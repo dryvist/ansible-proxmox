@@ -97,7 +97,7 @@
       - (nas_storage_shares | map(attribute='path') | list | unique | length) == (nas_storage_shares | length)
       - item.valid_users is defined and item.valid_users | length > 0
       - item.path is defined
-      - "'..'' not in item.path"
+      - "'..' not in item.path"
       - item.path == nas_storage_mount_point or item.path.startswith(nas_storage_mount_point ~ "/")
     fail_msg: "Invalid Samba share definition: {{ item | to_nice_json }}"
   loop: "{{ nas_storage_shares }}"
