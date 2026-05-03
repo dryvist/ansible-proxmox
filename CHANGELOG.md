@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.8](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.5.7...v1.5.8) (2026-05-03)
+
+
+### Bug Fixes
+
+* **ci:** remove deprecated app-id secret passthrough ([b9e86e3](https://github.com/JacobPEvans/ansible-proxmox/commit/b9e86e3e4cf04b9880781104c3451ec49a56af35))
+
 ## [1.5.7](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.5.6...v1.5.7) (2026-05-03)
 
 
