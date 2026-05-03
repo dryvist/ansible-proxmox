@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.7](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.5.6...v1.5.7) (2026-05-03)
+
+
+### Bug Fixes
+
+* **deps:** refresh gh-aw action SHA pins ([#164](https://github.com/JacobPEvans/ansible-proxmox/issues/164)) ([ebdcee3](https://github.com/JacobPEvans/ansible-proxmox/commit/ebdcee3cccb42c2a7a834d9993f05bf668bd279a))
+
 ## [1.5.6](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.5.5...v1.5.6) (2026-05-03)
 
 
