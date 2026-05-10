@@ -94,6 +94,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ([#125](https://github.com/JacobPEvans/ansible-proxmox/issues/125))
   ([72b8eb8](https://github.com/JacobPEvans/ansible-proxmox/commit/72b8eb86028191c08c8e87fe0b3f9327ae1d3760))
 
+## [1.4.0](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.3.1...v1.4.0) (2026-04-12)
+
+### Maintenance
+
+* internal tooling updates
+
 ## [1.4.1](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.4.0...v1.4.1) (2026-04-13)
 
 ### Bug Fixes
