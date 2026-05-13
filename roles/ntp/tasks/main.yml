@@ -5,28 +5,19 @@
   ansible.builtin.apt:
     name: chrony
     state: present
-    update_cache: false
+    update_cache: true
+    cache_valid_time: 3600
   tags:
     - ntp
 
 - name: Deploy chrony configuration
-  ansible.builtin.copy:
+  ansible.builtin.template:
+    src: chrony.conf.j2
     dest: "{{ ntp_config_file }}"
     owner: root
     group: root
     mode: "0644"
-    content: |
-      # Managed by Ansible - ntp role
-      {% for pool in ntp_pools %}
-      pool {{ pool }}
-      {% endfor %}
-      driftfile /var/lib/chrony/chrony.drift
-      logdir /var/log/chrony
-      leapsectz right/UTC
-      hwtimestamp *
-      local stratum 10
-      allow 127.0.0.1
-      allow ::1
+    validate: chronyd -p -f %s
   notify: Restart chrony
   tags:
     - ntp
@@ -36,6 +27,6 @@
     name: chrony
     state: "{{ ntp_service_state }}"
     enabled: "{{ ntp_service_enabled }}"
-    daemon_reload: true
+  when: ansible_virtualization_type != 'docker'
   tags:
     - ntp
