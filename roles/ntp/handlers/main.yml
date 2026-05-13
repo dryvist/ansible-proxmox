@@ -1,0 +1,9 @@
+---
+# NTP role handlers
+
+- name: Restart chrony
+  ansible.builtin.systemd:
+    name: chrony
+    state: restarted
+  when: ansible_virtualization_type != 'docker'
+  listen: Restart chrony

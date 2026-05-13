@@ -1,0 +1,17 @@
+---
+# NTP role defaults
+
+# NTP pool servers to synchronize with
+# Override to point to internal NTP servers (e.g., "ntp.example.com iburst")
+ntp_pools:
+  - "0.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
+  - "1.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
+  - "2.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
+  - "3.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
+
+# chrony service state and startup
+ntp_service_state: started
+ntp_service_enabled: true
+
+# Path to the chrony configuration file
+ntp_config_file: /etc/chrony/chrony.conf
