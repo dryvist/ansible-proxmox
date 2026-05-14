@@ -1,7 +1,7 @@
 # {{ ansible_managed }}
 {% if ntp_servers | length > 0 %}
 {% for server in ntp_servers %}
-server {{ server }} iburst
+server {{ server }}
 {% endfor %}
 {% else %}
 {% for pool in ntp_pools %}

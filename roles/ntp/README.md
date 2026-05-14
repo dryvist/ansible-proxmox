@@ -19,8 +19,11 @@ vendor the role or reference it via `requirements.yml` pointing at this repo.
 
 ## API
 
-The role's behavior is driven entirely by the variables documented below. All
-variables are read at template-render time; no facts or external state.
+The role's behavior is driven entirely by the variables documented below.
+Mode selection (client / server / hybrid) is variable-driven, but a small
+number of tasks are fact-gated: the systemd task is skipped under Docker
+(`ansible_virtualization_type != 'docker'`) so the role can be molecule-tested
+in containers.
 
 ### Modes
 
@@ -42,8 +45,10 @@ The combination of `ntp_servers` and `ntp_serve` selects the mode:
 
 See `defaults/main.yml` for the authoritative list and inline rationale.
 
-- `ntp_servers` (list, default `[]`) — Internal NTP servers, e.g.,
-  `["192.168.0.10", "192.168.0.11"]`.
+- `ntp_servers` (list, default `[]`) — Internal NTP servers. Each entry is
+  the full chrony directive following the `server` keyword, so include any
+  options you want (e.g., `["192.168.0.10 iburst", "192.168.0.11 iburst prefer"]`).
+  Mirrors the `ntp_pools` pattern.
 - `ntp_pools` (list, default Debian pool with 4 entries) — Used only when
   `ntp_servers` is empty.
 - `ntp_serve` (bool, default `false`) — Enable server mode.
