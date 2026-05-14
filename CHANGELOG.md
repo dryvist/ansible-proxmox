@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.5.11...v1.6.0) (2026-05-14)
+
+
+### Features
+
+* **ntp:** add server mode and wire role into proxmox play ([#182](https://github.com/JacobPEvans/ansible-proxmox/issues/182)) ([2a96f23](https://github.com/JacobPEvans/ansible-proxmox/commit/2a96f2377cac96e252994a3ae9d6da37b4e4f381)), closes [#179](https://github.com/JacobPEvans/ansible-proxmox/issues/179)
+
 ## [1.5.11](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.5.10...v1.5.11) (2026-05-14)
 
 
