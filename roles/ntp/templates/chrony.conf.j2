@@ -1,7 +1,13 @@
 # {{ ansible_managed }}
+{% if ntp_servers | length > 0 %}
+{% for server in ntp_servers %}
+server {{ server }} iburst
+{% endfor %}
+{% else %}
 {% for pool in ntp_pools %}
 pool {{ pool }}
 {% endfor %}
+{% endif %}
 driftfile /var/lib/chrony/chrony.drift
 logdir /var/log/chrony
 leapsectz right/UTC
@@ -9,3 +15,8 @@ hwtimestamp *
 local stratum 10
 allow 127.0.0.1
 allow ::1
+{% if ntp_serve %}
+{% for cidr in ntp_allow_cidrs %}
+allow {{ cidr }}
+{% endfor %}
+{% endif %}

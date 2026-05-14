@@ -1,13 +1,26 @@
 ---
 # NTP role defaults
 
-# NTP pool servers to synchronize with
-# Override to point to internal NTP servers (e.g., "ntp.example.com iburst")
+# Internal NTP servers to sync from. When non-empty, takes precedence over
+# ntp_pools (which is then ignored). Use this on clients to point at the
+# Proxmox stratum-2 servers; leave empty on the Proxmox hosts themselves
+# so they continue syncing from the public Debian pool.
+ntp_servers: []
+
+# Public NTP pool fallback. Used only when ntp_servers is empty.
 ntp_pools:
   - "0.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
   - "1.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
   - "2.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
   - "3.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
+
+# Enable chrony server mode: emits `allow` directives for ntp_allow_cidrs
+# so this host serves NTP to other machines on those subnets.
+ntp_serve: false
+
+# CIDRs permitted to query this host as an NTP server. Only used when
+# ntp_serve is true. Keep empty on pure clients.
+ntp_allow_cidrs: []
 
 # chrony service state and startup
 ntp_service_state: started
