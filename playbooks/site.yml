@@ -45,3 +45,12 @@
     - role: nas_storage
       tags:
         - nas_storage
+
+    - role: ntp
+      tags:
+        - ntp
+      vars:
+        ntp_serve: true
+        ntp_allow_cidrs:
+          - "192.168.0.0/16"
+          - "10.0.0.0/8"
