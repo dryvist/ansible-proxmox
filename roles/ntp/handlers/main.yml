@@ -5,5 +5,5 @@
   ansible.builtin.systemd:
     name: chrony
     state: restarted
-  when: ansible_virtualization_type != 'docker'
+  when: ansible_virtualization_type | default('') != 'docker'
   listen: Restart chrony
