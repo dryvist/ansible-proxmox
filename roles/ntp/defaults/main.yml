@@ -1,13 +1,16 @@
 ---
 # NTP role defaults
 
-# Internal NTP servers to sync from. When non-empty, takes precedence over
-# ntp_pools (which is then ignored). Use this on clients to point at the
-# Proxmox stratum-2 servers; leave empty on the Proxmox hosts themselves
-# so they continue syncing from the public Debian pool.
+# Internal NTP servers to sync from. Rendered alongside ntp_pools so chrony
+# always has the public pool available as additional sources. Chrony picks
+# the best source by stratum and jitter — to *prefer* internal entries
+# strictly, include the `prefer` keyword in the entry itself (e.g.,
+# "192.168.0.10 iburst prefer"). Use this on clients to point at the
+# Proxmox stratum-2 servers; leave empty on the Proxmox hosts themselves.
 ntp_servers: []
 
-# Public NTP pool fallback. Used only when ntp_servers is empty.
+# Public NTP pool. Always rendered into chrony.conf alongside ntp_servers
+# so public sources stay reachable if internal stratum-2 servers go down.
 ntp_pools:
   - "0.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
   - "1.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
