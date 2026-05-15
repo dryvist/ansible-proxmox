@@ -11,6 +11,7 @@ ENV/
 # Ansible
 *.retry
 .cache/
+.ansible/
 
 # Molecule
 .molecule/
