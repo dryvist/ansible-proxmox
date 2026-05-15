@@ -32,14 +32,32 @@ The combination of `ntp_servers` and `ntp_serve` selects the mode:
 - **Client (default)** — `ntp_servers: []`, `ntp_serve: false`. Syncs from
   `ntp_pools` (public Debian pool).
 - **Internal client** — `ntp_servers` non-empty, `ntp_serve: false`. Syncs
-  from `ntp_servers`; `ntp_pools` is ignored.
+  from `ntp_servers` plus `ntp_pools` (public pool kept as additional
+  sources for resilience).
 - **Server** — `ntp_servers: []`, `ntp_serve: true`. Syncs from `ntp_pools`,
   serves to `ntp_allow_cidrs`.
 - **Hybrid** — `ntp_servers` non-empty, `ntp_serve: true`. Syncs from
-  `ntp_servers`, serves to `ntp_allow_cidrs`.
+  `ntp_servers` plus `ntp_pools`, serves to `ntp_allow_cidrs`.
 
-`server <addr> iburst` lines take precedence over `pool` lines: when
-`ntp_servers` is non-empty, the pool block is skipped entirely.
+### Source selection
+
+Both `ntp_servers` entries (rendered as `server` directives) and `ntp_pools`
+entries (rendered as `pool` directives) are always included in the chrony
+configuration. Chrony picks the best source automatically by stratum and
+jitter — it does not strictly prefer earlier-listed entries.
+
+To make chrony **strictly prefer** internal entries over public pool
+members (e.g., to keep traffic on-LAN whenever an internal server is
+reachable), include the `prefer` keyword in each `ntp_servers` entry:
+
+```yaml
+ntp_servers:
+  - "192.168.0.10 iburst prefer"
+  - "192.168.0.11 iburst prefer"
+```
+
+When all internal `prefer`-marked entries become unreachable, chrony falls
+back to selecting among the remaining sources (the public pool).
 
 ### Variables
 

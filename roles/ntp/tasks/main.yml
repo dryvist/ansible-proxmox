@@ -1,9 +1,11 @@
 ---
 # NTP time synchronization role using chrony
 
-- name: Install chrony
+- name: Install chrony and tzdata
   ansible.builtin.apt:
-    name: chrony
+    name:
+      - chrony
+      - tzdata
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -27,6 +29,6 @@
     name: chrony
     state: "{{ ntp_service_state }}"
     enabled: "{{ ntp_service_enabled }}"
-  when: ansible_virtualization_type != 'docker'
+  when: ansible_virtualization_type | default('') != 'docker'
   tags:
     - ntp
