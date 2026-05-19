@@ -1,6 +1,37 @@
 ---
 # Common role tasks
 
+- name: Proxmox no-subscription repository
+  ansible.builtin.apt_repository:
+    repo: "deb http://download.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-no-subscription"
+    state: "{{ 'absent' if (proxmox_subscription_key is not none and proxmox_remove_nosubscription_repo | bool) else 'present' }}"
+    filename: pve-no-subscription
+  tags:
+    - common
+    - repositories
+
+- name: Proxmox enterprise repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://enterprise.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-enterprise"
+    state: "{{ 'present' if proxmox_subscription_key is not none else 'absent' }}"
+    filename: pve-enterprise
+  tags:
+    - common
+    - repositories
+
+- name: Store Proxmox subscription key
+  ansible.builtin.copy:
+    content: "{{ proxmox_subscription_key }}"
+    dest: /etc/pve/subscription
+    owner: root
+    group: root
+    mode: "0600"
+  when: proxmox_subscription_key is not none
+  no_log: true
+  tags:
+    - common
+    - repositories
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true
