@@ -6,3 +6,10 @@ common_packages:
   - iotop
   - lm-sensors
   - rasdaemon
+
+# Proxmox enterprise subscription key. Leave null to use no-subscription repo (default).
+# When set, enables enterprise repos and optionally removes the no-subscription repo.
+proxmox_subscription_key: null
+
+# Set false to keep no-subscription repo alongside enterprise repo
+proxmox_remove_nosubscription_repo: true
