@@ -5,6 +5,12 @@
   become: false
   gather_facts: true
 
+  # Load role defaults so the crash_diagnostics_* variables referenced below
+  # resolve. verify.yml runs as a standalone play and does not inherit
+  # role vars unless explicitly imported.
+  vars_files:
+    - ../../roles/crash_diagnostics/defaults/main.yml
+
   tasks:
     - name: Verify sysctl configuration file exists
       ansible.builtin.stat:
