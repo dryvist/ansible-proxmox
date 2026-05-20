@@ -1,26 +1,29 @@
 ---
-# Commission a Dell PowerEdge node for cluster join.
+# Commission a rack server for cluster join.
 #
-# Targets: hosts in the `poweredge` group (R410, R710, future PowerEdge models).
-# Assumes PVE 9.x bare-metal install already complete via iDRAC vKVM, node
-# already joined to the cluster (`pvecm add`), and SSH key auth from the
+# Targets: hosts in the `rack_servers` group (any 1U/2U rack-mounted server
+# with PVE installed and joined to the cluster — Dell PowerEdge, HPE ProLiant,
+# Supermicro, etc.).
+#
+# Assumes PVE 9.x bare-metal install already complete via the BMC's vKVM,
+# node already joined to the cluster (`pvecm add`), and SSH key auth from the
 # controller to root@<mgmt_ip>.
 #
 # Usage:
-#   ansible-playbook -i inventory playbooks/commission_poweredge.yml -l <node-name>
+#   ansible-playbook -i inventory playbooks/commission_rack_server.yml -l <node-name>
 #
-# Inventory: real per-host values for the `poweredge` group come from
+# Inventory: real per-host values for the `rack_servers` group come from
 # untracked `inventory/host_vars/<node-name>.yml` (or a SOPS-encrypted
 # overlay you decrypt at run time). See
-# `inventory/host_vars/poweredge-node.yml.example` for the schema.
+# `inventory/host_vars/rack-server.yml.example` for the schema.
 #
 # Note: this play deliberately does NOT import `load_terraform.yml` — that
 # loader is NAS-focused (validates `host_services.nas`) and would block
 # commissioning before the node has any cluster-level services. Run
 # `playbooks/site.yml` after commissioning if you want NAS provisioning.
 
-- name: Commission PowerEdge node
-  hosts: poweredge
+- name: Commission rack server
+  hosts: rack_servers
   become: true
   gather_facts: true
 
@@ -33,7 +36,7 @@
       tags:
         - ntp
       vars:
-        ntp_serve: false  # PowerEdge nodes are NTP clients of the cluster's existing ntp server (see site.yml)
+        ntp_serve: false  # Rack servers are NTP clients of the cluster's existing ntp server (see site.yml)
 
     - role: kernel_tuning
       tags:
@@ -54,14 +57,14 @@
     - role: nas_storage
       tags:
         - nas_storage
-      when: poweredge_enable_nas_storage | default(false)
+      when: rack_server_enable_nas_storage | default(false)
 
     - role: proxmox_monitoring
       tags:
         - monitoring
       vars:
         # Per-host healthchecks ping URL — uses inventory_hostname so each
-        # PowerEdge node pings its own check (unlike site.yml which uses the
+        # rack server pings its own check (unlike site.yml which uses the
         # fixed `/proxmox` slug for the legacy single node). Empty env var
         # disables the ping entirely.
         proxmox_monitoring_healthchecks_ping_url: >-

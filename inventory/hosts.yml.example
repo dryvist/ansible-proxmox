@@ -3,14 +3,14 @@
 # Copy this file to hosts.yml and customize for your environment.
 # Sample IPs use the 192.168.0.x placeholder prefix.
 #
-# `poweredge` is nested under `proxmox.children` so:
+# `rack_servers` is nested under `proxmox.children` so:
 #   1. `load_terraform.yml` (imported by site.yml) injects
 #      `nas_storage_from_terraform` for `groups['proxmox']` — children inherit.
 #   2. After commissioning, `playbooks/site.yml` (which targets `hosts: proxmox`)
-#      manages PowerEdge nodes alongside the original pve host.
+#      manages rack servers alongside the original pve host.
 #
-# PowerEdge commissioning runs AFTER `pvecm add` joins the node to the cluster;
-# see `playbooks/commission_poweredge.yml`.
+# Rack-server commissioning runs AFTER `pvecm add` joins the node to the cluster;
+# see `playbooks/commission_rack_server.yml`.
 
 all:
   children:
@@ -21,15 +21,15 @@ all:
           ansible_user: root
           # ansible_ssh_private_key_file: /path/to/your/ssh/key  # Uncomment and set your SSH key path
       children:
-        poweredge:
+        rack_servers:
           hosts:
             node-a:
               ansible_host: 192.168.0.11
               ansible_user: root
-              poweredge_idrac_ip: 192.168.0.10
-              poweredge_chassis: r410
+              rack_server_bmc_ip: 192.168.0.10
+              rack_server_chassis: r410
             node-b:
               ansible_host: 192.168.0.21
               ansible_user: root
-              poweredge_idrac_ip: 192.168.0.20
-              poweredge_chassis: r710
+              rack_server_bmc_ip: 192.168.0.20
+              rack_server_chassis: r710
