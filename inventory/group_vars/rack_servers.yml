@@ -1,0 +1,37 @@
+---
+# Group variables for the `rack_servers` group (1U/2U rack-mounted servers
+# joining the Proxmox cluster — Dell PowerEdge, HPE ProLiant, Supermicro, etc.).
+# Shared defaults for older Intel-class hardware; per-node overrides go in host_vars.
+
+# ZFS swap — smaller default than the existing pve box since rack servers
+# typically join with less swap headroom expectation.
+zfs_swap_size: "32G"
+zfs_swap_pool: "rpool"
+zfs_swap_dataset: "swap"
+
+# Kernel tuning — same baselines as the existing pve, sans the AMD Zen1 boot
+# params (current rack-server inventory is Intel Westmere/Nehalem; AMD nodes
+# can re-enable boot params per-host).
+kernel_tuning_swappiness: 10
+kernel_tuning_vfs_cache_pressure: 50
+kernel_tuning_dirty_ratio: 10
+kernel_tuning_dirty_background_ratio: 5
+kernel_tuning_overcommit_memory: 0
+kernel_tuning_boot_params_enabled: false
+
+# Ulimits
+ulimits_nofile: 65536
+ulimits_nproc: 65536
+ulimits_users:
+  - "*"
+  - root
+
+# LXC features — empty default; per-node host_vars adds container IDs that need nesting/keyctl/fuse
+lxc_features_containers: {}
+
+# NAS storage — opt-in per node. The commissioning playbook gates the
+# nas_storage role on `rack_server_enable_nas_storage` directly; set it to
+# `true` in the host_vars file of the chosen NAS node.
+
+# NTP — rack servers are clients of the cluster's existing NTP server
+ntp_serve: false

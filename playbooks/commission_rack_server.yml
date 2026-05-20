@@ -1,0 +1,76 @@
+---
+# Commission a rack server for cluster join.
+#
+# Targets: hosts in the `rack_servers` group (any 1U/2U rack-mounted server
+# with PVE installed and joined to the cluster — Dell PowerEdge, HPE ProLiant,
+# Supermicro, etc.).
+#
+# Assumes PVE 9.x bare-metal install already complete via the BMC's vKVM,
+# node already joined to the cluster (`pvecm add`), and SSH key auth from the
+# controller to root@<mgmt_ip>.
+#
+# Usage:
+#   ansible-playbook -i inventory playbooks/commission_rack_server.yml -l <node-name>
+#
+# Inventory: real per-host values for the `rack_servers` group come from
+# untracked `inventory/host_vars/<node-name>.yml` (or a SOPS-encrypted
+# overlay you decrypt at run time). See
+# `inventory/host_vars/rack-server.yml.example` for the schema.
+#
+# Note: this play deliberately does NOT import `load_terraform.yml` — that
+# loader is NAS-focused (validates `host_services.nas`) and would block
+# commissioning before the node has any cluster-level services. Run
+# `playbooks/site.yml` after commissioning if you want NAS provisioning.
+
+- name: Commission rack server
+  hosts: rack_servers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: common
+      tags:
+        - common
+
+    - role: ntp
+      tags:
+        - ntp
+      vars:
+        ntp_serve: false  # Rack servers are NTP clients of the cluster's existing ntp server (see site.yml)
+
+    - role: kernel_tuning
+      tags:
+        - kernel_tuning
+
+    - role: ulimits
+      tags:
+        - ulimits
+
+    - role: zfs_swap
+      tags:
+        - zfs_swap
+
+    - role: lxc_features
+      tags:
+        - lxc_features
+
+    - role: nas_storage
+      tags:
+        - nas_storage
+      when: rack_server_enable_nas_storage | default(false)
+
+    - role: proxmox_monitoring
+      tags:
+        - monitoring
+      vars:
+        # Per-host healthchecks ping URL — uses inventory_hostname so each
+        # rack server pings its own check (unlike site.yml which uses the
+        # fixed `/proxmox` slug for the legacy single node). Empty env var
+        # disables the ping entirely.
+        proxmox_monitoring_healthchecks_ping_url: >-
+          {{ lookup('env', 'HEALTHCHECK_PING_KEY') |
+             ternary('https://hc-ping.com/' ~ lookup('env', 'HEALTHCHECK_PING_KEY') ~ '/' ~ inventory_hostname, '') }}
+
+    # crash_diagnostics intentionally NOT applied during commissioning.
+    # Apply it from site.yml only after the cluster is healthy with the new
+    # node — it makes intentional changes that need a quiet baseline first.
