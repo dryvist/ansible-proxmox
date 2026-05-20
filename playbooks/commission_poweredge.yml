@@ -3,20 +3,21 @@
 #
 # Targets: hosts in the `poweredge` group (R410, R710, future PowerEdge models).
 # Prerequisites: PVE 9.x bare-metal install already complete via iDRAC vKVM,
-# node joined to the cluster (`pvecm add`), SSH key auth from the controller
-# to root@<mgmt_ip>.
+# node already joined to the cluster (`pvecm add`), SSH key auth from the
+# controller to root@<mgmt_ip>.
 #
 # Usage:
 #   ansible-playbook -i inventory playbooks/commission_poweredge.yml -l <node-name>
 #
-# Inventory: real values for the `poweredge` group are sourced from
-# inventory/group_vars/poweredge/secrets.sops.yml (gitignored) OR from the
-# terraform_inventory.json produced by terraform-proxmox (which carries the
-# poweredge_nodes output declared via SOPS-encrypted terraform.sops.json).
-# See inventory/host_vars/poweredge-node.yml.example for the schema.
-
-- name: Load Terraform host services
-  import_playbook: load_terraform.yml
+# Inventory: real per-host values for the `poweredge` group come from
+# untracked `inventory/host_vars/<node-name>.yml` (or a SOPS-encrypted
+# overlay you decrypt at run time). See
+# `inventory/host_vars/poweredge-node.yml.example` for the schema.
+#
+# Note: this play deliberately does NOT import `load_terraform.yml` — that
+# loader is NAS-focused (validates `host_services.nas`) and would block
+# commissioning before the node has any cluster-level services. Run
+# `playbooks/site.yml` after commissioning if you want NAS provisioning.
 
 - name: Validate PVE 9 baseline before commissioning roles run
   hosts: poweredge
@@ -28,7 +29,7 @@
 
   tasks:
     - name: Read pveversion
-      ansible.builtin.command: pveversion --verbose
+      ansible.builtin.command: pveversion
       register: pveversion_out
       changed_when: false
       check_mode: false
@@ -89,9 +90,12 @@
       tags:
         - monitoring
       vars:
+        # Per-host healthchecks ping URL — uses inventory_hostname so each
+        # PowerEdge node pings its own check (unlike site.yml which uses the
+        # fixed `/proxmox` slug for the legacy single node). Empty env var
+        # disables the ping entirely.
         proxmox_monitoring_healthchecks_ping_url: >-
           {{ lookup('env', 'HEALTHCHECK_PING_KEY') |
-             default('', true) |
              ternary('https://hc-ping.com/' ~ lookup('env', 'HEALTHCHECK_PING_KEY') ~ '/' ~ inventory_hostname, '') }}
 
     # crash_diagnostics intentionally NOT applied during commissioning.

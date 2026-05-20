@@ -27,8 +27,9 @@ ulimits_users:
 # LXC features — empty default; per-node host_vars adds container IDs that need nesting/keyctl/fuse
 lxc_features_containers: {}
 
-# NAS storage — opt-in per node (set poweredge_enable_nas_storage: true on the chosen NAS node only)
-nas_storage_enabled: "{{ poweredge_enable_nas_storage | default(false) }}"
+# NAS storage — opt-in per node. The commissioning playbook gates the
+# nas_storage role on `poweredge_enable_nas_storage` directly; set it to
+# `true` in the host_vars file of the chosen NAS node.
 
 # NTP — PowerEdge nodes are clients of the cluster's existing NTP server
 ntp_serve: false

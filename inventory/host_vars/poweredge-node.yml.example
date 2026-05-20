@@ -1,12 +1,12 @@
 ---
-# Example host_vars for a PowerEdge node — copy to inventory/host_vars/<node-name>.yml
-# and either fill real values, or pull them from terraform-proxmox via
-# terraform_inventory.json + load_terraform.yml.
+# Example host_vars for a PowerEdge node — copy to
+# `inventory/host_vars/<node-name>.yml` (untracked by default) and fill in real
+# values. SOPS-encrypt the resulting file if it carries any sensitive paths.
 #
-# Real values live in one of:
-#   1. terraform-proxmox SOPS-encrypted terraform.sops.json (preferred — DRY across repos)
-#   2. inventory/group_vars/poweredge/secrets.sops.yml (gitignored, ansible-side override)
-#   3. Local untracked host_vars/<node-name>.yml (last resort)
+# Note: the existing `load_terraform.yml` only injects NAS `host_services` and
+# does NOT populate PowerEdge per-host vars. Wiring `terraform-proxmox`'s
+# `poweredge_nodes` output into Ansible host_vars is a forward-looking
+# enhancement — for now, populate this file manually.
 #
 # Sample values use the 192.168.0.x placeholder prefix per the public-repo policy.
 

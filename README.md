@@ -105,12 +105,19 @@ ansible-playbook -i inventory playbooks/commission_poweredge.yml -l node-a
 ```
 
 The play asserts the PVE major version is 9.x and the kernel is ≥6.8
-before applying any roles. PowerEdge-group defaults live in
-`inventory/group_vars/poweredge.yml`; per-host settings (real IPs, iDRAC
-addresses, expected hardware) live in
-`inventory/host_vars/<node>.yml`. Real values come from the
-SOPS-encrypted overrides or from `terraform-proxmox`'s
-`poweredge_nodes` output via `terraform_inventory.json`.
+before applying any roles. It deliberately does NOT import
+`load_terraform.yml` — that loader is NAS-focused and would block
+commissioning. Run `playbooks/site.yml` after commissioning if you need NAS
+provisioning.
+
+PowerEdge-group defaults live in `inventory/group_vars/poweredge.yml`;
+per-host settings (real IPs, iDRAC addresses, expected hardware) live in
+`inventory/host_vars/<node>.yml` (untracked). See
+`inventory/host_vars/poweredge-node.yml.example` for the schema.
+
+Wiring `terraform-proxmox`'s `poweredge_nodes` output into Ansible
+host_vars is a forward-looking enhancement — the existing
+`load_terraform.yml` only injects the NAS `host_services` contract today.
 
 ## Customization
 
