@@ -2,8 +2,8 @@
 # Commission a Dell PowerEdge node for cluster join.
 #
 # Targets: hosts in the `poweredge` group (R410, R710, future PowerEdge models).
-# Prerequisites: PVE 9.x bare-metal install already complete via iDRAC vKVM,
-# node already joined to the cluster (`pvecm add`), SSH key auth from the
+# Assumes PVE 9.x bare-metal install already complete via iDRAC vKVM, node
+# already joined to the cluster (`pvecm add`), and SSH key auth from the
 # controller to root@<mgmt_ip>.
 #
 # Usage:
@@ -18,36 +18,6 @@
 # loader is NAS-focused (validates `host_services.nas`) and would block
 # commissioning before the node has any cluster-level services. Run
 # `playbooks/site.yml` after commissioning if you want NAS provisioning.
-
-- name: Validate PVE 9 baseline before commissioning roles run
-  hosts: poweredge
-  become: true
-  gather_facts: true
-  tags:
-    - always
-    - preflight
-
-  tasks:
-    - name: Read pveversion
-      ansible.builtin.command: pveversion
-      register: pveversion_out
-      changed_when: false
-      check_mode: false
-
-    - name: Assert Proxmox VE major version is 9.x
-      ansible.builtin.assert:
-        that:
-          - "'pve-manager/9.' in pveversion_out.stdout"
-        fail_msg: |
-          PVE 9.x is required for this playbook (no PVE 8 fallback).
-          Detected:
-          {{ pveversion_out.stdout }}
-
-    - name: Assert kernel meets PVE 9 baseline (6.8+)
-      ansible.builtin.assert:
-        that:
-          - ansible_kernel is version('6.8', '>=')
-        fail_msg: "Kernel {{ ansible_kernel }} below PVE 9 baseline 6.8. Reboot into the new kernel before running this playbook."
 
 - name: Commission PowerEdge node
   hosts: poweredge
