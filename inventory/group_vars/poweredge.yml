@@ -1,0 +1,34 @@
+---
+# Group variables for the `poweredge` group (Dell PowerEdge cluster join targets).
+# Shared defaults for R410/R710-class hardware; per-node overrides go in host_vars.
+
+# ZFS swap — smaller default than the existing pve box since PowerEdge nodes
+# typically join with less swap headroom expectation.
+zfs_swap_size: "32G"
+zfs_swap_pool: "rpool"
+zfs_swap_dataset: "swap"
+
+# Kernel tuning — same baselines as the existing pve, modulo Zen 1 specifics
+# (PowerEdge R410/R710 are Westmere/Nehalem, not AMD Zen).
+kernel_tuning_swappiness: 10
+kernel_tuning_vfs_cache_pressure: 50
+kernel_tuning_dirty_ratio: 10
+kernel_tuning_dirty_background_ratio: 5
+kernel_tuning_overcommit_memory: 0
+kernel_tuning_boot_params_enabled: false  # Intel Westmere/Nehalem don't need the AMD Zen1 workarounds
+
+# Ulimits
+ulimits_nofile: 65536
+ulimits_nproc: 65536
+ulimits_users:
+  - "*"
+  - root
+
+# LXC features — empty default; per-node host_vars adds container IDs that need nesting/keyctl/fuse
+lxc_features_containers: {}
+
+# NAS storage — opt-in per node (set poweredge_enable_nas_storage: true on the chosen NAS node only)
+nas_storage_enabled: "{{ poweredge_enable_nas_storage | default(false) }}"
+
+# NTP — PowerEdge nodes are clients of the cluster's existing NTP server
+ntp_serve: false

@@ -1,0 +1,36 @@
+---
+# Example host_vars for a PowerEdge node — copy to inventory/host_vars/<node-name>.yml
+# and either fill real values, or pull them from terraform-proxmox via
+# terraform_inventory.json + load_terraform.yml.
+#
+# Real values live in one of:
+#   1. terraform-proxmox SOPS-encrypted terraform.sops.json (preferred — DRY across repos)
+#   2. inventory/group_vars/poweredge/secrets.sops.yml (gitignored, ansible-side override)
+#   3. Local untracked host_vars/<node-name>.yml (last resort)
+#
+# Sample values use the 192.168.0.x placeholder prefix per the public-repo policy.
+
+# Connection
+ansible_host: 192.168.0.11        # PVE host management IP
+ansible_user: root
+# ansible_ssh_private_key_file: ~/.ssh/id_rsa_pve
+
+# iDRAC sidecar (optional — used by future racadm tasks)
+poweredge_idrac_ip: 192.168.0.10
+poweredge_chassis: r410           # r410 | r710 | r720 | r730 | r740
+poweredge_service_tag: EXAMPLE1
+
+# Expected hardware (for sanity-check tasks; not enforced by default)
+poweredge_expected_ram_gb: 32
+poweredge_expected_cpu_sockets: 2
+
+# Cluster role flags
+poweredge_enable_nas_storage: false  # set true on the node that hosts the NAS ZFS dataset
+
+# Storage pools to import / verify (real device paths in SOPS-encrypted overrides)
+poweredge_storage_pools:
+  - name: local-zfs
+    device: /dev/disk/by-id/CHANGE-ME
+
+# PVE cluster context (must match existing cluster name)
+pve_cluster_name: example-cluster

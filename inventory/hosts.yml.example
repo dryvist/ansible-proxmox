@@ -1,12 +1,29 @@
 ---
 # Proxmox VE Server Inventory
-# Copy this file to hosts.yml and customize for your environment
+# Copy this file to hosts.yml and customize for your environment.
+# Sample IPs use the 192.168.0.x placeholder prefix.
 
 all:
   children:
     proxmox:
       hosts:
         pve:
-          ansible_host: 192.168.1.100  # Replace with your Proxmox IP
+          ansible_host: 192.168.0.100  # Replace with your Proxmox IP
           ansible_user: root
           # ansible_ssh_private_key_file: /path/to/your/ssh/key  # Uncomment and set your SSH key path
+
+    # PowerEdge nodes are commissioned by playbooks/commission_poweredge.yml
+    # before they join the existing cluster. See inventory/host_vars/poweredge-node.yml.example
+    # for the per-host schema, and inventory/group_vars/poweredge.yml for shared defaults.
+    poweredge:
+      hosts:
+        node-a:
+          ansible_host: 192.168.0.11
+          ansible_user: root
+          poweredge_idrac_ip: 192.168.0.10
+          poweredge_chassis: r410
+        node-b:
+          ansible_host: 192.168.0.21
+          ansible_user: root
+          poweredge_idrac_ip: 192.168.0.20
+          poweredge_chassis: r710

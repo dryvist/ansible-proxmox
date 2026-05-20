@@ -95,6 +95,23 @@ Apply the configuration:
 sops exec-env secrets.sops.yml 'doppler run -- ./scripts/run-ansible.sh playbooks/site.yml'
 ```
 
+### Commissioning a new PowerEdge node (PVE 9.x)
+
+Use `playbooks/commission_poweredge.yml` after the new PowerEdge box has
+PVE 9.x installed (via iDRAC vKVM) and has joined the cluster (`pvecm add`):
+
+```bash
+ansible-playbook -i inventory playbooks/commission_poweredge.yml -l node-a
+```
+
+The play asserts the PVE major version is 9.x and the kernel is ≥6.8
+before applying any roles. PowerEdge-group defaults live in
+`inventory/group_vars/poweredge.yml`; per-host settings (real IPs, iDRAC
+addresses, expected hardware) live in
+`inventory/host_vars/<node>.yml`. Real values come from the
+SOPS-encrypted overrides or from `terraform-proxmox`'s
+`poweredge_nodes` output via `terraform_inventory.json`.
+
 ## Customization
 
 All settings have sensible defaults. Override them in
