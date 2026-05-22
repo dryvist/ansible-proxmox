@@ -37,4 +37,4 @@ repos:
     hooks:
       - id: markdownlint
         args: [--config, .markdownlint.json]
-        exclude: ^\.github/aw/
+        exclude: ^(\.github/aw/|CHANGELOG\.md$)
