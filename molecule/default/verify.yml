@@ -5,6 +5,12 @@
   become: false
   gather_facts: true
 
+  # Load role defaults so the crash_diagnostics_* variables referenced below
+  # resolve. verify.yml runs as a standalone play and does not inherit
+  # role vars unless explicitly imported.
+  vars_files:
+    - ../../roles/crash_diagnostics/defaults/main.yml
+
   tasks:
     - name: Verify sysctl configuration file exists
       ansible.builtin.stat:
@@ -41,4 +47,46 @@
     - name: Display kernel cmdline content if it exists
       ansible.builtin.debug:
         msg: "Kernel cmdline found (requires Proxmox): {{ kernel_cmdline_file.stat.exists }}"
+      changed_when: false
+
+    # --- crash_diagnostics role assertions ---
+
+    - name: Verify memory-config log directory
+      ansible.builtin.stat:
+        path: "{{ crash_diagnostics_memory_log_dir }}"
+      register: crash_diag_memory_log_dir
+
+    - name: Assert memory-config log directory is valid
+      ansible.builtin.assert:
+        that:
+          - crash_diag_memory_log_dir.stat.exists
+          - crash_diag_memory_log_dir.stat.isdir
+        fail_msg: "{{ crash_diagnostics_memory_log_dir }} is missing or not a directory"
+
+    - name: Verify memory-config-logger script
+      ansible.builtin.stat:
+        path: "{{ crash_diagnostics_memory_logger_script }}"
+      register: crash_diag_memory_logger
+
+    - name: Assert memory-config-logger script is valid
+      ansible.builtin.assert:
+        that:
+          - crash_diag_memory_logger.stat.exists
+          - crash_diag_memory_logger.stat.executable
+        fail_msg: "{{ crash_diagnostics_memory_logger_script }} is missing or not executable"
+
+    - name: Verify mce-monitor script
+      ansible.builtin.stat:
+        path: "{{ crash_diagnostics_mce_monitor_script }}"
+      register: crash_diag_mce_monitor
+
+    - name: Assert mce-monitor script is valid
+      ansible.builtin.assert:
+        that:
+          - crash_diag_mce_monitor.stat.exists
+          - crash_diag_mce_monitor.stat.executable
+        fail_msg: "{{ crash_diagnostics_mce_monitor_script }} is missing or not executable"
+
+    - name: Verify strace is installed (crash_diagnostics package)
+      ansible.builtin.command: which strace
       changed_when: false
