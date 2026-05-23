@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.7.1...v1.7.2) (2026-05-23)
+
+
+### Bug Fixes
+
+* **pre-commit:** exclude release-please CHANGELOG.md from markdownlint (closes [#200](https://github.com/JacobPEvans/ansible-proxmox/issues/200)) ([#201](https://github.com/JacobPEvans/ansible-proxmox/issues/201)) ([f09094c](https://github.com/JacobPEvans/ansible-proxmox/commit/f09094c3e706291d563b518eec2f30e89818e8bf))
+
 ## [1.7.1](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.7.0...v1.7.1) (2026-05-22)
 
 
