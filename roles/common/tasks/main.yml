@@ -1,33 +1,73 @@
 ---
 # Common role tasks
 
-- name: Proxmox no-subscription repository
+# Subscription activation must happen first so that any later `apt update`
+# against the enterprise repos can authenticate. `/etc/pve` is a FUSE-mounted
+# pmxcfs filesystem; the subscription record is managed by the `pvesubscription`
+# CLI rather than by writing files directly.
+- name: Activate Proxmox subscription
+  ansible.builtin.command:
+    cmd: "pvesubscription set {{ common_proxmox_subscription_key }}"
+  when: common_proxmox_subscription_key is not none
+  register: common_pvesubscription_set
+  changed_when: common_pvesubscription_set.rc == 0
+  no_log: true
+  tags:
+    - common
+    - repositories
+
+- name: Refresh Proxmox subscription status
+  ansible.builtin.command:
+    cmd: pvesubscription update
+  when:
+    - common_proxmox_subscription_key is not none
+    - common_pvesubscription_set is succeeded
+  register: common_pvesubscription_update
+  changed_when: common_pvesubscription_update.rc == 0
+  tags:
+    - common
+    - repositories
+
+# Repository state is gated on successful subscription activation so we never
+# enable an authenticated repo that the host cannot reach. `update_cache: false`
+# avoids redundant intermediate `apt update` runs; the dedicated cache-update
+# task below performs the single refresh.
+- name: Proxmox PVE no-subscription repository
   ansible.builtin.apt_repository:
     repo: "deb http://download.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-no-subscription"
     state: "{{ 'absent' if (common_proxmox_subscription_key is not none and common_proxmox_remove_nosubscription_repo | bool) else 'present' }}"
     filename: pve-no-subscription
+    update_cache: false
   tags:
     - common
     - repositories
 
-- name: Proxmox enterprise repository
+- name: Proxmox Ceph no-subscription repository
+  ansible.builtin.apt_repository:
+    repo: "deb http://download.proxmox.com/debian/ceph-{{ common_proxmox_ceph_release }} {{ ansible_distribution_release }} no-subscription"
+    state: "{{ 'absent' if (common_proxmox_subscription_key is not none and common_proxmox_remove_nosubscription_repo | bool) else 'present' }}"
+    filename: ceph-no-subscription
+    update_cache: false
+  tags:
+    - common
+    - repositories
+
+- name: Proxmox PVE enterprise repository
   ansible.builtin.apt_repository:
     repo: "deb https://enterprise.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-enterprise"
-    state: "{{ 'present' if common_proxmox_subscription_key is not none else 'absent' }}"
+    state: "{{ 'present' if (common_proxmox_subscription_key is not none and (common_pvesubscription_update is succeeded)) else 'absent' }}"
     filename: pve-enterprise
+    update_cache: false
   tags:
     - common
     - repositories
 
-- name: Store Proxmox subscription key
-  ansible.builtin.copy:
-    content: "{{ common_proxmox_subscription_key }}"
-    dest: /etc/pve/subscription
-    owner: root
-    group: root
-    mode: "0600"
-  when: common_proxmox_subscription_key is not none
-  no_log: true
+- name: Proxmox Ceph enterprise repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://enterprise.proxmox.com/debian/ceph-{{ common_proxmox_ceph_release }} {{ ansible_distribution_release }} enterprise"
+    state: "{{ 'present' if (common_proxmox_subscription_key is not none and (common_pvesubscription_update is succeeded)) else 'absent' }}"
+    filename: ceph-enterprise
+    update_cache: false
   tags:
     - common
     - repositories

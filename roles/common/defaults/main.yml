@@ -8,8 +8,12 @@ common_packages:
   - rasdaemon
 
 # Proxmox enterprise subscription key. Leave null to use no-subscription repo (default).
-# When set, enables enterprise repos and optionally removes the no-subscription repo.
+# When set, activates the subscription via `pvesubscription set` and enables
+# both the PVE and Ceph enterprise repositories.
 common_proxmox_subscription_key: null
 
-# Set false to keep no-subscription repo alongside enterprise repo
+# Set false to keep no-subscription repos alongside enterprise repos
 common_proxmox_remove_nosubscription_repo: true
+
+# Ceph release codename used in repository URLs (e.g. "squid", "reef", "quincy")
+common_proxmox_ceph_release: squid
