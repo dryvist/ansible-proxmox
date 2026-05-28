@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!-- Managed by Ansible (idrac_kiosk role). Do not edit on the host. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>iDRAC consoles</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      .console-grid {
+        display: flex;
+        height: 100vh;
+        width: 100vw;
+      }
+      .console-grid iframe {
+        flex: 1 1 50%;
+        height: 100%;
+        width: 50%;
+        border: 0;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="console-grid">
+      <iframe src="http://{{ idrac_kiosk_kvm_ip }}:{{ idrac_kiosk_r410_port }}/" title="Dell R410 iDRAC6"></iframe>
+      <iframe src="http://{{ idrac_kiosk_kvm_ip }}:{{ idrac_kiosk_r710_port }}/" title="Dell R710 iDRAC6"></iframe>
+    </div>
+  </body>
+</html>

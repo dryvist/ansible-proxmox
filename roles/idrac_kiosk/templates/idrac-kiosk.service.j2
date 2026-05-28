@@ -1,0 +1,23 @@
+{# Managed by Ansible (idrac_kiosk role). Do not edit on the host. #}
+[Unit]
+Description=iDRAC kiosk (cage + chromium) showing both iDRAC6 consoles
+Documentation=https://github.com/dryvist/ansible-proxmox
+After=seatd.service systemd-user-sessions.service
+Wants=seatd.service
+
+[Service]
+Type=simple
+User={{ idrac_kiosk_user }}
+# systemd creates /run/user-style runtime dir owned by the service user and
+# tears it down on stop. cage/wlroots and chromium both require a writable
+# XDG_RUNTIME_DIR; logind does not create one for a system service.
+RuntimeDirectory=idrac-kiosk
+Environment=XDG_RUNTIME_DIR=/run/idrac-kiosk
+Environment=WLR_RENDERER=gles2
+# cage hosts a single Wayland app fullscreen; chromium runs as the kiosk app.
+ExecStart=/usr/bin/cage -- /usr/bin/chromium --kiosk --ozone-platform=wayland --noerrdialogs --disable-infobars --incognito --no-first-run --app=file://{{ idrac_kiosk_data_dir }}/index.html
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

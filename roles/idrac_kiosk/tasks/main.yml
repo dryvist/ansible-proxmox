@@ -1,0 +1,151 @@
+---
+# iDRAC kiosk role tasks
+#
+# POLICY EXCEPTION: this repo otherwise keeps Proxmox hosts headless with no
+# extra desktop software. This role is a user-approved exception for the single
+# node `pve`: a read-only kiosk on the host's existing HDMI/DP output.
+
+- name: Detect whether the non-free-firmware apt component is enabled
+  # AMD GPU microcode (firmware-amd-graphics) lives in the non-free-firmware
+  # component on Debian 12/13. We do NOT silently rewrite apt sources; we only
+  # check, and warn below if it is missing so the operator can opt in.
+  ansible.builtin.command:
+    cmd: apt-cache policy firmware-amd-graphics
+  register: idrac_kiosk_amd_fw_policy
+  changed_when: false
+  failed_when: false
+  when: idrac_kiosk_enabled | bool
+  tags:
+    - idrac_kiosk
+
+- name: Warn when firmware-amd-graphics is not available
+  ansible.builtin.debug:
+    msg: >-
+      firmware-amd-graphics is not installable. The AMD iGPU on `pve` likely
+      needs the `non-free-firmware` apt component. Add it to your apt sources
+      (e.g. the components list in /etc/apt/sources.list or the relevant
+      .sources file), then re-run. Without GPU microcode the kiosk may fall
+      back to software rendering or fail to drive HDMI/DP.
+  when:
+    - idrac_kiosk_enabled | bool
+    - "'Candidate: (none)' in (idrac_kiosk_amd_fw_policy.stdout | default(''))
+       or idrac_kiosk_amd_fw_policy.rc | default(1) != 0"
+  tags:
+    - idrac_kiosk
+
+- name: Install kiosk packages
+  ansible.builtin.apt:
+    name:
+      - cage                  # minimal Wayland kiosk compositor (single app)
+      - chromium              # Debian browser package name
+      - seatd                 # seat management for the non-logind session
+      - libgl1-mesa-dri       # Mesa DRI drivers (OpenGL on the AMD iGPU)
+      - mesa-vulkan-drivers   # Vulkan drivers for the AMD iGPU
+      - fonts-dejavu-core     # baseline fonts so the noVNC UI renders
+    state: present
+    update_cache: true
+  when: idrac_kiosk_enabled | bool
+  tags:
+    - idrac_kiosk
+
+- name: Install AMD GPU firmware
+  # Separate task: this package only exists once non-free-firmware is enabled.
+  # Do not fail the play if it is unavailable; the warning above covers it.
+  ansible.builtin.apt:
+    name: firmware-amd-graphics
+    state: present
+    update_cache: true
+  when:
+    - idrac_kiosk_enabled | bool
+    - "'Candidate: (none)' not in (idrac_kiosk_amd_fw_policy.stdout | default(''))"
+    - idrac_kiosk_amd_fw_policy.rc | default(1) == 0
+  tags:
+    - idrac_kiosk
+
+- name: Enable and start seatd
+  ansible.builtin.systemd:
+    name: seatd
+    enabled: true
+    state: started
+  # seatd needs a real init; skip the start in containers without systemd.
+  when:
+    - idrac_kiosk_enabled | bool
+    - ansible_service_mgr == 'systemd'
+  tags:
+    - idrac_kiosk
+
+- name: Discover supplementary groups present on the host
+  ansible.builtin.getent:
+    database: group
+  when: idrac_kiosk_enabled | bool
+  tags:
+    - idrac_kiosk
+
+- name: Create the kiosk user
+  # video/render/input grant DRM + evdev access; seat (created by seatd) grants
+  # seatd access. Only request groups that actually exist on this host so the
+  # play does not fail if seatd has not created its group yet.
+  ansible.builtin.user:
+    name: "{{ idrac_kiosk_user }}"
+    state: present
+    system: true
+    create_home: true
+    home: "/home/{{ idrac_kiosk_user }}"
+    shell: /usr/sbin/nologin
+    groups: "{{ ['video', 'render', 'input', 'seat']
+                | select('in', ansible_facts.getent_group | default({}))
+                | list }}"
+    append: true
+  when: idrac_kiosk_enabled | bool
+  tags:
+    - idrac_kiosk
+
+- name: Create the kiosk data directory
+  ansible.builtin.file:
+    path: "{{ idrac_kiosk_data_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: idrac_kiosk_enabled | bool
+  tags:
+    - idrac_kiosk
+
+- name: Deploy the kiosk landing page
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ idrac_kiosk_data_dir }}/index.html"
+    owner: root
+    group: root
+    mode: "0644"
+  when: idrac_kiosk_enabled | bool
+  notify: Restart idrac-kiosk
+  tags:
+    - idrac_kiosk
+
+- name: Deploy the kiosk systemd service
+  ansible.builtin.template:
+    src: idrac-kiosk.service.j2
+    dest: /etc/systemd/system/idrac-kiosk.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: idrac_kiosk_enabled | bool
+  notify: Restart idrac-kiosk
+  tags:
+    - idrac_kiosk
+
+- name: Enable and start the kiosk service
+  ansible.builtin.systemd:
+    name: idrac-kiosk
+    enabled: true
+    state: started
+    daemon_reload: true
+  # Real hardware only: a headless container/VM has no DRM device to drive, so
+  # only enable+start on the physical Proxmox host running systemd.
+  when:
+    - idrac_kiosk_enabled | bool
+    - ansible_service_mgr == 'systemd'
+    - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - idrac_kiosk
