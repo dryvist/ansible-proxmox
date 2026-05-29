@@ -1,0 +1,13 @@
+---
+# iDRAC kiosk role handlers
+
+- name: Restart idrac-kiosk
+  ansible.builtin.systemd:
+    name: idrac-kiosk
+    state: restarted
+    daemon_reload: true
+  # Only meaningful on the physical host running systemd; a headless
+  # container/VM has no DRM device for cage to drive.
+  when:
+    - ansible_service_mgr == 'systemd'
+    - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'

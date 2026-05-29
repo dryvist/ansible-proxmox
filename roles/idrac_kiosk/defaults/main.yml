@@ -1,0 +1,22 @@
+---
+# iDRAC kiosk role defaults
+#
+# Drives a physical monitor on the pve host with a Wayland kiosk browser
+# showing both iDRAC6 HTML5 (noVNC) consoles side-by-side.
+
+# Master switch for the role. When false, no packages, users, or services
+# are touched.
+idrac_kiosk_enabled: true
+
+# LXC 251 serves the two iDRAC6 noVNC viewers (Dell R410 + R710).
+idrac_kiosk_kvm_ip: "10.0.1.251"
+
+# Per-server viewer ports on the LXC.
+idrac_kiosk_r410_port: 5410
+idrac_kiosk_r710_port: 5710
+
+# On-host directory holding the generated kiosk landing page.
+idrac_kiosk_data_dir: /opt/idrac-kiosk
+
+# Unprivileged user that runs the cage + chromium session.
+idrac_kiosk_user: kiosk
