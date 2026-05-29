@@ -38,7 +38,7 @@ jobs:
       contents: write
       id-token: write
       pull-requests: write
-    uses: JacobPEvans/ai-workflows/.github/workflows/post-merge-docs-review.yml@main
+    uses: dryvist/ai-workflows/.github/workflows/post-merge-docs-review.yml@main
     with:
       commit_sha: ${{ inputs.commit_sha || github.sha }}
     secrets: inherit
