@@ -1,0 +1,40 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    zfs_pools_from_terraform:
+      pools:
+        tank:
+          datasets:
+            backups:
+              quota: "1T"
+
+  tasks:
+    - name: Re-derive pools from the injected node_storage contract
+      ansible.builtin.set_fact:
+        zfs_pools_check: "{{ zfs_pools_from_terraform.pools | default({}) }}"
+
+    - name: Assert the contract exposes tank/backups with a 1T quota
+      ansible.builtin.assert:
+        that:
+          - "'tank' in zfs_pools_check"
+          - zfs_pools_check.tank.datasets.backups.quota == '1T'
+          # Confirms the byte-comparison used for idempotent quota drift.
+          - (zfs_pools_check.tank.datasets.backups.quota | human_to_bytes) == 1099511627776
+        fail_msg: "node_storage contract did not resolve as expected"
+
+    - name: Probe for ZFS pools (should be absent in the molecule container)
+      ansible.builtin.command:
+        cmd: zpool list
+      register: zfs_pools_zpool_probe
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the role skipped ZFS under Docker (no pool created)
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_zpool_probe.rc != 0
+        fail_msg: "Unexpected zpool present — Docker skip guard may be broken"

@@ -60,3 +60,15 @@
         name: "{{ item }}"
         nas_storage_from_terraform: "{{ terraform_data.host_services.nas }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
+
+    # Per-node ZFS storage (node_storage) is optional — present only once the
+    # terraform-proxmox multi-node contract is applied. Keyed by each host's
+    # `proxmox_node_name` (the terraform node name; e.g. an inventory host
+    # `node-a` maps to terraform node `pve2`), defaulting to inventory_hostname.
+    - name: Inject Terraform per-node ZFS storage onto proxmox hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        zfs_pools_from_terraform: >-
+          {{ (terraform_data.node_storage | default({}))[hostvars[item].proxmox_node_name | default(item)] | default({}) }}
+        cluster_nodes_from_terraform: "{{ terraform_data.nodes | default({}) }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"
