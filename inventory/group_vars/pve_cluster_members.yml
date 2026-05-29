@@ -1,0 +1,18 @@
+---
+# Group vars for the `pve_cluster_members` group — the nodes the `pve_cluster`
+# role is permitted to form/join into a cluster.
+#
+# The allow-list is derived FROM the group membership itself, so adding a host
+# to the group is the single source of truth (no second list to keep in sync).
+# pve_cluster_enabled stays false here — formation is opted into per-run
+# (e.g. `-e pve_cluster_enabled=true`) so a routine site.yml never forms a
+# cluster by accident.
+
+pve_cluster_member_hosts: "{{ groups['pve_cluster_members'] | default([]) }}"
+
+# The primary (cluster-creating) node. The terraform `nodes` map labels the
+# `pve` node as role pve1 — it is the control-plane primary on compute .10.
+pve_cluster_primary_host: pve
+
+# Cluster name. Non-secret structural value; override per environment if needed.
+pve_cluster_name: homelab

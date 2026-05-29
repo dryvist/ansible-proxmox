@@ -1,0 +1,20 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    # Drive the role as the PRIMARY so no join fingerprint is needed. The
+    # container's inventory_hostname (the molecule platform name) is both the
+    # declared primary and the sole allow-listed member. Under Docker every
+    # proxmox_cluster API task is skipped, so this proves the guards pass, the
+    # Docker-skip works, and the role converges idempotently without a live PVE.
+    pve_cluster_enabled: true
+    pve_cluster_primary_host: proxmox-cluster-test
+    pve_cluster_member_hosts:
+      - proxmox-cluster-test
+    pve_cluster_name: molecule-test
+
+  roles:
+    - role: pve_cluster

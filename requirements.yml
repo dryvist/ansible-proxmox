@@ -4,3 +4,8 @@ collections:
     version: ">=2.1.0"
   - name: community.general
     version: ">=12.0.0"
+  # proxmox_cluster (pve_cluster role) — wraps pvecm create/join via the PVE API.
+  # Ceiling at <2.0.0: validate_certs default flips to true at 2.0.0; opt in
+  # deliberately rather than inherit the change silently.
+  - name: community.proxmox
+    version: ">=1.6.0,<2.0.0"

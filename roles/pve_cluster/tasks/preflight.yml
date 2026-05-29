@@ -1,0 +1,59 @@
+---
+# pve_cluster preflight — safety gates.
+#
+# Cluster formation is high-risk and effectively one-directional. These gates
+# ensure the role acts ONLY when explicitly enabled and ONLY against an
+# allow-listed host, and that a secondary has everything it needs to join.
+
+- name: Refuse to run unless explicitly enabled
+  ansible.builtin.assert:
+    that:
+      - pve_cluster_enabled | bool
+    fail_msg: >-
+      pve_cluster is inert by default. Set pve_cluster_enabled=true (and ensure
+      this host is in pve_cluster_member_hosts) only when you intend to form or
+      join the cluster.
+    quiet: true
+  tags:
+    - pve_cluster
+
+- name: Refuse to run against a host outside the allow-list
+  ansible.builtin.assert:
+    that:
+      - pve_cluster_member_hosts | length > 0
+      - inventory_hostname in pve_cluster_member_hosts
+    fail_msg: >-
+      {{ inventory_hostname }} is not in pve_cluster_member_hosts
+      ({{ pve_cluster_member_hosts }}). The role refuses to touch hosts it was
+      not explicitly told are cluster members.
+    quiet: true
+  tags:
+    - pve_cluster
+
+- name: Validate primary has a cluster name
+  ansible.builtin.assert:
+    that:
+      - pve_cluster_name | length > 0
+    fail_msg: "pve_cluster_name must be set for the primary to create the cluster."
+    quiet: true
+  when: pve_cluster_role == 'primary'
+  tags:
+    - pve_cluster
+
+- name: Validate secondary join parameters are present
+  ansible.builtin.assert:
+    that:
+      - pve_cluster_master_ip | length > 0
+      - pve_cluster_fingerprint | length > 0
+    fail_msg: >-
+      Joining node {{ inventory_hostname }} needs pve_cluster_master_ip (the
+      primary's compute-VLAN IP) and pve_cluster_fingerprint (the primary's
+      corosync cert fingerprint, from `pvecm status` on the primary). Supply
+      them via -e or a SOPS var — they are host/cluster specific and not
+      committed.
+    quiet: true
+  when:
+    - pve_cluster_role != 'primary'
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_cluster

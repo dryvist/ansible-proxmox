@@ -11,6 +11,10 @@
 #
 # Rack-server commissioning runs AFTER `pvecm add` joins the node to the cluster;
 # see `playbooks/commission_rack_server.yml`.
+#
+# `pve_cluster_members` lists the nodes the `pve_cluster` role may form/join.
+# Keep uncommissioned nodes (e.g. one with a failed drive) OUT of this group
+# until they are ready — the role hard-refuses to touch a non-member host.
 
 all:
   children:
@@ -19,8 +23,23 @@ all:
         pve:
           ansible_host: 192.168.0.100  # Replace with your Proxmox IP
           ansible_user: root
+          proxmox_node_name: pve
           # ansible_ssh_private_key_file: /path/to/your/ssh/key  # Uncomment and set your SSH key path
+        pve2:
+          ansible_host: 192.168.0.11
+          ansible_user: root
+          proxmox_node_name: pve2
+        pve3:
+          ansible_host: 192.168.0.12
+          ansible_user: root
+          proxmox_node_name: pve3
+          pve_node_commissioned: false  # set true once hardware is ready
       children:
+        # Cluster-eligible nodes. pve3 omitted while uncommissioned.
+        pve_cluster_members:
+          hosts:
+            pve: {}
+            pve2: {}
         rack_servers:
           hosts:
             node-a:

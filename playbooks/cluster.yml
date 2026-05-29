@@ -1,0 +1,42 @@
+---
+# Form the Proxmox VE cluster.
+#
+# Two ordered plays guarantee the primary creates the cluster BEFORE any
+# secondary tries to join. Both target the `pve_cluster_members` group only, so
+# uncommissioned nodes (e.g. pve3 while its drive is bad) are never touched.
+#
+# The role is inert unless enabled, so formation is an explicit, deliberate run:
+#
+#   doppler run -- ansible-playbook -i inventory playbooks/cluster.yml \
+#     -e pve_cluster_enabled=true \
+#     -e pve_cluster_fingerprint="<primary corosync fp from `pvecm status`>"
+#
+# All IPs (link0, master_ip, API host) resolve from inventory / PROXMOX_VE_* env
+# (Doppler) — no literals. See roles/pve_cluster/README.md.
+
+- name: Create the cluster on the primary node
+  hosts: pve_cluster_members
+  become: true
+  gather_facts: true
+  # Only the declared primary runs this play; secondaries fall through to join.
+  tasks:
+    - name: Apply pve_cluster (primary create)
+      ansible.builtin.include_role:
+        name: pve_cluster
+      when: inventory_hostname == pve_cluster_primary_host
+      tags:
+        - pve_cluster
+
+- name: Join secondary nodes to the cluster
+  hosts: pve_cluster_members
+  become: true
+  gather_facts: true
+  # Run joins one node at a time so corosync membership settles between joins.
+  serial: 1
+  tasks:
+    - name: Apply pve_cluster (secondary join)
+      ansible.builtin.include_role:
+        name: pve_cluster
+      when: inventory_hostname != pve_cluster_primary_host
+      tags:
+        - pve_cluster

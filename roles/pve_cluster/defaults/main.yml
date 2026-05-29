@@ -1,0 +1,62 @@
+---
+# pve_cluster role defaults
+#
+# Forms / joins a Proxmox VE cluster idempotently via the
+# `community.proxmox.proxmox_cluster` module (the IaC-driven wrapper around
+# `pvecm` — never a raw shell `pvecm`). The primary node creates the cluster on
+# its compute-VLAN link0; secondary nodes join it. Re-running is a no-op
+# (the module supports check_mode/idempotence).
+#
+# SAFETY: this role is INERT by default. It does nothing unless
+# `pve_cluster_enabled` is true AND the host is in `pve_cluster_member_hosts`.
+# It also skips all API operations under Docker so it is molecule-testable in
+# containers without a live Proxmox cluster.
+#
+# NO MAGIC NUMBERS: every IP comes from inventory (`ansible_host`, itself
+# env/SOPS-injected) or a Doppler/SOPS-sourced var — never a literal here.
+
+# Master switch. Cluster formation is high-risk and one-directional, so the
+# role refuses to act unless this is explicitly turned on for the run.
+pve_cluster_enabled: false
+
+# The cluster name used when the primary creates the cluster.
+pve_cluster_name: homelab
+
+# Allow-list of inventory hostnames this role is permitted to touch. The role
+# hard-asserts inventory_hostname is in this set before doing anything, so a
+# stray run against an unintended host aborts. Populate from inventory/group_vars.
+pve_cluster_member_hosts: []
+
+# This host's role in the cluster: "primary" creates, anything else joins.
+# Derive from the terraform `nodes` map (role "pve1" == primary); default
+# resolves the primary by name match against pve_cluster_primary_host.
+pve_cluster_role: >-
+  {{ (inventory_hostname == pve_cluster_primary_host) | ternary('primary', 'secondary') }}
+
+# Inventory hostname of the primary (cluster-creating) node.
+pve_cluster_primary_host: pve
+
+# link0 — the IP this node uses for corosync ring 0. Defaults to the host's own
+# inventory connection IP (compute VLAN). Override per-host only if corosync
+# must ride a different interface than the management connection.
+pve_cluster_link0: "{{ ansible_host | default(omit) }}"
+
+# Optional second corosync ring (deferred to cluster v2 in ADR-0001; leave
+# empty to use a single link). Supply a per-host IP to enable.
+pve_cluster_link1: ""
+
+# Join parameters (secondary nodes). master_ip defaults to the primary's
+# inventory connection IP via hostvars — no literal. fingerprint is the
+# primary's corosync cert fingerprint; supply at run time (it is host/cluster
+# specific and changes on reinstall) via -e or a SOPS var. When empty on a
+# secondary, the role fails fast with guidance rather than guessing.
+pve_cluster_master_ip: "{{ hostvars[pve_cluster_primary_host].ansible_host | default('') }}"
+pve_cluster_fingerprint: ""
+
+# Proxmox API authentication for the module. Sourced from the same Doppler
+# PROXMOX_VE_* env vars the rest of the pipeline uses — never committed.
+pve_cluster_api_host: "{{ lookup('env', 'PROXMOX_VE_HOSTNAME') | default(ansible_host, true) }}"
+pve_cluster_api_user: "{{ lookup('env', 'PROXMOX_VE_USERNAME') | default('root@pam', true) }}"
+pve_cluster_api_token_id: "{{ lookup('env', 'PROXMOX_VE_TOKEN_ID') | default(omit, true) }}"
+pve_cluster_api_token_secret: "{{ lookup('env', 'PROXMOX_VE_TOKEN_SECRET') | default(omit, true) }}"
+pve_cluster_api_validate_certs: "{{ lookup('env', 'PROXMOX_VE_INSECURE') | default('false', true) | bool | ternary(false, true) }}"
