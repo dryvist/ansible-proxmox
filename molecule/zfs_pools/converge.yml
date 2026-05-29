@@ -1,0 +1,27 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    # Mirrors terraform-proxmox ansible_inventory.node_storage["pve2"], the
+    # live pve2 contract (tank raidz1 + tank/backups). ZFS/pvesm tasks are
+    # skipped under Docker; this proves the role converges and the contract
+    # plumbing resolves.
+    zfs_pools_from_terraform:
+      pools:
+        tank:
+          type: zfspool
+          raid: raidz1
+          protected: true
+          register: true
+          content:
+            - images
+            - rootdir
+          datasets:
+            backups:
+              quota: "1T"
+
+  roles:
+    - role: zfs_pools

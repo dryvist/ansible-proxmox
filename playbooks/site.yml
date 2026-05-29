@@ -46,6 +46,10 @@
       tags:
         - nas_storage
 
+    - role: zfs_pools
+      tags:
+        - zfs_pools
+
     - role: ntp
       tags:
         - ntp

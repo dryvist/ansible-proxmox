@@ -1,0 +1,55 @@
+---
+# Manage datasets within a single pool.
+# Included per-pool from main.yml with loop_var `zfs_pool`
+# (a dict2items entry: { key: <pool>, value: { datasets: {...}, ... } }).
+# Quotas are compared in bytes (zfs -p) against human_to_bytes(desired) so the
+# tasks are idempotent regardless of unit formatting (1T vs 1024G).
+
+- name: "Check datasets exist in pool {{ zfs_pool.key }}"
+  ansible.builtin.command:
+    cmd: "zfs list -H -o name {{ zfs_pool.key }}/{{ item.key }}"
+  register: zfs_pools_ds_check
+  changed_when: false
+  failed_when: false
+  loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}/{{ item.key }}"
+  tags:
+    - zfs_pools
+
+- name: "Create missing datasets in pool {{ zfs_pool.key }}"
+  ansible.builtin.command:
+    cmd: "zfs create -p {{ zfs_pool.key }}/{{ item.key }}"
+  loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}/{{ item.key }}"
+    index_var: zfs_pools_ds_idx
+  when: zfs_pools_ds_check.results[zfs_pools_ds_idx].rc != 0
+  changed_when: true
+  tags:
+    - zfs_pools
+
+- name: "Read current dataset quotas in pool {{ zfs_pool.key }}"
+  ansible.builtin.command:
+    cmd: "zfs get -Hp -o value quota {{ zfs_pool.key }}/{{ item.key }}"
+  register: zfs_pools_ds_quota
+  changed_when: false
+  loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}/{{ item.key }}"
+  tags:
+    - zfs_pools
+
+- name: "Set dataset quotas in pool {{ zfs_pool.key }}"
+  ansible.builtin.command:
+    cmd: "zfs set quota={{ item.value.quota }} {{ zfs_pool.key }}/{{ item.key }}"
+  loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}/{{ item.key }}={{ item.value.quota | default('none') }}"
+    index_var: zfs_pools_ds_idx
+  when:
+    - item.value.quota | default('') | length > 0
+    - zfs_pools_ds_quota.results[zfs_pools_ds_idx].stdout | int != item.value.quota | human_to_bytes
+  changed_when: true
+  tags:
+    - zfs_pools

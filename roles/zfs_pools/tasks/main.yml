@@ -1,0 +1,115 @@
+---
+# zfs_pools role tasks
+#
+# Manages ZFS datasets, quotas, and Proxmox storage registration for the pools
+# declared in terraform-proxmox `node_storage`. zpool CREATION is a host
+# commissioning step (device-specific, destructive) and is opt-in only — by
+# default the role asserts the pool exists and manages datasets within it.
+# All ZFS / pvesm / systemd tasks are skipped under Docker (molecule testing).
+
+- name: Check which declared ZFS pools exist
+  ansible.builtin.command:
+    cmd: "zpool list -H -o name {{ item.key }}"
+  register: zfs_pools_existing
+  changed_when: false
+  failed_when: false
+  loop: "{{ zfs_pools_map | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: ansible_virtualization_type != 'docker'
+  tags:
+    - zfs_pools
+
+- name: Build set of present pools
+  ansible.builtin.set_fact:
+    zfs_pools_present: >-
+      {{
+        zfs_pools_existing.results | default([])
+        | selectattr('rc', 'defined')
+        | selectattr('rc', 'equalto', 0)
+        | map(attribute='item.key') | list
+      }}
+  when: ansible_virtualization_type != 'docker'
+  tags:
+    - zfs_pools
+
+- name: Create missing pools (opt-in, guarded by zfs_pools_allow_create + devices)
+  ansible.builtin.command:
+    cmd: >-
+      zpool create -o ashift=12 {{ item.key }}
+      {{ item.value.raid | default('') }}
+      {{ zfs_pools_devices[item.key] | default([]) | join(' ') }}
+  loop: "{{ zfs_pools_map | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - ansible_virtualization_type != 'docker'
+    - item.key not in zfs_pools_present
+    - zfs_pools_allow_create | bool
+    - zfs_pools_devices[item.key] | default([]) | length > 0
+  changed_when: true
+  tags:
+    - zfs_pools
+
+- name: Assert registerable pools exist (creation is a commissioning step)
+  ansible.builtin.assert:
+    that:
+      - item.key in zfs_pools_present or zfs_pools_allow_create | bool
+    fail_msg: >-
+      ZFS pool '{{ item.key }}' does not exist on {{ inventory_hostname }} and
+      zfs_pools_allow_create is false. Create it during host commissioning
+      (zpool create with the correct by-id devices), or set
+      zfs_pools_allow_create + zfs_pools_devices.{{ item.key }} in host_vars.
+  loop: "{{ zfs_pools_map | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - ansible_virtualization_type != 'docker'
+    - item.value.register | default(true) | bool
+  tags:
+    - zfs_pools
+
+- name: Manage datasets for each present pool
+  ansible.builtin.include_tasks: datasets.yml
+  loop: "{{ zfs_pools_map | dict2items }}"
+  loop_control:
+    loop_var: zfs_pool
+    label: "{{ zfs_pool.key }}"
+  when:
+    - ansible_virtualization_type != 'docker'
+    - zfs_pool.key in zfs_pools_present
+  tags:
+    - zfs_pools
+
+- name: Check existing Proxmox storage registrations
+  ansible.builtin.command:
+    cmd: "pvesm status --storage {{ item.key }}"
+  register: zfs_pools_pvesm_check
+  changed_when: false
+  failed_when: false
+  loop: "{{ zfs_pools_map | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - ansible_virtualization_type != 'docker'
+    - item.key in zfs_pools_present
+    - item.value.register | default(true) | bool
+  tags:
+    - zfs_pools
+
+- name: Register pools as Proxmox ZFS storage (node-scoped)
+  ansible.builtin.command:
+    cmd: >-
+      pvesm add zfspool {{ item.item.key }} -pool {{ item.item.key }}
+      -content {{ item.item.content | default(['images', 'rootdir']) | join(',') }}
+      -nodes {{ proxmox_node_name | default(inventory_hostname) }}
+  loop: "{{ zfs_pools_pvesm_check.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key | default('') }}"
+  when:
+    - ansible_virtualization_type != 'docker'
+    - item.rc is defined
+    - item.rc != 0
+  changed_when: true
+  tags:
+    - zfs_pools
