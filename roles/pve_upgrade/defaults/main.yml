@@ -1,0 +1,19 @@
+---
+# pve_upgrade role defaults
+
+# Reboot the node after the upgrade when packages changed — a new kernel only
+# takes effect after a reboot. Set false to upgrade now and reboot manually in
+# a chosen window.
+pve_upgrade_reboot: true
+
+# Seconds to wait for the node to come back after the reboot.
+pve_upgrade_reboot_timeout: 600
+
+# Substring asserted in `pveversion` output after the upgrade. The role does not
+# pin an exact build: the no-subscription channel always serves the latest 9.x
+# point release, so the node lands on current 9.2.x.
+pve_upgrade_expected_version: "9.2"
+
+# This role runs the upgrade only. Repository normalization (keeping the node on
+# the no-subscription channel) is handled by the pve_repositories role, which
+# playbooks/upgrade.yml applies first.
