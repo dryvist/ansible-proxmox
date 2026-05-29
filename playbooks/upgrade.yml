@@ -1,0 +1,30 @@
+---
+# Upgrade Proxmox VE nodes to the latest point release on their channel.
+#
+# Composes the snapshot play first (ZFS root restore point) — mirroring how
+# site.yml imports load_terraform.yml — then normalizes the apt repositories to
+# the no-subscription channel (pve_repositories), runs apt full-upgrade, reboots
+# for the new kernel, and verifies the version. Deliberately does NOT import
+# load_terraform.yml (NAS-focused; irrelevant to an OS upgrade), matching
+# commission_rack_server.yml.
+#
+# Usage (test — snapshot and reboot are skipped in check mode):
+#   ./scripts/run-ansible.sh playbooks/upgrade.yml -l pve --check --diff
+# Usage (apply — run with console access available; the node reboots):
+#   ./scripts/run-ansible.sh playbooks/upgrade.yml -l pve
+
+- name: Snapshot the root dataset before upgrading
+  import_playbook: snapshot.yml
+
+- name: Upgrade Proxmox VE nodes
+  hosts: proxmox
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: pve_repositories
+      tags:
+        - pve_repositories
+    - role: pve_upgrade
+      tags:
+        - pve_upgrade

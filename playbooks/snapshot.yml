@@ -1,0 +1,19 @@
+---
+# Take a ZFS snapshot of the root (boot environment) dataset on Proxmox VE nodes.
+#
+# Standalone-runnable, and imported by playbooks/upgrade.yml as a pre-change
+# restore point. Override pve_snapshot_dataset if the node's root layout differs
+# from the rpool/ROOT/pve-1 default.
+#
+# Usage:
+#   ./scripts/run-ansible.sh playbooks/snapshot.yml -l pve
+
+- name: Snapshot Proxmox VE root dataset
+  hosts: proxmox
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: pve_snapshot
+      tags:
+        - pve_snapshot

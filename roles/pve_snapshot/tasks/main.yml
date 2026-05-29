@@ -1,0 +1,46 @@
+---
+# pve_snapshot role tasks — take a ZFS snapshot of the root (boot environment)
+# dataset as a pre-change restore point. Instant and near-zero space. If an
+# upgrade leaves the node unbootable, roll back with `zfs rollback <snap>` from a
+# rescue boot. This protects the host OS only; guest disks are separate datasets.
+
+- name: Verify the root dataset exists
+  ansible.builtin.command:
+    cmd: "zfs list -H -o name {{ pve_snapshot_dataset }}"
+  register: pve_snapshot_dataset_check
+  changed_when: false
+  check_mode: false
+  when: pve_snapshot_enabled | bool
+  tags:
+    - pve_snapshot
+
+- name: Build the snapshot name
+  ansible.builtin.set_fact:
+    # Use now() (evaluated at runtime) rather than ansible_date_time, which is a
+    # fact and gets stale under fact caching — two runs would collide on the same
+    # timestamped snapshot name. Folded scalar keeps the line under 120 chars.
+    pve_snapshot_name: >-
+      {{ pve_snapshot_dataset }}@{{ pve_snapshot_prefix }}-{{ now(utc=true, fmt='%Y%m%dT%H%M%S') }}
+  when: pve_snapshot_enabled | bool
+  tags:
+    - pve_snapshot
+
+- name: Snapshot the root dataset
+  ansible.builtin.command:
+    cmd: "zfs snapshot {{ pve_snapshot_name }}"
+  register: pve_snapshot_result
+  changed_when: pve_snapshot_result.rc == 0
+  when: pve_snapshot_enabled | bool
+  tags:
+    - pve_snapshot
+
+- name: Report the restore point
+  ansible.builtin.debug:
+    msg: >-
+      Created restore point {{ pve_snapshot_name }}
+      (roll back from a rescue boot with: zfs rollback {{ pve_snapshot_name }})
+  when:
+    - pve_snapshot_enabled | bool
+    - not ansible_check_mode
+  tags:
+    - pve_snapshot

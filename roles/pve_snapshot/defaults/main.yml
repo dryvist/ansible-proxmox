@@ -1,0 +1,14 @@
+---
+# pve_snapshot role defaults
+
+# Master switch. Set false to skip the pre-change snapshot.
+pve_snapshot_enabled: true
+
+# ZFS root (boot environment) dataset to snapshot before a change. The default
+# matches a standard PVE ZFS-on-root install (rpool/ROOT/pve-1). Override per
+# host if the layout differs (check `zfs list -o name,mountpoint`).
+pve_snapshot_dataset: rpool/ROOT/pve-1
+
+# Snapshot tag prefix. A UTC timestamp is appended for uniqueness, so each run
+# leaves its own restore point (e.g. rpool/ROOT/pve-1@pre-upgrade-20260529T...).
+pve_snapshot_prefix: pre-upgrade

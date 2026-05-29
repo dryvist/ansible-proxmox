@@ -118,6 +118,36 @@ Wiring `terraform-proxmox`'s `rack_servers` output into Ansible host_vars
 is a forward-looking enhancement — the existing `load_terraform.yml` only
 injects the NAS `host_services` contract today.
 
+### Upgrading a node to the latest point release (PVE 9.x)
+
+`playbooks/upgrade.yml` brings a node to the current point release on its
+channel (`apt full-upgrade`), then reboots for the new kernel and verifies
+`pveversion`. It first imports `playbooks/snapshot.yml`, which snapshots the
+ZFS root (boot environment) dataset as a restore point — instant and near-zero
+space. An OS upgrade does not touch guest disks (separate datasets), so the
+root snapshot, not a guest backup, is the right rollback artifact. It then
+applies the `pve_repositories` role, which keeps the node on the
+no-subscription channel (deb822 `.sources`, enterprise repo disabled) without
+touching the Debian base repos. If `pve_repositories_apt_proxy` is set (real URL
+injected via the `APT_PROXY_URL` env var, e.g. an apt-cacher-ng instance), apt
+`http://` fetches are routed through that caching proxy. Run it with console
+access available; the node reboots.
+
+```bash
+# Test (snapshot and reboot are skipped in check mode):
+./scripts/run-ansible.sh playbooks/upgrade.yml -l pve --check --diff
+
+# Apply:
+./scripts/run-ansible.sh playbooks/upgrade.yml -l pve
+```
+
+`playbooks/snapshot.yml` is also runnable on its own. If a node's root layout
+differs from the `rpool/ROOT/pve-1` default, override `pve_snapshot_dataset`.
+The upgrade assumes the node already has working apt repos for its channel
+(`apt update` fails loudly otherwise). To upgrade now and reboot later, pass
+`-e pve_upgrade_reboot=false`. Roll back a bad upgrade from a rescue boot with
+`zfs rollback <snapshot>`.
+
 ## Customization
 
 All settings have sensible defaults. Override them in

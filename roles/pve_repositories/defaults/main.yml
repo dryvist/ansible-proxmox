@@ -1,0 +1,17 @@
+---
+# pve_repositories role defaults
+
+# Master switch. Set false to leave the node's apt repositories untouched.
+pve_repositories_manage: true
+
+# Ceph repo channel codename used in the no-subscription Ceph repository URI.
+pve_repositories_ceph_release: squid
+
+# Keyring that signs the Proxmox repositories (PVE 9 / Debian 13 default).
+pve_repositories_keyring: /usr/share/keyrings/proxmox-archive-keyring.gpg
+
+# Optional apt caching proxy (e.g. apt-cacher-ng) for HTTP repositories. Empty
+# disables it. When set, apt routes http:// fetches through this proxy, which
+# caches packages and can reach upstream mirrors more reliably than each node.
+# Real value is injected per environment (see group_vars), never hardcoded here.
+pve_repositories_apt_proxy: ""

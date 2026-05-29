@@ -1,0 +1,56 @@
+---
+# pve_upgrade role tasks — bring a Proxmox VE node to the latest point release on
+# its channel (apt full-upgrade), reboot for the new kernel, and verify the
+# version. Assumes working apt repos for the channel (see defaults).
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+  tags:
+    - pve_upgrade
+
+- name: Perform full distribution upgrade (apt full-upgrade)
+  ansible.builtin.apt:
+    upgrade: dist
+  register: pve_upgrade_result
+  tags:
+    - pve_upgrade
+
+- name: Remove now-unused packages (apt autoremove)
+  ansible.builtin.apt:
+    autoremove: true
+  tags:
+    - pve_upgrade
+
+- name: Reboot when packages changed (new kernel takes effect on reboot)
+  ansible.builtin.reboot:
+    reboot_timeout: "{{ pve_upgrade_reboot_timeout | int }}"
+    msg: Reboot triggered by ansible pve_upgrade role
+  when:
+    - pve_upgrade_reboot | bool
+    - pve_upgrade_result is changed
+  tags:
+    - pve_upgrade
+
+# pveversion is read-only, but skip the verify in check mode: a dry run has not
+# actually upgraded anything, so asserting the new version would falsely fail.
+- name: Query Proxmox VE version
+  ansible.builtin.command:
+    cmd: pveversion
+  register: pve_upgrade_pveversion
+  changed_when: false
+  when: not ansible_check_mode
+  tags:
+    - pve_upgrade
+
+- name: Assert the node is on the expected PVE version
+  ansible.builtin.assert:
+    that:
+      - pve_upgrade_expected_version in pve_upgrade_pveversion.stdout
+    success_msg: "pveversion reports {{ pve_upgrade_pveversion.stdout }}"
+    fail_msg: >-
+      Expected '{{ pve_upgrade_expected_version }}' in pveversion output but got:
+      {{ pve_upgrade_pveversion.stdout | default('(pveversion not run)') }}
+  when: not ansible_check_mode
+  tags:
+    - pve_upgrade

@@ -1,0 +1,79 @@
+---
+# pve_repositories role tasks — keep the Proxmox apt repositories on the
+# no-subscription channel using the deb822 .sources format (PVE 9 default),
+# idempotently. Each Proxmox repo is its own .sources file, so this manages them
+# individually via ansible.builtin.deb822_repository and leaves the Debian base
+# repositories (debian.sources) untouched.
+
+- name: Ensure the PVE no-subscription repository is enabled
+  ansible.builtin.deb822_repository:
+    name: proxmox
+    types: deb
+    uris: http://download.proxmox.com/debian/pve
+    suites: "{{ ansible_distribution_release }}"
+    components: pve-no-subscription
+    signed_by: "{{ pve_repositories_keyring }}"
+    enabled: true
+    state: present
+  when: pve_repositories_manage | bool
+  tags:
+    - pve_repositories
+    - repositories
+
+- name: Ensure the Ceph no-subscription repository is enabled
+  ansible.builtin.deb822_repository:
+    name: ceph
+    types: deb
+    uris: "http://download.proxmox.com/debian/ceph-{{ pve_repositories_ceph_release }}"
+    suites: "{{ ansible_distribution_release }}"
+    components: no-subscription
+    signed_by: "{{ pve_repositories_keyring }}"
+    enabled: true
+    state: present
+  when: pve_repositories_manage | bool
+  tags:
+    - pve_repositories
+    - repositories
+
+- name: Ensure the PVE enterprise repository is present but disabled
+  ansible.builtin.deb822_repository:
+    name: pve-enterprise
+    types: deb
+    uris: https://enterprise.proxmox.com/debian/pve
+    suites: "{{ ansible_distribution_release }}"
+    components: pve-enterprise
+    signed_by: "{{ pve_repositories_keyring }}"
+    enabled: false
+    state: present
+  when: pve_repositories_manage | bool
+  tags:
+    - pve_repositories
+    - repositories
+
+- name: Configure apt to use the caching proxy
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/00acng-proxy
+    content: |
+      // Ansible managed - pve_repositories role
+      // Route apt http:// fetches through the caching proxy (apt-cacher-ng).
+      Acquire::http::Proxy "{{ pve_repositories_apt_proxy }}";
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - pve_repositories_manage | bool
+    - pve_repositories_apt_proxy | length > 0
+  tags:
+    - pve_repositories
+    - repositories
+
+- name: Remove the apt caching proxy config when unset
+  ansible.builtin.file:
+    path: /etc/apt/apt.conf.d/00acng-proxy
+    state: absent
+  when:
+    - pve_repositories_manage | bool
+    - pve_repositories_apt_proxy | length == 0
+  tags:
+    - pve_repositories
+    - repositories
