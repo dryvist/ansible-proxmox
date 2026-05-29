@@ -1,0 +1,23 @@
+---
+# Rename a STANDALONE (pre-cluster) Proxmox VE node.
+#
+# This is a deliberate, one-off, pre-cluster operation — it is NOT part of
+# `site.yml` (which targets the whole cluster). Run it against a single
+# standalone node only, AFTER taking a snapshot, BEFORE cluster formation
+# (`pve_cluster` role). The role hard-refuses to run on a clustered node.
+#
+# The new node name and the compute-VLAN IP come from inventory / SOPS /
+# Doppler — never pass literal IPs on the command line.
+#
+# Usage:
+#   doppler run -- ansible-playbook -i inventory playbooks/rename_node.yml -l <node>
+
+- name: Rename standalone Proxmox VE node
+  hosts: proxmox
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: pve_node_rename
+      tags:
+        - pve_node_rename

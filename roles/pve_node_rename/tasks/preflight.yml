@@ -1,0 +1,58 @@
+---
+# pve_node_rename preflight — safety gates.
+#
+# A node rename is ONLY safe while standalone. These checks refuse to proceed on
+# anything that looks clustered (corosync config present or a quorate corosync
+# membership), because renaming a clustered node corrupts pmxcfs/quorum.
+
+- name: Stat corosync configuration
+  ansible.builtin.stat:
+    path: /etc/pve/corosync.conf
+  register: pve_node_rename_corosync_stat
+  tags:
+    - pve_node_rename
+
+- name: Probe corosync quorum status
+  ansible.builtin.command:
+    cmd: corosync-quorumtool -s
+  register: pve_node_rename_quorum
+  changed_when: false
+  failed_when: false
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_node_rename
+
+- name: Determine whether the node appears clustered
+  ansible.builtin.set_fact:
+    pve_node_rename_is_clustered: >-
+      {{
+        (pve_node_rename_corosync_stat.stat.exists | default(false))
+        or ((pve_node_rename_quorum.rc | default(1)) == 0)
+      }}
+  tags:
+    - pve_node_rename
+
+- name: Refuse to rename a clustered node (safety gate)
+  ansible.builtin.assert:
+    that:
+      - (not pve_node_rename_is_clustered) or (pve_node_rename_force_when_clustered | bool)
+    fail_msg: >-
+      {{ inventory_hostname }} appears to be part of a Proxmox cluster
+      (corosync.conf present or quorum reported). Renaming a clustered node
+      corrupts pmxcfs — aborting. Renames are only safe while STANDALONE
+      (pre-cluster). If this is a false positive and the node is genuinely
+      standalone, set pve_node_rename_force_when_clustered=true.
+    success_msg: "Node is standalone — safe to rename."
+  tags:
+    - pve_node_rename
+
+- name: Validate rename target
+  ansible.builtin.assert:
+    that:
+      - pve_node_rename_to | length > 0
+      - pve_node_rename_to is match('^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$')
+    fail_msg: >-
+      pve_node_rename_to ('{{ pve_node_rename_to }}') is not a valid hostname
+      label.
+  tags:
+    - pve_node_rename

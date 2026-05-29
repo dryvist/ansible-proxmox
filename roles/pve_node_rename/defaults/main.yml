@@ -1,0 +1,37 @@
+---
+# pve_node_rename role defaults
+#
+# Renames a STANDALONE (pre-cluster) Proxmox VE node — the only window in which
+# a node rename is safe. Renaming a *clustered* node is high-risk and this role
+# refuses to run when corosync/quorum is present (see ADR-0001 in int_homelab).
+#
+# All real addresses come from inventory / SOPS / Doppler — never hardcode an IP
+# here. The current homelab use is `pve` -> `pve1`, moving its identity from the
+# legacy `net` VLAN to the `compute` VLAN, but the role is host-agnostic.
+
+# Target node name to rename TO (the new pmxcfs node identity + hostname).
+pve_node_rename_to: pve1
+
+# Source node name to rename FROM. Defaults to the live hostname so a re-run
+# after a successful rename is a no-op (source == target -> nothing to do).
+pve_node_rename_from: "{{ ansible_hostname }}"
+
+# Management/compute IP the renamed node should resolve to in /etc/hosts.
+# Supply from inventory (e.g. ansible_host) or a SOPS/Doppler-injected var.
+# Leave empty to skip the /etc/hosts address rewrite (hostname/pmxcfs only).
+pve_node_rename_ip: "{{ ansible_host | default('') }}"
+
+# Stale identity addresses to strip from /etc/hosts (the old VLAN IP[s] the
+# node used before the rename, e.g. the legacy net-VLAN 10.0.1.x address).
+# Supply from inventory/SOPS — no literal default so nothing is baked in here.
+pve_node_rename_stale_ips: []
+
+# Fully-qualified domain name for the renamed node's /etc/hosts entry. When
+# empty, only the short name is written.
+pve_node_rename_fqdn: ""
+
+# SAFETY GATE. The role hard-refuses to touch a node that looks clustered
+# (corosync config present or a quorate corosync membership). Renaming a
+# clustered node corrupts pmxcfs. Only set true if you have independently
+# confirmed the node is standalone and the detection is a false positive.
+pve_node_rename_force_when_clustered: false

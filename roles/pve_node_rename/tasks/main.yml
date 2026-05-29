@@ -1,0 +1,99 @@
+---
+# pve_node_rename role tasks
+#
+# Idempotently rename a STANDALONE Proxmox VE node: hostname, /etc/hosts (new
+# identity + stale-IP cleanup), and the pmxcfs node directory under /etc/pve.
+# corosync.conf nodename is fixed up only if a single-node config happens to
+# exist. The preflight gate refuses to run on a clustered node.
+#
+# All ZFS/pmxcfs/systemd-touching steps are skipped under Docker so the role can
+# be molecule-tested in containers without a live Proxmox host.
+
+- name: Run preflight safety gates
+  ansible.builtin.include_tasks: preflight.yml
+  tags:
+    - pve_node_rename
+
+- name: Set the system hostname
+  ansible.builtin.hostname:
+    name: "{{ pve_node_rename_to }}"
+  when: ansible_hostname != pve_node_rename_to
+  tags:
+    - pve_node_rename
+
+- name: Remove stale identity addresses from /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ item | regex_escape }}\\s"
+    state: absent
+  loop: "{{ pve_node_rename_stale_ips }}"
+  loop_control:
+    label: "{{ item }}"
+  tags:
+    - pve_node_rename
+
+- name: Remove old short hostname from any /etc/hosts line (pre-rename identity)
+  ansible.builtin.replace:
+    path: /etc/hosts
+    regexp: '(?<=\s){{ pve_node_rename_from | regex_escape }}(?=\s|$)'
+    replace: "{{ pve_node_rename_to }}"
+  when: pve_node_rename_from != pve_node_rename_to
+  tags:
+    - pve_node_rename
+
+- name: Ensure /etc/hosts maps the management IP to the renamed node
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ pve_node_rename_ip | regex_escape }}\\s"
+    line: "{{ pve_node_rename_ip }} {{ (pve_node_rename_fqdn | length > 0) | ternary(pve_node_rename_fqdn ~ ' ', '') }}{{ pve_node_rename_to }}"
+    state: present
+  when: pve_node_rename_ip | length > 0
+  tags:
+    - pve_node_rename
+
+# pmxcfs stores node state under /etc/pve/nodes/<nodename>. On a standalone node
+# the rename is completed by moving that directory to the new name. /etc/pve is a
+# FUSE mount (pmxcfs), so a plain move is the documented approach; guard it so it
+# only runs when the source exists, the target does not, and names differ.
+- name: Stat current pmxcfs node directory
+  ansible.builtin.stat:
+    path: "/etc/pve/nodes/{{ pve_node_rename_from }}"
+  register: pve_node_rename_src_dir
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_node_rename
+
+- name: Stat target pmxcfs node directory
+  ansible.builtin.stat:
+    path: "/etc/pve/nodes/{{ pve_node_rename_to }}"
+  register: pve_node_rename_dst_dir
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_node_rename
+
+- name: Rename pmxcfs node directory to the new node name
+  ansible.builtin.command:
+    cmd: "mv /etc/pve/nodes/{{ pve_node_rename_from }} /etc/pve/nodes/{{ pve_node_rename_to }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - pve_node_rename_from != pve_node_rename_to
+    - pve_node_rename_src_dir.stat.exists | default(false)
+    - not (pve_node_rename_dst_dir.stat.exists | default(false))
+  changed_when: true
+  tags:
+    - pve_node_rename
+
+# Single-node corosync config (rare on a standalone box, but the legacy `pve`
+# carried one). Fix the nodename only if the file exists AND still references the
+# old name — never create one here (cluster formation is the pve_cluster role).
+- name: Update single-node corosync nodename if present
+  ansible.builtin.replace:
+    path: /etc/pve/corosync.conf
+    regexp: '(?<=\s)name:\s*{{ pve_node_rename_from | regex_escape }}(?=\s|$)'
+    replace: "name: {{ pve_node_rename_to }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - pve_node_rename_from != pve_node_rename_to
+    - pve_node_rename_corosync_stat.stat.exists | default(false)
+  tags:
+    - pve_node_rename

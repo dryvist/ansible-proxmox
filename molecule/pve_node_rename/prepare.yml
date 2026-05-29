@@ -1,0 +1,22 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Install Python and system utilities
+      ansible.builtin.raw: |
+        apt-get update && apt-get install -y python3 procps hostname
+      changed_when: true
+
+    # Seed /etc/hosts with a pre-rename identity: a stale address line plus the
+    # old short name, so the role has real content to clean up. Addresses are
+    # RFC 5737 documentation ranges (TEST-NET) — never real infrastructure.
+    - name: Seed a stale-identity /etc/hosts
+      ansible.builtin.copy:
+        dest: /etc/hosts
+        mode: "0644"
+        content: |
+          127.0.0.1 localhost
+          198.51.100.14 oldnode.example.invalid oldnode
+          203.0.113.10 oldnode.example.invalid oldnode

@@ -1,0 +1,27 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Read /etc/hosts
+      ansible.builtin.slurp:
+        src: /etc/hosts
+      register: pve_node_rename_hosts
+
+    - name: Decode /etc/hosts
+      ansible.builtin.set_fact:
+        pve_node_rename_hosts_text: "{{ pve_node_rename_hosts.content | b64decode }}"
+
+    - name: Assert the renamed node identity is present and stale identity is gone
+      ansible.builtin.assert:
+        that:
+          # New identity line written with FQDN + new short name.
+          - "'203.0.113.10 newnode.example.invalid newnode' in pve_node_rename_hosts_text"
+          # Stale address line removed.
+          - "'198.51.100.14' not in pve_node_rename_hosts_text"
+          # Old short name no longer present anywhere.
+          - "'oldnode' not in pve_node_rename_hosts_text"
+        fail_msg: "/etc/hosts was not rewritten to the new node identity"
+        success_msg: "/etc/hosts reflects the renamed node and stale identity is cleaned"

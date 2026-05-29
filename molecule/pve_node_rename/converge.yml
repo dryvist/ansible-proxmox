@@ -1,0 +1,19 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    # Test fixtures only. Addresses are RFC 5737 documentation ranges
+    # (TEST-NET) so nothing real is implied. The live homelab supplies the
+    # real compute-VLAN IP + node name from inventory/SOPS, never literals.
+    pve_node_rename_from: oldnode
+    pve_node_rename_to: newnode
+    pve_node_rename_ip: "203.0.113.10"
+    pve_node_rename_fqdn: newnode.example.invalid
+    pve_node_rename_stale_ips:
+      - "198.51.100.14"
+
+  roles:
+    - role: pve_node_rename

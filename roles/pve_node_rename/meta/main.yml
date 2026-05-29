@@ -1,0 +1,23 @@
+---
+# pve_node_rename role metadata
+
+galaxy_info:
+  role_name: pve_node_rename
+  author: ansible-proxmox
+  description: Idempotently rename a standalone (pre-cluster) Proxmox VE node
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - cluster
+    - rename
+    - hostname
+
+dependencies: []
