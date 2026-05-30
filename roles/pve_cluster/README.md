@@ -48,8 +48,8 @@ literal in this role:
 ```yaml
 pve_cluster_enabled: false            # master switch — set true to act
 pve_cluster_name: homelab             # cluster name (primary creates it)
-pve_cluster_member_hosts: []          # allow-list, e.g. [pve, pve2]
-pve_cluster_primary_host: pve         # which inventory host creates the cluster
+pve_cluster_member_hosts: []          # allow-list, e.g. [pve1, pve2]
+pve_cluster_primary_host: pve1        # which inventory host creates the cluster
 pve_cluster_role: >-                  # auto: 'primary' on the primary, else 'secondary'
   {{ (inventory_hostname == pve_cluster_primary_host) | ternary('primary', 'secondary') }}
 pve_cluster_link0: "{{ ansible_host }}"   # corosync ring 0 (compute VLAN)

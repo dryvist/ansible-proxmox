@@ -7,7 +7,7 @@
 #   1. `load_terraform.yml` (imported by site.yml) injects
 #      `nas_storage_from_terraform` for `groups['proxmox']` — children inherit.
 #   2. After commissioning, `playbooks/site.yml` (which targets `hosts: proxmox`)
-#      manages rack servers alongside the original pve host.
+#      manages rack servers alongside the original pve1 host.
 #
 # Rack-server commissioning runs AFTER `pvecm add` joins the node to the cluster;
 # see `playbooks/commission_rack_server.yml`.
@@ -20,10 +20,10 @@ all:
   children:
     proxmox:
       hosts:
-        pve:
+        pve1:
           ansible_host: 192.168.0.100  # Replace with your Proxmox IP
           ansible_user: root
-          proxmox_node_name: pve
+          proxmox_node_name: pve1
           # ansible_ssh_private_key_file: /path/to/your/ssh/key  # Uncomment and set your SSH key path
         pve2:
           ansible_host: 192.168.0.11
@@ -38,7 +38,7 @@ all:
         # Cluster-eligible nodes. pve3 omitted while uncommissioned.
         pve_cluster_members:
           hosts:
-            pve: {}
+            pve1: {}
             pve2: {}
         rack_servers:
           hosts:
