@@ -1,0 +1,80 @@
+---
+# pve_cluster role tasks
+#
+# Idempotently create the cluster on the primary node and join secondary nodes,
+# using community.proxmox.proxmox_cluster (the IaC wrapper around pvecm — never
+# a raw shell pvecm). corosync ring 0 (link0) rides each node's compute-VLAN IP.
+#
+# All proxmox_cluster / API calls are skipped under Docker so the role is
+# molecule-testable in containers without a live Proxmox cluster.
+
+- name: Run preflight safety gates
+  ansible.builtin.include_tasks: preflight.yml
+  tags:
+    - pve_cluster
+
+- name: Create the cluster on the primary node
+  community.proxmox.proxmox_cluster:
+    state: present
+    api_host: "{{ pve_cluster_api_host }}"
+    api_user: "{{ pve_cluster_api_user }}"
+    api_token_id: "{{ pve_cluster_api_token_id }}"
+    api_token_secret: "{{ pve_cluster_api_token_secret }}"
+    validate_certs: "{{ pve_cluster_api_validate_certs }}"
+    cluster_name: "{{ pve_cluster_name }}"
+    link0: "{{ pve_cluster_link0 }}"
+    link1: "{{ (pve_cluster_link1 | length > 0) | ternary(pve_cluster_link1, omit) }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - pve_cluster_role == 'primary'
+  tags:
+    - pve_cluster
+
+- name: Join secondary node to the cluster
+  community.proxmox.proxmox_cluster:
+    state: present
+    api_host: "{{ pve_cluster_api_host }}"
+    api_user: "{{ pve_cluster_api_user }}"
+    api_token_id: "{{ pve_cluster_api_token_id }}"
+    api_token_secret: "{{ pve_cluster_api_token_secret }}"
+    validate_certs: "{{ pve_cluster_api_validate_certs }}"
+    master_ip: "{{ pve_cluster_master_ip }}"
+    fingerprint: "{{ pve_cluster_fingerprint }}"
+    link0: "{{ pve_cluster_link0 }}"
+    link1: "{{ (pve_cluster_link1 | length > 0) | ternary(pve_cluster_link1, omit) }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - pve_cluster_role != 'primary'
+  tags:
+    - pve_cluster
+
+- name: Read cluster status for verification
+  community.proxmox.proxmox_cluster_status_info:
+    api_host: "{{ pve_cluster_api_host }}"
+    api_user: "{{ pve_cluster_api_user }}"
+    api_token_id: "{{ pve_cluster_api_token_id }}"
+    api_token_secret: "{{ pve_cluster_api_token_secret }}"
+    validate_certs: "{{ pve_cluster_api_validate_certs }}"
+  register: pve_cluster_status
+  changed_when: false
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - pve_cluster_role == 'primary'
+  tags:
+    - pve_cluster
+
+- name: Assert the cluster reports quorum from the primary
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_cluster_status.cluster_status
+        | selectattr('type', 'equalto', 'cluster')
+        | map(attribute='quorate') | first | int == 1
+    fail_msg: "Cluster did not report quorum after formation."
+    success_msg: "Cluster is quorate."
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - pve_cluster_role == 'primary'
+    - pve_cluster_status.cluster_status is defined
+  tags:
+    - pve_cluster

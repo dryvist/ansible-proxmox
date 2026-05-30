@@ -1,0 +1,10 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Install Python and system utilities
+      ansible.builtin.raw: |
+        apt-get update && apt-get install -y python3 procps
+      changed_when: true
