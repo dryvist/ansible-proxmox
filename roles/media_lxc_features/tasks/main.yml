@@ -1,0 +1,53 @@
+---
+# media_lxc_features role tasks
+#
+# Applies the root-only LXC features (host bind-mounts, keyctl, /dev/net/tun
+# passthrough) that the BPG Proxmox provider's API token cannot set (Proxmox
+# restricts them to root@pam ticket auth -> token gets 403). Runs over native
+# root SSH, idempotently, only on media vmids that actually exist on the host.
+#
+# Ordering: terraform-proxmox creates the media LXCs as plain shells ->
+# THIS role applies root-only features -> ansible-proxmox-apps converges the
+# services. See README.md.
+
+- name: Enumerate LXC containers present on this host
+  ansible.builtin.command:
+    cmd: pct list
+  register: media_lxc_features_pct_list
+  changed_when: false
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - media_lxc_features
+
+- name: Build the set of vmids present on this host
+  ansible.builtin.set_fact:
+    # `pct list` columns: "VMID Status ... Name". Keep only lines beginning with
+    # digits (skips the header), then take the leading vmid token from each.
+    media_lxc_features_present: >-
+      {{
+        media_lxc_features_pct_list.stdout_lines | default([])
+        | map('regex_search', '^\d+')
+        | select('truthy')
+        | list
+      }}
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - media_lxc_features
+
+- name: Reset the changed-container accumulator
+  ansible.builtin.set_fact:
+    media_lxc_features_changed: []
+  tags:
+    - media_lxc_features
+
+- name: Apply root-only features to each present media container
+  ansible.builtin.include_tasks: configure_container.yml
+  loop: "{{ media_lxc_features_map | dict2items }}"
+  loop_control:
+    loop_var: media_ct
+    label: "container {{ media_ct.key }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - media_ct.key in media_lxc_features_present | default([])
+  tags:
+    - media_lxc_features

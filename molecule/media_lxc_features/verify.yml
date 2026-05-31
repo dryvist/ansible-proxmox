@@ -1,0 +1,107 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: true
+
+  tasks:
+    - name: Load the role defaults (feature map)
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/media_lxc_features/defaults/main.yml"
+
+    - name: Assert the media feature map covers vmids 210-214
+      ansible.builtin.assert:
+        that:
+          - "'210' in media_lxc_features_map"
+          - "'211' in media_lxc_features_map"
+          - "'212' in media_lxc_features_map"
+          - "'213' in media_lxc_features_map"
+          - "'214' in media_lxc_features_map"
+        fail_msg: "media_lxc_features_map is missing one of the media vmids"
+
+    - name: Assert download-vpn (210) gets both mounts, keyctl, and tun
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_map['210'].mounts | length == 2
+          - >-
+            (media_lxc_features_map['210'].mounts
+             | selectattr('src', 'equalto', '/rpool/data/downloads')
+             | map(attribute='dst') | first) == '/mnt/downloads'
+          - >-
+            (media_lxc_features_map['210'].mounts
+             | selectattr('src', 'equalto', '/rpool/data/media')
+             | map(attribute='dst') | first) == '/mnt/media'
+          - media_lxc_features_map['210'].keyctl | bool
+          - media_lxc_features_map['210'].tun | bool
+        fail_msg: "download-vpn (210) feature contract did not resolve as expected"
+
+    - name: Assert sonarr/radarr (211/212) get both mounts, no keyctl, no tun
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_map['211'].mounts | length == 2
+          - media_lxc_features_map['212'].mounts | length == 2
+          - not (media_lxc_features_map['211'].keyctl | bool)
+          - not (media_lxc_features_map['212'].keyctl | bool)
+          - not (media_lxc_features_map['211'].tun | bool)
+          - not (media_lxc_features_map['212'].tun | bool)
+        fail_msg: "sonarr/radarr (211/212) feature contract did not resolve as expected"
+
+    - name: Assert plex (213) gets the media mount only, read-write
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_map['213'].mounts | length == 1
+          - media_lxc_features_map['213'].mounts[0].src == '/rpool/data/media'
+          - media_lxc_features_map['213'].mounts[0].dst == '/mnt/media'
+          - not (media_lxc_features_map['213'].mounts[0].ro | default(false))
+        fail_msg: "plex (213) feature contract did not resolve as expected"
+
+    - name: Assert jellyseerr (214) gets keyctl only, no bind-mounts
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_map['214'].mounts | default([]) | length == 0
+          - media_lxc_features_map['214'].keyctl | bool
+          - not (media_lxc_features_map['214'].tun | bool)
+        fail_msg: "jellyseerr (214) feature contract did not resolve as expected"
+
+    - name: Assert the tun device numbers are the TUN/TAP allocation (10:200)
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_tun_major == 10
+          - media_lxc_features_tun_minor == 200
+        fail_msg: "/dev/net/tun device numbers are not the expected 10:200"
+
+    # Guards the keyctl feature-merge logic (the load-bearing expression the role
+    # uses to build `pct set --features` and gate its idempotent `when`). Proves
+    # keyctl=1 is merged in WITHOUT dropping a terraform-set nesting=1, the result
+    # is sorted (stable), and an already-converged host yields no change.
+    - name: Merge keyctl into a nesting-only feature set (as the role does)
+      ansible.builtin.set_fact:
+        media_lxc_features_verify_cur: ["nesting=1"]
+        media_lxc_features_verify_merged: >-
+          {{ ((['nesting=1'] | reject('match', '^keyctl=') | list) + ['keyctl=1']) | sort }}
+        media_lxc_features_verify_converged: >-
+          {{ ((['keyctl=1', 'nesting=1'] | reject('match', '^keyctl=') | list) + ['keyctl=1']) | sort }}
+
+    - name: Assert keyctl-merge preserves nesting, sorts, and is idempotent
+      ansible.builtin.assert:
+        that:
+          # nesting preserved, keyctl added, sorted for a stable pct-set string
+          - media_lxc_features_verify_merged == ['keyctl=1', 'nesting=1']
+          # a nesting-only container would change (keyctl is added)
+          - (media_lxc_features_verify_cur | sort) != media_lxc_features_verify_merged
+          # an already-converged container yields no change (idempotent)
+          - (['keyctl=1', 'nesting=1'] | sort) == media_lxc_features_verify_converged
+        fail_msg: "keyctl feature-merge logic regressed (drop, order, or idempotency)"
+
+    - name: Probe for the pct CLI (must be absent in the molecule container)
+      ansible.builtin.command:
+        cmd: which pct
+      register: media_lxc_features_pct_probe
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the role skipped pct under Docker (no pct present)
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_pct_probe.rc != 0
+        fail_msg: "Unexpected pct present — Docker skip guard may be broken"

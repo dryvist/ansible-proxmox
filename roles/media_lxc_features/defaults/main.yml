@@ -1,0 +1,58 @@
+---
+# media_lxc_features role defaults
+#
+# Root-only LXC features for the media stack that the BPG Proxmox provider's
+# API token CANNOT set: host bind-mounts (mp), the keyctl feature, and
+# /dev/net/tun device passthrough. Proxmox restricts all three to root@pam
+# *ticket* auth, so the API token gets HTTP 403. Terraform creates the media
+# LXCs as plain shells; this role applies the root-only bits over native root
+# SSH, idempotently.
+#
+# The map is keyed by container ID (string). Each entry is a fixed, non-secret
+# vmid -> feature declaration replicating the live terraform-proxmox
+# deployment.json media stack (download-vpn, sonarr, radarr, plex, jellyseerr).
+# No IPs, no secrets — safe to commit.
+#
+# Per-vmid shape:
+#   mounts:     list of { src: <host path>, dst: <in-container path>, ro: <bool, default false> }
+#   keyctl:     bool — ensure features contains keyctl=1, MERGED into existing
+#               features (terraform-set nesting=1 is preserved, never dropped)
+#   tun:        bool — passthrough /dev/net/tun (char 10:200) into the container
+#
+# Only vmids that actually exist on the target host are acted on; absent vmids
+# are skipped (terraform may not have created them yet). All tasks are skipped
+# under Docker virtualization (molecule).
+media_lxc_features_map:
+  "210":  # download-vpn — qBittorrent + Prowlarr behind Proton WireGuard
+    mounts:
+      - { src: /rpool/data/downloads, dst: /mnt/downloads }
+      - { src: /rpool/data/media, dst: /mnt/media }
+    keyctl: true
+    tun: true
+  "211":  # sonarr — TV PVR
+    mounts:
+      - { src: /rpool/data/downloads, dst: /mnt/downloads }
+      - { src: /rpool/data/media, dst: /mnt/media }
+    keyctl: false
+    tun: false
+  "212":  # radarr — movie PVR
+    mounts:
+      - { src: /rpool/data/downloads, dst: /mnt/downloads }
+      - { src: /rpool/data/media, dst: /mnt/media }
+    keyctl: false
+    tun: false
+  "213":  # plex — media streaming
+    mounts:
+      - { src: /rpool/data/media, dst: /mnt/media }
+    keyctl: false
+    tun: false
+  "214":  # jellyseerr — request UI (Docker-in-LXC); no bind-mounts
+    mounts: []
+    keyctl: true
+    tun: false
+
+# /dev/net/tun device numbers (char major:minor). Stable Linux allocation for
+# the TUN/TAP driver. Verified on pve1: `stat -c %t:%T /dev/net/tun` -> a:c8
+# (hex) == 10:200 (decimal).
+media_lxc_features_tun_major: 10
+media_lxc_features_tun_minor: 200

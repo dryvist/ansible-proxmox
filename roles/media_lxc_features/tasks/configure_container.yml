@@ -1,0 +1,139 @@
+---
+# Apply root-only features to a single media LXC container.
+# media_ct.key   = container ID (string)
+# media_ct.value = { mounts: [...], keyctl: bool, tun: bool }
+#
+# Idempotency strategy: read the live config with `pct config` FIRST, then make
+# each change only when the desired state is absent/different. Any task that
+# mutates config appends the vmid to media_lxc_features_changed and notifies the
+# restart handler.
+
+- name: "Read current config for container {{ media_ct.key }}"
+  ansible.builtin.command:
+    cmd: "pct config {{ media_ct.key }}"
+  register: media_lxc_features_cfg
+  changed_when: false
+  tags:
+    - media_lxc_features
+
+# ---------------------------------------------------------------------------
+# Bind-mounts (mp0, mp1, ...) — host path -> in-container target, optional ro
+# ---------------------------------------------------------------------------
+# Desired line shape (matches `pct config` readback, e.g. CT 252):
+#   mpN: <host>,mp=<target>[,ro=1]
+# We compare the desired mp string against the current value of that exact mpN
+# slot and only `pct set` when missing or different.
+
+- name: "Set bind-mounts on container {{ media_ct.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      pct set {{ media_ct.key }}
+      --mp{{ media_mp_idx }}
+      {{ media_mp.src }},mp={{ media_mp.dst }}{{ ',ro=1' if (media_mp.ro | default(false)) else '' }}
+  loop: "{{ media_ct.value.mounts | default([]) }}"
+  loop_control:
+    loop_var: media_mp
+    index_var: media_mp_idx
+    label: "{{ media_ct.key }} mp{{ media_mp_idx }}: {{ media_mp.src }} -> {{ media_mp.dst }}"
+  vars:
+    media_mp_desired: >-
+      {{ media_mp.src }},mp={{ media_mp.dst }}{{ ',ro=1' if (media_mp.ro | default(false)) else '' }}
+    media_mp_current: >-
+      {{
+        media_lxc_features_cfg.stdout_lines
+        | select('match', '^mp' ~ media_mp_idx ~ ':')
+        | map('regex_replace', '^mp' ~ media_mp_idx ~ ':\s*', '')
+        | list | first | default('')
+      }}
+  when: media_mp_current != media_mp_desired
+  changed_when: true
+  notify: Restart changed media containers
+  register: media_lxc_features_mp_set
+  tags:
+    - media_lxc_features
+
+- name: "Record bind-mount change for container {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"
+  when: media_lxc_features_mp_set is defined and media_lxc_features_mp_set.changed
+  tags:
+    - media_lxc_features
+
+# ---------------------------------------------------------------------------
+# keyctl feature — MERGE into existing features (preserve terraform-set nesting)
+# ---------------------------------------------------------------------------
+# Parse the current `features:` line into a key=val map, add keyctl=1 if absent,
+# and only `pct set --features` when the merged set differs from the current.
+
+- name: "Ensure keyctl feature on container {{ media_ct.key }}"
+  when: media_ct.value.keyctl | default(false)
+  tags:
+    - media_lxc_features
+  block:
+    - name: "Parse current features into a token set for {{ media_ct.key }}"
+      ansible.builtin.set_fact:
+        # `features:` value (e.g. "nesting=1") -> ["nesting=1"]. Empty list when
+        # the container has no features line yet.
+        media_lxc_features_cur_tokens: >-
+          {{
+            media_lxc_features_cfg.stdout_lines
+            | select('match', '^features:')
+            | map('regex_replace', '^features:\s*', '')
+            | list | first | default('')
+            | split(',') | select('truthy') | list
+          }}
+
+    - name: "Compute merged feature tokens (keyctl added, nesting preserved) for {{ media_ct.key }}"
+      ansible.builtin.set_fact:
+        # Drop any existing keyctl=* token, append keyctl=1, sort for stability.
+        # Every other token (e.g. terraform-set nesting=1) is preserved verbatim.
+        media_lxc_features_merged_tokens: >-
+          {{
+            (
+              (media_lxc_features_cur_tokens | reject('match', '^keyctl=') | list)
+              + ['keyctl=1']
+            ) | sort
+          }}
+
+    - name: "Apply merged features to container {{ media_ct.key }}"
+      ansible.builtin.command:
+        cmd: "pct set {{ media_ct.key }} --features {{ media_lxc_features_merged_tokens | join(',') }}"
+      when: (media_lxc_features_cur_tokens | sort) != media_lxc_features_merged_tokens
+      changed_when: true
+      notify: Restart changed media containers
+      register: media_lxc_features_feat_set
+
+    - name: "Record feature change for container {{ media_ct.key }}"
+      ansible.builtin.set_fact:
+        media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"
+      when: media_lxc_features_feat_set is defined and media_lxc_features_feat_set.changed
+
+# ---------------------------------------------------------------------------
+# /dev/net/tun device passthrough — raw LXC config lines in the .conf file
+# ---------------------------------------------------------------------------
+# `pct set` has no flag for arbitrary device passthrough, so the standard method
+# is two raw lines appended to /etc/pve/lxc/<vmid>.conf:
+#   lxc.cgroup2.devices.allow: c 10:200 rwm
+#   lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+# blockinfile is idempotent (marker-guarded) and reports changed only on edit.
+
+- name: "Passthrough /dev/net/tun into container {{ media_ct.key }}"
+  ansible.builtin.blockinfile:
+    path: "/etc/pve/lxc/{{ media_ct.key }}.conf"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK media_lxc_features tun"
+    block: |
+      lxc.cgroup2.devices.allow: c {{ media_lxc_features_tun_major }}:{{ media_lxc_features_tun_minor }} rwm
+      lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+    insertafter: EOF
+  when: media_ct.value.tun | default(false)
+  notify: Restart changed media containers
+  register: media_lxc_features_tun_set
+  tags:
+    - media_lxc_features
+
+- name: "Record tun-passthrough change for container {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"
+  when: media_lxc_features_tun_set is defined and media_lxc_features_tun_set.changed
+  tags:
+    - media_lxc_features

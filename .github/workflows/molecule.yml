@@ -51,3 +51,10 @@ jobs:
           ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
           PY_COLORS: "1"
           ANSIBLE_FORCE_COLOR: "1"
+
+      - name: Run media_lxc_features molecule test
+        run: molecule test -s media_lxc_features
+        env:
+          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
+          PY_COLORS: "1"
+          ANSIBLE_FORCE_COLOR: "1"
