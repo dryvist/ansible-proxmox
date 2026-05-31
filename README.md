@@ -40,16 +40,16 @@ configuration:
 
 ## What Gets Configured
 
-| Component              | What It Does                                        |
-| ---------------------- | --------------------------------------------------- |
-| **Common Packages**    | Installs utilities: htop, iotop, lm-sensors         |
-| **ZFS Swap**           | Creates optimized swap on ZFS                       |
-| **Kernel Tuning**      | Optimizes memory and disk settings                  |
-| **System Limits**      | Increases file and process limits                   |
-| **Crash Diagnostics**  | System crash diagnostics configuration              |
-| **LXC Features**       | LXC container feature flags (fuse, nesting)         |
-| **Proxmox Monitoring** | Sets up historical monitoring (sysstat, atop)       |
-| **NAS Storage**        | Declarative ZFS + Samba NAS for Home Assistant      |
+| Component              | What It Does                                   |
+| ---------------------- | ---------------------------------------------- |
+| **Common Packages**    | Installs utilities: htop, iotop, lm-sensors    |
+| **ZFS Swap**           | Creates optimized swap on ZFS                  |
+| **Kernel Tuning**      | Optimizes memory and disk settings             |
+| **System Limits**      | Increases file and process limits              |
+| **Crash Diagnostics**  | System crash diagnostics configuration         |
+| **LXC Features**       | LXC container feature flags (fuse, nesting)    |
+| **Proxmox Monitoring** | Sets up historical monitoring (sysstat, atop)  |
+| **NAS Storage**        | Declarative ZFS + Samba NAS for Home Assistant |
 
 ### Why Each Matters
 
@@ -216,13 +216,13 @@ yamllint .
 
 ## Cost-Benefit Summary
 
-| Metric              | Manual Setup       | With Ansible       |
-| ------------------- | ------------------ | ------------------ |
-| Time per server     | 30-60 min          | 2-5 min            |
-| Consistency         | Variable           | 100% identical     |
-| Documentation       | In your head       | In the code        |
-| Disaster recovery   | Start from scratch | Re-run playbook    |
-| Onboarding new team | Shadow someone     | Read the code      |
+| Metric              | Manual Setup       | With Ansible    |
+| ------------------- | ------------------ | --------------- |
+| Time per server     | 30-60 min          | 2-5 min         |
+| Consistency         | Variable           | 100% identical  |
+| Documentation       | In your head       | In the code     |
+| Disaster recovery   | Start from scratch | Re-run playbook |
+| Onboarding new team | Shadow someone     | Read the code   |
 
 ## License
 

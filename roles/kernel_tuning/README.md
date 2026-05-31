@@ -33,12 +33,12 @@ Available boot parameters:
 
 See `defaults/main.yml` for complete list. Key variables:
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `kernel_tuning_boot_params_enabled` | `false` | Enable boot parameter management |
-| `kernel_tuning_clocksource` | `hpet` | Preferred clocksource |
-| `kernel_tuning_disable_smt` | `false` | Add `nosmt` parameter |
-| `kernel_tuning_manage_crashkernel` | `false` | Manage crashkernel (conflicts with crash_diagnostics role) |
+| Variable                            | Default | Purpose                                                    |
+| ----------------------------------- | ------- | ---------------------------------------------------------- |
+| `kernel_tuning_boot_params_enabled` | `false` | Enable boot parameter management                           |
+| `kernel_tuning_clocksource`         | `hpet`  | Preferred clocksource                                      |
+| `kernel_tuning_disable_smt`         | `false` | Add `nosmt` parameter                                      |
+| `kernel_tuning_manage_crashkernel`  | `false` | Manage crashkernel (conflicts with crash_diagnostics role) |
 
 ### Hardware-Specific Settings
 

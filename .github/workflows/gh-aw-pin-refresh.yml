@@ -2,14 +2,14 @@ name: gh-aw pin refresh
 
 on:
   schedule:
-    - cron: "0 12 * * 1"  # Monday 12:00 UTC (7am CDT / 6am CST)
-    - cron: "0 12 * * 4"  # Thursday 12:00 UTC (7am CDT / 6am CST)
+    - cron: "0 12 * * 1" # Monday 12:00 UTC (7am CDT / 6am CST)
+    - cron: "0 12 * * 4" # Thursday 12:00 UTC (7am CDT / 6am CST)
   workflow_dispatch:
     inputs:
       operation:
-        description: 'compile = refresh SHA pins only; upgrade = full gh-aw infrastructure update'
+        description: "compile = refresh SHA pins only; upgrade = full gh-aw infrastructure update"
         type: choice
-        default: 'compile'
+        default: "compile"
         options:
           - compile
           - upgrade

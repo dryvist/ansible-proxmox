@@ -36,7 +36,7 @@
       tags:
         - ntp
       vars:
-        ntp_serve: false  # Rack servers are NTP clients of the cluster's existing ntp server (see site.yml)
+        ntp_serve: false # Rack servers are NTP clients of the cluster's existing ntp server (see site.yml)
 
     - role: kernel_tuning
       tags:

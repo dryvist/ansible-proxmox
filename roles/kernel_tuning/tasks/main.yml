@@ -176,7 +176,10 @@
 
         - name: Warn when /etc/kernel/cmdline does not exist
           ansible.builtin.debug:
-            msg: "WARNING: /etc/kernel/cmdline does not exist. This may indicate a non-UEFI or non-Proxmox system. Boot parameter configuration will be skipped."
+            msg: >-
+              WARNING: /etc/kernel/cmdline does not exist. This may indicate
+              a non-UEFI or non-Proxmox system. Boot parameter configuration
+              will be skipped.
           when: not kernel_tuning_cmdline_stat.stat.exists
 
         - name: Write new kernel cmdline

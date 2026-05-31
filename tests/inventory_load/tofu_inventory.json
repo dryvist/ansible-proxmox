@@ -6,19 +6,12 @@
       "zfs_quota": "1T",
       "mount_point": "/mnt/nas",
       "smb_share_name": "nas",
-      "directories": [
-        "huggingface/hub",
-        "ollama/models",
-        "media",
-        "backups"
-      ],
+      "directories": ["huggingface/hub", "ollama/models", "media", "backups"],
       "group_name": "nas",
       "managed_users": [
         {
           "name": "homeassistant",
-          "unix_groups": [
-            "nas"
-          ],
+          "unix_groups": ["nas"],
           "shell": "/usr/sbin/nologin",
           "create_home": false,
           "password_secret_env": "NAS_HOMEASSISTANT_SMB_PASSWORD"
