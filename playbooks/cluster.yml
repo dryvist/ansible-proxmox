@@ -2,8 +2,10 @@
 # Form the Proxmox VE cluster.
 #
 # Two ordered plays guarantee the primary creates the cluster BEFORE any
-# secondary tries to join. Both target the `pve_cluster_members` group only, so
-# uncommissioned nodes (e.g. pve3 while its drive is bad) are never touched.
+# secondary tries to join. Both target the `pve_cluster_members` group only.
+# Cluster membership is decoupled from storage commissioning: pve3 is a member
+# while its `bulk-pool` stays uncommissioned (storage is gated separately by
+# `pve_node_commissioned` in the zfs_pools role).
 #
 # The role is inert unless enabled, so formation is an explicit, deliberate run:
 #
