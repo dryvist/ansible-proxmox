@@ -1,0 +1,19 @@
+---
+# media_lxc_features handlers
+#
+# Bind-mount, feature, and device-passthrough changes only take effect after the
+# container is restarted. Tasks that mutate a container's config notify this
+# handler and append the vmid to `media_lxc_features_changed`. The handler
+# restarts ONLY those containers (running ones), so an already-converged host
+# performs zero restarts.
+
+- name: Restart changed media containers
+  ansible.builtin.command:
+    cmd: "pct reboot {{ item }}"
+  loop: "{{ media_lxc_features_changed | default([]) | unique }}"
+  loop_control:
+    label: "container {{ item }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - media_lxc_features_changed | default([]) | length > 0
+  changed_when: true

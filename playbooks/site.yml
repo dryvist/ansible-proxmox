@@ -50,6 +50,14 @@
       tags:
         - zfs_pools
 
+    # Root-only media LXC features (bind-mounts, keyctl, /dev/net/tun) that the
+    # BPG provider's API token cannot set. Runs AFTER terraform creates the
+    # media LXC shells and zfs_pools manages the /rpool/data datasets, and
+    # BEFORE ansible-proxmox-apps converges the services. See the role README.
+    - role: media_lxc_features
+      tags:
+        - media_lxc_features
+
     - role: ntp
       tags:
         - ntp
