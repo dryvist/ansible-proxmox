@@ -1,0 +1,33 @@
+---
+# Synced from dryvist/.github precommit/configs/ansible-lint.yml — keep
+# in lockstep with that canonical. CI's `ansible/ansible-lint@v26`
+# action reads this file from disk; the Nix-based pre-commit hook
+# reads the same content via fetch-shared-configs. Renovate sync of
+# precommit/configs/ is queued; refresh manually for now.
+
+profile: production
+
+exclude_paths:
+  - .git/
+  - .github/
+  - .cache/
+  - .venv/
+  - venv/
+  - "**/*.enc.yaml"
+  - "**/*.enc.yml"
+
+skip_list:
+  - yaml[line-length]
+
+warn_list:
+  - experimental
+
+enable_list:
+  - fqcn
+  - no-changed-when
+
+kinds:
+  - playbook: "**/load_terraform.yml"
+
+use_default_rules: true
+offline: false

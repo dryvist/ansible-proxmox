@@ -1,0 +1,42 @@
+---
+# Synced from dryvist/.github precommit/configs/yamllint.yml — keep
+# in lockstep with that canonical. ansible-lint's bundled yamllint
+# integration reads this from disk in CI; the Nix-based pre-commit
+# hook reads the same content via fetch-shared-configs. Renovate
+# sync of precommit/configs/ is queued; refresh manually for now.
+
+extends: default
+
+ignore: |
+  .github/aw/
+  .github/workflows/*.lock.yml
+  .github/workflows/agentics-maintenance.yml
+  **/*.enc.yaml
+  **/*.enc.yml
+
+rules:
+  line-length:
+    max: 160
+    level: warning
+  truthy:
+    allowed-values:
+      - "true"
+      - "false"
+      - "yes"
+      - "no"
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 0
+  indentation:
+    spaces: 2
+    indent-sequences: true
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true

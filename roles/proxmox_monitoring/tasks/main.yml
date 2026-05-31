@@ -7,7 +7,7 @@
       - sysstat
       - atop
     state: present
-    update_cache: yes
+    update_cache: true
   when: proxmox_monitoring_enable_sysstat or proxmox_monitoring_enable_atop
 
 - name: Create systemd override directories for monitoring services
