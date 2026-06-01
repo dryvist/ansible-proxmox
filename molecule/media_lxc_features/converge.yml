@@ -4,8 +4,22 @@
   become: false
   gather_facts: true
 
+  vars:
+    # Stand in for the terraform inventory's service -> vmid resolution that
+    # playbooks/load_terraform.yml injects on a real host. Uses the NEW media
+    # VMID mapping (210 plex, 211 jellyseerr, 212 sonarr, 213 radarr,
+    # 214 download-vpn) so converge proves the role follows a renumber with no
+    # change to the service-keyed feature map.
+    media_lxc_features_service_vmids_from_terraform:
+      plex: 210
+      jellyseerr: 211
+      sonarr: 212
+      radarr: 213
+      download-vpn: 214
+
   roles:
     # Under Docker the role short-circuits every `pct`/blockinfile task
     # (ansible_virtualization_type == 'docker'). This proves the role converges
-    # cleanly, the default feature map loads, and the skip guards hold.
+    # cleanly, the service-keyed feature map loads, the service -> vmid join
+    # resolves, and the skip guards hold.
     - role: media_lxc_features

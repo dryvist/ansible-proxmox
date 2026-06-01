@@ -20,9 +20,9 @@ ansible-galaxy collection install -r requirements.yml
 
 ## Why this role exists (the contract split)
 
-`terraform-proxmox` creates the media LXCs (210-214) as **plain shells**. The
-root-only bits are deliberately removed from Terraform because the API token
-cannot apply them. This role realizes them after creation.
+`terraform-proxmox` creates the media LXCs as **plain shells**. The root-only
+bits are deliberately removed from Terraform because the API token cannot apply
+them. This role realizes them after creation.
 
 | Layer | Owns |
 | --- | --- |
@@ -44,20 +44,34 @@ Run this role **after** the LXCs exist and **before** the apps converge. In
 `playbooks/site.yml` it runs after `lxc_features` and after `zfs_pools` (the
 bind-mount sources are ZFS datasets under `/rpool/data`).
 
-## Feature map (replicates terraform-proxmox `deployment.json`)
+## Feature map (keyed by service, not VMID)
 
-Fixed, non-secret, committed in `defaults/main.yml` as `media_lxc_features_map`:
+Non-secret, committed in `defaults/main.yml` as `media_lxc_features_map`, keyed
+by **service name**. Each service's bind-mounts / keyctl / tun follow the
+service, never a hardcoded VMID:
 
-| vmid | name | bind-mounts (host -> container) | keyctl | /dev/net/tun |
-| --- | --- | --- | --- | --- |
-| 210 | download-vpn | `/rpool/data/downloads`->`/mnt/downloads`, `/rpool/data/media`->`/mnt/media` | yes | yes |
-| 211 | sonarr | `/rpool/data/downloads`->`/mnt/downloads`, `/rpool/data/media`->`/mnt/media` | no | no |
-| 212 | radarr | `/rpool/data/downloads`->`/mnt/downloads`, `/rpool/data/media`->`/mnt/media` | no | no |
-| 213 | plex | `/rpool/data/media`->`/mnt/media` | no | no |
-| 214 | jellyseerr | (none) | yes | no |
+| service | bind-mounts (host -> container) | keyctl | /dev/net/tun |
+| --- | --- | --- | --- |
+| plex | `/rpool/data/media`->`/mnt/media` | no | no |
+| jellyseerr | (none) | yes | no |
+| sonarr | `/rpool/data/downloads`->`/mnt/downloads`, `/rpool/data/media`->`/mnt/media` | no | no |
+| radarr | `/rpool/data/downloads`->`/mnt/downloads`, `/rpool/data/media`->`/mnt/media` | no | no |
+| download-vpn | `/rpool/data/downloads`->`/mnt/downloads`, `/rpool/data/media`->`/mnt/media` | yes | yes |
 
 All bind-mounts are **read-write** (no `ro=1`), matching the live deployment.
 `/dev/net/tun` is char device **10:200** (verified on pve1).
+
+### VMID resolution (renumber-proof)
+
+The role never names a raw VMID. `playbooks/load_terraform.yml` projects the
+terraform inventory's `containers` (keyed by service hostname, each with a
+`vmid`) into `media_lxc_features_service_vmids_from_terraform` —
+`{ service: vmid }` — and injects it onto each proxmox host. The role joins its
+service-keyed feature map against that resolution at run time to build the
+effective `{ vmid: features }` it acts on. A VMID renumber therefore flows in
+through `terraform_inventory.json` and needs **zero** changes here: each service
+keeps its features and follows its new VMID automatically. Services absent from
+the inventory resolve to nothing and are skipped.
 
 ## Idempotency
 
@@ -79,9 +93,10 @@ restarts.
 
 ## Guards
 
-- Only vmids in `media_lxc_features_map` that are **actually present** on the
-  host (per `pct list`) are touched — absent vmids (not yet created by
-  Terraform) are skipped silently.
+- Only vmids resolved from `media_lxc_features_map` (service -> vmid via the
+  terraform inventory) that are **actually present** on the host (per
+  `pct list`) are touched — absent vmids (not yet created by Terraform), and
+  services with no inventory vmid, are skipped silently.
 - All tasks are skipped under Docker (`ansible_virtualization_type == 'docker'`)
   for molecule testing.
 

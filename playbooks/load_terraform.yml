@@ -72,3 +72,27 @@
           {{ (terraform_data.node_storage | default({}))[hostvars[item].proxmox_node_name | default(item)] | default({}) }}
         cluster_nodes_from_terraform: "{{ terraform_data.nodes | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
+
+    # Service -> VMID resolution for media_lxc_features. The terraform
+    # `containers` dict is keyed by service hostname and carries each container's
+    # current `vmid`; project it to { service: vmid } so the role can key its
+    # feature map by service and follow any VMID renumber with no role change.
+    # The role only resolves the services it knows about, so the extra
+    # (non-media) entries are harmless.
+    - name: Inject Terraform service -> vmid map onto proxmox hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        media_lxc_features_service_vmids_from_terraform: >-
+          {{
+            dict(
+              (terraform_data.containers | default({})) | dict2items
+              | selectattr('value.vmid', 'defined')
+              | map(attribute='key') | list
+              | zip(
+                  (terraform_data.containers | default({})) | dict2items
+                  | selectattr('value.vmid', 'defined')
+                  | map(attribute='value.vmid') | list
+                )
+            )
+          }}
+      loop: "{{ groups['proxmox'] | default([]) }}"
