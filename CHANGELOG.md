@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0](https://github.com/dryvist/ansible-proxmox/compare/v1.7.2...v1.8.0) (2026-06-01)
+
+
+### Features
+
+* **idrac_kiosk:** add pve kiosk showing both iDRAC consoles ([#205](https://github.com/dryvist/ansible-proxmox/issues/205)) ([ea111d4](https://github.com/dryvist/ansible-proxmox/commit/ea111d41dc5549026be8ae1095d41d546f79bf2f))
+* **media_lxc_features:** apply root-only LXC features (bind-mounts, keyctl, /dev/net/tun) as root ([#215](https://github.com/dryvist/ansible-proxmox/issues/215)) ([52c456f](https://github.com/dryvist/ansible-proxmox/commit/52c456f62fb4332c77546e829e43491566b55d62))
+* **playbooks:** add PVE point-upgrade play (snapshot + repos + upgrade) ([#208](https://github.com/dryvist/ansible-proxmox/issues/208)) ([9ea8e75](https://github.com/dryvist/ansible-proxmox/commit/9ea8e757e0c479737966405421ce460822ba76d5))
+* **pve_cluster:** add pve3 as cluster member, decoupled from storage ([#217](https://github.com/dryvist/ansible-proxmox/issues/217)) ([af87178](https://github.com/dryvist/ansible-proxmox/commit/af87178cd0879dbd4905b90df2bedd4edbd88957))
+* **pve_cluster:** idempotent cluster formation + multinode inventory ([#211](https://github.com/dryvist/ansible-proxmox/issues/211)) ([3314e22](https://github.com/dryvist/ansible-proxmox/commit/3314e2253bede63314ec087eb8ba6837856b446f))
+* **zfs_pools:** codify per-node ZFS storage from terraform node_storage ([#206](https://github.com/dryvist/ansible-proxmox/issues/206)) ([eb0f3ed](https://github.com/dryvist/ansible-proxmox/commit/eb0f3ed0a54c0246ed3c02fbfeaa53a795a0ba9e))
+
+
+### Bug Fixes
+
+* **ci:** repoint release-please caller to org-native reusable workflow ([#218](https://github.com/dryvist/ansible-proxmox/issues/218)) ([09e40a2](https://github.com/dryvist/ansible-proxmox/commit/09e40a2f9ff6239c48bee98896b7c1bf212391be))
+* **ci:** retarget reusable-workflow uses: refs to current org homes ([#207](https://github.com/dryvist/ansible-proxmox/issues/207)) ([999e116](https://github.com/dryvist/ansible-proxmox/commit/999e1160043279cdae84735ae6893a901c4d660e))
+* **tests:** align inventory_load test with pve→pve1 rename ([6e03789](https://github.com/dryvist/ansible-proxmox/commit/6e03789ff9e13fa41a0f120a2f7f1dd580dac495))
+
 ## [1.7.2](https://github.com/JacobPEvans/ansible-proxmox/compare/v1.7.1...v1.7.2) (2026-05-23)
 
 
