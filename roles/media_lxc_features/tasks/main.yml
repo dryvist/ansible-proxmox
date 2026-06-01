@@ -9,6 +9,47 @@
 # Ordering: terraform-proxmox creates the media LXCs as plain shells ->
 # THIS role applies root-only features -> ansible-proxmox-apps converges the
 # services. See README.md.
+#
+# The feature map is keyed by SERVICE NAME. The effective vmid -> features map
+# is built here by resolving each service's CURRENT vmid from the terraform
+# inventory (media_lxc_features_service_vmids), so a vmid renumber needs no role
+# change — only terraform_inventory.json updates. Services without a resolved
+# vmid (not in the inventory) contribute nothing.
+
+- name: Select the services that have a vmid in the terraform inventory
+  ansible.builtin.set_fact:
+    # Drop any service the inventory does not currently place (not yet created /
+    # not deployed). Keeps the join below total over what remains.
+    media_lxc_features_selected: >-
+      {{
+        media_lxc_features_map | dict2items
+        | selectattr('key', 'in', media_lxc_features_service_vmids)
+        | list
+      }}
+  tags:
+    - media_lxc_features
+
+- name: Resolve the service feature map to the current vmids
+  ansible.builtin.set_fact:
+    # Join the service-keyed features onto each service's CURRENT vmid (resolved
+    # from the terraform inventory), producing the vmid-keyed dict the loop below
+    # consumes: { "<vmid>": <features> }. VMIDs are stringified to match the
+    # `pct list` present-set. A vmid renumber flows in through the inventory and
+    # needs NO change here — each service simply lands on its new vmid.
+    media_lxc_features_resolved: >-
+      {{
+        dict(
+          (
+            media_lxc_features_selected
+            | map(attribute='key')
+            | map('extract', media_lxc_features_service_vmids)
+            | map('string') | list
+          )
+          | zip(media_lxc_features_selected | map(attribute='value') | list)
+        )
+      }}
+  tags:
+    - media_lxc_features
 
 - name: Enumerate LXC containers present on this host
   ansible.builtin.command:
@@ -42,7 +83,7 @@
 
 - name: Apply root-only features to each present media container
   ansible.builtin.include_tasks: configure_container.yml
-  loop: "{{ media_lxc_features_map | dict2items }}"
+  loop: "{{ media_lxc_features_resolved | default({}) | dict2items }}"
   loop_control:
     loop_var: media_ct
     label: "container {{ media_ct.key }}"

@@ -4,64 +4,79 @@
   become: false
   gather_facts: true
 
+  vars:
+    # The NEW media VMID mapping (same as converge). Used to prove the
+    # service-keyed feature map resolves onto the renumbered vmids.
+    media_lxc_features_verify_service_vmids:
+      plex: 210
+      jellyseerr: 211
+      sonarr: 212
+      radarr: 213
+      download-vpn: 214
+
   tasks:
-    - name: Load the role defaults (feature map)
+    - name: Load the role defaults (service-keyed feature map)
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../../roles/media_lxc_features/defaults/main.yml"
 
-    - name: Assert the media feature map covers vmids 210-214
+    - name: Assert the feature map is keyed by service, not raw vmid
       ansible.builtin.assert:
         that:
-          - "'210' in media_lxc_features_map"
-          - "'211' in media_lxc_features_map"
-          - "'212' in media_lxc_features_map"
-          - "'213' in media_lxc_features_map"
-          - "'214' in media_lxc_features_map"
-        fail_msg: "media_lxc_features_map is missing one of the media vmids"
+          - "'plex' in media_lxc_features_map"
+          - "'jellyseerr' in media_lxc_features_map"
+          - "'sonarr' in media_lxc_features_map"
+          - "'radarr' in media_lxc_features_map"
+          - "'download-vpn' in media_lxc_features_map"
+          # No raw vmids leaked back in as keys.
+          - "'210' not in media_lxc_features_map"
+          - "'214' not in media_lxc_features_map"
+        fail_msg: "media_lxc_features_map must be keyed by service name, not vmid"
 
-    - name: Assert download-vpn (210) gets both mounts, keyctl, and tun
+    - name: Assert plex gets the media mount only, read-write
       ansible.builtin.assert:
         that:
-          - media_lxc_features_map['210'].mounts | length == 2
+          - media_lxc_features_map['plex'].mounts | length == 1
+          - media_lxc_features_map['plex'].mounts[0].src == '/rpool/data/media'
+          - media_lxc_features_map['plex'].mounts[0].dst == '/mnt/media'
+          - not (media_lxc_features_map['plex'].mounts[0].ro | default(false))
+          - not (media_lxc_features_map['plex'].keyctl | bool)
+          - not (media_lxc_features_map['plex'].tun | bool)
+        fail_msg: "plex feature contract did not resolve as expected"
+
+    - name: Assert jellyseerr gets keyctl only, no bind-mounts, no tun
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_map['jellyseerr'].mounts | default([]) | length == 0
+          - media_lxc_features_map['jellyseerr'].keyctl | bool
+          - not (media_lxc_features_map['jellyseerr'].tun | bool)
+        fail_msg: "jellyseerr feature contract did not resolve as expected"
+
+    - name: Assert sonarr/radarr get both mounts, no keyctl, no tun
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_map['sonarr'].mounts | length == 2
+          - media_lxc_features_map['radarr'].mounts | length == 2
+          - not (media_lxc_features_map['sonarr'].keyctl | bool)
+          - not (media_lxc_features_map['radarr'].keyctl | bool)
+          - not (media_lxc_features_map['sonarr'].tun | bool)
+          - not (media_lxc_features_map['radarr'].tun | bool)
+        fail_msg: "sonarr/radarr feature contract did not resolve as expected"
+
+    - name: Assert download-vpn gets both mounts, keyctl, and tun
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_map['download-vpn'].mounts | length == 2
           - >-
-            (media_lxc_features_map['210'].mounts
+            (media_lxc_features_map['download-vpn'].mounts
              | selectattr('src', 'equalto', '/rpool/data/downloads')
              | map(attribute='dst') | first) == '/mnt/downloads'
           - >-
-            (media_lxc_features_map['210'].mounts
+            (media_lxc_features_map['download-vpn'].mounts
              | selectattr('src', 'equalto', '/rpool/data/media')
              | map(attribute='dst') | first) == '/mnt/media'
-          - media_lxc_features_map['210'].keyctl | bool
-          - media_lxc_features_map['210'].tun | bool
-        fail_msg: "download-vpn (210) feature contract did not resolve as expected"
-
-    - name: Assert sonarr/radarr (211/212) get both mounts, no keyctl, no tun
-      ansible.builtin.assert:
-        that:
-          - media_lxc_features_map['211'].mounts | length == 2
-          - media_lxc_features_map['212'].mounts | length == 2
-          - not (media_lxc_features_map['211'].keyctl | bool)
-          - not (media_lxc_features_map['212'].keyctl | bool)
-          - not (media_lxc_features_map['211'].tun | bool)
-          - not (media_lxc_features_map['212'].tun | bool)
-        fail_msg: "sonarr/radarr (211/212) feature contract did not resolve as expected"
-
-    - name: Assert plex (213) gets the media mount only, read-write
-      ansible.builtin.assert:
-        that:
-          - media_lxc_features_map['213'].mounts | length == 1
-          - media_lxc_features_map['213'].mounts[0].src == '/rpool/data/media'
-          - media_lxc_features_map['213'].mounts[0].dst == '/mnt/media'
-          - not (media_lxc_features_map['213'].mounts[0].ro | default(false))
-        fail_msg: "plex (213) feature contract did not resolve as expected"
-
-    - name: Assert jellyseerr (214) gets keyctl only, no bind-mounts
-      ansible.builtin.assert:
-        that:
-          - media_lxc_features_map['214'].mounts | default([]) | length == 0
-          - media_lxc_features_map['214'].keyctl | bool
-          - not (media_lxc_features_map['214'].tun | bool)
-        fail_msg: "jellyseerr (214) feature contract did not resolve as expected"
+          - media_lxc_features_map['download-vpn'].keyctl | bool
+          - media_lxc_features_map['download-vpn'].tun | bool
+        fail_msg: "download-vpn feature contract did not resolve as expected"
 
     - name: Assert the tun device numbers are the TUN/TAP allocation (10:200)
       ansible.builtin.assert:
@@ -69,6 +84,88 @@
           - media_lxc_features_tun_major == 10
           - media_lxc_features_tun_minor == 200
         fail_msg: "/dev/net/tun device numbers are not the expected 10:200"
+
+    # ---------------------------------------------------------------------------
+    # Service -> vmid JOIN: the load-bearing refactor. Re-derive the resolved
+    # vmid-keyed map exactly as roles/.../tasks/main.yml does, against the NEW
+    # mapping, and prove each service's features land on its new vmid. This is
+    # what makes a renumber need no role change.
+    # ---------------------------------------------------------------------------
+    - name: Resolve the service feature map to the NEW vmids (as the role does)
+      ansible.builtin.set_fact:
+        media_lxc_features_verify_selected: >-
+          {{
+            media_lxc_features_map | dict2items
+            | selectattr('key', 'in', media_lxc_features_verify_service_vmids)
+            | list
+          }}
+    - name: Build the resolved vmid-keyed map (as the role does)
+      ansible.builtin.set_fact:
+        media_lxc_features_verify_resolved: >-
+          {{
+            dict(
+              (
+                media_lxc_features_verify_selected
+                | map(attribute='key')
+                | map('extract', media_lxc_features_verify_service_vmids)
+                | map('string') | list
+              )
+              | zip(media_lxc_features_verify_selected | map(attribute='value') | list)
+            )
+          }}
+
+    - name: Assert the join puts each service's features on its NEW vmid
+      ansible.builtin.assert:
+        that:
+          # NEW: 210 plex (media mount only, no keyctl, no tun)
+          - "'210' in media_lxc_features_verify_resolved"
+          - media_lxc_features_verify_resolved['210'].mounts | length == 1
+          - media_lxc_features_verify_resolved['210'].mounts[0].dst == '/mnt/media'
+          - not (media_lxc_features_verify_resolved['210'].keyctl | bool)
+          - not (media_lxc_features_verify_resolved['210'].tun | bool)
+          # NEW: 211 jellyseerr (keyctl only, no mounts, no tun)
+          - media_lxc_features_verify_resolved['211'].mounts | length == 0
+          - media_lxc_features_verify_resolved['211'].keyctl | bool
+          - not (media_lxc_features_verify_resolved['211'].tun | bool)
+          # NEW: 212 sonarr / 213 radarr (both mounts, no keyctl, no tun)
+          - media_lxc_features_verify_resolved['212'].mounts | length == 2
+          - media_lxc_features_verify_resolved['213'].mounts | length == 2
+          - not (media_lxc_features_verify_resolved['212'].keyctl | bool)
+          - not (media_lxc_features_verify_resolved['213'].tun | bool)
+          # NEW: 214 download-vpn (both mounts + keyctl + tun)
+          - media_lxc_features_verify_resolved['214'].mounts | length == 2
+          - media_lxc_features_verify_resolved['214'].keyctl | bool
+          - media_lxc_features_verify_resolved['214'].tun | bool
+        fail_msg: "service -> vmid join did not place features on the new vmids"
+
+    - name: Build a partial resolution (only plex placed) for the absent-skip case
+      ansible.builtin.set_fact:
+        media_lxc_features_verify_partial_sel: >-
+          {{
+            media_lxc_features_map | dict2items
+            | selectattr('key', 'in', {'plex': 210})
+            | list
+          }}
+    - name: Resolve the partial map (as the role does)
+      ansible.builtin.set_fact:
+        media_lxc_features_verify_partial: >-
+          {{
+            dict(
+              (
+                media_lxc_features_verify_partial_sel
+                | map(attribute='key')
+                | map('extract', {'plex': 210})
+                | map('string') | list
+              )
+              | zip(media_lxc_features_verify_partial_sel | map(attribute='value') | list)
+            )
+          }}
+
+    - name: Assert only the resolvable service appears (absent-skip behaviour)
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_verify_partial.keys() | list == ['210']
+        fail_msg: "unresolved services must not appear in the effective map"
 
     # Guards the keyctl feature-merge logic (the load-bearing expression the role
     # uses to build `pct set --features` and gate its idempotent `when`). Proves
