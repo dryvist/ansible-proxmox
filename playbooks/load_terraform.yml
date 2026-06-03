@@ -96,3 +96,24 @@
             )
           }}
       loop: "{{ groups['proxmox'] | default([]) }}"
+
+    # Service -> VMID resolution for lxc_gpu_features (GPU passthrough). Same
+    # projection as the media map above, exposed under its own var so the GPU
+    # role has no coupling to media naming. Extra (non-GPU) entries are harmless.
+    - name: Inject Terraform service -> vmid map for GPU passthrough onto proxmox hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        lxc_gpu_features_service_vmids_from_terraform: >-
+          {{
+            dict(
+              (terraform_data.containers | default({})) | dict2items
+              | selectattr('value.vmid', 'defined')
+              | map(attribute='key') | list
+              | zip(
+                  (terraform_data.containers | default({})) | dict2items
+                  | selectattr('value.vmid', 'defined')
+                  | map(attribute='value.vmid') | list
+                )
+            )
+          }}
+      loop: "{{ groups['proxmox'] | default([]) }}"

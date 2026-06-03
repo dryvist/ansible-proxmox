@@ -1,0 +1,17 @@
+---
+# lxc_gpu_features handlers
+#
+# Device-passthrough changes take effect only after the container restarts.
+# Mutating tasks append the vmid to lxc_gpu_features_changed and notify this
+# handler, which reboots ONLY those containers — a converged host does nothing.
+
+- name: Restart changed gpu containers
+  ansible.builtin.command:
+    cmd: "pct reboot {{ item }}"
+  loop: "{{ lxc_gpu_features_changed | default([]) | unique }}"
+  loop_control:
+    label: "container {{ item }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - lxc_gpu_features_changed | default([]) | length > 0
+  changed_when: true

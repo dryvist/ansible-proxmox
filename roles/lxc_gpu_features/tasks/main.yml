@@ -1,0 +1,80 @@
+---
+# lxc_gpu_features role tasks
+#
+# Applies root-only AMD GPU device passthrough to GPU LXCs that the BPG Proxmox
+# API token cannot set (403; root@pam only). Runs over native root SSH,
+# idempotently, only on vmids that actually exist on the host.
+#
+# The feature map is keyed by SERVICE NAME. The effective vmid -> features map is
+# built here by resolving each service's CURRENT vmid from the terraform
+# inventory (lxc_gpu_features_service_vmids), so a vmid renumber needs no role
+# change — only terraform_inventory.json updates. Services without a resolved
+# vmid (not in the inventory) contribute nothing.
+
+- name: Select GPU services that have a vmid in the terraform inventory
+  ansible.builtin.set_fact:
+    lxc_gpu_features_selected: >-
+      {{
+        lxc_gpu_features_map | dict2items
+        | selectattr('key', 'in', lxc_gpu_features_service_vmids)
+        | list
+      }}
+  tags:
+    - lxc_gpu_features
+
+- name: Resolve the GPU service feature map to current vmids
+  ansible.builtin.set_fact:
+    lxc_gpu_features_resolved: >-
+      {{
+        dict(
+          (
+            lxc_gpu_features_selected
+            | map(attribute='key')
+            | map('extract', lxc_gpu_features_service_vmids)
+            | map('string') | list
+          )
+          | zip(lxc_gpu_features_selected | map(attribute='value') | list)
+        )
+      }}
+  tags:
+    - lxc_gpu_features
+
+- name: Enumerate LXC containers present on this host
+  ansible.builtin.command:
+    cmd: pct list
+  register: lxc_gpu_features_pct_list
+  changed_when: false
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - lxc_gpu_features
+
+- name: Build the set of vmids present on this host
+  ansible.builtin.set_fact:
+    lxc_gpu_features_present: >-
+      {{
+        lxc_gpu_features_pct_list.stdout_lines | default([])
+        | map('regex_search', '^\d+')
+        | select('truthy')
+        | list
+      }}
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - lxc_gpu_features
+
+- name: Reset the changed-container accumulator
+  ansible.builtin.set_fact:
+    lxc_gpu_features_changed: []
+  tags:
+    - lxc_gpu_features
+
+- name: Apply GPU passthrough to each present GPU container
+  ansible.builtin.include_tasks: configure_container.yml
+  loop: "{{ lxc_gpu_features_resolved | default({}) | dict2items }}"
+  loop_control:
+    loop_var: gpu_ct
+    label: "container {{ gpu_ct.key }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - gpu_ct.key in lxc_gpu_features_present | default([])
+  tags:
+    - lxc_gpu_features
