@@ -1,0 +1,51 @@
+---
+# Bind AMD GPU device nodes into a single GPU LXC.
+# gpu_ct.key   = container ID (string)
+# gpu_ct.value = { dri: bool, kfd: bool }
+#
+# `pct set` has no flag for arbitrary device passthrough, so the standard method
+# is raw lines appended to /etc/pve/lxc/<vmid>.conf:
+#   lxc.cgroup2.devices.allow: c 226:* rwm           # /dev/dri (card + render)
+#   lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
+#   lxc.cgroup2.devices.allow: c 235:* rwm           # /dev/kfd (ROCm)
+#   lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
+# blockinfile is marker-guarded -> idempotent, reports changed only on edit.
+# This is a PRIVILEGED LXC, so host GIDs map 1:1; the ollama service user is
+# added to render/video inside the container by the ansible-proxmox-apps role.
+
+- name: "Build GPU passthrough lines for container {{ gpu_ct.key }}"
+  ansible.builtin.set_fact:
+    lxc_gpu_features_lines: >-
+      {{
+        (
+          ([
+            'lxc.cgroup2.devices.allow: c ' ~ lxc_gpu_features_dri_major ~ ':* rwm',
+            'lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir'
+          ] if (gpu_ct.value.dri | default(true)) else [])
+          +
+          ([
+            'lxc.cgroup2.devices.allow: c ' ~ lxc_gpu_features_kfd_major ~ ':* rwm',
+            'lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file'
+          ] if (gpu_ct.value.kfd | default(true)) else [])
+        )
+      }}
+  tags:
+    - lxc_gpu_features
+
+- name: "Passthrough AMD GPU devices into container {{ gpu_ct.key }}"
+  ansible.builtin.blockinfile:
+    path: "/etc/pve/lxc/{{ gpu_ct.key }}.conf"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK lxc_gpu_features"
+    block: '{{ lxc_gpu_features_lines | join("\n") }}'
+    insertafter: EOF
+  notify: Restart changed gpu containers
+  register: lxc_gpu_features_set
+  tags:
+    - lxc_gpu_features
+
+- name: "Record GPU-passthrough change for container {{ gpu_ct.key }}"
+  ansible.builtin.set_fact:
+    lxc_gpu_features_changed: "{{ lxc_gpu_features_changed | default([]) + [gpu_ct.key] }}"
+  when: lxc_gpu_features_set is defined and lxc_gpu_features_set.changed
+  tags:
+    - lxc_gpu_features

@@ -1,0 +1,39 @@
+---
+# lxc_gpu_features role defaults
+#
+# Root-only LXC GPU passthrough that the BPG Proxmox provider's API token CANNOT
+# set: Proxmox restricts arbitrary device passthrough to root@pam *ticket* auth,
+# so the API token gets HTTP 403. terraform-proxmox creates the GPU LXC as a
+# plain shell; this role binds the AMD GPU device nodes into it over native root
+# SSH, idempotently. Mirrors the media_lxc_features pattern exactly.
+#
+# Ordering: terraform-proxmox (shell) -> THIS role (devices) ->
+# ansible-proxmox-apps role: ollama (inference stack). See README.md.
+#
+# Per-service shape:
+#   dri: bool — bind /dev/dri (card0 + renderD128, char major 226) for compute
+#   kfd: bool — bind /dev/kfd (char major 235) for ROCm/HIP compute
+#
+# Keyed by SERVICE NAME; each service's current vmid is resolved at run time from
+# the terraform inventory (see lxc_gpu_features_service_vmids). A vmid renumber
+# needs no change here. Only vmids present on the host are acted on; every task
+# is skipped under Docker virtualization (molecule). No IPs, no secrets.
+lxc_gpu_features_map:
+  hermes-infer:  # Ollama + ROCm on the RX 6800 (privileged LXC)
+    dri: true
+    kfd: true
+
+# AMD GPU character-device majors on pve1, verified live:
+#   /dev/dri/card0 = 226:0, /dev/dri/renderD128 = 226:128, /dev/kfd = 235:0.
+# A `*` minor covers card + render + any future render nodes.
+lxc_gpu_features_dri_major: 226
+lxc_gpu_features_kfd_major: 235
+
+# Service -> VMID resolution, injected by playbooks/load_terraform.yml. Defaults
+# to {} (a safe no-op that resolves no containers) when unset — e.g. a bare role
+# run without load_terraform having populated the inventory.
+lxc_gpu_features_service_vmids: >-
+  {{
+    lxc_gpu_features_service_vmids_from_terraform
+    | default(hostvars[inventory_hostname].lxc_gpu_features_service_vmids_from_terraform | default({}), true)
+  }}

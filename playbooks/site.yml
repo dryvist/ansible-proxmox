@@ -58,6 +58,13 @@
       tags:
         - media_lxc_features
 
+    # Root-only AMD GPU passthrough (/dev/dri + /dev/kfd) for the inference LXC
+    # (hermes-infer, vmid 167) — same root@pam-only contract as media_lxc_features.
+    # Runs after terraform creates the shell, before ansible-proxmox-apps installs Ollama.
+    - role: lxc_gpu_features
+      tags:
+        - lxc_gpu_features
+
     - role: ntp
       tags:
         - ntp
