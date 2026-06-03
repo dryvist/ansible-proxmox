@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0](https://github.com/dryvist/ansible-proxmox/compare/v1.8.0...v1.9.0) (2026-06-03)
+
+
+### Features
+
+* **lxc_gpu_features:** pass AMD RX 6800 into hermes-infer LXC ([f8f958a](https://github.com/dryvist/ansible-proxmox/commit/f8f958a531e57600bc88dbbaa1f6d5a492836dd7))
+
 ## [1.8.0](https://github.com/dryvist/ansible-proxmox/compare/v1.7.2...v1.8.0) (2026-06-01)
 
 
