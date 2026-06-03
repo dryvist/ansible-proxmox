@@ -1,6 +1,6 @@
 ---
-- name: Load Terraform host services
-  import_playbook: load_terraform.yml
+- name: Load OpenTofu host services
+  import_playbook: load_tofu.yml
 
 - name: Validate Proxmox NAS
   hosts: proxmox
@@ -40,31 +40,31 @@
   tasks:
     - name: Verify ZFS dataset exists
       ansible.builtin.command:
-        cmd: "zfs list {{ nas_storage_from_terraform.zfs_dataset }}"
+        cmd: "zfs list {{ nas_storage_from_tofu.zfs_dataset }}"
       changed_when: false
 
     - name: Verify ZFS mountpoint
       ansible.builtin.command:
-        cmd: "zfs get -H -o value mountpoint {{ nas_storage_from_terraform.zfs_dataset }}"
+        cmd: "zfs get -H -o value mountpoint {{ nas_storage_from_tofu.zfs_dataset }}"
       register: nas_validate_mountpoint
       changed_when: false
 
-    - name: Assert mountpoint matches Terraform
+    - name: Assert mountpoint matches OpenTofu
       ansible.builtin.assert:
         that:
-          - nas_validate_mountpoint.stdout == nas_storage_from_terraform.mount_point
+          - nas_validate_mountpoint.stdout == nas_storage_from_tofu.mount_point
         fail_msg: "NAS mountpoint drift detected"
 
     - name: Verify ZFS quota
       ansible.builtin.command:
-        cmd: "zfs get -H -o value quota {{ nas_storage_from_terraform.zfs_dataset }}"
+        cmd: "zfs get -H -o value quota {{ nas_storage_from_tofu.zfs_dataset }}"
       register: nas_validate_quota
       changed_when: false
 
-    - name: Assert quota matches Terraform
+    - name: Assert quota matches OpenTofu
       ansible.builtin.assert:
         that:
-          - nas_validate_quota.stdout == nas_storage_from_terraform.zfs_quota
+          - nas_validate_quota.stdout == nas_storage_from_tofu.zfs_quota
         fail_msg: "NAS quota drift detected"
 
     - name: Gather service facts

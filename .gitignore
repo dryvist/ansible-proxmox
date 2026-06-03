@@ -47,7 +47,7 @@ keys.txt
 # Local inventory overrides
 inventory/local/
 inventory/*.local.yml
-inventory/terraform_inventory.json
+inventory/tofu_inventory.json
 
 # Logs
 *.log

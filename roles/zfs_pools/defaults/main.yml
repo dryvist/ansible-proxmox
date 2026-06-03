@@ -3,12 +3,12 @@
 #
 # Consumes the per-node ZFS storage declaration produced by terraform-proxmox
 # (ansible_inventory.node_storage[<node>]) and injected onto the host by
-# inventory/load_terraform.yml as `zfs_pools_from_terraform`.
+# inventory/load_tofu.yml as `zfs_pools_from_tofu`.
 
 zfs_pools_config: >-
   {{
-    zfs_pools_from_terraform
-    | default(hostvars[inventory_hostname].zfs_pools_from_terraform | default({}), true)
+    zfs_pools_from_tofu
+    | default(hostvars[inventory_hostname].zfs_pools_from_tofu | default({}), true)
   }}
 
 # Map of pools for this node, keyed by pool name. Shape per pool:
@@ -17,7 +17,7 @@ zfs_pools_map: "{{ zfs_pools_config.pools | default({}) }}"
 
 # SAFETY: creating a zpool from raw devices is a destructive commissioning step
 # and the device list is host-specific (by-id paths), so it is NOT part of the
-# committed terraform contract. By default this role only manages datasets,
+# committed tofu contract. By default this role only manages datasets,
 # quotas, and Proxmox storage registration on pools that ALREADY exist, and
 # asserts presence for pools marked register=true.
 #

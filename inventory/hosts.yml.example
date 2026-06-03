@@ -4,8 +4,8 @@
 # Sample IPs use the 192.168.0.x placeholder prefix.
 #
 # `rack_servers` is nested under `proxmox.children` so:
-#   1. `load_terraform.yml` (imported by site.yml) injects
-#      `nas_storage_from_terraform` for `groups['proxmox']` — children inherit.
+#   1. `load_tofu.yml` (imported by site.yml) injects
+#      `nas_storage_from_tofu` for `groups['proxmox']` — children inherit.
 #   2. After commissioning, `playbooks/site.yml` (which targets `hosts: proxmox`)
 #      manages rack servers alongside the original pve1 host.
 #

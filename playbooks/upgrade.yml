@@ -2,10 +2,10 @@
 # Upgrade Proxmox VE nodes to the latest point release on their channel.
 #
 # Composes the snapshot play first (ZFS root restore point) — mirroring how
-# site.yml imports load_terraform.yml — then normalizes the apt repositories to
+# site.yml imports load_tofu.yml — then normalizes the apt repositories to
 # the no-subscription channel (pve_repositories), runs apt full-upgrade, reboots
 # for the new kernel, and verifies the version. Deliberately does NOT import
-# load_terraform.yml (NAS-focused; irrelevant to an OS upgrade), matching
+# load_tofu.yml (NAS-focused; irrelevant to an OS upgrade), matching
 # commission_rack_server.yml.
 #
 # Usage (test — snapshot and reboot are skipped in check mode):

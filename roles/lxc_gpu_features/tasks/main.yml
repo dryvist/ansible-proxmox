@@ -6,12 +6,12 @@
 # idempotently, only on vmids that actually exist on the host.
 #
 # The feature map is keyed by SERVICE NAME. The effective vmid -> features map is
-# built here by resolving each service's CURRENT vmid from the terraform
+# built here by resolving each service's CURRENT vmid from the tofu
 # inventory (lxc_gpu_features_service_vmids), so a vmid renumber needs no role
-# change — only terraform_inventory.json updates. Services without a resolved
+# change — only tofu_inventory.json updates. Services without a resolved
 # vmid (not in the inventory) contribute nothing.
 
-- name: Select GPU services that have a vmid in the terraform inventory
+- name: Select GPU services that have a vmid in the tofu inventory
   ansible.builtin.set_fact:
     lxc_gpu_features_selected: >-
       {{

@@ -3,7 +3,7 @@
 # `inventory/host_vars/<node-name>.yml` (untracked by default) and fill in
 # real values. SOPS-encrypt the resulting file if it carries sensitive paths.
 #
-# Note: the existing `load_terraform.yml` only injects NAS `host_services`
+# Note: the existing `load_tofu.yml` only injects NAS `host_services`
 # and does NOT populate rack-server per-host vars. Wiring `terraform-proxmox`'s
 # `rack_servers` output into Ansible host_vars is a forward-looking
 # enhancement — for now, populate this file manually.
