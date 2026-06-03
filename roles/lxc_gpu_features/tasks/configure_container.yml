@@ -3,13 +3,13 @@
 # gpu_ct.key   = container ID (string)
 # gpu_ct.value = { dri: bool, kfd: bool }
 #
-# `pct set` has no flag for arbitrary device passthrough, so the standard method
-# is raw lines appended to /etc/pve/lxc/<vmid>.conf:
-#   lxc.cgroup2.devices.allow: c 226:* rwm           # /dev/dri (card + render)
-#   lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
-#   lxc.cgroup2.devices.allow: c 235:* rwm           # /dev/kfd (ROCm)
-#   lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
-# blockinfile is marker-guarded -> idempotent, reports changed only on edit.
+# Proxmox RELOCATES raw `lxc.*` keys to the end of /etc/pve/lxc/<vmid>.conf on
+# every rewrite/reboot, which separates them from any blockinfile markers — so a
+# marker-guarded block can never manage these lines idempotently (it re-appends
+# on every run). We therefore manage each raw line independently with lineinfile
+# (idempotent by exact match, position-agnostic), and clean up any legacy
+# marker block / malformed single-line variants left by earlier versions.
+#
 # This is a PRIVILEGED LXC, so host GIDs map 1:1; the ollama service user is
 # added to render/video inside the container by the ansible-proxmox-apps role.
 
@@ -32,12 +32,41 @@
   tags:
     - lxc_gpu_features
 
-- name: "Passthrough AMD GPU devices into container {{ gpu_ct.key }}"
+# --- cleanup of earlier-version artifacts (idempotent; no-op once clean) ---
+
+- name: "Remove legacy marker block for container {{ gpu_ct.key }}"
   ansible.builtin.blockinfile:
     path: "/etc/pve/lxc/{{ gpu_ct.key }}.conf"
     marker: "# {mark} ANSIBLE MANAGED BLOCK lxc_gpu_features"
-    block: '{{ lxc_gpu_features_lines | join("\n") }}'
+    state: absent
+  notify: Restart changed gpu containers
+  register: lxc_gpu_features_markers
+  tags:
+    - lxc_gpu_features
+
+- name: "Remove legacy malformed (\\n-joined) GPU line for container {{ gpu_ct.key }}"
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ gpu_ct.key }}.conf"
+    # The old single-line variant concatenated all directives, so it is the only
+    # line containing "devices.allow" more than once.
+    regexp: 'devices\.allow.*devices\.allow'
+    state: absent
+  notify: Restart changed gpu containers
+  register: lxc_gpu_features_legacy
+  tags:
+    - lxc_gpu_features
+
+# --- desired state: one lineinfile per raw lxc.* directive ---
+
+- name: "Passthrough AMD GPU devices into container {{ gpu_ct.key }}"
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ gpu_ct.key }}.conf"
+    line: "{{ gpu_line }}"
     insertafter: EOF
+    state: present
+  loop: "{{ lxc_gpu_features_lines }}"
+  loop_control:
+    loop_var: gpu_line
   notify: Restart changed gpu containers
   register: lxc_gpu_features_set
   tags:
@@ -46,6 +75,9 @@
 - name: "Record GPU-passthrough change for container {{ gpu_ct.key }}"
   ansible.builtin.set_fact:
     lxc_gpu_features_changed: "{{ lxc_gpu_features_changed | default([]) + [gpu_ct.key] }}"
-  when: lxc_gpu_features_set is defined and lxc_gpu_features_set.changed
+  when: >-
+    (lxc_gpu_features_set is defined and lxc_gpu_features_set.changed) or
+    (lxc_gpu_features_markers is defined and lxc_gpu_features_markers.changed) or
+    (lxc_gpu_features_legacy is defined and lxc_gpu_features_legacy.changed)
   tags:
     - lxc_gpu_features
