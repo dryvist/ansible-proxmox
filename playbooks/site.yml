@@ -3,8 +3,8 @@
 #
 # Usage: See README.md or CLAUDE.md for environment configuration
 
-- name: Load Terraform host services
-  import_playbook: load_terraform.yml
+- name: Load OpenTofu host services
+  import_playbook: load_tofu.yml
 
 - name: Configure Proxmox VE servers
   hosts: proxmox
@@ -51,7 +51,7 @@
         - zfs_pools
 
     # Root-only media LXC features (bind-mounts, keyctl, /dev/net/tun) that the
-    # BPG provider's API token cannot set. Runs AFTER terraform creates the
+    # BPG provider's API token cannot set. Runs AFTER OpenTofu creates the
     # media LXC shells and zfs_pools manages the /rpool/data datasets, and
     # BEFORE ansible-proxmox-apps converges the services. See the role README.
     - role: media_lxc_features
@@ -60,7 +60,7 @@
 
     # Root-only AMD GPU passthrough (/dev/dri + /dev/kfd) for the inference LXC
     # (hermes-infer, vmid 167) — same root@pam-only contract as media_lxc_features.
-    # Runs after terraform creates the shell, before ansible-proxmox-apps installs Ollama.
+    # Runs after OpenTofu creates the shell, before ansible-proxmox-apps installs Ollama.
     - role: lxc_gpu_features
       tags:
         - lxc_gpu_features

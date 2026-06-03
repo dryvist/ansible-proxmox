@@ -5,7 +5,7 @@
   gather_facts: true
 
   vars:
-    zfs_pools_from_terraform:
+    zfs_pools_from_tofu:
       pools:
         tank:
           datasets:
@@ -15,7 +15,7 @@
   tasks:
     - name: Re-derive pools from the injected node_storage contract
       ansible.builtin.set_fact:
-        zfs_pools_check: "{{ zfs_pools_from_terraform.pools | default({}) }}"
+        zfs_pools_check: "{{ zfs_pools_from_tofu.pools | default({}) }}"
 
     - name: Assert the contract exposes tank/backups with a 1T quota
       ansible.builtin.assert:

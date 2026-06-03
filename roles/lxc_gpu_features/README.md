@@ -8,7 +8,7 @@ native `root@pam` SSH, idempotently. Companion to `media_lxc_features`.
 This role ships with the `ansible-proxmox` repository — no external install. It
 is wired into `playbooks/site.yml` (after `media_lxc_features`) and runs against
 the `proxmox` host group. Service → VMID resolution is injected by
-`playbooks/load_terraform.yml` from `terraform_inventory.json`, so the role must
+`playbooks/load_tofu.yml` from `tofu_inventory.json`, so the role must
 run after that play (already imported first by `site.yml`). Tools come from the
 repo's Nix dev shell (`direnv allow`); no `pip`/`galaxy` step is required.
 
@@ -47,9 +47,9 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 | `lxc_gpu_features_map` | `{ hermes-infer: { dri: true, kfd: true } }` | Service → which device groups to bind |
 | `lxc_gpu_features_dri_major` | `226` | `/dev/dri` char major |
 | `lxc_gpu_features_kfd_major` | `235` | `/dev/kfd` char major |
-| `lxc_gpu_features_service_vmids` | from terraform inventory | Service → current vmid (auto) |
+| `lxc_gpu_features_service_vmids` | from tofu inventory | Service → current vmid (auto) |
 
-The current vmid is resolved at run time from `terraform_inventory.json`, so a
+The current vmid is resolved at run time from `tofu_inventory.json`, so a
 vmid renumber needs no change here.
 
 ## Idempotency & guards
@@ -67,7 +67,7 @@ inventory resolves no GPU services.
 env -u DOPPLER_PROJECT -u DOPPLER_CONFIG -u DOPPLER_ENVIRONMENT doppler run -- \
   ./scripts/run-ansible.sh playbooks/site.yml --limit pve1 --tags lxc_gpu_features --check --diff
 
-# Apply (after terraform creates the LXC shell, before apps converge)
+# Apply (after tofu creates the LXC shell, before apps converge)
 env -u DOPPLER_PROJECT -u DOPPLER_CONFIG -u DOPPLER_ENVIRONMENT doppler run -- \
   ./scripts/run-ansible.sh playbooks/site.yml --limit pve1 --tags lxc_gpu_features
 ```

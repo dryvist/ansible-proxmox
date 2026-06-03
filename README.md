@@ -70,11 +70,11 @@ cp inventory/hosts.yml.example inventory/hosts.yml
 # Edit inventory/hosts.yml with your server details
 ```
 
-Sync the Terraform inventory and create the SOPS secrets file:
+Sync the OpenTofu inventory and create the SOPS secrets file:
 
 ```bash
 aws-vault exec tf-proxmox -- doppler run -- \
-  terragrunt output -json ansible_inventory > inventory/terraform_inventory.json
+  terragrunt output -json ansible_inventory > inventory/tofu_inventory.json
 cp secrets.sops.yml.example secrets.sops.yml
 sops secrets.sops.yml
 ```
@@ -105,7 +105,7 @@ BMC's vKVM and has joined the cluster (`pvecm add`):
 ansible-playbook -i inventory playbooks/commission_rack_server.yml -l node-a
 ```
 
-The play deliberately does NOT import `load_terraform.yml` — that loader is
+The play deliberately does NOT import `load_tofu.yml` — that loader is
 NAS-focused and would block commissioning. Run `playbooks/site.yml` after
 commissioning if you need NAS provisioning.
 
@@ -115,7 +115,7 @@ per-host settings (real IPs, BMC addresses, expected hardware) live in
 `inventory/host_vars/rack-server.yml.example` for the schema.
 
 Wiring `terraform-proxmox`'s `rack_servers` output into Ansible host_vars
-is a forward-looking enhancement — the existing `load_terraform.yml` only
+is a forward-looking enhancement — the existing `load_tofu.yml` only
 injects the NAS `host_services` contract today.
 
 ### Upgrading a node to the latest point release (PVE 9.x)
@@ -182,7 +182,7 @@ Tools provided: `ansible`, `ansible-lint`, `molecule`, `sops`, `age`,
 ## Testing
 
 This project includes automated tests using [Molecule][molecule] plus a
-Terraform inventory loading check:
+OpenTofu inventory loading check:
 
 ```bash
 # Run the default scenario
@@ -191,9 +191,9 @@ ANSIBLE_ALLOW_BROKEN_CONDITIONALS=1 molecule test
 # Run the NAS-focused scenario
 ANSIBLE_ALLOW_BROKEN_CONDITIONALS=1 molecule test -s nas_storage
 
-# Verify Terraform inventory loading locally
-cp tests/inventory_load/terraform_inventory.json inventory/terraform_inventory.json
-TERRAFORM_INVENTORY_PATH=$PWD/inventory/terraform_inventory.json \
+# Verify OpenTofu inventory loading locally
+cp tests/inventory_load/tofu_inventory.json inventory/tofu_inventory.json
+TOFU_INVENTORY_PATH=$PWD/inventory/tofu_inventory.json \
 PROXMOX_VE_HOSTNAME=localhost PROXMOX_VM_SSH_USERNAME=root \
   ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
 ```

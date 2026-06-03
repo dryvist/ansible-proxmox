@@ -60,7 +60,7 @@
     - media_lxc_features
 
 # ---------------------------------------------------------------------------
-# keyctl feature — MERGE into existing features (preserve terraform-set nesting)
+# keyctl feature — MERGE into existing features (preserve tofu-set nesting)
 # ---------------------------------------------------------------------------
 # Parse the current `features:` line into a key=val map, add keyctl=1 if absent,
 # and only `pct set --features` when the merged set differs from the current.
@@ -86,7 +86,7 @@
     - name: "Compute merged feature tokens (keyctl added, nesting preserved) for {{ media_ct.key }}"
       ansible.builtin.set_fact:
         # Drop any existing keyctl=* token, append keyctl=1, sort for stability.
-        # Every other token (e.g. terraform-set nesting=1) is preserved verbatim.
+        # Every other token (e.g. tofu-set nesting=1) is preserved verbatim.
         media_lxc_features_merged_tokens: >-
           {{
             (

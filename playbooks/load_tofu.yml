@@ -1,95 +1,95 @@
 ---
-- name: Load Terraform Host Services
+- name: Load OpenTofu Host Services
   hosts: localhost
   become: false
   gather_facts: false
   tags: always
 
   vars:
-    terraform_inventory_path: >-
+    tofu_inventory_path: >-
       {{
-        lookup('env', 'TERRAFORM_INVENTORY_PATH')
-        | default(playbook_dir ~ '/../inventory/terraform_inventory.json', true)
+        lookup('env', 'TOFU_INVENTORY_PATH')
+        | default(playbook_dir ~ '/../inventory/tofu_inventory.json', true)
       }}
 
   tasks:
-    - name: Verify terraform inventory exists
+    - name: Verify tofu inventory exists
       ansible.builtin.stat:
-        path: "{{ terraform_inventory_path }}"
-      register: terraform_inventory_check
+        path: "{{ tofu_inventory_path }}"
+      register: tofu_inventory_check
 
-    - name: Fail if terraform inventory is missing
+    - name: Fail if tofu inventory is missing
       ansible.builtin.fail:
         msg: |
-          Terraform inventory not found at: {{ terraform_inventory_path }}
+          OpenTofu inventory not found at: {{ tofu_inventory_path }}
 
           Generate it by running from terraform-proxmox:
-            terragrunt output -json ansible_inventory > {{ terraform_inventory_path }}
+            terragrunt output -json ansible_inventory > {{ tofu_inventory_path }}
 
-          Or set TERRAFORM_INVENTORY_PATH to the correct location.
+          Or set TOFU_INVENTORY_PATH to the correct location.
 
           Or apply terraform-proxmox from a cloned worktree so the after-hook
           syncs inventory into ansible-proxmox automatically.
-      when: not terraform_inventory_check.stat.exists
+      when: not tofu_inventory_check.stat.exists
 
-    - name: Load terraform inventory JSON
+    - name: Load tofu inventory JSON
       ansible.builtin.include_vars:
-        file: "{{ terraform_inventory_path }}"
-        name: terraform_data
+        file: "{{ tofu_inventory_path }}"
+        name: tofu_data
 
     - name: Validate NAS host_services structure
       ansible.builtin.assert:
         that:
-          - terraform_data is defined
-          - terraform_data.host_services is defined
-          - terraform_data.host_services.nas is defined
-          - terraform_data.host_services.nas.zfs_dataset is defined
-          - terraform_data.host_services.nas.mount_point is defined
-          - terraform_data.host_services.nas.directories is defined
+          - tofu_data is defined
+          - tofu_data.host_services is defined
+          - tofu_data.host_services.nas is defined
+          - tofu_data.host_services.nas.zfs_dataset is defined
+          - tofu_data.host_services.nas.mount_point is defined
+          - tofu_data.host_services.nas.directories is defined
         fail_msg: |
-          terraform_data.host_services.nas is missing or incomplete in
-          terraform_inventory.json.
+          tofu_data.host_services.nas is missing or incomplete in
+          tofu_inventory.json.
 
           Expected terraform-proxmox ansible_inventory output to include the
           NAS contract under host_services.nas.
 
           Re-run terraform-proxmox apply or export ansible_inventory again.
 
-    - name: Inject Terraform NAS config onto proxmox hosts
+    - name: Inject OpenTofu NAS config onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
-        nas_storage_from_terraform: "{{ terraform_data.host_services.nas }}"
+        nas_storage_from_tofu: "{{ tofu_data.host_services.nas }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
     # Per-node ZFS storage (node_storage) is optional — present only once the
     # terraform-proxmox multi-node contract is applied. Keyed by each host's
-    # `proxmox_node_name` (the terraform node name; e.g. an inventory host
-    # `node-a` maps to terraform node `pve2`), defaulting to inventory_hostname.
-    - name: Inject Terraform per-node ZFS storage onto proxmox hosts
+    # `proxmox_node_name` (the tofu node name; e.g. an inventory host
+    # `node-a` maps to tofu node `pve2`), defaulting to inventory_hostname.
+    - name: Inject OpenTofu per-node ZFS storage onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
-        zfs_pools_from_terraform: >-
-          {{ (terraform_data.node_storage | default({}))[hostvars[item].proxmox_node_name | default(item)] | default({}) }}
-        cluster_nodes_from_terraform: "{{ terraform_data.nodes | default({}) }}"
+        zfs_pools_from_tofu: >-
+          {{ (tofu_data.node_storage | default({}))[hostvars[item].proxmox_node_name | default(item)] | default({}) }}
+        cluster_nodes_from_tofu: "{{ tofu_data.nodes | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
-    # Service -> VMID resolution for media_lxc_features. The terraform
+    # Service -> VMID resolution for media_lxc_features. The tofu
     # `containers` dict is keyed by service hostname and carries each container's
     # current `vmid`; project it to { service: vmid } so the role can key its
     # feature map by service and follow any VMID renumber with no role change.
     # The role only resolves the services it knows about, so the extra
     # (non-media) entries are harmless.
-    - name: Inject Terraform service -> vmid map onto proxmox hosts
+    - name: Inject OpenTofu service -> vmid map onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
-        media_lxc_features_service_vmids_from_terraform: >-
+        media_lxc_features_service_vmids_from_tofu: >-
           {{
             dict(
-              (terraform_data.containers | default({})) | dict2items
+              (tofu_data.containers | default({})) | dict2items
               | selectattr('value.vmid', 'defined')
               | map(attribute='key') | list
               | zip(
-                  (terraform_data.containers | default({})) | dict2items
+                  (tofu_data.containers | default({})) | dict2items
                   | selectattr('value.vmid', 'defined')
                   | map(attribute='value.vmid') | list
                 )
@@ -100,17 +100,17 @@
     # Service -> VMID resolution for lxc_gpu_features (GPU passthrough). Same
     # projection as the media map above, exposed under its own var so the GPU
     # role has no coupling to media naming. Extra (non-GPU) entries are harmless.
-    - name: Inject Terraform service -> vmid map for GPU passthrough onto proxmox hosts
+    - name: Inject OpenTofu service -> vmid map for GPU passthrough onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
-        lxc_gpu_features_service_vmids_from_terraform: >-
+        lxc_gpu_features_service_vmids_from_tofu: >-
           {{
             dict(
-              (terraform_data.containers | default({})) | dict2items
+              (tofu_data.containers | default({})) | dict2items
               | selectattr('value.vmid', 'defined')
               | map(attribute='key') | list
               | zip(
-                  (terraform_data.containers | default({})) | dict2items
+                  (tofu_data.containers | default({})) | dict2items
                   | selectattr('value.vmid', 'defined')
                   | map(attribute='value.vmid') | list
                 )

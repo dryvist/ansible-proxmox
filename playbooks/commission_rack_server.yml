@@ -17,7 +17,7 @@
 # overlay you decrypt at run time). See
 # `inventory/host_vars/rack-server.yml.example` for the schema.
 #
-# Note: this play deliberately does NOT import `load_terraform.yml` — that
+# Note: this play deliberately does NOT import `load_tofu.yml` — that
 # loader is NAS-focused (validates `host_services.nas`) and would block
 # commissioning before the node has any cluster-level services. Run
 # `playbooks/site.yml` after commissioning if you want NAS provisioning.

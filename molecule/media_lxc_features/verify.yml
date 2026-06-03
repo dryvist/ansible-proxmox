@@ -169,7 +169,7 @@
 
     # Guards the keyctl feature-merge logic (the load-bearing expression the role
     # uses to build `pct set --features` and gate its idempotent `when`). Proves
-    # keyctl=1 is merged in WITHOUT dropping a terraform-set nesting=1, the result
+    # keyctl=1 is merged in WITHOUT dropping a tofu-set nesting=1, the result
     # is sorted (stable), and an already-converged host yields no change.
     - name: Merge keyctl into a nesting-only feature set (as the role does)
       ansible.builtin.set_fact:

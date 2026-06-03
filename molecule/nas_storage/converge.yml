@@ -5,7 +5,7 @@
   gather_facts: true
 
   vars:
-    nas_storage_from_terraform:
+    nas_storage_from_tofu:
       zfs_dataset: "rpool/data/nas"
       zfs_quota: "1T"
       mount_point: "/mnt/nas"

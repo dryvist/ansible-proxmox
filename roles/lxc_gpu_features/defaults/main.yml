@@ -15,7 +15,7 @@
 #   kfd: bool — bind /dev/kfd (char major 235) for ROCm/HIP compute
 #
 # Keyed by SERVICE NAME; each service's current vmid is resolved at run time from
-# the terraform inventory (see lxc_gpu_features_service_vmids). A vmid renumber
+# the tofu inventory (see lxc_gpu_features_service_vmids). A vmid renumber
 # needs no change here. Only vmids present on the host are acted on; every task
 # is skipped under Docker virtualization (molecule). No IPs, no secrets.
 lxc_gpu_features_map:
@@ -29,11 +29,11 @@ lxc_gpu_features_map:
 lxc_gpu_features_dri_major: 226
 lxc_gpu_features_kfd_major: 235
 
-# Service -> VMID resolution, injected by playbooks/load_terraform.yml. Defaults
+# Service -> VMID resolution, injected by playbooks/load_tofu.yml. Defaults
 # to {} (a safe no-op that resolves no containers) when unset — e.g. a bare role
-# run without load_terraform having populated the inventory.
+# run without load_tofu having populated the inventory.
 lxc_gpu_features_service_vmids: >-
   {{
-    lxc_gpu_features_service_vmids_from_terraform
-    | default(hostvars[inventory_hostname].lxc_gpu_features_service_vmids_from_terraform | default({}), true)
+    lxc_gpu_features_service_vmids_from_tofu
+    | default(hostvars[inventory_hostname].lxc_gpu_features_service_vmids_from_tofu | default({}), true)
   }}

@@ -9,7 +9,7 @@
     # live pve2 contract (tank raidz1 + tank/backups). ZFS/pvesm tasks are
     # skipped under Docker; this proves the role converges and the contract
     # plumbing resolves.
-    zfs_pools_from_terraform:
+    zfs_pools_from_tofu:
       pools:
         tank:
           type: zfspool

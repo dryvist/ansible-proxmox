@@ -4,27 +4,27 @@
 # Root-only LXC features for the media stack that the BPG Proxmox provider's
 # API token CANNOT set: host bind-mounts (mp), the keyctl feature, and
 # /dev/net/tun device passthrough. Proxmox restricts all three to root@pam
-# *ticket* auth, so the API token gets HTTP 403. Terraform creates the media
+# *ticket* auth, so the API token gets HTTP 403. OpenTofu creates the media
 # LXCs as plain shells; this role applies the root-only bits over native root
 # SSH, idempotently.
 #
 # The feature map is keyed by SERVICE NAME (plex, jellyseerr, sonarr, radarr,
 # download-vpn) — NOT by raw VMID. Each service's current VMID is resolved at
-# run time from the terraform inventory (containers keyed by hostname, each with
-# a `vmid`), injected onto proxmox hosts by playbooks/load_terraform.yml as
-# `media_lxc_features_service_vmids_from_terraform`. A future VMID renumber needs
-# ZERO changes here: the new vmid flows in through terraform_inventory.json and
+# run time from the tofu inventory (containers keyed by hostname, each with
+# a `vmid`), injected onto proxmox hosts by playbooks/load_tofu.yml as
+# `media_lxc_features_service_vmids_from_tofu`. A future VMID renumber needs
+# ZERO changes here: the new vmid flows in through tofu_inventory.json and
 # each service keeps its features automatically. No IPs, no secrets — safe to
 # commit.
 #
 # Per-service shape:
 #   mounts:     list of { src: <host path>, dst: <in-container path>, ro: <bool, default false> }
 #   keyctl:     bool — ensure features contains keyctl=1, MERGED into existing
-#               features (terraform-set nesting=1 is preserved, never dropped)
+#               features (tofu-set nesting=1 is preserved, never dropped)
 #   tun:        bool — passthrough /dev/net/tun (char 10:200) into the container
 #
 # Only vmids that actually exist on the target host are acted on; absent vmids
-# are skipped (terraform may not have created them yet). All tasks are skipped
+# are skipped (tofu may not have created them yet). All tasks are skipped
 # under Docker virtualization (molecule).
 media_lxc_features_map:
   plex:  # media streaming
@@ -55,14 +55,14 @@ media_lxc_features_map:
     keyctl: true
     tun: true
 
-# Service -> VMID resolution, sourced from the terraform inventory and injected
-# onto proxmox hosts by playbooks/load_terraform.yml. Defaults to {} when unset
-# (e.g. a bare role run without load_terraform), in which case the role resolves
+# Service -> VMID resolution, sourced from the tofu inventory and injected
+# onto proxmox hosts by playbooks/load_tofu.yml. Defaults to {} when unset
+# (e.g. a bare role run without load_tofu), in which case the role resolves
 # no containers and acts on nothing — the safe no-op.
 media_lxc_features_service_vmids: >-
   {{
-    media_lxc_features_service_vmids_from_terraform
-    | default(hostvars[inventory_hostname].media_lxc_features_service_vmids_from_terraform | default({}), true)
+    media_lxc_features_service_vmids_from_tofu
+    | default(hostvars[inventory_hostname].media_lxc_features_service_vmids_from_tofu | default({}), true)
   }}
 
 # /dev/net/tun device numbers (char major:minor). Stable Linux allocation for

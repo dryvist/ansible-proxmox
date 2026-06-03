@@ -23,7 +23,7 @@ configured by `ansible-proxmox-apps` and `ansible-splunk`.
 
 ### Infrastructure
 
-- Physical Proxmox VE cluster (not provisioned by Terraform)
+- Physical Proxmox VE cluster (not provisioned by OpenTofu)
 
 ## Key Files
 

@@ -1,6 +1,6 @@
 # nas_storage
 
-Provisions the Proxmox host NAS end to end from the Terraform `host_services.nas`
+Provisions the Proxmox host NAS end to end from the OpenTofu `host_services.nas`
 contract: ZFS dataset, directory permissions, declarative Samba shares, and managed
 Samba users.
 
@@ -20,7 +20,7 @@ No separate installation is required.
 
 ## Inputs
 
-- `inventory/terraform_inventory.json` must exist and contain `host_services.nas`
+- `inventory/tofu_inventory.json` must exist and contain `host_services.nas`
 - `NAS_HOMEASSISTANT_SMB_PASSWORD` must be exported for the managed Home Assistant user
 
 ## Usage
@@ -40,7 +40,7 @@ sops exec-env secrets.sops.yml 'doppler run -- ./scripts/run-ansible.sh playbook
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `nas_storage_config` | Terraform host_services.nas | Source config injected by `inventory/load_terraform.yml` |
+| `nas_storage_config` | OpenTofu host_services.nas | Source config injected by `inventory/load_tofu.yml` |
 | `nas_storage_group_name` | `nas` | Unix/Samba group for shared access |
 | `nas_storage_managed_users` | `[]` | Declarative Samba-backed service accounts |
 | `nas_storage_shares` | single `nas` share fallback | Declarative Samba shares |
