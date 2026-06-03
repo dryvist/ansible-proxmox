@@ -30,7 +30,8 @@ the download-vpn LXC).
 
 ## What it writes
 
-A marker-guarded block in `/etc/pve/lxc/<vmid>.conf`:
+Manages these raw lines in `/etc/pve/lxc/<vmid>.conf`, one per `lineinfile` — Proxmox
+relocates raw `lxc.*` keys to EOF, so marker-guarded blocks can't manage them idempotently:
 
 ```text
 lxc.cgroup2.devices.allow: c 226:* rwm
@@ -53,11 +54,11 @@ vmid renumber needs no change here.
 
 ## Idempotency & guards
 
-`blockinfile` is marker-guarded — reports `changed` only on edit, and the
-handler reboots **only** changed containers, so a converged host does nothing.
-Acts only on vmids actually present (`pct list`); skipped entirely under Docker
-virtualization (molecule), and a no-op when the inventory resolves no GPU
-services.
+Each raw line is managed with `lineinfile` (idempotent by exact match,
+position-agnostic), and the handler reboots **only** changed containers, so a
+converged host does nothing. Acts only on vmids actually present (`pct list`);
+skipped entirely under Docker virtualization (molecule), and a no-op when the
+inventory resolves no GPU services.
 
 ## Usage
 
