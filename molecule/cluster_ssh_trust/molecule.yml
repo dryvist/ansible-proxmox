@@ -9,7 +9,7 @@ driver:
 
 platforms:
   - name: proxmox-cluster-ssh-trust-test
-    image: debian:12-slim
+    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
     pre_build_image: true
     privileged: true
     tmpfs:

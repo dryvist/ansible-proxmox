@@ -8,7 +8,7 @@ driver:
   name: docker
 
 platforms:
-  - name: proxmox-syncoid-test
+  - name: proxmox-idrac-power-test
     image: "${MOLECULE_IMAGE:-debian:stable-slim}"
     pre_build_image: true
     privileged: true

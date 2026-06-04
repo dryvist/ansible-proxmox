@@ -68,8 +68,10 @@
   loop: "{{ crash_diagnostics_sysctl_settings }}"
   register: crash_diagnostics_sysctl_result
   notify: Reload sysctl
-  # Some kernel settings (nmi_watchdog, etc.) require hardware access
-  # and will fail in containers - this is expected and safe to ignore
+  # Skipped in containers: these are real-kernel settings (nmi_watchdog, etc.)
+  # that a container cannot persist, so sysctl_set re-reports "changed" every
+  # run (non-idempotent under molecule). Real nodes apply them idempotently.
+  when: ansible_virtualization_type != 'docker'
   failed_when:
     - crash_diagnostics_sysctl_result.failed
     - ansible_virtualization_type != 'docker'

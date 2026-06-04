@@ -1,0 +1,26 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Assert idrac_power defaults loaded
+      ansible.builtin.assert:
+        that:
+          - idrac_power_enabled is defined
+          - idrac_power_action is defined
+          - idrac_power_controller is defined
+        fail_msg: "idrac_power role defaults did not load"
+
+    - name: Assert ipmitool was NOT installed under Docker (tasks skipped)
+      ansible.builtin.command: dpkg -s ipmitool
+      register: ipmitool_check
+      changed_when: false
+      failed_when: false
+
+    - name: Confirm the power tasks were inert in-container
+      ansible.builtin.assert:
+        that:
+          - ipmitool_check.rc != 0
+        fail_msg: "ipmitool was installed — Docker-skip guard did not hold"

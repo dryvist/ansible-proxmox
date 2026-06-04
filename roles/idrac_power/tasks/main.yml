@@ -1,0 +1,105 @@
+---
+# idrac_power tasks — query/set a target node's chassis power via ipmitool.
+# All ipmitool calls are delegated to idrac_power_controller (which can reach
+# the BMC subnet); the target node may be powered off. Skipped under Docker
+# (molecule) and when disabled or no BMC IP is set.
+
+- name: Ensure ipmitool is installed on the controller
+  ansible.builtin.apt:
+    name: ipmitool
+    state: present
+    update_cache: true
+  delegate_to: "{{ idrac_power_controller }}"
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_ip | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - idrac_power
+
+- name: Query current chassis power status
+  ansible.builtin.command:
+    cmd: >-
+      ipmitool -I lanplus -H {{ idrac_power_bmc_ip }}
+      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      chassis power status
+  delegate_to: "{{ idrac_power_controller }}"
+  register: idrac_power_status
+  changed_when: false
+  no_log: true
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_ip | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - idrac_power
+
+# ipmitool prints "Chassis Power is on" / "Chassis Power is off".
+- name: Power on the target (only if currently off)
+  ansible.builtin.command:
+    cmd: >-
+      ipmitool -I lanplus -H {{ idrac_power_bmc_ip }}
+      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      chassis power on
+  delegate_to: "{{ idrac_power_controller }}"
+  changed_when: true
+  no_log: true
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_ip | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+    - idrac_power_action == 'on'
+    - "'is on' not in (idrac_power_status.stdout | default(''))"
+  tags:
+    - idrac_power
+
+- name: Wait for the target to become reachable over SSH
+  ansible.builtin.wait_for_connection:
+    timeout: "{{ idrac_power_boot_timeout | int }}"
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_ip | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+    - idrac_power_action == 'on'
+  tags:
+    - idrac_power
+
+- name: Power off the target gracefully (ACPI soft, only if currently on)
+  ansible.builtin.command:
+    cmd: >-
+      ipmitool -I lanplus -H {{ idrac_power_bmc_ip }}
+      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      chassis power soft
+  delegate_to: "{{ idrac_power_controller }}"
+  changed_when: true
+  no_log: true
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_ip | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+    - idrac_power_action == 'off'
+    - "'is off' not in (idrac_power_status.stdout | default(''))"
+  tags:
+    - idrac_power
+
+- name: Wait for the graceful power-off to complete
+  ansible.builtin.command:
+    cmd: >-
+      ipmitool -I lanplus -H {{ idrac_power_bmc_ip }}
+      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      chassis power status
+  delegate_to: "{{ idrac_power_controller }}"
+  register: idrac_power_off_check
+  until: "'is off' in (idrac_power_off_check.stdout | default(''))"
+  retries: "{{ idrac_power_off_retries | int }}"
+  delay: 10
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_ip | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+    - idrac_power_action == 'off'
+  tags:
+    - idrac_power
