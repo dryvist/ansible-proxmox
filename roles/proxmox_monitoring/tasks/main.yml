@@ -113,3 +113,31 @@
           {{ proxmox_monitoring_healthchecks_ping_url }}
         minute: "*/{{ proxmox_monitoring_healthchecks_interval }}"
         user: root
+
+- name: Configure ZFS capacity monitor
+  when:
+    - proxmox_monitoring_enable_zfs_capacity
+    - proxmox_monitoring_ntfy_url | length > 0
+  block:
+    - name: Create ZFS capacity monitor state directory
+      ansible.builtin.file:
+        path: /var/lib/zfs-capacity-monitor
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Deploy ZFS capacity monitor script
+      ansible.builtin.template:
+        src: zfs-capacity-monitor.sh.j2
+        dest: /usr/local/bin/zfs-capacity-monitor.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure ZFS capacity monitor cron job
+      ansible.builtin.cron:
+        name: "zfs-capacity-monitor"
+        job: "/usr/local/bin/zfs-capacity-monitor.sh"
+        minute: "*/{{ proxmox_monitoring_zfs_capacity_interval }}"
+        user: root

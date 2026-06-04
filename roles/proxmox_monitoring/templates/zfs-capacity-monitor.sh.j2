@@ -1,0 +1,47 @@
+#!/bin/bash
+set -euo pipefail
+# ZFS pool capacity monitor — pushes an ntfy alert when a pool crosses a usage
+# band (e.g. 50/75/90%). State is tracked per pool so a notification fires only
+# on a band CHANGE, not every run. Managed by Ansible — do not edit manually.
+
+NTFY_URL="{{ proxmox_monitoring_ntfy_url }}"
+STATE_DIR="/var/lib/zfs-capacity-monitor"
+THRESHOLDS=({{ proxmox_monitoring_zfs_capacity_thresholds | join(' ') }})
+
+mkdir -p "$STATE_DIR"
+
+notify() {
+  # $1=title  $2=priority  $3=tags  $4=message
+  curl -fsS -m 10 --retry 3 -o /dev/null \
+    -H "Title: $1" -H "Priority: $2" -H "Tags: $3" \
+    -d "$4" "$NTFY_URL" || true
+}
+
+zpool list -H -o name,capacity | while IFS=$'\t' read -r pool cap_raw; do
+  cap="${cap_raw%\%}"
+
+  # Current band = highest threshold the pool has reached (0 if below all).
+  band=0
+  for t in "${THRESHOLDS[@]}"; do
+    if [ "$cap" -ge "$t" ]; then band="$t"; fi
+  done
+
+  state_file="$STATE_DIR/${pool//\//_}.band"
+  last=0
+  if [ -f "$state_file" ]; then last="$(cat "$state_file")"; fi
+  if [ "$band" = "$last" ]; then continue; fi
+
+  if [ "$band" -gt "$last" ]; then
+    case "$band" in
+      90) prio="urgent"; tags="rotating_light" ;;
+      75) prio="high"; tags="warning" ;;
+      *) prio="default"; tags="floppy_disk" ;;
+    esac
+    notify "ZFS ${pool} at ${cap}%" "$prio" "$tags" \
+      "Pool '${pool}' crossed ${band}% capacity (now ${cap}%) on $(hostname)."
+  else
+    notify "ZFS ${pool} recovered" "default" "white_check_mark" \
+      "Pool '${pool}' dropped to ${cap}% (below ${last}%) on $(hostname)."
+  fi
+  echo "$band" >"$state_file"
+done
