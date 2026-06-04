@@ -48,7 +48,10 @@
     label: "{{ zfs_pool.key }}/{{ item.key }}={{ item.value.quota | default('none') }}"
     index_var: zfs_pools_ds_idx
   when:
-    - item.value.quota | default('') | length > 0
+    # default('', true) coerces a null/absent quota (e.g. replica or scratch
+    # datasets) to '' so `length` doesn't choke on None; the second filter is
+    # only reached for datasets that actually declare a quota.
+    - item.value.quota | default('', true) | length > 0
     - zfs_pools_ds_quota.results[zfs_pools_ds_idx].stdout | int != item.value.quota | human_to_bytes
   changed_when: true
   tags:
