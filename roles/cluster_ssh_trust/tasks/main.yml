@@ -1,0 +1,36 @@
+---
+# cluster_ssh_trust tasks — seed /root/.ssh/known_hosts with every cluster
+# peer's current host keys so inter-node root SSH never needs a manual
+# ssh-keyscan (and survives renames). Skipped under Docker (molecule).
+
+- name: Ensure root .ssh directory exists
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: cluster_ssh_trust_enabled | bool
+  tags:
+    - cluster_ssh_trust
+
+- name: Seed cluster peer host keys into known_hosts (idempotent)
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: >-
+      set -o pipefail;
+      touch /root/.ssh/known_hosts;
+      before=$(sort -u /root/.ssh/known_hosts | sha1sum);
+      ssh-keyscan -T 5 {{ cluster_ssh_trust_peers | join(' ') }} 2>/dev/null
+      >> /root/.ssh/known_hosts || true;
+      sort -u -o /root/.ssh/known_hosts /root/.ssh/known_hosts;
+      after=$(sha1sum /root/.ssh/known_hosts);
+      [[ "${before%% *}" == "${after%% *}" ]] && echo UNCHANGED || echo CHANGED
+  register: cluster_ssh_trust_seed
+  changed_when: "'CHANGED' in cluster_ssh_trust_seed.stdout"
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - cluster_ssh_trust_peers | length > 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust

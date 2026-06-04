@@ -1,0 +1,11 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # No peer list set here on purpose: PROXMOX_VE_NODES is unset under molecule and
+  # the pve_cluster_members group is absent, so the keyscan/seed step is skipped.
+  # This proves the role converges and creates the root .ssh dir with correct perms.
+  roles:
+    - role: cluster_ssh_trust

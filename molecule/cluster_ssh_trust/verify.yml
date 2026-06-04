@@ -1,0 +1,19 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Stat /root/.ssh
+      ansible.builtin.stat:
+        path: /root/.ssh
+      register: rootssh
+
+    - name: Assert root .ssh exists with secure perms
+      ansible.builtin.assert:
+        that:
+          - rootssh.stat.exists
+          - rootssh.stat.isdir
+          - rootssh.stat.mode == "0700"
+        fail_msg: "/root/.ssh missing or wrong permissions"
