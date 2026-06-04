@@ -19,12 +19,19 @@ idrac_power_autocycle: true
 # site.yml sets this per power play.
 idrac_power_action: status
 
-# Node that runs ipmitool (must reach the BMC subnet). For powering a node ON
-# (target is off) or polling during its shutdown, this MUST be a *separate*
-# always-on node — set it in inventory (group_vars). The generic default runs
-# ipmitool on the target itself, which only suffices for `status` of an
-# already-on host; no node name is baked into the role.
-idrac_power_controller: "{{ inventory_hostname }}"
+# Node that runs ipmitool (must reach the BMC subnet, be always-on, and NOT be
+# the target being powered). Derived — never hard-coded — from the shared
+# PROXMOX_VE_NODES Doppler list (same source of truth as cluster_ssh_trust):
+# the first cluster node that is not this target. Falls back to the target
+# itself when the list is empty (e.g. molecule), which is fine for `status`.
+# Override per-host/group if a specific controller is required.
+idrac_power_controller: >-
+  {{
+    ((lookup('env', 'PROXMOX_VE_NODES') | default('', true)
+       | regex_findall('[A-Za-z0-9][A-Za-z0-9._-]*')
+       | reject('equalto', inventory_hostname) | list)
+     or [inventory_hostname]) | first
+  }}
 
 # Seconds to wait for the target's SSH after power-on, and the poll budget
 # (x10s) to confirm a graceful power-off completed.

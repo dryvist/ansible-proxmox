@@ -5,11 +5,12 @@ bring **pve3** — the normally-powered-off offline-DR leg — up at the start o
 `site.yml` run and shut it down gracefully at the end, so replication/backup
 targets on `hdd3` are seeded only while it is online.
 
-The `ipmitool` calls are **delegated to a controller node** (`idrac_power_controller`,
-default `pve1`) that can reach the BMC subnet (`NETWORK_CIDR_BMC`). The target
-node itself may be powered off, so the power op never SSHes to it. The role is
-**idempotent**: it queries `chassis power status` first and only acts on a
-state mismatch.
+The `ipmitool` calls are **delegated to a controller node** (`idrac_power_controller`)
+that can reach the BMC subnet (`NETWORK_CIDR_BMC`). That controller is **derived,
+not hard-coded** — the first node in the shared `PROXMOX_VE_NODES` list that isn't
+the target — so no node name lives in the role. The target node itself may be
+powered off, so the power op never SSHes to it. The role is **idempotent**: it
+queries `chassis power status` first and only acts on a state mismatch.
 
 ## Installation
 
@@ -40,7 +41,7 @@ ansible-galaxy collection install -r requirements.yml
 | `idrac_power_enabled` | `true` | Master enable |
 | `idrac_power_autocycle` | `true` | site.yml auto power on/off around the run |
 | `idrac_power_action` | `status` | `status` / `on` / `off` (set per caller) |
-| `idrac_power_controller` | `inventory_hostname` (repo sets `pve1` in group_vars) | Always-on node that runs ipmitool; MUST be a separate node for power-on/off |
+| `idrac_power_controller` | first non-target node from `PROXMOX_VE_NODES` (else `inventory_hostname`) | Always-on node that runs ipmitool; derived, never hard-coded |
 | `idrac_power_boot_timeout` | `300` | Seconds to wait for SSH after power-on |
 | `idrac_power_off_retries` | `30` | Poll budget (×10s) for graceful off |
 | `idrac_power_username` / `_password` | `IDRAC_USERNAME` / `IDRAC_PASSWORD` env | BMC creds (no_log) |
