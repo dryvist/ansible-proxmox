@@ -29,19 +29,19 @@
   when:
     - idrac_kiosk_enabled | bool
     - "'Candidate: (none)' in (idrac_kiosk_amd_fw_policy.stdout | default(''))
-       or idrac_kiosk_amd_fw_policy.rc | default(1) != 0"
+      or idrac_kiosk_amd_fw_policy.rc | default(1) != 0"
   tags:
     - idrac_kiosk
 
 - name: Install kiosk packages
   ansible.builtin.apt:
     name:
-      - cage                  # minimal Wayland kiosk compositor (single app)
-      - chromium              # Debian browser package name
-      - seatd                 # seat management for the non-logind session
-      - libgl1-mesa-dri       # Mesa DRI drivers (OpenGL on the AMD iGPU)
-      - mesa-vulkan-drivers   # Vulkan drivers for the AMD iGPU
-      - fonts-dejavu-core     # baseline fonts so the noVNC UI renders
+      - cage # minimal Wayland kiosk compositor (single app)
+      - chromium # Debian browser package name
+      - seatd # seat management for the non-logind session
+      - libgl1-mesa-dri # Mesa DRI drivers (OpenGL on the AMD iGPU)
+      - mesa-vulkan-drivers # Vulkan drivers for the AMD iGPU
+      - fonts-dejavu-core # baseline fonts so the noVNC UI renders
     state: present
     update_cache: true
   when: idrac_kiosk_enabled | bool
@@ -93,8 +93,8 @@
     home: "/home/{{ idrac_kiosk_user }}"
     shell: /usr/sbin/nologin
     groups: "{{ ['video', 'render', 'input', 'seat']
-                | select('in', ansible_facts.getent_group | default({}))
-                | list }}"
+      | select('in', ansible_facts.getent_group | default({}))
+      | list }}"
     append: true
   when: idrac_kiosk_enabled | bool
   tags:

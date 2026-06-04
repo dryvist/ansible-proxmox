@@ -22,7 +22,7 @@
 - name: "Apply features to container {{ item.key }}"
   when: lxc_features_current != item.value
   block:
-    - name: Stop container to apply feature changes  # {{ item.key }}
+    - name: Stop container to apply feature changes # {{ item.key }}
       ansible.builtin.command: "pct stop '{{ item.key }}'"
       register: lxc_features_stop_result
       failed_when:

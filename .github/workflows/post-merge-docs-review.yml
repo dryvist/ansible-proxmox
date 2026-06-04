@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       commit_sha:
-        description: 'Commit SHA to review'
+        description: "Commit SHA to review"
         required: false
         type: string
   # --- DISABLED AUTOMATIC TRIGGERS (restore by uncommenting) ---

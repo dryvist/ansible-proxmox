@@ -21,11 +21,11 @@ ansible-galaxy collection install -r requirements.yml
 Proxmox API cannot create ZFS pools (`zpool create` is an OS operation), so the
 contract is split:
 
-| Layer | Owns |
-| --- | --- |
-| Host commissioning (auto-install / manual) | `zpool create` from physical devices |
-| **this role** | datasets, quotas, `pvesm` storage registration |
-| terraform-proxmox | references the datastore by `id` on VM/LXC disks |
+| Layer                                      | Owns                                             |
+| ------------------------------------------ | ------------------------------------------------ |
+| Host commissioning (auto-install / manual) | `zpool create` from physical devices             |
+| **this role**                              | datasets, quotas, `pvesm` storage registration   |
+| terraform-proxmox                          | references the datastore by `id` on VM/LXC disks |
 
 **Pool creation is opt-in and off by default.** Creating a pool needs the
 host-specific device list (`by-id` paths), which is not in the committed
@@ -53,9 +53,9 @@ Shape (`zfs_pools_map`):
 zfs_pools_map:
   tank:
     type: zfspool
-    raid: raidz1          # informational
-    protected: true       # storage-safety (hold/readonly enforcement: design pending)
-    register: true        # run `pvesm add zfspool` if not already registered
+    raid: raidz1 # informational
+    protected: true # storage-safety (hold/readonly enforcement: design pending)
+    register: true # run `pvesm add zfspool` if not already registered
     content: [images, rootdir]
     datasets:
       backups:

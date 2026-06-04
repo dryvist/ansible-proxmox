@@ -36,9 +36,9 @@ ulimits_users:
 # The BPG Proxmox Terraform provider cannot set features on privileged containers (requires root@pam).
 # This role applies the correct feature flags via pct set on the Proxmox host.
 lxc_features_containers:
-  "110": "nesting=1,keyctl=1,fuse=1"   # mailpit - Docker SMTP relay
-  "111": "nesting=1,keyctl=1,fuse=1"   # ntfy - Docker push notifications
-  "130": "nesting=1,keyctl=1,fuse=1"   # mssql - Docker MS SQL Server
+  "110": "nesting=1,keyctl=1,fuse=1" # mailpit - Docker SMTP relay
+  "111": "nesting=1,keyctl=1,fuse=1" # ntfy - Docker push notifications
+  "130": "nesting=1,keyctl=1,fuse=1" # mssql - Docker MS SQL Server
 
 # Common packages to install
 common_packages:

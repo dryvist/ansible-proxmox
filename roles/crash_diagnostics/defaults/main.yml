@@ -10,33 +10,33 @@
 # Note: sysstat installed by proxmox_monitoring role
 crash_diagnostics_packages:
   # Crash dump tools
-  - kdump-tools      # Kernel crash dump capture
-  - crash            # Kernel crash analysis
+  - kdump-tools # Kernel crash dump capture
+  - crash # Kernel crash analysis
 
   # System tracing
-  - strace           # System call tracer
+  - strace # System call tracer
 
   # Network diagnostics
-  - tcpdump          # Network packet analyzer
-  - nmap             # Network scanner
-  - traceroute       # Network path tracing
-  - socat            # Multipurpose relay
+  - tcpdump # Network packet analyzer
+  - nmap # Network scanner
+  - traceroute # Network path tracing
+  - socat # Multipurpose relay
 
   # Process/file diagnostics
-  - lsof             # List open files
-  - psmisc           # fuser, killall, pstree
+  - lsof # List open files
+  - psmisc # fuser, killall, pstree
 
   # Hardware monitoring
-  - smartmontools    # Disk SMART monitoring
+  - smartmontools # Disk SMART monitoring
 
   # MCE/EDAC hardware error detection
   # Note: mcelog is deprecated on newer kernels; rasdaemon handles MCE logging
-  - rasdaemon        # RAS daemon for hardware error logging (replaces mcelog)
-  - edac-utils       # EDAC (Error Detection and Correction) utilities
+  - rasdaemon # RAS daemon for hardware error logging (replaces mcelog)
+  - edac-utils # EDAC (Error Detection and Correction) utilities
 
   # DIMM identification and memory testing
-  - i2c-tools        # decode-dimms for DIMM SPD data
-  - memtest86+       # Boot-time memory testing
+  - i2c-tools # decode-dimms for DIMM SPD data
+  - memtest86+ # Boot-time memory testing
 
 # =============================================================================
 # SYSCTL CONFIGURATION
@@ -136,8 +136,8 @@ crash_diagnostics_grub_params:
   - nmi_watchdog=1
   - softlockup_panic=1
   - hung_task_panic=1
-  - mce=3                # Maximum MCE verbosity (0=off, 1=default, 2=CMCI, 3=all)
-  - edac_report=1        # Enable EDAC reporting at boot
+  - mce=3 # Maximum MCE verbosity (0=off, 1=default, 2=CMCI, 3=all)
+  - edac_report=1 # Enable EDAC reporting at boot
 
 # =============================================================================
 # CLEANUP

@@ -18,17 +18,16 @@ the Proxmox host is stable and properly configured so
 that VMs/containers (managed by other repos) can run
 reliably.
 
-Firewall rules for pipeline ports (1514-1518, 8088,
-2055) are managed by `terraform-proxmox/modules/firewall/`.
+Firewall rules for pipeline ports (1514-1518, 8088, 2055) are managed by `terraform-proxmox/modules/firewall/`.
 
 ## Required Environment Variables
 
-| Variable | Purpose |
-| --- | --- |
-| `PROXMOX_VE_HOSTNAME` | Proxmox VE hostname |
-| `PROXMOX_VM_SSH_USERNAME` | SSH user for Proxmox host |
+| Variable                  | Purpose                                          |
+| ------------------------- | ------------------------------------------------ |
+| `PROXMOX_VE_HOSTNAME`     | Proxmox VE hostname                              |
+| `PROXMOX_VM_SSH_USERNAME` | SSH user for Proxmox host                        |
 | `PROXMOX_SSH_PRIVATE_KEY` | SSH private key (used by scripts/run-ansible.sh) |
-| `HEALTHCHECK_PING_KEY` | Healthchecks.io key |
+| `HEALTHCHECK_PING_KEY`    | Healthchecks.io key                              |
 
 `scripts/run-ansible.sh` writes `PROXMOX_SSH_PRIVATE_KEY` to a temp file
 and exports `ANSIBLE_PRIVATE_KEY_FILE` pointing to it.
@@ -77,8 +76,8 @@ nix develop
 
 ## Related Repositories
 
-| Repo | Relationship |
-| --- | --- |
-| terraform-proxmox | Peer: provisions VMs/containers |
-| ansible-proxmox-apps | Peer: configures apps on VMs |
-| ansible-splunk | Peer: configures Splunk on VM |
+| Repo                 | Relationship                    |
+| -------------------- | ------------------------------- |
+| terraform-proxmox    | Peer: provisions VMs/containers |
+| ansible-proxmox-apps | Peer: configures apps on VMs    |
+| ansible-splunk       | Peer: configures Splunk on VM   |

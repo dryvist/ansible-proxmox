@@ -27,11 +27,11 @@ configured by `ansible-proxmox-apps` and `ansible-splunk`.
 
 ## Key Files
 
-| Path | Purpose |
-| ---- | ------- |
+| Path                 | Purpose                     |
+| -------------------- | --------------------------- |
 | `playbooks/site.yml` | Main orchestration playbook |
-| `roles/` | Configuration roles |
-| `inventory/` | Proxmox host inventory |
+| `roles/`             | Configuration roles         |
+| `inventory/`         | Proxmox host inventory      |
 
 ## Agent Tasks
 
@@ -64,6 +64,6 @@ After cloning, run `direnv allow` to enable automatic shell activation.
 
 ## Related Repositories
 
-- **terraform-proxmox*: VM/container provisioning
+- \*_terraform-proxmox_: VM/container provisioning
 - **ansible-proxmox-apps**: Application deployment on VMs
-- **ansible-splunk*: Splunk configuration
+- \*_ansible-splunk_: Splunk configuration
