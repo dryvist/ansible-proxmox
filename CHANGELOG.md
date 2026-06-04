@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0](https://github.com/dryvist/ansible-proxmox/compare/v1.15.0...v1.16.0) (2026-06-04)
+
+
+### Features
+
+* adopt nix-devenv ansible pre-commit profile ([#213](https://github.com/dryvist/ansible-proxmox/issues/213)) ([f988bc2](https://github.com/dryvist/ansible-proxmox/commit/f988bc2b9d2050e999629e6530a616a28aafb7b2))
+
 ## [1.15.0](https://github.com/dryvist/ansible-proxmox/compare/v1.14.0...v1.15.0) (2026-06-04)
 
 
