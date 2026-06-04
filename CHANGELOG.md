@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0](https://github.com/dryvist/ansible-proxmox/compare/v1.12.0...v1.13.0) (2026-06-04)
+
+
+### Features
+
+* **syncoid:** cross-node ZFS replication role (layer 2) ([#235](https://github.com/dryvist/ansible-proxmox/issues/235)) ([b151c74](https://github.com/dryvist/ansible-proxmox/commit/b151c74158df216ff5848bd5d5817e8faae327ee))
+
 ## [1.12.0](https://github.com/dryvist/ansible-proxmox/compare/v1.11.0...v1.12.0) (2026-06-04)
 
 
