@@ -44,7 +44,28 @@ sops exec-env secrets.sops.yml 'doppler run -- ./scripts/run-ansible.sh playbook
 | `nas_storage_group_name` | `nas` | Unix/Samba group for shared access |
 | `nas_storage_managed_users` | `[]` | Declarative Samba-backed service accounts |
 | `nas_storage_shares` | single `nas` share fallback | Declarative Samba shares |
+| `nas_storage_macos_optimized` | `true` | Global vfs_fruit tuning for macOS Finder/Time Machine |
 | `nas_storage_password_fingerprint_dir` | `/etc/samba/password-fingerprints` | Root-only password hash cache for idempotence |
+
+## Apple clients (macOS, Time Machine, Infuse)
+
+When `nas_storage_macos_optimized` is true (default), the global Samba config
+enables `vfs_fruit` (`catia fruit streams_xattr` + `fruit:*` options) so macOS
+Finder behaves correctly and shares can serve Time Machine. It is harmless for
+non-Apple clients.
+
+Per-share Apple options (set on a share in the `host_services.nas.shares`
+contract):
+
+| Share field | Effect |
+| --- | --- |
+| `time_machine: true` | Adds `fruit:time machine = yes` — the share becomes a Time Machine target |
+| `time_machine_max_size: "1T"` | Optional per-share Time Machine quota |
+| `read_only: true` | A read-only media share — e.g. for **Infuse** on Apple TV / iPhone to play directly over SMB alongside Plex |
+
+Spotlight *search* over SMB additionally requires a server-side indexer
+(Tracker/Elasticsearch) and is out of scope; Finder browsing and metadata work
+with `vfs_fruit` alone.
 
 ## Notes
 

@@ -10,4 +10,16 @@
    max log size = 1000
    logging = file
    panic action = /usr/share/samba/panic-action %d
+{% if nas_storage_macos_optimized | default(true) | bool %}
+   # macOS Finder + Time Machine integration (vfs_fruit). Harmless for non-Mac
+   # clients; required for `fruit:time machine` shares and clean Finder behaviour.
+   vfs objects = catia fruit streams_xattr
+   fruit:metadata = stream
+   fruit:model = TimeCapsule
+   fruit:posix_rename = yes
+   fruit:veto_appledouble = no
+   fruit:nfs_aces = no
+   fruit:wipe_intentionally_left_blank_rfork = yes
+   fruit:delete_empty_adfiles = yes
+{% endif %}
    include = /etc/samba/smb.conf.d/*.conf
