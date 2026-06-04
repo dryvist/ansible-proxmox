@@ -3,6 +3,18 @@
 Configures system monitoring tools for Proxmox VE crash investigation and
 health monitoring.
 
+## Installation
+
+This role ships in the `ansible-proxmox` repository and is applied via
+`playbooks/site.yml`. No separate installation is required beyond cloning the
+repo and installing collection dependencies:
+
+```bash
+git clone https://github.com/dryvist/ansible-proxmox.git
+cd ansible-proxmox
+ansible-galaxy collection install -r requirements.yml
+```
+
 ## Components
 
 ### sysstat (sar)
@@ -33,6 +45,15 @@ minute.
 
 External uptime monitoring ping (optional).
 
+### zfs-capacity
+
+Pushes an [ntfy](https://ntfy.sh) alert when a ZFS pool crosses a usage band
+(default 50/75/90%). State is tracked per pool under
+`/var/lib/zfs-capacity-monitor/`, so a notification fires only on a band
+**change** (rising or recovering) — not every run. Priority scales with the
+band (50 → default, 75 → high, 90 → urgent). Disabled until
+`proxmox_monitoring_ntfy_url` is set.
+
 ## Variables
 
 | Variable | Default | Description |
@@ -45,6 +66,10 @@ External uptime monitoring ping (optional).
 | `proxmox_monitoring_crash_monitor_interval` | `1` | Crash monitor cron interval (minutes) |
 | `proxmox_monitoring_healthchecks_interval` | `1` | Healthchecks.io ping interval (minutes) |
 | `proxmox_monitoring_log_retention_days` | `90` | Days to retain |
+| `proxmox_monitoring_enable_zfs_capacity` | `true` | Enable ZFS capacity alerts |
+| `proxmox_monitoring_ntfy_url` | `""` | ntfy topic URL (secret); empty disables |
+| `proxmox_monitoring_zfs_capacity_interval` | `15` | Capacity check cron interval (minutes) |
+| `proxmox_monitoring_zfs_capacity_thresholds` | `[50, 75, 90]` | Usage bands (%) that trigger alerts |
 
 ## Usage
 

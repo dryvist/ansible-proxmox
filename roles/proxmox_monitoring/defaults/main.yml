@@ -19,3 +19,11 @@ proxmox_monitoring_enable_sysstat: true
 proxmox_monitoring_enable_atop: true
 proxmox_monitoring_enable_crash_monitor: true
 proxmox_monitoring_enable_healthchecks: true
+proxmox_monitoring_enable_zfs_capacity: true
+
+# ZFS pool capacity alerts: push via ntfy when a pool crosses a usage band.
+proxmox_monitoring_zfs_capacity_interval: 15
+proxmox_monitoring_zfs_capacity_thresholds: [50, 75, 90]
+# ntfy topic URL, e.g. https://ntfy.example.com/proxmox-storage
+# Set via vault/external variable — DO NOT commit a real URL. Empty disables it.
+proxmox_monitoring_ntfy_url: ""
