@@ -1,0 +1,22 @@
+#!/bin/bash
+# syncoid replication — pull ZFS datasets to this (target) node.
+# Managed by Ansible — do not edit manually. One run per configured job; a
+# failed job (e.g. source offline) is logged and does NOT abort the rest.
+set -uo pipefail
+
+LOG_DIR="{{ syncoid_log_dir }}"
+mkdir -p "$LOG_DIR"
+log="$LOG_DIR/$(date +%Y-%m-%d).log"
+
+replicate() {
+  echo "=== $(date +%H:%M:%S) syncoid $* ===" >>"$log"
+  local rc=0
+  syncoid "$@" >>"$log" 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "  FAILED (rc=$rc)" >>"$log"
+  fi
+}
+
+{% for job in syncoid_jobs %}
+replicate {{ job.options | default(syncoid_default_options) }} {{ job.source }} {{ job.target }}
+{% endfor %}

@@ -74,6 +74,12 @@
           - "192.168.0.0/16"
           - "10.0.0.0/8"
 
+    # Cross-node ZFS replication (syncoid, layer 2). Pull model — runs on the
+    # backup node; inert until syncoid_jobs is set.
+    - role: syncoid
+      tags:
+        - syncoid
+
     - role: idrac_kiosk
       tags:
         - idrac_kiosk

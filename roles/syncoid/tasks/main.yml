@@ -1,0 +1,51 @@
+---
+# syncoid role tasks — install, render the replication wrapper, schedule it.
+# Package install + cron are Docker-skipped; the wrapper still renders so
+# molecule can verify the generated commands.
+
+- name: Install sanoid (provides syncoid)
+  ansible.builtin.apt:
+    name: "{{ syncoid_package }}"
+    state: present
+    update_cache: true
+  when:
+    - syncoid_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
+- name: Ensure syncoid log directory exists
+  ansible.builtin.file:
+    path: "{{ syncoid_log_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: syncoid_enabled
+  tags:
+    - syncoid
+
+- name: Deploy syncoid replication wrapper
+  ansible.builtin.template:
+    src: syncoid-replicate.sh.j2
+    dest: /usr/local/bin/syncoid-replicate.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: syncoid_enabled
+  tags:
+    - syncoid
+
+- name: Schedule syncoid replication
+  ansible.builtin.cron:
+    name: "syncoid-replicate"
+    job: "/usr/local/bin/syncoid-replicate.sh"
+    hour: "{{ syncoid_cron_hour }}"
+    minute: "{{ syncoid_cron_minute }}"
+    user: "{{ syncoid_user }}"
+  when:
+    - syncoid_enabled
+    - syncoid_jobs | length > 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
