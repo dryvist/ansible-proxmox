@@ -1,0 +1,14 @@
+---
+# Host vars for pve1 (primary, always-on).
+#
+# Layer-1 protection (local ZFS snapshots via sanoid) for the Splunk all-in-one
+# VM (vmid 200), whose disks live on rpool/data. These snapshots are also the
+# source syncoid pulls to pve2 (see host_vars/pve2.yml). Scoped to Splunk for
+# now; broadening sanoid to the rest of rpool/data (nas, media) is a follow-up.
+sanoid_datasets:
+  "rpool/data/vm-200-disk-0":
+    use_template: critical
+  "rpool/data/vm-200-disk-1":
+    use_template: critical
+  "rpool/data/vm-200-disk-2":
+    use_template: critical
