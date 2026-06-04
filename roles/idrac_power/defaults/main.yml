@@ -1,7 +1,7 @@
 ---
 # idrac_power — power-control a rack server's BMC over IPMI (lanplus), used to
-# bring a normally-powered-off node (pve3, the offline-DR leg) up at the start
-# of a site.yml run and shut it down gracefully at the end.
+# bring a normally-powered-off node (an offline-DR leg) up at the start of a
+# site.yml run and shut it down gracefully at the end.
 #
 # The ipmitool calls run on a CONTROLLER node that can reach the BMC subnet
 # (NETWORK_CIDR_BMC) — the target node itself may be powered off, so the power
@@ -11,7 +11,7 @@
 idrac_power_enabled: true
 
 # Master switch for the site.yml auto-cycle (power on at start, off at end).
-# Set -e idrac_power_autocycle=false for quick pve1/pve2-only runs (then also
+# Set -e idrac_power_autocycle=false for quick always-on-only runs (then also
 # --limit to exclude the powered-off node).
 idrac_power_autocycle: true
 
@@ -34,9 +34,11 @@ idrac_power_controller: >-
   }}
 
 # Seconds to wait for the target's SSH after power-on, and the poll budget
-# (x10s) to confirm a graceful power-off completed.
-idrac_power_boot_timeout: 300
-idrac_power_off_retries: 30
+# (x10s, so 60 => 10 min) to confirm a graceful power-off completed. Old rack
+# hardware (e.g. a Dell R710) can take ~10 minutes to POST and boot, so these
+# default generously; tune per host if your hardware is faster/slower.
+idrac_power_boot_timeout: 720
+idrac_power_off_retries: 60
 
 # BMC credentials — injected from the environment (Doppler), never committed.
 idrac_power_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"

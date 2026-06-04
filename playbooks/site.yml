@@ -6,10 +6,10 @@
 - name: Load OpenTofu host services
   import_playbook: load_tofu.yml
 
-# Bring power-managed nodes (pve3 — the offline-DR leg) UP before the main play
-# so they are reachable for configuration. Inert unless a host sets
-# pve_power_managed: true and idrac_power_autocycle is on. ipmitool runs on the
-# controller (idrac_power_controller); wait_for_connection blocks until SSH is up.
+# Bring power-managed nodes (the offline-DR leg) UP before the main play so they
+# are reachable for configuration. Inert unless a host sets pve_power_managed:
+# true and idrac_power_autocycle is on. ipmitool runs on the controller
+# (idrac_power_controller); wait_for_connection blocks until SSH is up.
 - name: Power on power-managed nodes (iDRAC auto-cycle)
   hosts: proxmox
   gather_facts: false
