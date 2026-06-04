@@ -1,0 +1,27 @@
+---
+# syncoid role defaults — cross-node ZFS replication (layer 2 of resiliency).
+#
+# PULL model: run this on the TARGET (backup) node; it SSHes to each source to
+# pull snapshots. Pull-from-backup is safer than push — a compromised source
+# cannot reach the backup. Inert until syncoid_jobs is set. SSH trust from this
+# node's syncoid_user to each source host is a prerequisite, set up out of band.
+
+syncoid_enabled: true
+syncoid_package: sanoid # provides both sanoid and syncoid
+syncoid_user: root
+syncoid_log_dir: /var/log/syncoid
+syncoid_cron_hour: 2
+syncoid_cron_minute: 17
+# Integrate with sanoid: replicate existing sanoid snapshots instead of making
+# syncoid's own (--no-sync-snap), recurse the tree, stay quiet for cron.
+syncoid_default_options: "--recursive --no-sync-snap --quiet"
+
+# Replication jobs (empty by default). Each pulls source -> local target:
+#   syncoid_jobs:
+#     - name: pve1-nas
+#       source: "root@pve1:rpool/data/nas"
+#       target: "tank/replica/pve1/nas"
+#     - name: pve1-splunk-hot
+#       source: "root@pve1:nvme1/siem/splunk-hot"
+#       target: "tank/replica/pve1/splunk-hot"
+syncoid_jobs: []

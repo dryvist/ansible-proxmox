@@ -1,0 +1,20 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    # Pull model: this node is the target (pve2), pulling pve1 datasets.
+    # Package + cron are Docker-skipped; this proves the wrapper renders the
+    # expected syncoid invocations from the job contract.
+    syncoid_jobs:
+      - name: pve1-nas
+        source: "root@pve1:rpool/data/nas"
+        target: "tank/replica/pve1/nas"
+      - name: pve1-splunk-hot
+        source: "root@pve1:nvme1/siem/splunk-hot"
+        target: "tank/replica/pve1/splunk-hot"
+
+  roles:
+    - role: syncoid

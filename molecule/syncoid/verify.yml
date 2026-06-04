@@ -1,0 +1,24 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered syncoid wrapper
+      ansible.builtin.slurp:
+        src: /usr/local/bin/syncoid-replicate.sh
+      register: syncoid_wrapper
+
+    - name: Decode wrapper
+      ansible.builtin.set_fact:
+        syncoid_wrapper_text: "{{ syncoid_wrapper.content | b64decode }}"
+
+    - name: Assert wrapper renders the pull invocations from the job contract
+      ansible.builtin.assert:
+        that:
+          - "'replicate --recursive --no-sync-snap --quiet root@pve1:rpool/data/nas tank/replica/pve1/nas' in syncoid_wrapper_text"
+          - "'root@pve1:nvme1/siem/splunk-hot tank/replica/pve1/splunk-hot' in syncoid_wrapper_text"
+          # failure isolation present so an offline source does not abort the run
+          - "'FAILED (rc=' in syncoid_wrapper_text"
+        fail_msg: "syncoid wrapper did not render the expected jobs"
