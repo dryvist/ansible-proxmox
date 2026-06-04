@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.1](https://github.com/dryvist/ansible-proxmox/compare/v1.16.0...v1.16.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* **cluster_ssh_trust:** correct non-idempotent changed_when ([#242](https://github.com/dryvist/ansible-proxmox/issues/242)) ([fabe94e](https://github.com/dryvist/ansible-proxmox/commit/fabe94e615f00fdda657ee1c735877c44e1d998d))
+
 ## [1.16.0](https://github.com/dryvist/ansible-proxmox/compare/v1.15.0...v1.16.0) (2026-06-04)
 
 
