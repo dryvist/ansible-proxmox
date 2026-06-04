@@ -40,7 +40,7 @@ ansible-galaxy collection install -r requirements.yml
 | `idrac_power_enabled` | `true` | Master enable |
 | `idrac_power_autocycle` | `true` | site.yml auto power on/off around the run |
 | `idrac_power_action` | `status` | `status` / `on` / `off` (set per caller) |
-| `idrac_power_controller` | `pve1` | Node that runs ipmitool (reaches BMC subnet) |
+| `idrac_power_controller` | `inventory_hostname` (repo sets `pve1` in group_vars) | Always-on node that runs ipmitool; MUST be a separate node for power-on/off |
 | `idrac_power_boot_timeout` | `300` | Seconds to wait for SSH after power-on |
 | `idrac_power_off_retries` | `30` | Poll budget (×10s) for graceful off |
 | `idrac_power_username` / `_password` | `IDRAC_USERNAME` / `IDRAC_PASSWORD` env | BMC creds (no_log) |

@@ -19,8 +19,12 @@ idrac_power_autocycle: true
 # site.yml sets this per power play.
 idrac_power_action: status
 
-# Node that runs ipmitool (must reach the BMC subnet). Always-on.
-idrac_power_controller: pve1
+# Node that runs ipmitool (must reach the BMC subnet). For powering a node ON
+# (target is off) or polling during its shutdown, this MUST be a *separate*
+# always-on node — set it in inventory (group_vars). The generic default runs
+# ipmitool on the target itself, which only suffices for `status` of an
+# already-on host; no node name is baked into the role.
+idrac_power_controller: "{{ inventory_hostname }}"
 
 # Seconds to wait for the target's SSH after power-on, and the poll budget
 # (x10s) to confirm a graceful power-off completed.

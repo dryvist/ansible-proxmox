@@ -1,6 +1,11 @@
 ---
 # Group variables for Proxmox VE servers
 
+# iDRAC/IPMI power control — the always-on node that runs ipmitool against other
+# nodes' BMCs (must reach the BMC subnet). This is the one environment-specific
+# value; the idrac_power role itself is node-agnostic (acts on idrac_power_bmc_ip).
+idrac_power_controller: pve1
+
 # ZFS Swap Configuration
 zfs_swap_size: "96G"
 zfs_swap_pool: "rpool"
