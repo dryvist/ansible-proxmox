@@ -1,0 +1,49 @@
+---
+# sanoid role tasks — install sanoid, render its config, enable the timer.
+# Package install and the systemd timer are skipped under Docker (molecule);
+# config rendering still runs so the contract can be verified in-container.
+
+- name: Install sanoid
+  ansible.builtin.apt:
+    name: "{{ sanoid_package }}"
+    state: present
+    update_cache: true
+  when:
+    - sanoid_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - sanoid
+
+- name: Ensure sanoid config directory exists
+  ansible.builtin.file:
+    path: "{{ sanoid_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: sanoid_enabled
+  tags:
+    - sanoid
+
+- name: Render sanoid.conf
+  ansible.builtin.template:
+    src: sanoid.conf.j2
+    dest: "{{ sanoid_config_dir }}/sanoid.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  when: sanoid_enabled
+  tags:
+    - sanoid
+
+- name: Enable and start the sanoid timer
+  ansible.builtin.systemd:
+    name: sanoid.timer
+    enabled: true
+    state: started
+  when:
+    - sanoid_enabled
+    - sanoid_timer_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - sanoid

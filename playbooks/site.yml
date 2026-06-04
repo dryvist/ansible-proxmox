@@ -50,6 +50,12 @@
       tags:
         - zfs_pools
 
+    # Local ZFS snapshot retention (sanoid) for the datasets zfs_pools manages.
+    # Layer 1 protection (rollback); cross-node replication is a separate role.
+    - role: sanoid
+      tags:
+        - sanoid
+
     # Root-only media LXC features (bind-mounts, keyctl, /dev/net/tun) that the
     # BPG provider's API token cannot set. Runs AFTER OpenTofu creates the
     # media LXC shells and zfs_pools manages the /rpool/data datasets, and

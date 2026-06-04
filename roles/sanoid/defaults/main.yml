@@ -1,0 +1,42 @@
+---
+# sanoid role defaults — ZFS snapshot scheduling + retention.
+#
+# Datasets are assigned per host (group_vars/host_vars) by criticality tier.
+# The role is inert until sanoid_datasets is populated (templates alone take no
+# snapshots).
+
+sanoid_enabled: true
+sanoid_package: sanoid
+sanoid_timer_enabled: true
+sanoid_config_dir: /etc/sanoid
+
+# Retention templates by criticality tier. Quote yes/no so YAML keeps them
+# strings — sanoid wants literal yes/no, not Python booleans (True/False).
+sanoid_templates:
+  critical:
+    frequently: 0
+    hourly: 36
+    daily: 30
+    weekly: 8
+    monthly: 6
+    yearly: 0
+    autosnap: "yes"
+    autoprune: "yes"
+  media:
+    frequently: 0
+    hourly: 0
+    daily: 14
+    weekly: 4
+    monthly: 3
+    yearly: 0
+    autosnap: "yes"
+    autoprune: "yes"
+  scratch:
+    autosnap: "no"
+    autoprune: "no"
+
+# Per-dataset assignment (empty by default). Set in inventory, e.g.:
+#   sanoid_datasets:
+#     "rpool/data/nas": { use_template: critical, recursive: "yes" }
+#     "nvme1/siem/cribl-pq": { use_template: scratch }
+sanoid_datasets: {}
