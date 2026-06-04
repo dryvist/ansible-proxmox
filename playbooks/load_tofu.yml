@@ -117,3 +117,12 @@
             )
           }}
       loop: "{{ groups['proxmox'] | default([]) }}"
+
+    # Splunk VM identity (node + vmid) for the sanoid/syncoid replication config.
+    # Lets host_vars derive the source node + vmid from tofu instead of
+    # hard-coding node names (keyed by splunk instance, currently "splunk").
+    - name: Inject OpenTofu Splunk VM identity onto proxmox hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        splunk_vm_from_tofu: "{{ tofu_data.splunk_vm | default({}) }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"

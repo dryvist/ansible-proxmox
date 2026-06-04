@@ -1,14 +1,18 @@
 ---
-# Host vars for pve1 (primary, always-on).
+# Host vars for pve1 (primary, always-on — currently the Splunk node).
 #
 # Layer-1 protection (local ZFS snapshots via sanoid) for the Splunk all-in-one
-# VM (vmid 200), whose disks live on rpool/data. These snapshots are also the
-# source syncoid pulls to pve2 (see host_vars/pve2.yml). Scoped to Splunk for
-# now; broadening sanoid to the rest of rpool/data (nas, media) is a follow-up.
+# VM disks, so the snapshots exist for syncoid to pull (and as a rollback
+# point). vm-<id>-disk-<n> is Proxmox's default zvol naming, kept as-is. The
+# empty leftover disk-1 was removed; we snapshot the OS disk (0) and
+# /opt/splunk config+indexes (2). Whole-disk for now; the critical/volatile
+# SSD split is a tracked follow-up.
+#
+# NOTE (generalization, follow-up): this assumes Splunk runs on pve1. When the
+# layout is generalized (data-driven from splunk_vm_from_tofu across nodes),
+# this moves out of a per-host file. See docs design + follow-up issue.
 sanoid_datasets:
   "rpool/data/vm-200-disk-0":
-    use_template: critical
-  "rpool/data/vm-200-disk-1":
     use_template: critical
   "rpool/data/vm-200-disk-2":
     use_template: critical
