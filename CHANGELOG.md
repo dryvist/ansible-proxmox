@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0](https://github.com/dryvist/ansible-proxmox/compare/v1.16.2...v1.17.0) (2026-06-04)
+
+
+### Features
+
+* **replication:** codify Splunk VM 200 sanoid+syncoid protection ([#244](https://github.com/dryvist/ansible-proxmox/issues/244)) ([64ad255](https://github.com/dryvist/ansible-proxmox/commit/64ad2554ed77bf2c947583baff65c01c1e5d05e8))
+
 ## [1.16.2](https://github.com/dryvist/ansible-proxmox/compare/v1.16.1...v1.16.2) (2026-06-04)
 
 
