@@ -1,0 +1,27 @@
+---
+# Host vars for pve2 (secondary, always-on — the backup/replica target).
+#
+# Layer-2 protection (cross-node ZFS replication via syncoid, PULL model): pve2
+# pulls the Splunk VM disk snapshots from its source node into
+# hdd2/replica/<node>. The source NODE NAME is derived from tofu
+# (splunk_vm_from_tofu, injected by load_tofu) — never hard-coded — so this
+# follows the VM if it is ever defined on a different node. The vmid and the
+# vm-<id>-disk-<n> leaves use Proxmox's default naming (kept as-is); hdd2 is
+# pve2's own local pool. The hdd2/replica/<node> parent is created by zfs_pools
+# from the terraform-proxmox node_storage declaration; syncoid creates the
+# per-disk leaves.
+#
+# Prereqs (verified live): root SSH pve2->source works (PVE cluster keys +
+# cluster_ssh_trust known_hosts); each source disk has a snapshot for
+# --no-sync-snap (sanoid on the source provides ongoing ones).
+#
+# disk-1 was an empty leftover (removed); replicate the OS disk (0) and
+# /opt/splunk config+indexes (2). Whole-disk for now; excluding the volatile
+# index tier is the tracked critical/volatile follow-up.
+syncoid_jobs:
+  - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk0"
+    source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-0"
+    target: "hdd2/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-0"
+  - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk2"
+    source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
+    target: "hdd2/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
