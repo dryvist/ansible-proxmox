@@ -1,0 +1,36 @@
+---
+# idrac_power — power-control a rack server's BMC over IPMI (lanplus), used to
+# bring a normally-powered-off node (pve3, the offline-DR leg) up at the start
+# of a site.yml run and shut it down gracefully at the end.
+#
+# The ipmitool calls run on a CONTROLLER node that can reach the BMC subnet
+# (NETWORK_CIDR_BMC) — the target node itself may be powered off, so the power
+# op is delegated to the controller and never SSHes to the target. Idempotent:
+# queries `chassis power status` first and only acts on a state mismatch.
+
+idrac_power_enabled: true
+
+# Master switch for the site.yml auto-cycle (power on at start, off at end).
+# Set -e idrac_power_autocycle=false for quick pve1/pve2-only runs (then also
+# --limit to exclude the powered-off node).
+idrac_power_autocycle: true
+
+# Action for this invocation: "status" (default, no-op), "on", or "off".
+# site.yml sets this per power play.
+idrac_power_action: status
+
+# Node that runs ipmitool (must reach the BMC subnet). Always-on.
+idrac_power_controller: pve1
+
+# Seconds to wait for the target's SSH after power-on, and the poll budget
+# (x10s) to confirm a graceful power-off completed.
+idrac_power_boot_timeout: 300
+idrac_power_off_retries: 30
+
+# BMC credentials — injected from the environment (Doppler), never committed.
+idrac_power_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
+idrac_power_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"
+
+# Per-host BMC address. Set in host_vars/<node>.yml (e.g. from the tofu
+# rack_servers output / SOPS); there is no safe default.
+# idrac_power_bmc_ip: "10.x.x.x"

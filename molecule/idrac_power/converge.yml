@@ -1,0 +1,14 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # Under Docker every power task is skipped (ansible_virtualization_type ==
+  # 'docker'), and no idrac_power_bmc_ip is set, so this proves the role loads
+  # and converges cleanly without touching any BMC. Live power behavior is
+  # validated against real hardware, not in molecule.
+  vars:
+    idrac_power_controller: proxmox-idrac-power-test
+  roles:
+    - role: idrac_power

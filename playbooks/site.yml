@@ -6,6 +6,26 @@
 - name: Load OpenTofu host services
   import_playbook: load_tofu.yml
 
+# Bring power-managed nodes (pve3 — the offline-DR leg) UP before the main play
+# so they are reachable for configuration. Inert unless a host sets
+# pve_power_managed: true and idrac_power_autocycle is on. ipmitool runs on the
+# controller (idrac_power_controller); wait_for_connection blocks until SSH is up.
+- name: Power on power-managed nodes (iDRAC auto-cycle)
+  hosts: proxmox
+  gather_facts: false
+
+  tasks:
+    - name: Power on via iDRAC
+      ansible.builtin.include_role:
+        name: idrac_power
+      vars:
+        idrac_power_action: "on"
+      when:
+        - pve_power_managed | default(false) | bool
+        - idrac_power_autocycle | bool
+      tags:
+        - idrac_power
+
 - name: Configure Proxmox VE servers
   hosts: proxmox
   become: true
@@ -95,3 +115,23 @@
     - role: idrac_kiosk
       tags:
         - idrac_kiosk
+
+# Gracefully power down the power-managed nodes at the very END of the run (the
+# offline-DR leg returns to off after its targets are seeded). NOTE: a mid-run
+# failure stops subsequent plays, so the node may be left powered on (re-run or
+# power off manually) — a guaranteed-off (block/always) refinement is tracked.
+- name: Power off power-managed nodes (iDRAC auto-cycle)
+  hosts: proxmox
+  gather_facts: false
+
+  tasks:
+    - name: Power off via iDRAC (graceful ACPI)
+      ansible.builtin.include_role:
+        name: idrac_power
+      vars:
+        idrac_power_action: "off"
+      when:
+        - pve_power_managed | default(false) | bool
+        - idrac_power_autocycle | bool
+      tags:
+        - idrac_power
