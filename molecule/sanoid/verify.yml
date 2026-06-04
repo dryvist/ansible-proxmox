@@ -1,0 +1,26 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered sanoid.conf
+      ansible.builtin.slurp:
+        src: /etc/sanoid/sanoid.conf
+      register: sanoid_conf
+
+    - name: Decode sanoid.conf
+      ansible.builtin.set_fact:
+        sanoid_conf_text: "{{ sanoid_conf.content | b64decode }}"
+
+    - name: Assert templates and dataset assignments rendered
+      ansible.builtin.assert:
+        that:
+          - "'[template_critical]' in sanoid_conf_text"
+          - "'[template_scratch]' in sanoid_conf_text"
+          - "'[rpool/data/nas]' in sanoid_conf_text"
+          - "'use_template = critical' in sanoid_conf_text"
+          # scratch dataset opts out of snapshots
+          - "'[nvme1/siem/cribl-pq]' in sanoid_conf_text"
+        fail_msg: "sanoid.conf did not render the expected templates/datasets"

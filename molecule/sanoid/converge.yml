@@ -1,0 +1,19 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    # A representative per-criticality assignment. Package install + timer are
+    # skipped under Docker; this proves the role converges and sanoid.conf
+    # renders the templates and dataset sections from the contract.
+    sanoid_datasets:
+      "rpool/data/nas":
+        use_template: critical
+        recursive: "yes"
+      "nvme1/siem/cribl-pq":
+        use_template: scratch
+
+  roles:
+    - role: sanoid

@@ -1,0 +1,16 @@
+# Managed by Ansible — do not edit manually.
+# ZFS snapshot retention (sanoid). https://github.com/jimsalterjrs/sanoid
+{% for tname, opts in sanoid_templates | dictsort %}
+
+[template_{{ tname }}]
+{% for k, v in opts | dictsort %}
+        {{ k }} = {{ v }}
+{% endfor %}
+{% endfor %}
+{% for ds, opts in sanoid_datasets | dictsort %}
+
+[{{ ds }}]
+{% for k, v in opts | dictsort %}
+        {{ k }} = {{ v }}
+{% endfor %}
+{% endfor %}
