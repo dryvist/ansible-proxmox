@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0](https://github.com/dryvist/ansible-proxmox/compare/v1.13.0...v1.14.0) (2026-06-04)
+
+
+### Features
+
+* **nas_storage:** macOS/Time Machine/Infuse SMB support ([#234](https://github.com/dryvist/ansible-proxmox/issues/234)) ([1369611](https://github.com/dryvist/ansible-proxmox/commit/1369611006f2fb4299424d293d3ffe25f1535c52))
+
 ## [1.13.0](https://github.com/dryvist/ansible-proxmox/compare/v1.12.0...v1.13.0) (2026-06-04)
 
 
