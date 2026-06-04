@@ -42,6 +42,7 @@
         - /etc/samba/smb.conf.d/nas.conf
         - /etc/samba/smb.conf.d/ha-backups.conf
         - /etc/samba/smb.conf.d/ha-media.conf
+        - /etc/samba/smb.conf.d/timemachine.conf
       register: samba_config_files
 
     - name: Assert Samba config files exist
@@ -79,3 +80,27 @@
         that:
           - "'[ha-backups]' in (ha_backup_share.content | b64decode)"
           - "'valid users = homeassistant' in (ha_backup_share.content | b64decode)"
+
+    - name: Read global smb.conf
+      ansible.builtin.slurp:
+        src: /etc/samba/smb.conf
+      register: nas_smb_conf
+
+    - name: Assert macOS (vfs_fruit) tuning is present globally
+      ansible.builtin.assert:
+        that:
+          - "'vfs objects = catia fruit streams_xattr' in (nas_smb_conf.content | b64decode)"
+          - "'fruit:metadata = stream' in (nas_smb_conf.content | b64decode)"
+        fail_msg: "Global vfs_fruit macOS tuning missing from smb.conf"
+
+    - name: Read Time Machine share config
+      ansible.builtin.slurp:
+        src: /etc/samba/smb.conf.d/timemachine.conf
+      register: nas_tm_share
+
+    - name: Assert Time Machine share enables fruit time machine
+      ansible.builtin.assert:
+        that:
+          - "'[timemachine]' in (nas_tm_share.content | b64decode)"
+          - "'fruit:time machine = yes' in (nas_tm_share.content | b64decode)"
+        fail_msg: "timemachine share did not render fruit:time machine = yes"

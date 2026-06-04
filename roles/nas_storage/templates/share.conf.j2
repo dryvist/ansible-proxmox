@@ -9,3 +9,9 @@
    create mask = {{ item.create_mask | default('0664') }}
    directory mask = {{ item.directory_mask | default('0775') }}
    force group = {{ item.force_group | default(nas_storage_group_name) }}
+{% if item.time_machine | default(false) | bool %}
+   fruit:time machine = yes
+{% if item.time_machine_max_size is defined %}
+   fruit:time machine max size = {{ item.time_machine_max_size }}
+{% endif %}
+{% endif %}

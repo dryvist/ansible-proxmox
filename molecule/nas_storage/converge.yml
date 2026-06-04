@@ -51,6 +51,14 @@
           create_mask: "0664"
           directory_mask: "0775"
           comment: "Home Assistant media storage"
+        - name: "timemachine"
+          path: "/mnt/nas/timemachine"
+          valid_users: "@nas"
+          browsable: true
+          read_only: false
+          force_group: "nas"
+          time_machine: true
+          comment: "Mac Time Machine target"
 
   tasks:
     - name: Update apt cache

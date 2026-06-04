@@ -17,6 +17,9 @@ nas_storage_group_name: "{{ nas_storage_config.group_name | default('nas') }}"
 # Samba configuration
 nas_storage_smb_share_name: "{{ nas_storage_config.smb_share_name | default('nas') }}"
 nas_storage_smb_workgroup: "WORKGROUP"
+# macOS Finder/Time Machine integration via vfs_fruit (global). Enables
+# fruit:* options and per-share `time_machine: true`. Harmless for non-Mac.
+nas_storage_macos_optimized: "{{ nas_storage_config.macos_optimized | default(true) }}"
 nas_storage_smb_valid_users: "{{ nas_storage_config.smb_valid_users | default('@' ~ nas_storage_group_name) }}"
 nas_storage_packages:
   - samba
