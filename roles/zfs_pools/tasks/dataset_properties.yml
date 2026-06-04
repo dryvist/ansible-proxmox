@@ -1,0 +1,31 @@
+---
+# Idempotently apply arbitrary ZFS properties for a single dataset.
+# Included per-dataset from datasets.yml; `zfs_pool` (pool dict2items entry) and
+# `zfs_dataset` (dataset dict2items entry) are in scope. Each value is compared
+# against what ZFS reports (`zfs get -H -o value`), so declare properties in ZFS
+# canonical form (e.g. recordsize: "1M", compression: "zstd", readonly: "on",
+# "com.sun:auto-snapshot": "false") and quote them so YAML does not coerce
+# on/off/true/false into booleans.
+
+- name: "Read current properties for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.command:
+    cmd: "zfs get -H -o value {{ item.key }} {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
+  register: zfs_pools_ds_prop
+  changed_when: false
+  loop: "{{ zfs_dataset.value.properties | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }} {{ item.key }}"
+  tags:
+    - zfs_pools
+
+- name: "Set drifted properties for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.command:
+    cmd: "zfs set {{ item.key }}={{ item.value | string }} {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
+  loop: "{{ zfs_dataset.value.properties | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }} {{ item.key }}={{ item.value }}"
+    index_var: zfs_pools_ds_prop_idx
+  when: zfs_pools_ds_prop.results[zfs_pools_ds_prop_idx].stdout != (item.value | string)
+  changed_when: true
+  tags:
+    - zfs_pools
