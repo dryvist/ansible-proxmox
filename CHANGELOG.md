@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.2](https://github.com/dryvist/ansible-proxmox/compare/v1.16.1...v1.16.2) (2026-06-04)
+
+
+### Bug Fixes
+
+* **zfs_pools:** handle datasets with no quota (null) ([#245](https://github.com/dryvist/ansible-proxmox/issues/245)) ([f949a31](https://github.com/dryvist/ansible-proxmox/commit/f949a315b629a4e4be3b4c317e30113c606fdc73))
+
 ## [1.16.1](https://github.com/dryvist/ansible-proxmox/compare/v1.16.0...v1.16.1) (2026-06-04)
 
 
