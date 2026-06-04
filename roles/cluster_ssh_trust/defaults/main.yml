@@ -9,6 +9,14 @@
 
 cluster_ssh_trust_enabled: true
 
-# Peers to trust. Defaults to the cluster-member inventory names, which resolve
-# via the PVE cluster's /etc/hosts. Override to add IPs or FQDNs.
-cluster_ssh_trust_peers: "{{ groups['pve_cluster_members'] | default([]) }}"
+# Canonical node list: the PROXMOX_VE_NODES Doppler variable (the single source
+# of truth shared by terraform + ansible), e.g. "pve1,pve2,pve3". regex_findall
+# extracts the hostname tokens, so the value may be plain comma-separated,
+# bracketed, and/or quoted — all are tolerated. Falls back to the
+# pve_cluster_members inventory group when the variable is absent (e.g. molecule).
+cluster_ssh_trust_peers: >-
+  {{
+    (lookup('env', 'PROXMOX_VE_NODES') | default('', true)
+      | regex_findall('[A-Za-z0-9][A-Za-z0-9._-]*'))
+    or (groups['pve_cluster_members'] | default([]))
+  }}

@@ -21,9 +21,14 @@ ansible-galaxy collection install -r requirements.yml
 
 ## What it does
 
-- Runs `ssh-keyscan` for each peer in `cluster_ssh_trust_peers` (default: the
-  `pve_cluster_members` inventory group, which resolves via the PVE cluster's
-  `/etc/hosts`) and merges the keys into `/root/.ssh/known_hosts`, de-duplicated.
+- Runs `ssh-keyscan` for each peer in `cluster_ssh_trust_peers` and merges the
+  keys into `/root/.ssh/known_hosts`, de-duplicated.
+- Peers come from the **`PROXMOX_VE_NODES`** Doppler variable — the single
+  source of truth for the cluster node list, shared by terraform and ansible
+  (e.g. `pve1,pve2,pve3`). The value is tokenised with `regex_findall`, so plain
+  comma-separated, bracketed (`[pve1, pve2]`), or quoted forms all work. When the
+  variable is absent (e.g. molecule), it falls back to the `pve_cluster_members`
+  inventory group.
 - Idempotent: re-runs only report `changed` when a new/rotated key is added.
 - Skipped under Docker so molecule can converge.
 
@@ -32,7 +37,7 @@ ansible-galaxy collection install -r requirements.yml
 | Variable | Default | Description |
 | --- | --- | --- |
 | `cluster_ssh_trust_enabled` | `true` | Master enable |
-| `cluster_ssh_trust_peers` | `pve_cluster_members` names | Hosts whose keys to trust (names/IPs/FQDNs) |
+| `cluster_ssh_trust_peers` | from `PROXMOX_VE_NODES` (fallback: `pve_cluster_members`) | Hosts whose keys to trust |
 
 ## Usage
 

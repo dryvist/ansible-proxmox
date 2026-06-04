@@ -4,12 +4,8 @@
   become: true
   gather_facts: true
 
-  vars:
-    # The keyscan/seed step is skipped under Docker; this proves the role
-    # converges and creates the root .ssh dir with correct perms.
-    cluster_ssh_trust_peers:
-      - pve1
-      - pve2
-
+  # No peer list set here on purpose: PROXMOX_VE_NODES is unset under molecule and
+  # the pve_cluster_members group is absent, so the keyscan/seed step is skipped.
+  # This proves the role converges and creates the root .ssh dir with correct perms.
   roles:
     - role: cluster_ssh_trust
