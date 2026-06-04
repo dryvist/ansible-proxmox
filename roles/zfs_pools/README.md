@@ -58,8 +58,24 @@ zfs_pools_map:
     register: true        # run `pvesm add zfspool` if not already registered
     content: [images, rootdir]
     datasets:
-      backups: { quota: "1T" }
+      backups:
+        quota: "1T"
+        properties:                 # optional; any zfs property=value
+          recordsize: "1M"
+          compression: "zstd"
+          "com.sun:auto-snapshot": "false"
 ```
+
+### Per-dataset properties
+
+`datasets.<name>.properties` is an optional map of arbitrary ZFS properties
+(`recordsize`, `compression`, `readonly`, `atime`, `com.sun:auto-snapshot`,
+user properties, …). Each is read with `zfs get -H -o value` and only set when
+it differs, so re-runs report no change. Declare values in **ZFS canonical
+form** (`recordsize: "1M"`, `compression: "zstd"`, `readonly: "on"`) and
+**quote** them so YAML does not coerce `on`/`off`/`true`/`false` to booleans.
+`quota` keeps its own dedicated (byte-compared) handling — do not also put it
+under `properties`.
 
 ## Usage
 
@@ -76,6 +92,8 @@ doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools
 - Datasets: checked with `zfs list`; created with `zfs create -p` when absent.
 - Quotas: compared in **bytes** (`zfs get -Hp` vs `human_to_bytes(desired)`), so
   `1T` and `1024G` do not cause spurious changes.
+- Properties: each `properties` entry compared as a string (`zfs get -H -o
+  value`) and only `zfs set` when it differs.
 - Registration: `pvesm status --storage <pool>` gates `pvesm add`.
 
 All ZFS / `pvesm` tasks are skipped under Docker (`ansible_virtualization_type

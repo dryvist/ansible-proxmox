@@ -53,3 +53,13 @@
   changed_when: true
   tags:
     - zfs_pools
+
+- name: "Apply per-dataset properties in pool {{ zfs_pool.key }}"
+  ansible.builtin.include_tasks: dataset_properties.yml
+  loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
+  loop_control:
+    loop_var: zfs_dataset
+    label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }}"
+  when: zfs_dataset.value.properties | default({}) | length > 0
+  tags:
+    - zfs_pools

@@ -11,6 +11,9 @@
           datasets:
             backups:
               quota: "1T"
+              properties:
+                recordsize: "1M"
+                compression: "zstd"
 
   tasks:
     - name: Re-derive pools from the injected node_storage contract
@@ -24,6 +27,9 @@
           - zfs_pools_check.tank.datasets.backups.quota == '1T'
           # Confirms the byte-comparison used for idempotent quota drift.
           - (zfs_pools_check.tank.datasets.backups.quota | human_to_bytes) == 1099511627776
+          # Confirms the per-dataset properties map resolves through the contract.
+          - zfs_pools_check.tank.datasets.backups.properties.recordsize == '1M'
+          - zfs_pools_check.tank.datasets.backups.properties.compression == 'zstd'
         fail_msg: "node_storage contract did not resolve as expected"
 
     - name: Probe for ZFS pools (should be absent in the molecule container)

@@ -22,6 +22,9 @@
           datasets:
             backups:
               quota: "1T"
+              properties:
+                recordsize: "1M"
+                compression: "zstd"
 
   roles:
     - role: zfs_pools
