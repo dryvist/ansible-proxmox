@@ -1,0 +1,14 @@
+---
+# cluster_ssh_trust — keep inter-node root SSH working without manual steps.
+#
+# Seeds each node's /root/.ssh/known_hosts with the CURRENT host keys of all
+# cluster peers (idempotent), so root SSH between nodes — syncoid replication,
+# live migration, pvecm — works and survives node renames/reinstalls. This is
+# the INTERIM fix; full per-host, rotatable, inventory-stored key management is
+# tracked separately (see role README).
+
+cluster_ssh_trust_enabled: true
+
+# Peers to trust. Defaults to the cluster-member inventory names, which resolve
+# via the PVE cluster's /etc/hosts. Override to add IPs or FQDNs.
+cluster_ssh_trust_peers: "{{ groups['pve_cluster_members'] | default([]) }}"

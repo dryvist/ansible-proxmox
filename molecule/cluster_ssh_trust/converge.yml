@@ -1,0 +1,15 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # The keyscan/seed step is skipped under Docker; this proves the role
+    # converges and creates the root .ssh dir with correct perms.
+    cluster_ssh_trust_peers:
+      - pve1
+      - pve2
+
+  roles:
+    - role: cluster_ssh_trust

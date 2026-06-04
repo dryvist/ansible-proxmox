@@ -16,6 +16,12 @@
       tags:
         - common
 
+    # Inter-node root SSH trust (known_hosts) — must precede anything that SSHes
+    # between nodes (syncoid replication, pvecm). Idempotent; survives renames.
+    - role: cluster_ssh_trust
+      tags:
+        - cluster_ssh_trust
+
     - role: zfs_swap
       tags:
         - zfs_swap
