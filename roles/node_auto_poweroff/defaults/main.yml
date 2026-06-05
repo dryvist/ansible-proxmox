@@ -1,0 +1,20 @@
+---
+# node_auto_poweroff role defaults — schedule a graceful, self-initiated power
+# off of the node via a systemd timer.
+#
+# Purpose: a normally-off node (an offline-DR leg) that gets powered ON for a
+# maintenance/replication window should not be left running overnight. This
+# role installs a local systemd timer that runs `systemctl poweroff` at a
+# scheduled time. Powering OFF is the OS's own job (no BMC creds); powering a
+# node back ON is the separate idrac_power role (IPMI, which the OS cannot do
+# for itself once off).
+#
+# Inert by default: opt a host in with node_auto_poweroff_enabled in its
+# host_vars. Every value is parameterized here so the schedule lives in exactly
+# one place and can be overridden per host.
+
+node_auto_poweroff_enabled: false
+
+# systemd OnCalendar expression for the nightly power-off. The default is daily
+# at 22:00 local time. Override per host if a node needs a different window.
+node_auto_poweroff_on_calendar: "*-*-* 22:00:00"

@@ -1,0 +1,15 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # Under Docker the daemon-reload and timer start are skipped
+  # (ansible_virtualization_type == 'docker'); the unit files still render, so
+  # this proves the role converges and templates the service + timer from the
+  # contract. Live power behavior is validated on real hardware, not in molecule.
+  vars:
+    node_auto_poweroff_enabled: true
+
+  roles:
+    - role: node_auto_poweroff

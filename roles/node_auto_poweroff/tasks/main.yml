@@ -1,0 +1,49 @@
+---
+# node_auto_poweroff tasks — render the systemd timer + oneshot service that
+# gracefully powers the node off on a schedule.
+#
+# The unit files render whenever the role is enabled (so the contract is
+# verifiable in-container), then flush_handlers runs the daemon-reload BEFORE
+# the timer is enabled so systemd knows the new unit. The daemon-reload and the
+# timer enable/start are skipped under Docker (molecule), matching the sanoid
+# role's pattern.
+
+- name: Render the auto-poweroff service unit
+  ansible.builtin.template:
+    src: node-auto-poweroff.service.j2
+    dest: /etc/systemd/system/node-auto-poweroff.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: node_auto_poweroff_enabled | bool
+  notify: Reload systemd daemon
+  tags:
+    - node_auto_poweroff
+
+- name: Render the auto-poweroff timer unit
+  ansible.builtin.template:
+    src: node-auto-poweroff.timer.j2
+    dest: /etc/systemd/system/node-auto-poweroff.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: node_auto_poweroff_enabled | bool
+  notify: Reload systemd daemon
+  tags:
+    - node_auto_poweroff
+
+# Apply any pending daemon-reload now so the timer below enables against the
+# freshly written unit (handlers otherwise run only at end of play).
+- name: Reload systemd before enabling the timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the auto-poweroff timer
+  ansible.builtin.systemd:
+    name: node-auto-poweroff.timer
+    enabled: true
+    state: started
+  when:
+    - node_auto_poweroff_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - node_auto_poweroff
