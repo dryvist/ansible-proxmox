@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0](https://github.com/dryvist/ansible-proxmox/compare/v1.18.0...v1.19.0) (2026-06-06)
+
+
+### Features
+
+* **node_auto_poweroff:** nightly graceful self-power-off via systemd timer ([#251](https://github.com/dryvist/ansible-proxmox/issues/251)) ([c62cad4](https://github.com/dryvist/ansible-proxmox/commit/c62cad40b073d1834f7887a7186aa79fa3838e11))
+
 ## [1.18.0](https://github.com/dryvist/ansible-proxmox/compare/v1.17.0...v1.18.0) (2026-06-04)
 
 
