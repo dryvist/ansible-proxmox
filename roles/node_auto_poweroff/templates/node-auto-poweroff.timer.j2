@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Nightly graceful node power-off
+Documentation=ansible role node_auto_poweroff
+
+[Timer]
+OnCalendar={{ node_auto_poweroff_on_calendar }}
+# Persistent=false is deliberate: do NOT catch up a missed trigger. A node that
+# was off at the scheduled time and boots later must keep running, not power
+# itself straight back off.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

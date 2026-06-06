@@ -1,0 +1,31 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered service unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/node-auto-poweroff.service
+      register: poweroff_service
+
+    - name: Read the rendered timer unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/node-auto-poweroff.timer
+      register: poweroff_timer
+
+    - name: Assert the units rendered the expected contract
+      ansible.builtin.assert:
+        that:
+          - "'--no-block poweroff' in (poweroff_service.content | b64decode)"
+          - "'Type=oneshot' in (poweroff_service.content | b64decode)"
+          - "'OnCalendar=*-*-* 22:00:00' in (poweroff_timer.content | b64decode)"
+          - "'Persistent=false' in (poweroff_timer.content | b64decode)"
+          - "'WantedBy=timers.target' in (poweroff_timer.content | b64decode)"
+        fail_msg: "node_auto_poweroff units did not render the expected contract"
+
+    # The Docker-skip on the daemon-reload + timer-start tasks is proven by this
+    # converge succeeding (those tasks are guarded off, not failed). The unit
+    # contract is verified by the slurp assertions above — mirroring the
+    # slurp-only sanoid verifier.

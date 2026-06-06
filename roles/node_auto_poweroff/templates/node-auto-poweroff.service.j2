@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Scheduled graceful node power-off
+Documentation=ansible role node_auto_poweroff
+
+[Service]
+Type=oneshot
+# --no-block so this oneshot does not deadlock waiting on the shutdown
+# transition it is itself triggering. Proxmox's pve-guests ordering still stops
+# running guests before the host powers off.
+ExecStart=/usr/bin/systemctl --no-block poweroff

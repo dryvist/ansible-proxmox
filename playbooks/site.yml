@@ -116,6 +116,14 @@
       tags:
         - idrac_kiosk
 
+    # Scheduled local power-off (systemd timer) for normally-off nodes so a node
+    # brought up for a window is not left running overnight. Inert unless a host
+    # sets node_auto_poweroff_enabled: true (e.g. pve3). The OS powers itself
+    # off; idrac_power (IPMI) handles powering a node back on.
+    - role: node_auto_poweroff
+      tags:
+        - node_auto_poweroff
+
 # Gracefully power down the power-managed nodes at the very END of the run (the
 # offline-DR leg returns to off after its targets are seeded). NOTE: a mid-run
 # failure stops subsequent plays, so the node may be left powered on (re-run or

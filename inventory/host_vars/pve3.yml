@@ -1,0 +1,8 @@
+---
+# Host vars for pve3 (the R710 — a normally-off offline-DR leg).
+#
+# pve3 is powered on only for maintenance/replication windows (via the
+# idrac_power IPMI auto-cycle) and must not be left running overnight. The
+# node_auto_poweroff role installs a local systemd timer that gracefully powers
+# pve3 off on a schedule; the time (default 22:00) lives in the role defaults.
+node_auto_poweroff_enabled: true
