@@ -25,3 +25,14 @@ syncoid_jobs:
   - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk2"
     source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
     target: "hdd2/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
+  # mssql LXC (130) pre-migration replication. Pulls from pve1 into hdd2/replica/pve1/
+  # until Phase B moves mssql to pve2 (node_name change in deployment.json). After
+  # migration these jobs are removed; pve3 DR replication replaces them in Phase D.
+  # Node and VMID are fixed (pve1, 130) — not data-driven — because this is a
+  # temporary pre-migration config and both values are stable until Phase B.
+  - name: "mssql-130-disk0"
+    source: "root@pve1:rpool/data/subvol-130-disk-0"
+    target: "hdd2/replica/pve1/subvol-130-disk-0"
+  - name: "mssql-130-disk1"
+    source: "root@pve1:rpool/data/subvol-130-disk-1"
+    target: "hdd2/replica/pve1/subvol-130-disk-1"

@@ -16,3 +16,10 @@ sanoid_datasets:
     use_template: critical
   "rpool/data/vm-200-disk-2":
     use_template: critical
+  # mssql LXC (130) pre-migration snapshots. LXC subvol naming (subvol-<vmid>-disk-<n>)
+  # vs VM zvol naming (vm-<vmid>-disk-<n>) above. Two datasets: rootfs (disk-0, 16 GB)
+  # and /opt/mssql data volume (disk-1, 50 GB). Removed once mssql moves to pve2.
+  "rpool/data/subvol-130-disk-0":
+    use_template: critical
+  "rpool/data/subvol-130-disk-1":
+    use_template: critical
