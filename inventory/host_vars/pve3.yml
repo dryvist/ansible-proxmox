@@ -6,3 +6,27 @@
 # node_auto_poweroff role installs a local systemd timer that gracefully powers
 # pve3 off on a schedule; the time (default 22:00) lives in the role defaults.
 node_auto_poweroff_enabled: true
+
+# Layer-2 protection (cross-node ZFS replication via syncoid, PULL model): pve3
+# is the second (offline-DR) replica target. It pulls the Splunk VM disk
+# snapshots from its source node into hdd3/replica/<node> — the same jobs pve2
+# runs into hdd2/replica/<node>, so both always-on (pve2) and offline-DR (pve3)
+# legs hold an independent copy. The source NODE NAME is derived from tofu
+# (splunk_vm_from_tofu, injected by load_tofu) — never hard-coded — so this
+# follows the VM if it is ever defined on a different node. hdd3 is pve3's own
+# local raidz2 pool; the hdd3/replica/<node> parent is created by zfs_pools from
+# the terraform-proxmox node_storage declaration, and syncoid creates the
+# per-disk leaves.
+#
+# Prereqs (verified live): root SSH pve3->source works (PVE cluster keys +
+# cluster_ssh_trust known_hosts); each source disk has a sanoid snapshot for
+# --no-sync-snap. Replicate the OS disk (0) and /opt/splunk config+indexes (2);
+# disk-1 was an empty leftover. Whole-disk for now; excluding the volatile index
+# tier is the tracked critical/volatile follow-up.
+syncoid_jobs:
+  - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk0"
+    source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-0"
+    target: "hdd3/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-0"
+  - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk2"
+    source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
+    target: "hdd3/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
