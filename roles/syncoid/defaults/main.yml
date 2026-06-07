@@ -12,6 +12,10 @@ syncoid_user: root
 syncoid_log_dir: /var/log/syncoid
 syncoid_cron_hour: 2
 syncoid_cron_minute: 17
+# Opt-in: run replication immediately during the play (not just install cron).
+# Set true to seed/refresh a normally-off DR node while it is up for a window;
+# the scheduled cron never fires on a node that is powered off at cron time.
+syncoid_run_now: false
 # Integrate with sanoid: replicate existing sanoid snapshots instead of making
 # syncoid's own (--no-sync-snap), recurse the tree, stay quiet for cron.
 syncoid_default_options: "--recursive --no-sync-snap --quiet"
