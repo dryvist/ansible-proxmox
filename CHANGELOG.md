@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0](https://github.com/dryvist/ansible-proxmox/compare/v1.19.0...v1.20.0) (2026-06-07)
+
+
+### Features
+
+* **syncoid:** replicate Splunk VM disks to pve3 hdd3 (DR leg) ([#255](https://github.com/dryvist/ansible-proxmox/issues/255)) ([b4816a5](https://github.com/dryvist/ansible-proxmox/commit/b4816a53f77cd19eccf3efd23659e517009ad9ce))
+
 ## [1.19.0](https://github.com/dryvist/ansible-proxmox/compare/v1.18.0...v1.19.0) (2026-06-06)
 
 
