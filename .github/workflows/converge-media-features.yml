@@ -1,0 +1,68 @@
+# Converge media LXC features — hop 2 of the download-vpn rebuild chain (#368).
+#
+# After terraform-proxmox recreates the bare download-vpn shell it fires a
+# repository_dispatch (event_type: rebuild-download-vpn) at this repo. The
+# media_lxc_features role re-applies the host bind-mounts, /dev/net/tun, and
+# keyctl over root@pam (the BPG API token cannot) — REQUIRED before the app
+# converge, since WireGuard cannot start without /dev/net/tun. On success this
+# dispatches the final hop at ansible-proxmox-apps.
+#
+# Requires a self-hosted runner ([self-hosted, Linux]) with Nix and the Doppler
+# token (project iac-conf-mgmt, config prd — provides the root@pam SSH key) in
+# its environment, plus the synced tofu_inventory.json (load_tofu.yml). See
+# dryvist/terraform-proxmox docs/REBUILD.md for the full prerequisites.
+name: Converge media LXC features
+
+"on":
+  repository_dispatch:
+    types: [rebuild-download-vpn]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: converge-media-features
+  cancel-in-progress: false
+
+jobs:
+  converge:
+    name: Apply media_lxc_features (root@pam)
+    runs-on: [self-hosted, Linux]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # run-ansible.sh loads the Doppler-provided SSH key into ssh-agent (never to
+      # disk) and runs the play; the media_lxc_features tag scopes it to the
+      # root@pam-only container features (mounts, /dev/net/tun, keyctl).
+      - name: Apply media LXC features
+        run: >-
+          nix develop --command
+          doppler run -p iac-conf-mgmt -c prd --
+          ./scripts/run-ansible.sh playbooks/site.yml --tags media_lxc_features
+
+  dispatch:
+    name: Dispatch the download_vpn converge
+    needs: converge
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.GH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: dryvist
+          repositories: ansible-proxmox-apps
+          permission-contents: write
+
+      - name: repository_dispatch -> ansible-proxmox-apps (download_vpn)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: >-
+          gh api repos/dryvist/ansible-proxmox-apps/dispatches
+          -f event_type=rebuild-download-vpn
