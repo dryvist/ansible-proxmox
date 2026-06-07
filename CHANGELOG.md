@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0](https://github.com/dryvist/ansible-proxmox/compare/v1.20.0...v1.21.0) (2026-06-07)
+
+
+### Features
+
+* **commissioning:** codify Proxmox node setup for fully-automated provisioning ([#257](https://github.com/dryvist/ansible-proxmox/issues/257)) ([67706c3](https://github.com/dryvist/ansible-proxmox/commit/67706c3431871da899a34ce7af9e8ff43f5db85a))
+
 ## [1.20.0](https://github.com/dryvist/ansible-proxmox/compare/v1.19.0...v1.20.0) (2026-06-07)
 
 
