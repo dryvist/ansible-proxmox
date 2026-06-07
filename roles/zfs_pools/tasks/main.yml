@@ -48,6 +48,27 @@
     - zfs_pools_allow_create | bool
     - zfs_pools_devices[item.key] | default([]) | length > 0
   changed_when: true
+  register: zfs_pools_created
+  tags:
+    - zfs_pools
+
+# A just-created pool is not in zfs_pools_present (computed before creation), so
+# without this the datasets + registration tasks below would skip on the same
+# run and require a second pass. Fold any newly-created pools into the present
+# set so a single commissioning run does create + datasets + registration.
+- name: Add newly-created pools to the present set
+  ansible.builtin.set_fact:
+    zfs_pools_present: >-
+      {{
+        (zfs_pools_present | default([]))
+        + (
+            zfs_pools_created.results | default([])
+            | selectattr('changed', 'defined')
+            | selectattr('changed', 'equalto', true)
+            | map(attribute='item.key') | list
+          )
+      }}
+  when: ansible_virtualization_type != 'docker'
   tags:
     - zfs_pools
 

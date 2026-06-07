@@ -32,6 +32,15 @@
   gather_facts: true
 
   roles:
+    # Proxmox apt repositories first (no-subscription, deb822). Runs before any
+    # other role so every node — including freshly commissioned ones — is on the
+    # correct channel before the first apt operation. This is what makes a fresh
+    # node fully configurable from a single site.yml run (no manual repo fixup).
+    - role: pve_repositories
+      tags:
+        - pve_repositories
+        - repositories
+
     - role: common
       tags:
         - common

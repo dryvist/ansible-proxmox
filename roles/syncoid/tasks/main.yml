@@ -49,3 +49,19 @@
     - ansible_virtualization_type != 'docker'
   tags:
     - syncoid
+
+# Opt-in immediate replication: run the wrapper now instead of waiting for cron.
+# Needed to seed (or refresh) a normally-off DR node during the maintenance
+# window it is powered on for — its cron would otherwise never fire while the
+# node is down. Enable with -e syncoid_run_now=true. The wrapper logs per job and
+# does not abort on a single failed job.
+- name: Run syncoid replication now (opt-in seed/refresh for a maintenance window)
+  ansible.builtin.command: /usr/local/bin/syncoid-replicate.sh
+  when:
+    - syncoid_enabled
+    - syncoid_jobs | length > 0
+    - syncoid_run_now | bool
+    - ansible_virtualization_type != 'docker'
+  changed_when: true
+  tags:
+    - syncoid
