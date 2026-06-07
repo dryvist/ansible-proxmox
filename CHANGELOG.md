@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0](https://github.com/dryvist/ansible-proxmox/compare/v1.21.0...v1.22.0) (2026-06-07)
+
+
+### Features
+
+* **zfs:** rename node pools to tier-named bulk/fast (node-agnostic) ([#259](https://github.com/dryvist/ansible-proxmox/issues/259)) ([b455365](https://github.com/dryvist/ansible-proxmox/commit/b455365819822f36e8a3e72ed8f7d24d9898823a))
+
 ## [1.21.0](https://github.com/dryvist/ansible-proxmox/compare/v1.20.0...v1.21.0) (2026-06-07)
 
 
