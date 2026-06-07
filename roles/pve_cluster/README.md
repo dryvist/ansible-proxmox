@@ -65,11 +65,11 @@ or a SOPS-encrypted var.
 ## Usage
 
 The cluster is formed by `playbooks/cluster.yml`, which targets the primary
-first (creates) then secondaries (join). `pve3` is a cluster member even though
-its tofu `commissioned` flag is `false` (bad drive): corosync membership is
-decoupled from storage commissioning, so `pve3` joins the cluster while its
-`bulk-pool` stays uncommissioned (`zfs_pools` gates pool creation on
-`pve_node_commissioned`, not on cluster-group membership).
+first (creates) then secondaries (join). `pve3` is a cluster member with its
+tofu `commissioned` flag `true`: corosync membership is decoupled from storage
+commissioning, so `pve3` joined the cluster and its `bulk` pool is commissioned
+(`zfs_pools` gates pool creation on `pve_node_commissioned`, not on
+cluster-group membership).
 
 ```bash
 # Form the cluster (enable + allow-list supplied at run time, fingerprint via -e)
