@@ -121,6 +121,17 @@
       tags:
         - syncoid
 
+    # Insert-only SQLite warm standby — one consumer of the generic
+    # <pool>/databases storage namespace. Daily appends new rows from a source
+    # DB into a queryable archive (never deletes). Inert until
+    # sqlite_standby_jobs is set (per host). Runs after zfs_pools (dataset) and
+    # syncoid; the namespace is snapshotted (sanoid) and replicated (syncoid).
+    - role: sqlite_standby
+      tags:
+        - sqlite_standby
+      vars:
+        sqlite_standby_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/sqlite-standby"
+
     - role: idrac_kiosk
       tags:
         - idrac_kiosk

@@ -1,0 +1,22 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    # Package install, dir creation, and timer enable are Docker-skipped; this
+    # proves the sync script + timer render the expected insert-only contract
+    # from the job definition.
+    sqlite_standby_healthcheck_url: "https://hc-ping.example/standby"
+    sqlite_standby_jobs:
+      - name: "events-archive"
+        source_host: "root@10.0.0.10"
+        source_path: "/var/lib/app/live.db"
+        archive_path: "/bulk/databases/events/archive.db"
+        tables:
+          - { name: "events", key: "id" }
+          - { name: "samples", key: "ts" }
+
+  roles:
+    - role: sqlite_standby

@@ -10,6 +10,12 @@ Configure the Proxmox VE host itself (not applications).
 - Proxmox monitoring (healthchecks)
 - Crash diagnostics
 - Common system packages
+- ZFS dataset realization, quotas, and NFS exports (`zfs_pools`), including the
+  generic engine-/tier-agnostic `<pool>/databases` namespace (datasets declared
+  in `terraform-proxmox` `node_storage`; convention in `roles/zfs_pools/README.md`)
+- Local snapshots + cross-node replication (`sanoid` / `syncoid`)
+- SQLite warm-standby archival (`sqlite_standby`) — one consumer of the
+  databases namespace
 
 ## Pipeline Role
 

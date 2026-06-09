@@ -1,0 +1,40 @@
+---
+# Idempotently export a single dataset over NFS via the ZFS `sharenfs` property.
+# Included per-dataset from datasets.yml when `nfs_export` is set; `zfs_pool` and
+# `zfs_dataset` (dict2items entries) are in scope. `nfs_export` is the exact ZFS
+# `sharenfs` value — e.g. "ro=@10.0.0.0/8 ro=@192.168.0.0/16" for a LAN-scoped
+# read-only export. Space-separated client specs, comma-separated options per
+# client, mirroring exports(5). This whole path is already Docker-skipped via the
+# datasets.yml include gate in main.yml, so no per-task docker guard is needed.
+
+- name: "Ensure nfs-kernel-server is installed for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.apt:
+    name: nfs-kernel-server
+    state: present
+    update_cache: true
+  tags:
+    - zfs_pools
+
+- name: "Ensure nfs-server is enabled and started for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.systemd:
+    name: nfs-server
+    enabled: true
+    state: started
+  tags:
+    - zfs_pools
+
+- name: "Read current sharenfs for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.command:
+    cmd: "zfs get -H -o value sharenfs {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
+  register: zfs_pools_sharenfs_cur
+  changed_when: false
+  tags:
+    - zfs_pools
+
+- name: "Set sharenfs for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.command:
+    cmd: "zfs set sharenfs={{ zfs_dataset.value.nfs_export | quote }} {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
+  when: zfs_pools_sharenfs_cur.stdout != (zfs_dataset.value.nfs_export | string)
+  changed_when: true
+  tags:
+    - zfs_pools

@@ -1,0 +1,113 @@
+---
+# sqlite_standby tasks — install the engine and render the daily insert-only
+# sync script + systemd timer. Package install, directory creation, and the
+# timer enable are Docker-skipped (molecule); the script and unit files always
+# render so the contract is verifiable in-container.
+
+- name: Install sqlite_standby packages (sqlite3 + rsync)
+  ansible.builtin.apt:
+    name: "{{ sqlite_standby_packages }}"
+    state: present
+    update_cache: true
+  when:
+    - sqlite_standby_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - sqlite_standby
+
+- name: Ensure staging and log directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - "{{ sqlite_standby_staging_dir }}"
+    - "{{ sqlite_standby_log_dir }}"
+  when:
+    - sqlite_standby_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - sqlite_standby
+
+- name: Ensure archive parent directories exist
+  ansible.builtin.file:
+    path: "{{ item.archive_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop: "{{ sqlite_standby_jobs }}"
+  loop_control:
+    label: "{{ item.archive_path | dirname }}"
+  when:
+    - sqlite_standby_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - sqlite_standby
+
+- name: Deploy the warm-standby sync script
+  ansible.builtin.template:
+    src: sqlite-standby-sync.sh.j2
+    dest: /usr/local/bin/sqlite-standby-sync.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: sqlite_standby_enabled
+  tags:
+    - sqlite_standby
+
+- name: Render the warm-standby service unit
+  ansible.builtin.template:
+    src: sqlite-standby.service.j2
+    dest: /etc/systemd/system/sqlite-standby.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: sqlite_standby_enabled
+  notify: Reload systemd daemon
+  tags:
+    - sqlite_standby
+
+- name: Render the warm-standby timer unit
+  ansible.builtin.template:
+    src: sqlite-standby.timer.j2
+    dest: /etc/systemd/system/sqlite-standby.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: sqlite_standby_enabled
+  notify: Reload systemd daemon
+  tags:
+    - sqlite_standby
+
+# Apply any pending daemon-reload now so the timer below enables against the
+# freshly written unit (handlers otherwise run only at end of play).
+- name: Reload systemd before enabling the timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the warm-standby timer
+  ansible.builtin.systemd:
+    name: sqlite-standby.timer
+    enabled: true
+    state: started
+  when:
+    - sqlite_standby_enabled
+    - sqlite_standby_jobs | length > 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - sqlite_standby
+
+# Opt-in immediate run (seed/refresh on demand) — mirrors syncoid_run_now.
+# Useful to seed a new archive without waiting for the timer.
+- name: Run the warm-standby sync now (opt-in seed/refresh)
+  ansible.builtin.command: /usr/local/bin/sqlite-standby-sync.sh
+  when:
+    - sqlite_standby_enabled
+    - sqlite_standby_jobs | length > 0
+    - sqlite_standby_run_now | bool
+    - ansible_virtualization_type != 'docker'
+  changed_when: true
+  tags:
+    - sqlite_standby

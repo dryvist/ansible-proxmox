@@ -1,0 +1,43 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered sync script
+      ansible.builtin.slurp:
+        src: /usr/local/bin/sqlite-standby-sync.sh
+      register: sqlite_standby_script
+
+    - name: Read the rendered timer unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/sqlite-standby.timer
+      register: sqlite_standby_timer
+
+    - name: Decode rendered files
+      ansible.builtin.set_fact:
+        sqlite_standby_script_text: "{{ sqlite_standby_script.content | b64decode }}"
+        sqlite_standby_timer_text: "{{ sqlite_standby_timer.content | b64decode }}"
+
+    - name: Assert the sync script renders the insert-only contract
+      ansible.builtin.assert:
+        that:
+          # Job invocation with its source, archive, and table:key pairs.
+          - >-
+            'sync_job "events-archive" "root@10.0.0.10" "/var/lib/app/live.db"
+            "/bulk/databases/events/archive.db" "events:id" "samples:ts"'
+            in sqlite_standby_script_text
+          # Insert-only, never-delete semantics.
+          - "'INSERT OR IGNORE INTO main.[' in sqlite_standby_script_text"
+          - "'DELETE FROM' not in sqlite_standby_script_text"
+          # Per-job failure isolation present.
+          - "'one or more jobs FAILED' in sqlite_standby_script_text"
+        fail_msg: "sqlite-standby sync script did not render the expected contract"
+
+    - name: Assert the timer is daily and persistent
+      ansible.builtin.assert:
+        that:
+          - "'OnCalendar=*-*-* 03:30:00' in sqlite_standby_timer_text"
+          - "'Persistent=true' in sqlite_standby_timer_text"
+        fail_msg: "sqlite-standby timer did not render the expected schedule"

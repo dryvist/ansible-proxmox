@@ -31,6 +31,17 @@ sanoid_templates:
     yearly: 0
     autosnap: "yes"
     autoprune: "yes"
+  # Warm/standby/backup databases (daily-cadence, long history). hot/primary
+  # databases that need point-in-time recovery use the `critical` template.
+  database:
+    frequently: 0
+    hourly: 0
+    daily: 30
+    weekly: 8
+    monthly: 12
+    yearly: 3
+    autosnap: "yes"
+    autoprune: "yes"
   scratch:
     autosnap: "no"
     autoprune: "no"
