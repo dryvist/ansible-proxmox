@@ -1,0 +1,45 @@
+---
+# sqlite_standby role defaults — daily, insert-only SQLite warm standby.
+#
+# One CONSUMER of the generic <pool>/databases storage namespace (see the
+# zfs_pools role). For each configured job it pulls a consistent online backup
+# of a source SQLite database over SSH and appends only NEW rows (by a per-table
+# monotonic key) into a local archive DB — it never deletes, so the live source
+# can be pruned while history accrues here. The archive stays directly queryable
+# (and is read-only-exported + snapshotted + replicated by the storage layer).
+#
+# Inert until sqlite_standby_jobs is set. Prerequisites (out of band): SSH trust
+# from this host's root to each source host, and sqlite3 on the source.
+# cluster_ssh_trust covers PVE node<->node trust, NOT host->guest.
+
+sqlite_standby_enabled: true
+
+# sqlite3 (append engine) + rsync (binary pull) installed on THIS (standby) host.
+sqlite_standby_packages:
+  - sqlite3
+  - rsync
+sqlite_standby_sqlite_bin: sqlite3
+sqlite_standby_staging_dir: /var/lib/sqlite-standby
+sqlite_standby_log_dir: /var/log/sqlite-standby
+
+# Daily by design (a warm standby / queryable daily archive, not a hot replica).
+sqlite_standby_on_calendar: "*-*-* 03:30:00"
+# Run a missed schedule on next boot (sensible for a backup job).
+sqlite_standby_persistent: true
+
+# Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" on
+# failure. Wire from the play (env-sourced), like proxmox_monitoring.
+sqlite_standby_healthcheck_url: ""
+
+# Opt-in: run the sync immediately during the play (seed/refresh on demand) in
+# addition to installing the timer. Mirrors syncoid_run_now.
+sqlite_standby_run_now: false
+
+# Insert-only warm-standby jobs (empty -> inert). Each job:
+#   - name: "<instance>"                          # log label + remote temp name
+#     source_host: "root@10.0.x.y"                # ssh target holding the live DB
+#     source_path: "/path/to/live.db"             # live SQLite DB on the source
+#     archive_path: "/bulk/databases/<instance>/archive.db"
+#     tables:                                      # per-table monotonic key
+#       - { name: "events", key: "id" }
+sqlite_standby_jobs: []

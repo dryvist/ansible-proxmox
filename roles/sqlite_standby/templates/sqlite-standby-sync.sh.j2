@@ -1,0 +1,86 @@
+#!/bin/bash
+# sqlite-standby-sync — daily, insert-only SQLite warm-standby sync.
+# Managed by Ansible — do not edit manually.
+#
+# Per job: take a consistent online backup of the source DB (sqlite3 .backup
+# over SSH), pull it (binary rsync), then INSERT OR IGNORE only rows newer than
+# the archive's current per-table high-water mark. Never deletes; an UPDATE
+# keeps the first-seen row. The archive uses journal_mode=DELETE so a read-only
+# NFS consumer sees a self-consistent file (for a guaranteed point-in-time view,
+# read the latest ZFS snapshot under <dataset>/.zfs/snapshot/). A failed job is
+# logged and does NOT abort the others.
+set -uo pipefail
+
+SQLITE="{{ sqlite_standby_sqlite_bin }}"
+STAGING="{{ sqlite_standby_staging_dir }}"
+LOG_DIR="{{ sqlite_standby_log_dir }}"
+HC="{{ sqlite_standby_healthcheck_url }}"
+mkdir -p "$STAGING" "$LOG_DIR"
+log="$LOG_DIR/$(date +%Y-%m-%d).log"
+
+say()     { echo "=== $(date +%H:%M:%S) $* ===" >>"$log"; }
+ping_hc() { [ -n "$HC" ] && curl -fsS -m 10 --retry 3 -o /dev/null "$1" >/dev/null 2>&1 || true; }
+
+sync_job() {
+  local name="$1" src_host="$2" src_path="$3" archive="$4"; shift 4
+  say "job $name: ${src_host}:${src_path} -> ${archive}"
+  mkdir -p "$(dirname "$archive")"
+
+  local rtmp="/tmp/sqlite-standby-${name}.db"
+  local snap="${STAGING}/${name}.snap.db"
+  rm -f "$snap"
+
+  # 1. Consistent online backup on the source (handles a live WAL DB), pull it.
+  if ! ssh -o BatchMode=yes "$src_host" "${SQLITE} '${src_path}' \".backup '${rtmp}'\"" >>"$log" 2>&1; then
+    say "  FAILED: online backup on source"
+    return 1
+  fi
+  if ! rsync -a --remove-source-files "${src_host}:${rtmp}" "$snap" >>"$log" 2>&1; then
+    say "  FAILED: rsync pull"
+    ssh -o BatchMode=yes "$src_host" "rm -f '${rtmp}'" >>"$log" 2>&1 || true
+    return 1
+  fi
+
+  # 2. First run: the consistent copy *is* the archive (full schema + primary
+  #    keys preserved, so INSERT OR IGNORE can dedupe). journal_mode=DELETE
+  #    leaves no -wal so NFS read-only consumers see a self-consistent file.
+  if [ ! -f "$archive" ]; then
+    mv "$snap" "$archive"
+    "$SQLITE" "$archive" "PRAGMA journal_mode=DELETE;" >>"$log" 2>&1 || true
+    say "  seeded archive from first consistent copy"
+    return 0
+  fi
+
+  # 3. Insert-only append: rows past the archive's current high-water mark per
+  #    table; OR IGNORE keeps the first-seen row on a primary-key collision.
+  "$SQLITE" "$archive" "PRAGMA journal_mode=DELETE;" >>"$log" 2>&1 || true
+  local sql="ATTACH '${snap}' AS src;"
+  local pair t key
+  for pair in "$@"; do
+    t="${pair%%:*}"
+    key="${pair##*:}"
+    sql+="INSERT OR IGNORE INTO main.[${t}] SELECT * FROM src.[${t}]"
+    sql+=" WHERE [${key}] > (SELECT MAX([${key}]) FROM main.[${t}]);"
+  done
+  sql+="DETACH src;"
+  if ! "$SQLITE" "$archive" "$sql" >>"$log" 2>&1; then
+    say "  FAILED: insert-only append"
+    rm -f "$snap"
+    return 1
+  fi
+  rm -f "$snap"
+  say "  job $name OK"
+}
+
+rc=0
+{% for job in sqlite_standby_jobs %}
+sync_job "{{ job.name }}" "{{ job.source_host }}" "{{ job.source_path }}" "{{ job.archive_path }}"{% for t in job.tables %} "{{ t.name }}:{{ t.key }}"{% endfor %} || rc=1
+{% endfor %}
+
+if [ "$rc" -ne 0 ]; then
+  say "one or more jobs FAILED"
+  ping_hc "${HC}/fail"
+  exit 1
+fi
+say "all jobs OK"
+ping_hc "${HC}"

@@ -77,6 +77,65 @@ form** (`recordsize: "1M"`, `compression: "zstd"`, `readonly: "on"`) and
 `quota` keeps its own dedicated (byte-compared) handling — do not also put it
 under `properties`.
 
+### Per-dataset NFS export
+
+`datasets.<name>.nfs_export` (optional) is the exact ZFS `sharenfs` value, set
+verbatim and compared with `zfs get -H -o value sharenfs`. Use it to expose a
+dataset over NFS — typically **read-only and LAN-scoped** for query access:
+
+```yaml
+datasets:
+  databases:
+    nfs_export: "ro=@10.0.0.0/8 ro=@192.168.0.0/16"  # space-separated clients
+```
+
+Children **inherit** a parent's `sharenfs`, so exporting a namespace parent
+(e.g. `bulk/databases`) makes every dataset beneath it queryable read-only
+without per-child config; a child can opt out with `sharenfs: "off"` under
+`properties`. When any dataset declares `nfs_export`, the role ensures
+`nfs-kernel-server` is installed and running. Leave it `null` (the default) for
+no export.
+
+## Database storage namespace (engine- and tier-agnostic)
+
+A reserved `<pool>/databases/<instance>` namespace standardizes where database
+data lives, independent of engine (SQLite, PostgreSQL, MySQL, …) or role
+(hot/primary, warm/standby, backup/archive). The parent `databases` dataset on
+a pool is a lightweight container; each database is its **own child dataset** so
+it carries engine-appropriate tuning, its own quota, snapshot policy, and
+(optionally) replication.
+
+**Tier → pool.** Pick the pool by latency need, not engine:
+
+| Role | Pool | Why |
+| --- | --- | --- |
+| hot / primary | `fast` (NVMe) | low-latency random I/O |
+| warm / standby / backup / archive | `bulk` (non-fast) | capacity over latency |
+
+**Engine → `recordsize`.** Match ZFS `recordsize` to the engine's page/IO unit:
+
+| Engine | `recordsize` | Notes |
+| --- | --- | --- |
+| PostgreSQL | `8K`–`16K` | 8K page; consider a separate WAL dataset, `logbias=throughput` |
+| MySQL / MariaDB (InnoDB) | `16K` | 16K page |
+| SQLite | `32K`–`64K` | balances query reads vs. append writes |
+
+Always pair with `compression: "zstd"` and `atime: "off"`. The namespace parent
+defaults to a neutral `recordsize: "16K"`; per-instance children override.
+
+**Role → snapshots / replication / export.**
+
+- **primary/hot** → `critical` sanoid template (hourly + long retention); export
+  off.
+- **warm/standby/backup** → `database` sanoid template (daily, long retention),
+  `syncoid` DR replication, and `nfs_export` read-only so the standby is
+  queryable from another machine.
+
+The parent is snapshotted/replicated **recursively**, so adding a child instance
+inherits snapshots, the DR copy, and (on `bulk`) the read-only export with no
+extra wiring. Engine-specific *sync* mechanisms (e.g. the `sqlite_standby` role,
+`pg_basebackup`, `mysqldump`) are separate consumers of this namespace.
+
 ## Usage
 
 ```bash

@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Daily insert-only SQLite warm-standby sync
+Documentation=ansible role sqlite_standby
+
+[Timer]
+OnCalendar={{ sqlite_standby_on_calendar }}
+Persistent={{ sqlite_standby_persistent | ternary('true', 'false') }}
+
+[Install]
+WantedBy=timers.target

@@ -25,3 +25,27 @@ syncoid_jobs:
   - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk2"
     source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
     target: "bulk/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
+
+# Layer-1 protection (local ZFS snapshots via sanoid) for the warm-standby
+# database namespace. Recursive so any bulk/databases/<instance> child inherits
+# the daily-cadence, long-history `database` retention template. These snapshots
+# are what preserve pre-prune history (even though the live source is pruned)
+# and what syncoid ships to pve3. The bulk/databases parent is created by
+# zfs_pools from the terraform-proxmox node_storage declaration — apply that
+# first (see the zfs_pools README "Database storage namespace").
+sanoid_datasets:
+  "bulk/databases":
+    use_template: database
+    recursive: "yes"
+
+# Insert-only SQLite warm-standby jobs (sqlite_standby role). The storage is
+# engine-agnostic and generic; the per-database specifics (source host/path,
+# tables) are environment-specific, so they are populated per deployment rather
+# than committed. Uncomment and fill in to activate:
+# sqlite_standby_jobs:
+#   - name: "events-archive"
+#     source_host: "root@10.0.x.y"
+#     source_path: "/var/lib/app/live.db"
+#     archive_path: "/bulk/databases/events/archive.db"
+#     tables:
+#       - { name: "events", key: "id" }

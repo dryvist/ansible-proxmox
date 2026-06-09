@@ -30,3 +30,11 @@ syncoid_jobs:
   - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk2"
     source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
     target: "bulk/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
+  # Database warm-standby DR: pull the whole bulk/databases namespace from the
+  # always-on pve2 into this offline-DR leg (recursive via default options, so
+  # every bulk/databases/<instance> child comes along). Source is pve2 by design
+  # (the warm-standby home), unlike the splunk jobs whose source node is derived
+  # from tofu. Refreshes only during pve3 power-on windows.
+  - name: "databases"
+    source: "root@pve2:bulk/databases"
+    target: "bulk/replica/pve2/databases"
