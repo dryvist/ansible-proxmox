@@ -70,11 +70,31 @@ cp inventory/hosts.yml.example inventory/hosts.yml
 # Edit inventory/hosts.yml with your server details
 ```
 
-Sync the OpenTofu inventory and create the SOPS secrets file:
+### Inventory resolution
+
+`playbooks/load_tofu.yml` resolves the OpenTofu inventory at run time, in
+priority order (first that resolves wins):
+
+1. `TOFU_INVENTORY_PATH` — an explicit local file (pin / override, e.g. tests).
+2. **S3 published artifact** — `terragrunt apply` publishes the raw
+   `ansible_inventory` output to the terraform-proxmox state bucket. Any runner
+   with scoped AWS read creds (CI via OIDC, a cloud agent, or `aws-vault`)
+   fetches it with **no checkout and no terraform toolchain**. Override the
+   location with `TOFU_INVENTORY_S3_URI` (else it is derived from the account).
+3. `inventory/tofu_inventory.json` — a local cache the terraform-proxmox
+   after-hook writes for local development.
+
+So in CI or on a cloud agent you only need AWS read creds. For local-only use,
+populate the cache once:
 
 ```bash
 aws-vault exec tf-proxmox -- doppler run -- \
   terragrunt output -json ansible_inventory > inventory/tofu_inventory.json
+```
+
+Create the SOPS secrets file:
+
+```bash
 cp secrets.sops.yml.example secrets.sops.yml
 sops secrets.sops.yml
 ```

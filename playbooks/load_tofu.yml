@@ -5,36 +5,112 @@
   gather_facts: false
   tags: always
 
+  # Inventory source resolution (priority order, first that resolves wins):
+  #   1. TOFU_INVENTORY_PATH  — explicit local path / pin (tests, overrides)
+  #   2. S3 published artifact — `terragrunt apply` publishes the RAW tofu output
+  #      to the state bucket; CI runners and cloud agents fetch it with only
+  #      scoped read creds (no checkout, no toolchain). Location override:
+  #      TOFU_INVENTORY_S3_URI, else derived from the AWS account id.
+  #   3. inventory/tofu_inventory.json — the local gitignored cache (dev)
+  # The artifact is consumed RAW (standard tofu output); the tasks below adapt it
+  # into per-host facts.
   vars:
-    tofu_inventory_path: >-
-      {{
-        lookup('env', 'TOFU_INVENTORY_PATH')
-        | default(playbook_dir ~ '/../inventory/tofu_inventory.json', true)
-      }}
+    tofu_inventory_path: "{{ lookup('env', 'TOFU_INVENTORY_PATH') | default('', true) }}"
+    tofu_inventory_local: "{{ playbook_dir }}/../inventory/tofu_inventory.json"
+    tofu_inventory_s3_uri: "{{ lookup('env', 'TOFU_INVENTORY_S3_URI') | default('', true) }}"
+    tofu_inventory_s3_region: "{{ lookup('env', 'TOFU_INVENTORY_S3_REGION') | default('us-east-2', true) }}"
 
   tasks:
-    - name: Verify tofu inventory exists
+    - name: Stat the explicit TOFU_INVENTORY_PATH
       ansible.builtin.stat:
         path: "{{ tofu_inventory_path }}"
-      register: tofu_inventory_check
+      register: tofu_inv_explicit
+      when: tofu_inventory_path | length > 0
 
-    - name: Fail if tofu inventory is missing
+    - name: Resolve inventory from the explicit path when it exists
+      ansible.builtin.set_fact:
+        tofu_inventory_resolved: "{{ tofu_inventory_path }}"
+      when:
+        - tofu_inventory_path | length > 0
+        - tofu_inv_explicit.stat.exists | default(false)
+
+    - name: Resolve the published S3 inventory
+      when: tofu_inventory_resolved is not defined
+      block:
+        - name: Derive the AWS account when no S3 URI is set
+          ansible.builtin.command: aws sts get-caller-identity --query Account --output text
+          register: tofu_inv_aws_acct
+          changed_when: false
+          failed_when: false
+          when: tofu_inventory_s3_uri | length == 0
+
+        - name: Compute the effective S3 inventory URI
+          ansible.builtin.set_fact:
+            tofu_inventory_s3_effective: >-
+              {{
+                tofu_inventory_s3_uri if tofu_inventory_s3_uri | length > 0
+                else (
+                  's3://terraform-proxmox-state-useast2-'
+                  ~ (tofu_inv_aws_acct.stdout | default('') | trim)
+                  ~ '/terraform-proxmox/inventory/ansible_inventory.json'
+                ) if (tofu_inv_aws_acct.rc | default(1)) == 0
+                  and (tofu_inv_aws_acct.stdout | default('') | trim | length > 0)
+                else ''
+              }}
+
+        - name: Fetch the published inventory from S3
+          when: tofu_inventory_s3_effective | length > 0
+          block:
+            - name: Create a temp file for the S3 inventory
+              ansible.builtin.tempfile:
+                state: file
+                suffix: tofu_inventory.json
+              register: tofu_inv_tmp
+
+            - name: Download the inventory from S3
+              ansible.builtin.command: >-
+                aws s3 cp {{ tofu_inventory_s3_effective | quote }} {{ tofu_inv_tmp.path | quote }}
+                --region {{ tofu_inventory_s3_region | quote }} --only-show-errors
+              register: tofu_inv_s3
+              changed_when: false
+              failed_when: false
+
+            - name: Resolve inventory from the S3 download when it succeeded
+              ansible.builtin.set_fact:
+                tofu_inventory_resolved: "{{ tofu_inv_tmp.path }}"
+              when: (tofu_inv_s3.rc | default(1)) == 0
+
+    - name: Stat the local inventory cache
+      ansible.builtin.stat:
+        path: "{{ tofu_inventory_local }}"
+      register: tofu_inv_localstat
+      when: tofu_inventory_resolved is not defined
+
+    - name: Resolve inventory from the local cache when present
+      ansible.builtin.set_fact:
+        tofu_inventory_resolved: "{{ tofu_inventory_local }}"
+      when:
+        - tofu_inventory_resolved is not defined
+        - tofu_inv_localstat.stat.exists | default(false)
+
+    - name: Fail when no inventory source resolves
       ansible.builtin.fail:
         msg: |
-          OpenTofu inventory not found at: {{ tofu_inventory_path }}
+          OpenTofu inventory could not be resolved from any source:
+            1. TOFU_INVENTORY_PATH : {{ tofu_inventory_path | default('(unset)', true) }}
+            2. S3 artifact         : {{ tofu_inventory_s3_effective | default('(no AWS creds / URI)', true) }}
+            3. local cache         : {{ tofu_inventory_local }}
 
-          Generate it by running from terraform-proxmox:
-            terragrunt output -json ansible_inventory > {{ tofu_inventory_path }}
-
-          Or set TOFU_INVENTORY_PATH to the correct location.
-
-          Or apply terraform-proxmox from a cloned worktree so the after-hook
-          syncs inventory into ansible-proxmox automatically.
-      when: not tofu_inventory_check.stat.exists
+          Provide ONE of:
+            - Read creds for the S3 artifact (CI: OIDC role; agents: scoped role);
+              optionally set TOFU_INVENTORY_S3_URI to override the location.
+            - TOFU_INVENTORY_PATH pointing at a local copy.
+            - Run terraform-proxmox apply so the after-hook publishes + syncs.
+      when: tofu_inventory_resolved is not defined
 
     - name: Load tofu inventory JSON
       ansible.builtin.include_vars:
-        file: "{{ tofu_inventory_path }}"
+        file: "{{ tofu_inventory_resolved }}"
         name: tofu_data
 
     - name: Validate NAS host_services structure
