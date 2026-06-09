@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.23.0](https://github.com/dryvist/ansible-proxmox/compare/v1.22.0...v1.23.0) (2026-06-09)
+
+
+### Features
+
+* **databases:** generic ZFS database namespace + SQLite warm standby ([#263](https://github.com/dryvist/ansible-proxmox/issues/263)) ([05fc07d](https://github.com/dryvist/ansible-proxmox/commit/05fc07d50b1228a75e748450d3efc781fa5beace))
+
 ## [1.22.0](https://github.com/dryvist/ansible-proxmox/compare/v1.21.0...v1.22.0) (2026-06-07)
 
 
