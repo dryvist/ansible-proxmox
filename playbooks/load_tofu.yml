@@ -59,6 +59,10 @@
                 else ''
               }}
 
+        # Inventory resolution is read-only and must work under --check too
+        # (tempfile creates no path in check mode, which would blow up the
+        # download's dest templating before failed_when applies) — so the
+        # fetch pair always really runs (check_mode: false).
         - name: Fetch the published inventory from S3
           when: tofu_inventory_s3_effective | length > 0
           block:
@@ -67,6 +71,7 @@
                 state: file
                 suffix: tofu_inventory.json
               register: tofu_inv_tmp
+              check_mode: false
 
             - name: Download the inventory from S3
               amazon.aws.s3_object:
@@ -78,6 +83,7 @@
               register: tofu_inv_s3
               changed_when: false
               failed_when: false
+              check_mode: false
 
             # failed_when:false masks the module's failed flag, so success is
             # judged by the artifact itself: the GET overwrote the empty temp
