@@ -34,13 +34,15 @@
         - tofu_inventory_path | length > 0
         - tofu_inv_explicit.stat.exists | default(false)
 
+    # Native amazon.aws modules (boto3 from the dev shell) — no `aws` CLI
+    # dependency. Both lookups are best-effort: on missing creds/boto3 the
+    # chain falls through to the local cache, mirroring the explicit-path step.
     - name: Resolve the published S3 inventory
       when: tofu_inventory_resolved is not defined
       block:
         - name: Derive the AWS account when no S3 URI is set
-          ansible.builtin.command: aws sts get-caller-identity --query Account --output text
+          amazon.aws.aws_caller_info:
           register: tofu_inv_aws_acct
-          changed_when: false
           failed_when: false
           when: tofu_inventory_s3_uri | length == 0
 
@@ -51,10 +53,9 @@
                 tofu_inventory_s3_uri if tofu_inventory_s3_uri | length > 0
                 else (
                   's3://terraform-proxmox-state-useast2-'
-                  ~ (tofu_inv_aws_acct.stdout | default('') | trim)
+                  ~ tofu_inv_aws_acct.account
                   ~ '/terraform-proxmox/inventory/ansible_inventory.json'
-                ) if (tofu_inv_aws_acct.rc | default(1)) == 0
-                  and (tofu_inv_aws_acct.stdout | default('') | trim | length > 0)
+                ) if tofu_inv_aws_acct.account is defined
                 else ''
               }}
 
@@ -68,17 +69,28 @@
               register: tofu_inv_tmp
 
             - name: Download the inventory from S3
-              ansible.builtin.command: >-
-                aws s3 cp {{ tofu_inventory_s3_effective | quote }} {{ tofu_inv_tmp.path | quote }}
-                --region {{ tofu_inventory_s3_region | quote }} --only-show-errors
+              amazon.aws.s3_object:
+                bucket: "{{ tofu_inventory_s3_effective | regex_replace('^s3://([^/]+)/.*$', '\\1') }}"
+                object: "{{ tofu_inventory_s3_effective | regex_replace('^s3://[^/]+/', '') }}"
+                dest: "{{ tofu_inv_tmp.path }}"
+                mode: get
+                region: "{{ tofu_inventory_s3_region }}"
               register: tofu_inv_s3
               changed_when: false
               failed_when: false
 
+            # failed_when:false masks the module's failed flag, so success is
+            # judged by the artifact itself: the GET overwrote the empty temp
+            # file with content.
+            - name: Stat the downloaded inventory
+              ansible.builtin.stat:
+                path: "{{ tofu_inv_tmp.path }}"
+              register: tofu_inv_s3_stat
+
             - name: Resolve inventory from the S3 download when it succeeded
               ansible.builtin.set_fact:
                 tofu_inventory_resolved: "{{ tofu_inv_tmp.path }}"
-              when: (tofu_inv_s3.rc | default(1)) == 0
+              when: (tofu_inv_s3_stat.stat.size | default(0)) > 0
 
     - name: Stat the local inventory cache
       ansible.builtin.stat:
