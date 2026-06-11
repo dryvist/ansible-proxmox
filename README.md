@@ -79,8 +79,10 @@ priority order (first that resolves wins):
 2. **S3 published artifact** — `terragrunt apply` publishes the raw
    `ansible_inventory` output to the terraform-proxmox state bucket. Any runner
    with scoped AWS read creds (CI via OIDC, a cloud agent, or `aws-vault`)
-   fetches it with **no checkout and no terraform toolchain**. Override the
-   location with `TOFU_INVENTORY_S3_URI` (else it is derived from the account).
+   fetches it with **no checkout and no terraform toolchain**. The fetch is
+   native (`amazon.aws.aws_caller_info` + `amazon.aws.s3_object`; boto3 comes
+   from the dev shell) — no `aws` CLI required. Override the location with
+   `TOFU_INVENTORY_S3_URI` (else it is derived from the account).
 3. `inventory/tofu_inventory.json` — a local cache the terraform-proxmox
    after-hook writes for local development.
 
