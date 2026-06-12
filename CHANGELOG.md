@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0](https://github.com/dryvist/ansible-proxmox/compare/v1.26.0...v1.27.0) (2026-06-12)
+
+
+### Features
+
+* **media_lxc_features:** map shared-data GID 13000 into unprivileged LXCs ([#276](https://github.com/dryvist/ansible-proxmox/issues/276)) ([0cd9016](https://github.com/dryvist/ansible-proxmox/commit/0cd9016d8040b89db8a66fc8d3900c748ebc2fc0))
+
 ## [1.26.0](https://github.com/dryvist/ansible-proxmox/compare/v1.25.0...v1.26.0) (2026-06-12)
 
 
