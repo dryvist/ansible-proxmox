@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.0](https://github.com/dryvist/ansible-proxmox/compare/v1.23.0...v1.24.0) (2026-06-12)
+
+
+### Features
+
+* **inventory:** fetch S3 inventory natively via amazon.aws modules ([#266](https://github.com/dryvist/ansible-proxmox/issues/266)) ([76a9ecf](https://github.com/dryvist/ansible-proxmox/commit/76a9ecfd7f76d62ea400441b910190ba20c7f47a))
+
+
+### Bug Fixes
+
+* **inventory:** S3 resolver works under --check (tempfile has no path in check mode) ([#268](https://github.com/dryvist/ansible-proxmox/issues/268)) ([4381484](https://github.com/dryvist/ansible-proxmox/commit/438148464e9a6f5d162c6a81e308de5526ba4278))
+
 ## [1.23.0](https://github.com/dryvist/ansible-proxmox/compare/v1.22.0...v1.23.0) (2026-06-09)
 
 
