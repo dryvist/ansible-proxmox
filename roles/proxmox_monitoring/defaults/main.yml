@@ -31,7 +31,7 @@ proxmox_monitoring_zfs_capacity_thresholds: [50, 75, 85, 90]
 # filesystem dataset with a quota is checked as used/quota. Quota-less
 # datasets share their pool's free space, so their ">85%" moment IS the pool's
 # — the pool bands above cover them; per-dataset bands would only duplicate
-# that alert once per dataset (noise). bulk/data on pve2 is the motivating
+# that alert once per dataset (noise). bulk/data on the media node is the motivating
 # case: its quota caps torrent churn and this fires before writes start
 # failing at the quota wall.
 proxmox_monitoring_zfs_dataset_capacity_thresholds: [85, 90]

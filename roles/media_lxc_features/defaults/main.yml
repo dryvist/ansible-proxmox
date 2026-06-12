@@ -26,7 +26,7 @@
 # Only vmids that actually exist on the target host are acted on; absent vmids
 # are skipped (tofu may not have created them yet). All tasks are skipped
 # under Docker virtualization (molecule).
-# Mount layout (pve2 rebuild): ONE bind-mount per service — the unified
+# Mount layout (bulk-node rebuild): ONE bind-mount per service — the unified
 # `bulk/data` dataset (host /bulk/data) -> /data in-container. The single
 # dataset is what lets qBittorrent and the *arrs HARDLINK between
 # /data/torrents/* and /data/media/* (hardlinks cannot cross the old

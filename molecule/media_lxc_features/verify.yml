@@ -5,7 +5,7 @@
   gather_facts: true
 
   vars:
-    # The NEW 6-digit pve2 media VMID mapping (same as converge). Used to prove
+    # The NEW 6-digit media-node VMID mapping (same as converge). Used to prove
     # the service-keyed feature map resolves onto the renumbered vmids.
     media_lxc_features_verify_service_vmids:
       plex: 703040

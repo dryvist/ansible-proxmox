@@ -7,7 +7,7 @@
   vars:
     # Stand in for the tofu inventory's service -> vmid resolution that
     # playbooks/load_tofu.yml injects on a real host. Uses the NEW 6-digit
-    # pve2 media VMID mapping (703040 plex, 736030 seerr, 715240 sonarr,
+    # Media-node VMID mapping (703040 plex, 736030 seerr, 715240 sonarr,
     # 715340 radarr, 725140 download-vpn) so converge proves the role follows
     # a renumber with no change to the service-keyed feature map.
     media_lxc_features_service_vmids_from_tofu:
