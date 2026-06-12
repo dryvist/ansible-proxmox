@@ -86,13 +86,10 @@ priority order (first that resolves wins):
 3. `inventory/tofu_inventory.json` — a local cache the terraform-proxmox
    after-hook writes for local development.
 
-So in CI or on a cloud agent you only need AWS read creds. For local-only use,
-populate the cache once:
-
-```bash
-aws-vault exec tf-proxmox -- doppler run -- \
-  terragrunt output -json ansible_inventory > inventory/tofu_inventory.json
-```
+So in CI or on a cloud agent you only need AWS read creds. Locally the cache
+is written automatically by every terraform-proxmox `terragrunt apply`
+(after-hook); a one-shot `aws-vault exec tf-proxmox` session also satisfies
+the S3 step directly, so manual cache population is never needed.
 
 Create the SOPS secrets file:
 
