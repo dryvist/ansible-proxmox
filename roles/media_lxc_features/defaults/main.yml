@@ -22,6 +22,12 @@
 #   keyctl:     bool — ensure features contains keyctl=1, MERGED into existing
 #               features (tofu-set nesting=1 is preserved, never dropped)
 #   tun:        bool — passthrough /dev/net/tun (char 10:200) into the container
+#   data_idmap: bool — punch an LXC idmap so host GID 13000 (the shared `media`
+#               group that owns /bulk/data) maps 1:1 into the unprivileged
+#               container. Without it, host GID 13000 falls below the unpriv map
+#               base (100000) and /data appears as nobody:nogroup inside —
+#               read-only to the container's `media` user. Set on every service
+#               that bind-mounts /data (all but seerr, which has no mount).
 #
 # Only vmids that actually exist on the target host are acted on; absent vmids
 # are skipped (tofu may not have created them yet). All tasks are skipped
@@ -38,25 +44,30 @@ media_lxc_features_map:
       - { src: /bulk/data, dst: /data }
     keyctl: false
     tun: false
+    data_idmap: true
   seerr:  # request UI (Docker-in-LXC); no bind-mounts
     mounts: []
     keyctl: true
     tun: false
+    data_idmap: false
   sonarr:  # TV PVR
     mounts:
       - { src: /bulk/data, dst: /data }
     keyctl: false
     tun: false
+    data_idmap: true
   radarr:  # movie PVR
     mounts:
       - { src: /bulk/data, dst: /data }
     keyctl: false
     tun: false
+    data_idmap: true
   download-vpn:  # qBittorrent + Prowlarr behind Proton WireGuard
     mounts:
       - { src: /bulk/data, dst: /data }
     keyctl: true
     tun: true
+    data_idmap: true
 
 # Service -> VMID resolution, sourced from the tofu inventory and injected
 # onto proxmox hosts by playbooks/load_tofu.yml. Defaults to {} when unset
@@ -96,8 +107,31 @@ media_lxc_features_data_gid: 13000
 media_lxc_features_data_dir_mode: "2775"
 media_lxc_features_data_directories:
   - torrents
+  - torrents/incomplete
   - torrents/movies
   - torrents/tv
   - media
   - media/movies
   - media/tv
+
+# ---------------------------------------------------------------------------
+# Unprivileged-container GID passthrough for the shared data root
+# ---------------------------------------------------------------------------
+# An unprivileged LXC maps container UID/GID 0..65535 -> host 100000..165535 by
+# default, so host GID 13000 (which owns /bulk/data) lands on the overflow id
+# (nobody:nogroup) inside the container and the `media` user cannot write. These
+# lxc.idmap lines punch GID 13000 straight through (container 13000 -> host
+# 13000) while leaving every other id on the default offset, so /data shows up
+# as media:media and stays group-writable. The UID map is left at the default.
+# The host /etc/subgid must grant root the single-GID sub-range (added by the
+# role) or the container refuses to start.
+#
+# Derived from media_lxc_features_data_gid so a GID change needs no edit here.
+media_lxc_features_data_idmap_lines:
+  - "lxc.idmap: u 0 100000 65536"
+  - "lxc.idmap: g 0 100000 {{ media_lxc_features_data_gid | int }}"
+  - "lxc.idmap: g {{ media_lxc_features_data_gid | int }} {{ media_lxc_features_data_gid | int }} 1"
+  - >-
+    lxc.idmap: g {{ media_lxc_features_data_gid | int + 1 }}
+    {{ 100000 + (media_lxc_features_data_gid | int) + 1 }}
+    {{ 65536 - (media_lxc_features_data_gid | int) - 1 }}

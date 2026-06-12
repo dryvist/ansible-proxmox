@@ -68,6 +68,23 @@
   tags:
     - media_lxc_features
 
+# Grant root the single-GID sub-range so the data-root idmap (container GID
+# 13000 -> host GID 13000) is permitted. Without this line in /etc/subgid an
+# unprivileged container carrying the lxc.idmap lines refuses to start. The
+# default `root:100000:65536` grant stays untouched; this adds the punch-through.
+- name: Permit the shared-data GID in the host subgid map
+  ansible.builtin.lineinfile:
+    path: /etc/subgid
+    line: "root:{{ media_lxc_features_data_gid | int }}:1"
+    regexp: "^root:{{ media_lxc_features_data_gid | int }}:1$"
+    state: present
+    create: false
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - media_lxc_features_data_root_stat.stat.exists | default(false)
+  tags:
+    - media_lxc_features
+
 - name: Select the services that have a vmid in the tofu inventory
   ansible.builtin.set_fact:
     # Drop any service the inventory does not currently place (not yet created /
