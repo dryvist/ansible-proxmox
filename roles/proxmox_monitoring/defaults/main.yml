@@ -22,8 +22,19 @@ proxmox_monitoring_enable_healthchecks: true
 proxmox_monitoring_enable_zfs_capacity: true
 
 # ZFS pool capacity alerts: push via ntfy when a pool crosses a usage band.
+# 85 sits between the old 75 warning and the 90 urgent band so every pool —
+# and with it every quota-less dataset it backs — alerts above 85% capacity.
 proxmox_monitoring_zfs_capacity_interval: 15
-proxmox_monitoring_zfs_capacity_thresholds: [50, 75, 90]
+proxmox_monitoring_zfs_capacity_thresholds: [50, 75, 85, 90]
+
+# ZFS DATASET capacity alerts (same script, same ntfy band mechanics): every
+# filesystem dataset with a quota is checked as used/quota. Quota-less
+# datasets share their pool's free space, so their ">85%" moment IS the pool's
+# — the pool bands above cover them; per-dataset bands would only duplicate
+# that alert once per dataset (noise). bulk/data on the media node is the motivating
+# case: its quota caps torrent churn and this fires before writes start
+# failing at the quota wall.
+proxmox_monitoring_zfs_dataset_capacity_thresholds: [85, 90]
 # ntfy topic URL, e.g. https://ntfy.example.com/proxmox-storage
 # Set via vault/external variable — DO NOT commit a real URL. Empty disables it.
 proxmox_monitoring_ntfy_url: ""

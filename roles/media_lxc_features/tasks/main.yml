@@ -16,6 +16,58 @@
 # change — only tofu_inventory.json updates. Services without a resolved
 # vmid (not in the inventory) contribute nothing.
 
+# ---------------------------------------------------------------------------
+# Shared media data root — POSIX layer inside the bulk/data dataset
+# ---------------------------------------------------------------------------
+# zfs_pools creates/mounts the dataset (from the tofu node_storage contract);
+# this prepares what the bind-mounts expose: the shared `media` group (fixed
+# GID — it must resolve identically inside every guest the path is mounted
+# into) and the group-writable subdirectory skeleton qBittorrent + the *arrs
+# hardlink across. Skipped wholesale on hosts where the data root does not
+# exist (no bulk pool on this node, or zfs_pools has not run yet).
+
+- name: Probe for the shared media data root
+  ansible.builtin.stat:
+    path: "{{ media_lxc_features_data_root }}"
+  register: media_lxc_features_data_root_stat
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - media_lxc_features
+
+- name: Ensure the shared media group exists
+  ansible.builtin.group:
+    name: "{{ media_lxc_features_data_group }}"
+    gid: "{{ media_lxc_features_data_gid }}"
+    state: present
+  when: media_lxc_features_data_root_stat.stat.exists | default(false)
+  tags:
+    - media_lxc_features
+
+- name: Ensure data root ownership and group-writable mode
+  ansible.builtin.file:
+    path: "{{ media_lxc_features_data_root }}"
+    state: directory
+    owner: root
+    group: "{{ media_lxc_features_data_group }}"
+    mode: "{{ media_lxc_features_data_dir_mode }}"
+  when: media_lxc_features_data_root_stat.stat.exists | default(false)
+  tags:
+    - media_lxc_features
+
+- name: Ensure media data subdirectories
+  ansible.builtin.file:
+    path: "{{ media_lxc_features_data_root }}/{{ item }}"
+    state: directory
+    owner: root
+    group: "{{ media_lxc_features_data_group }}"
+    mode: "{{ media_lxc_features_data_dir_mode }}"
+  loop: "{{ media_lxc_features_data_directories }}"
+  loop_control:
+    label: "{{ media_lxc_features_data_root }}/{{ item }}"
+  when: media_lxc_features_data_root_stat.stat.exists | default(false)
+  tags:
+    - media_lxc_features
+
 - name: Select the services that have a vmid in the tofu inventory
   ansible.builtin.set_fact:
     # Drop any service the inventory does not currently place (not yet created /

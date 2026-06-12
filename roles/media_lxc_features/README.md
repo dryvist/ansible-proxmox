@@ -26,8 +26,8 @@ them. This role realizes them after creation.
 
 | Layer | Owns |
 | --- | --- |
-| terraform-proxmox | Create the media LXCs (CPU, RAM, disk, network, `nesting`) |
-| **this role** | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough |
+| terraform-proxmox | Create the media LXCs (CPU, RAM, disk, network, `nesting`) + declare the `bulk/data` dataset (`node_storage`) |
+| **this role** | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough, shared `media` group + `/bulk/data` directory skeleton |
 | ansible-proxmox-apps | Converge the services inside each LXC |
 
 `nesting=1` stays **OpenTofu-managed**. This role never drops it: `keyctl=1` is
@@ -42,7 +42,7 @@ terraform-proxmox (shells)  ->  media_lxc_features  ->  ansible-proxmox-apps
 
 Run this role **after** the LXCs exist and **before** the apps converge. In
 `playbooks/site.yml` it runs after `lxc_features` and after `zfs_pools` (the
-bind-mount sources are ZFS datasets under `/rpool/data`).
+bind-mount source is the `bulk/data` ZFS dataset, mounted at `/bulk/data`).
 
 ## Feature map (keyed by service, not VMID)
 
@@ -52,14 +52,37 @@ service, never a hardcoded VMID:
 
 | service | bind-mounts (host -> container) | keyctl | /dev/net/tun |
 | --- | --- | --- | --- |
-| plex | `/rpool/data/media`->`/mnt/media` | no | no |
-| jellyseerr | (none) | yes | no |
-| sonarr | `/rpool/data/downloads`->`/mnt/downloads`, `/rpool/data/media`->`/mnt/media` | no | no |
-| radarr | `/rpool/data/downloads`->`/mnt/downloads`, `/rpool/data/media`->`/mnt/media` | no | no |
-| download-vpn | `/rpool/data/downloads`->`/mnt/downloads`, `/rpool/data/media`->`/mnt/media` | yes | yes |
+| plex | `/bulk/data`->`/data` | no | no |
+| seerr | (none) | yes | no |
+| sonarr | `/bulk/data`->`/data` | no | no |
+| radarr | `/bulk/data`->`/data` | no | no |
+| download-vpn | `/bulk/data`->`/data` | yes | yes |
 
-All bind-mounts are **read-write** (no `ro=1`), matching the live deployment.
+Every mounted service gets the **same single bind-mount**: the unified
+`bulk/data` dataset -> `/data`. One dataset (replacing the old separate
+`downloads` + `media` datasets/mounts) is what lets qBittorrent and the *arrs
+**hardlink** between `/data/torrents/*` and `/data/media/*` — hardlinks cannot
+cross dataset boundaries. All bind-mounts are **read-write** (no `ro=1`), the
+role's existing convention (plex is read-mostly by usage, not by mount flag).
 `/dev/net/tun` is char device **10:200** (verified on pve1).
+
+## Shared data root (host side)
+
+The `bulk/data` **dataset** (recordsize, auto-snapshot, quota) is declared in
+terraform-proxmox `node_storage` and realized by `zfs_pools`. This role owns
+the **POSIX layer** inside it, on hosts where `/bulk/data` exists:
+
+- the shared `media` group at a **fixed GID** (`13000` by default) — the path
+  is bind-mounted into several LXCs, so each guest's `media` group must map to
+  the same host GID;
+- the subdirectory skeleton `torrents/{movies,tv}` + `media/{movies,tv}`,
+  owner `root`, group `media`, mode `2775` (group-writable like the
+  `nas_storage` directory convention, plus setgid so app-created content keeps
+  the `media` group).
+
+Hosts without the data root (no bulk pool, or `zfs_pools` not yet applied)
+skip these tasks entirely; the role never invents a plain directory on the
+root filesystem.
 
 ### VMID resolution (renumber-proof)
 

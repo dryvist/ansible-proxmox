@@ -93,7 +93,7 @@
 
     # Root-only media LXC features (bind-mounts, keyctl, /dev/net/tun) that the
     # BPG provider's API token cannot set. Runs AFTER OpenTofu creates the
-    # media LXC shells and zfs_pools manages the /rpool/data datasets, and
+    # media LXC shells and zfs_pools mounts the bulk/data dataset, and
     # BEFORE ansible-proxmox-apps converges the services. See the role README.
     - role: media_lxc_features
       tags:

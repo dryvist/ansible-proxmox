@@ -33,6 +33,12 @@ syncoid_jobs:
 # and what syncoid ships to pve3. The bulk/databases parent is created by
 # zfs_pools from the terraform-proxmox node_storage declaration — apply that
 # first (see the zfs_pools README "Database storage namespace").
+# bulk/data (the unified media dataset the pve2 media LXCs bind-mount) is
+# DELIBERATELY absent here: terraform-proxmox declares it with
+# com.sun:auto-snapshot=false because torrent churn would bloat snapshots, and
+# the media payload is re-acquirable. If the library half ever deserves
+# snapshots, that means either splitting it back out or accepting short-lived
+# sanoid retention on the whole dataset — a maintainer decision, not a default.
 sanoid_datasets:
   "bulk/databases":
     use_template: database
