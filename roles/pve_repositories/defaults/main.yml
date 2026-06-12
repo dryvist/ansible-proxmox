@@ -15,3 +15,13 @@ pve_repositories_keyring: /usr/share/keyrings/proxmox-archive-keyring.gpg
 # caches packages and can reach upstream mirrors more reliably than each node.
 # Real value is injected per environment (see group_vars), never hardcoded here.
 pve_repositories_apt_proxy: ""
+
+# LXC (CT) appliance templates to ensure on `local` storage. OpenTofu creates
+# containers from `local:vztmpl/<template>`, so every node must have these
+# present or container creation fails on a fresh node. Each is downloaded only
+# when missing (see tasks/ct_templates.yml).
+#
+# Canonical source: terraform-proxmox deployment.json `proxmox_ct_template_debian`.
+# Keep this default in lockstep with that value when the base image is bumped.
+pve_repositories_ct_templates:
+  - debian-13-standard_13.1-2_amd64.tar.zst

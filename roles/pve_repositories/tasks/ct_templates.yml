@@ -1,0 +1,47 @@
+---
+# Ensure the configured LXC (CT) templates are present on `local` storage so
+# OpenTofu container creation never fails with
+#   volume 'local:vztmpl/<template>' does not exist
+# on a freshly commissioned node. Idempotent: each template is checked with
+# `pveam list local` first and only downloaded when missing (no re-download,
+# no apt-style churn). Included from main.yml so it runs at node setup under
+# `hosts: proxmox` alongside the apt-repository management.
+
+- name: List CT templates already present on local storage
+  ansible.builtin.command:
+    cmd: pveam list local
+  register: pve_repositories_pveam_list
+  changed_when: false
+  check_mode: false
+  tags:
+    - pve_repositories
+    - ct_templates
+
+# `pveam update` refreshes the appliance index. Run it once, only when at least
+# one configured template is missing, so a fully-provisioned node stays a no-op.
+- name: Refresh the CT template appliance index when a template is missing
+  ansible.builtin.command:
+    cmd: pveam update
+  register: pve_repositories_pveam_update
+  changed_when: pve_repositories_pveam_update.rc == 0
+  when: >-
+    pve_repositories_ct_templates
+    | reject('in', pve_repositories_pveam_list.stdout)
+    | list | length > 0
+  tags:
+    - pve_repositories
+    - ct_templates
+
+# Download each missing template. The `when` guard keys off the same
+# `pveam list local` output, so a present template is skipped entirely and the
+# task reports ok (never changed) on a converged node.
+- name: Ensure each configured CT template is present on local storage
+  ansible.builtin.command:
+    cmd: "pveam download local {{ item }}"
+  loop: "{{ pve_repositories_ct_templates }}"
+  register: pve_repositories_pveam_download
+  changed_when: pve_repositories_pveam_download.rc == 0
+  when: item not in pve_repositories_pveam_list.stdout
+  tags:
+    - pve_repositories
+    - ct_templates

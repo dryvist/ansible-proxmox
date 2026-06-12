@@ -77,3 +77,13 @@
   tags:
     - pve_repositories
     - repositories
+
+# Ensure the configured LXC (CT) templates are present on `local` storage so a
+# freshly commissioned node can have containers created by OpenTofu without a
+# manual `pveam download`. Gated on the same master switch as the repos above.
+- name: Ensure the configured CT templates are present
+  ansible.builtin.include_tasks: ct_templates.yml
+  when: pve_repositories_manage | bool
+  tags:
+    - pve_repositories
+    - ct_templates
