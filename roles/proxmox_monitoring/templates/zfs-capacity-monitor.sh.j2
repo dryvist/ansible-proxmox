@@ -1,12 +1,16 @@
 #!/bin/bash
 set -euo pipefail
-# ZFS pool capacity monitor — pushes an ntfy alert when a pool crosses a usage
-# band (e.g. 50/75/90%). State is tracked per pool so a notification fires only
-# on a band CHANGE, not every run. Managed by Ansible — do not edit manually.
+# ZFS capacity monitor — pushes an ntfy alert when a POOL or a quota'd DATASET
+# crosses a usage band. State is tracked per pool/dataset so a notification
+# fires only on a band CHANGE, not every run. Quota-less datasets share their
+# pool's free space, so the pool bands already cover them (per-dataset bands
+# would just duplicate the pool alert). Managed by Ansible — do not edit
+# manually.
 
 NTFY_URL="{{ proxmox_monitoring_ntfy_url }}"
 STATE_DIR="/var/lib/zfs-capacity-monitor"
-THRESHOLDS=({{ proxmox_monitoring_zfs_capacity_thresholds | join(' ') }})
+POOL_THRESHOLDS=({{ proxmox_monitoring_zfs_capacity_thresholds | join(' ') }})
+DATASET_THRESHOLDS=({{ proxmox_monitoring_zfs_dataset_capacity_thresholds | join(' ') }})
 
 mkdir -p "$STATE_DIR"
 
@@ -17,31 +21,44 @@ notify() {
     -d "$4" "$NTFY_URL" || true
 }
 
-zpool list -H -o name,capacity | while IFS=$'\t' read -r pool cap_raw; do
-  cap="${cap_raw%\%}"
+# $1=kind (Pool|Dataset)  $2=name  $3=cap%  $4..=thresholds
+check_capacity() {
+  local kind="$1" name="$2" cap="$3"
+  shift 3
 
-  # Current band = highest threshold the pool has reached (0 if below all).
-  band=0
-  for t in "${THRESHOLDS[@]}"; do
+  # Current band = highest threshold reached (0 if below all).
+  local band=0 t
+  for t in "$@"; do
     if [ "$cap" -ge "$t" ]; then band="$t"; fi
   done
 
-  state_file="$STATE_DIR/${pool//\//_}.band"
-  last=0
+  local state_file="$STATE_DIR/${kind,,}_${name//\//_}.band"
+  local last=0
   if [ -f "$state_file" ]; then last="$(cat "$state_file")"; fi
-  if [ "$band" = "$last" ]; then continue; fi
+  if [ "$band" = "$last" ]; then return; fi
 
+  local prio tags
   if [ "$band" -gt "$last" ]; then
     case "$band" in
       90) prio="urgent"; tags="rotating_light" ;;
-      75) prio="high"; tags="warning" ;;
+      75 | 85) prio="high"; tags="warning" ;;
       *) prio="default"; tags="floppy_disk" ;;
     esac
-    notify "ZFS ${pool} at ${cap}%" "$prio" "$tags" \
-      "Pool '${pool}' crossed ${band}% capacity (now ${cap}%) on $(hostname)."
+    notify "ZFS ${name} at ${cap}%" "$prio" "$tags" \
+      "${kind} '${name}' crossed ${band}% capacity (now ${cap}%) on $(hostname)."
   else
-    notify "ZFS ${pool} recovered" "default" "white_check_mark" \
-      "Pool '${pool}' dropped to ${cap}% (below ${last}%) on $(hostname)."
+    notify "ZFS ${name} recovered" "default" "white_check_mark" \
+      "${kind} '${name}' dropped to ${cap}% (below ${last}%) on $(hostname)."
   fi
   echo "$band" >"$state_file"
+}
+
+zpool list -H -o name,capacity | while IFS=$'\t' read -r pool cap_raw; do
+  check_capacity "Pool" "$pool" "${cap_raw%\%}" "${POOL_THRESHOLDS[@]}"
+done
+
+# Quota'd datasets: capacity = used/quota (raw bytes via -p; quota 0 = none).
+zfs list -Hp -t filesystem -o name,used,quota | while IFS=$'\t' read -r ds used quota; do
+  [ "$quota" -gt 0 ] || continue
+  check_capacity "Dataset" "$ds" "$((used * 100 / quota))" "${DATASET_THRESHOLDS[@]}"
 done

@@ -8,7 +8,7 @@
 # LXCs as plain shells; this role applies the root-only bits over native root
 # SSH, idempotently.
 #
-# The feature map is keyed by SERVICE NAME (plex, jellyseerr, sonarr, radarr,
+# The feature map is keyed by SERVICE NAME (plex, seerr, sonarr, radarr,
 # download-vpn) — NOT by raw VMID. Each service's current VMID is resolved at
 # run time from the tofu inventory (containers keyed by hostname, each with
 # a `vmid`), injected onto proxmox hosts by playbooks/load_tofu.yml as
@@ -26,32 +26,35 @@
 # Only vmids that actually exist on the target host are acted on; absent vmids
 # are skipped (tofu may not have created them yet). All tasks are skipped
 # under Docker virtualization (molecule).
+# Mount layout (pve2 rebuild): ONE bind-mount per service — the unified
+# `bulk/data` dataset (host /bulk/data) -> /data in-container. The single
+# dataset is what lets qBittorrent and the *arrs HARDLINK between
+# /data/torrents/* and /data/media/* (hardlinks cannot cross the old
+# downloads/media dataset boundary). All mounts stay read-write (the role's
+# existing convention; plex is read-mostly by usage, not by mount flag).
 media_lxc_features_map:
   plex:  # media streaming
     mounts:
-      - { src: /rpool/data/media, dst: /mnt/media }
+      - { src: /bulk/data, dst: /data }
     keyctl: false
     tun: false
-  jellyseerr:  # request UI (Docker-in-LXC); no bind-mounts
+  seerr:  # request UI (Docker-in-LXC); no bind-mounts
     mounts: []
     keyctl: true
     tun: false
   sonarr:  # TV PVR
     mounts:
-      - { src: /rpool/data/downloads, dst: /mnt/downloads }
-      - { src: /rpool/data/media, dst: /mnt/media }
+      - { src: /bulk/data, dst: /data }
     keyctl: false
     tun: false
   radarr:  # movie PVR
     mounts:
-      - { src: /rpool/data/downloads, dst: /mnt/downloads }
-      - { src: /rpool/data/media, dst: /mnt/media }
+      - { src: /bulk/data, dst: /data }
     keyctl: false
     tun: false
   download-vpn:  # qBittorrent + Prowlarr behind Proton WireGuard
     mounts:
-      - { src: /rpool/data/downloads, dst: /mnt/downloads }
-      - { src: /rpool/data/media, dst: /mnt/media }
+      - { src: /bulk/data, dst: /data }
     keyctl: true
     tun: true
 
@@ -70,3 +73,31 @@ media_lxc_features_service_vmids: >-
 # (hex) == 10:200 (decimal).
 media_lxc_features_tun_major: 10
 media_lxc_features_tun_minor: 200
+
+# ---------------------------------------------------------------------------
+# Shared media data root (host side of the bind-mount)
+# ---------------------------------------------------------------------------
+# The `bulk/data` DATASET itself (recordsize, auto-snapshot, quota) is declared
+# in terraform-proxmox node_storage and realized by the zfs_pools role. This
+# role owns the POSIX layer inside it: the shared `media` group and the
+# group-writable subdirectory skeleton qBittorrent + the *arrs hardlink across.
+# Same owner/group/mode convention as the nas_storage directory tasks
+# (owner root, shared group, group-writable), plus setgid (2775) so content the
+# apps create keeps the `media` group without per-app umask coupling.
+#
+# The GID is fixed (13000) because the path is bind-mounted into several LXCs:
+# in-container `media` groups must map to the same host GID on every guest.
+# Tasks run only when the data root already exists on the host (i.e. zfs_pools
+# mounted the dataset there) — nodes without the bulk pool are skipped, and a
+# plain directory is never invented on the root filesystem.
+media_lxc_features_data_root: /bulk/data
+media_lxc_features_data_group: media
+media_lxc_features_data_gid: 13000
+media_lxc_features_data_dir_mode: "2775"
+media_lxc_features_data_directories:
+  - torrents
+  - torrents/movies
+  - torrents/tv
+  - media
+  - media/movies
+  - media/tv

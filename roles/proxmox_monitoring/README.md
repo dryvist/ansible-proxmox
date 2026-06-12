@@ -47,11 +47,14 @@ External uptime monitoring ping (optional).
 
 ### zfs-capacity
 
-Pushes an [ntfy](https://ntfy.sh) alert when a ZFS pool crosses a usage band
-(default 50/75/90%). State is tracked per pool under
+Pushes an [ntfy](https://ntfy.sh) alert when a ZFS **pool** crosses a usage
+band (default 50/75/85/90%) or a **quota'd dataset** crosses a dataset band
+(default 85/90%, computed as `used/quota`). Quota-less datasets share their
+pool's free space, so the pool bands already cover them — per-dataset bands
+would only duplicate the pool alert. State is tracked per pool/dataset under
 `/var/lib/zfs-capacity-monitor/`, so a notification fires only on a band
 **change** (rising or recovering) — not every run. Priority scales with the
-band (50 → default, 75 → high, 90 → urgent). Disabled until
+band (50 → default, 75/85 → high, 90 → urgent). Disabled until
 `proxmox_monitoring_ntfy_url` is set.
 
 ## Variables
@@ -69,7 +72,8 @@ band (50 → default, 75 → high, 90 → urgent). Disabled until
 | `proxmox_monitoring_enable_zfs_capacity` | `true` | Enable ZFS capacity alerts |
 | `proxmox_monitoring_ntfy_url` | `""` | ntfy topic URL (secret); empty disables |
 | `proxmox_monitoring_zfs_capacity_interval` | `15` | Capacity check cron interval (minutes) |
-| `proxmox_monitoring_zfs_capacity_thresholds` | `[50, 75, 90]` | Usage bands (%) that trigger alerts |
+| `proxmox_monitoring_zfs_capacity_thresholds` | `[50, 75, 85, 90]` | Pool usage bands (%) that trigger alerts |
+| `proxmox_monitoring_zfs_dataset_capacity_thresholds` | `[85, 90]` | Quota'd-dataset usage bands (%; `used/quota`) |
 
 ## Usage
 
