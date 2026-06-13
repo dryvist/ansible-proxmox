@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.1](https://github.com/dryvist/ansible-proxmox/compare/v1.27.0...v1.27.1) (2026-06-13)
+
+
+### Bug Fixes
+
+* **inventory:** fail loud instead of silently using a stale cache ([#278](https://github.com/dryvist/ansible-proxmox/issues/278)) ([1257445](https://github.com/dryvist/ansible-proxmox/commit/1257445e43a3c996cabbca1f58acdca78ee5e3bf))
+
 ## [1.27.0](https://github.com/dryvist/ansible-proxmox/compare/v1.26.0...v1.27.0) (2026-06-12)
 
 
