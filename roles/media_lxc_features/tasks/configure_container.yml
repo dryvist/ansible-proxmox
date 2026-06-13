@@ -112,31 +112,86 @@
 # /dev/net/tun device passthrough — raw LXC config lines in the .conf file
 # ---------------------------------------------------------------------------
 # `pct set` has no flag for arbitrary device passthrough, so the standard method
-# is two raw lines appended to /etc/pve/lxc/<vmid>.conf:
+# is two raw lines in /etc/pve/lxc/<vmid>.conf:
 #   lxc.cgroup2.devices.allow: c 10:200 rwm
 #   lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
-# blockinfile is idempotent (marker-guarded) and reports changed only on edit.
+#
+# IMPORTANT: blockinfile is NOT usable here, for the same reason as the idmap
+# section below. Proxmox's pmxcfs rewrites the .conf on every change — it
+# relocates raw `lxc.*` keys to the end of the file and strips comment markers —
+# so the blockinfile markers vanish and a second run re-appends the lines,
+# duplicating the passthrough and eventually making the container refuse to
+# start. Instead, compare the present tun line-set to the desired one and only
+# rewrite (drop-all + re-add) on a difference; a converged host makes no change
+# and triggers no restart.
 
-- name: "Passthrough /dev/net/tun into container {{ media_ct.key }}"
-  ansible.builtin.blockinfile:
+# One-time cleanup of the stale blockinfile markers left by the earlier
+# (withdrawn) implementation. Idempotent: a no-op once the comment lines are gone.
+- name: "Remove stale tun blockinfile markers on {{ media_ct.key }}"
+  ansible.builtin.lineinfile:
     path: "/etc/pve/lxc/{{ media_ct.key }}.conf"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK media_lxc_features tun"
-    block: |
-      lxc.cgroup2.devices.allow: c {{ media_lxc_features_tun_major }}:{{ media_lxc_features_tun_minor }} rwm
-      lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
-    insertafter: EOF
+    regexp: "ANSIBLE MANAGED BLOCK media_lxc_features tun"
+    state: absent
   when: media_ct.value.tun | default(false)
-  notify: Restart changed media containers
-  register: media_lxc_features_tun_set
   tags:
     - media_lxc_features
 
-- name: "Record tun-passthrough change for container {{ media_ct.key }}"
-  ansible.builtin.set_fact:
-    media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"
-  when: media_lxc_features_tun_set is defined and media_lxc_features_tun_set.changed
+- name: "Read the LXC config to compare the tun passthrough on {{ media_ct.key }}"
+  ansible.builtin.slurp:
+    src: "/etc/pve/lxc/{{ media_ct.key }}.conf"
+  register: media_lxc_features_tun_conf_raw
+  when: media_ct.value.tun | default(false)
   tags:
     - media_lxc_features
+
+- name: "Compute the present tun line-set on {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    # Only the tun-specific passthrough lines: the cgroup allow for this
+    # major:minor and the /dev/net/tun mount entry. Other raw lines (idmap,
+    # unrelated mount entries) are left untouched.
+    media_lxc_features_cur_tun: >-
+      {{
+        (media_lxc_features_tun_conf_raw.content | b64decode).splitlines()
+        | map('trim')
+        | select('match', '^lxc\.cgroup2\.devices\.allow:\s*c ' ~ media_lxc_features_tun_major ~ ':' ~ media_lxc_features_tun_minor ~ ' |^lxc\.mount\.entry:\s*/dev/net/tun ')
+        | list
+      }}
+  when: media_ct.value.tun | default(false)
+  tags:
+    - media_lxc_features
+
+- name: "Reconcile the /dev/net/tun passthrough on {{ media_ct.key }}"
+  when:
+    - media_ct.value.tun | default(false)
+    - (media_lxc_features_cur_tun | sort)
+      != (media_lxc_features_tun_lines | map('trim') | sort)
+  tags:
+    - media_lxc_features
+  block:
+    - name: "Drop any existing tun cgroup-allow line on {{ media_ct.key }}"
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ media_ct.key }}.conf"
+        regexp: '^lxc\.cgroup2\.devices\.allow:\s*c {{ media_lxc_features_tun_major }}:{{ media_lxc_features_tun_minor }} '
+        state: absent
+
+    - name: "Drop any existing tun mount-entry line on {{ media_ct.key }}"
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ media_ct.key }}.conf"
+        regexp: '^lxc\.mount\.entry:\s*/dev/net/tun '
+        state: absent
+
+    - name: "Write the desired tun passthrough lines on {{ media_ct.key }}"
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ media_ct.key }}.conf"
+        line: "{{ item }}"
+        insertafter: EOF
+        state: present
+      loop: "{{ media_lxc_features_tun_lines }}"
+      notify: Restart changed media containers
+
+    - name: "Record tun-passthrough change for container {{ media_ct.key }}"
+      ansible.builtin.set_fact:
+        media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"
 
 # ---------------------------------------------------------------------------
 # Shared-data GID idmap — raw LXC config lines in the .conf file

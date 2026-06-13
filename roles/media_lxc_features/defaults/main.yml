@@ -85,6 +85,16 @@ media_lxc_features_service_vmids: >-
 media_lxc_features_tun_major: 10
 media_lxc_features_tun_minor: 200
 
+# Raw LXC config lines that pass /dev/net/tun through to the guest. `pct set` has
+# no flag for arbitrary device passthrough, so these live directly in
+# /etc/pve/lxc/<vmid>.conf. Reconciled the same drop-all/re-add way as the idmap
+# lines (see configure_container.yml) because pmxcfs relocates raw `lxc.*` keys
+# and strips comment markers, which makes a marker-guarded blockinfile re-append
+# duplicates on every run.
+media_lxc_features_tun_lines:
+  - "lxc.cgroup2.devices.allow: c {{ media_lxc_features_tun_major }}:{{ media_lxc_features_tun_minor }} rwm"
+  - "lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"
+
 # ---------------------------------------------------------------------------
 # Shared media data root (host side of the bind-mount)
 # ---------------------------------------------------------------------------
