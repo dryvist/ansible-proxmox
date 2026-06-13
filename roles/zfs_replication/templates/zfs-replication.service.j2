@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Reachability-gated ZFS replication to the standby node
+Documentation=ansible role zfs_replication
+# Best-effort: the wrapper self-skips when the standby is offline.
+After=network-online.target zfs.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/zfs-replicate.sh
+# A skip (standby down) and per-job logging both exit 0; only a wrapper crash
+# surfaces as a failed unit.
+Nice=10
+IOSchedulingClass=idle

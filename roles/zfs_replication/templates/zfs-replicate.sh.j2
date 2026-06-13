@@ -1,0 +1,68 @@
+#!/bin/bash
+{{ ansible_managed | comment }}
+# Reachability-gated ZFS replication to an intermittently-online standby node.
+#
+# Behaviour: probe the target first. If it is unreachable (the standby is
+# powered off — the expected steady state), exit 0 immediately as a CLEAN SKIP
+# — replication is best-effort and a down standby is never an error. If it is
+# reachable, run syncoid for each configured job, logging per job; a single
+# failed job does NOT abort the rest.
+set -uo pipefail
+
+TARGET_HOST="{{ zfs_replication_target_host }}"
+PROBE="{{ zfs_replication_probe_method }}"
+PROBE_PORT="{{ zfs_replication_probe_port }}"
+PROBE_TIMEOUT="{{ zfs_replication_probe_timeout }}"
+PROBE_ENABLED="{{ zfs_replication_reachability_probe | bool | lower }}"
+LOG_DIR="{{ zfs_replication_log_dir }}"
+
+mkdir -p "$LOG_DIR"
+log="$LOG_DIR/$(date +%Y-%m-%d).log"
+say() { echo "$(date +%H:%M:%S) $*" >>"$log"; }
+
+if [ -z "$TARGET_HOST" ]; then
+  say "no target host configured; nothing to do"
+  exit 0
+fi
+
+target_reachable() {
+  case "$PROBE" in
+    ping)
+      ping -c1 -W"$PROBE_TIMEOUT" "$TARGET_HOST" >/dev/null 2>&1
+      ;;
+    ssh|*)
+      # TCP connect to the SSH port — the path syncoid actually uses. bash's
+      # /dev/tcp avoids needing nc; `timeout` bounds a hung connect.
+      timeout "$PROBE_TIMEOUT" bash -c \
+        "exec 3<>/dev/tcp/$TARGET_HOST/$PROBE_PORT" >/dev/null 2>&1
+      ;;
+  esac
+}
+
+if [ "$PROBE_ENABLED" = "true" ]; then
+  if ! target_reachable; then
+    say "standby $TARGET_HOST unreachable via $PROBE — clean skip"
+    exit 0
+  fi
+  say "standby $TARGET_HOST reachable via $PROBE — replicating"
+fi
+
+replicate() {
+  say "=== syncoid $* ==="
+  local rc=0
+  syncoid "$@" >>"$log" 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] && say "  FAILED (rc=$rc)"
+  return 0
+}
+
+{% for job in zfs_replication_jobs %}
+{%   if job.options is defined %}
+{%     set opts = job.options %}
+{%   else %}
+{%     set _recursive = '--recursive' if (job.recursive | default(true)) else '' %}
+{%     set _snaps = '' if (job.sync_snaps | default(false)) else '--no-sync-snap' %}
+{%     set opts = (_recursive ~ ' ' ~ _snaps ~ ' --quiet') | trim %}
+{%   endif %}
+# job: {{ job.name }} — PUSH local source -> standby target
+replicate {{ opts }} {{ job.source_dataset }} {{ zfs_replication_user }}@"$TARGET_HOST":{{ job.target_dataset }}
+{% endfor %}

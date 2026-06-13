@@ -1,0 +1,17 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # Default (inert) contract: empty jobs list, no target host. The role must
+  # converge as a clean no-op — wrapper + unit files still render under Docker
+  # (package install, daemon-reload, timer enable are guarded off), and the
+  # timer is NOT enabled because there are no jobs. Live syncoid behavior is
+  # validated on real hardware, not in molecule.
+  vars:
+    zfs_replication_jobs: []
+    zfs_replication_target_host: ""
+
+  roles:
+    - role: zfs_replication

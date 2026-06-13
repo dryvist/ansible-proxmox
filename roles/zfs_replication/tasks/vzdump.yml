@@ -1,0 +1,51 @@
+---
+# Optional vzdump backup leg — schedule periodic vzdump of named guests to a
+# backup storage. Independent of the syncoid replication. Inert unless
+# zfs_replication_vzdump_enabled is true AND guests are listed; the timer below
+# only enables when there is at least one guest to back up.
+
+- name: Render the vzdump backup wrapper
+  ansible.builtin.template:
+    src: zfs-replication-vzdump.sh.j2
+    dest: /usr/local/bin/zfs-replication-vzdump.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - zfs_replication_vzdump
+
+- name: Render the vzdump service unit
+  ansible.builtin.template:
+    src: zfs-replication-vzdump.service.j2
+    dest: /etc/systemd/system/zfs-replication-vzdump.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd daemon
+  tags:
+    - zfs_replication_vzdump
+
+- name: Render the vzdump timer unit
+  ansible.builtin.template:
+    src: zfs-replication-vzdump.timer.j2
+    dest: /etc/systemd/system/zfs-replication-vzdump.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd daemon
+  tags:
+    - zfs_replication_vzdump
+
+- name: Reload systemd before enabling the vzdump timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the vzdump timer
+  ansible.builtin.systemd:
+    name: zfs-replication-vzdump.timer
+    enabled: true
+    state: started
+  when:
+    - zfs_replication_vzdump_guests | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - zfs_replication_vzdump

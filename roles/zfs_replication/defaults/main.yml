@@ -1,0 +1,94 @@
+---
+# zfs_replication role defaults — opt-in, reachability-gated ZFS replication to
+# an intermittently-online standby node, plus an optional vzdump backup leg.
+#
+# RELATIONSHIP TO THE EXISTING sanoid/syncoid ROLES
+# -------------------------------------------------
+# This repo already ships `sanoid` (snapshot retention, layer 1) and `syncoid`
+# (cron-driven PULL replication, layer 2). This role is ADDITIVE groundwork, not
+# a replacement: it adds a systemd-timer schedule with an EXPLICIT pre-flight
+# target-reachability gate (so a job against a powered-off standby is a clean
+# SKIP, decided before syncoid is even invoked) and an optional vzdump leg.
+# It is NOT yet wired into playbooks/site.yml. A human should decide whether to
+# adopt this role or fold its additive pieces into the existing syncoid role —
+# see the role README and the PR body. Until then it is inert by default.
+#
+# Model: PUSH from the source toward an intermittent standby (e.g. proxmox-3).
+# Whenever the standby is reachable, configured datasets are replicated; when it
+# is down, every job is skipped cleanly (never a failure). syncoid (from the
+# `sanoid` apt package) is used because it tolerates an offline target far more
+# gracefully than Proxmox-native `pvesr`, which requires the target up.
+
+zfs_replication_enabled: true
+# `sanoid` provides both the sanoid and syncoid binaries.
+zfs_replication_package: sanoid
+zfs_replication_user: root
+zfs_replication_log_dir: /var/log/zfs-replication
+
+# --- Target standby node --------------------------------------------------
+# The standby host to replicate toward. Set this to the inventory hostname or
+# address of the standby in inventory/host_vars; NEVER hard-code a real node
+# name or IP in committed files. Empty by default keeps the role inert.
+#   zfs_replication_target_host: "<target-node>"   # e.g. proxmox-3
+zfs_replication_target_host: ""
+
+# Pre-flight reachability gate. Before any syncoid run the role probes the
+# target; if it does not answer within the timeout the whole replication run is
+# a clean SKIP (changed_when:false, no failure) with a debug message. This is
+# the "the standby may be down at any time" requirement.
+zfs_replication_reachability_probe: true
+# How to probe: "ping" (ICMP) or "ssh" (TCP connect to the SSH port). ssh is
+# the more meaningful check since syncoid replicates over SSH.
+zfs_replication_probe_method: ssh
+zfs_replication_probe_port: 22
+zfs_replication_probe_timeout: 10
+
+# --- syncoid options ------------------------------------------------------
+# Replicate the snapshots sanoid already took (--no-sync-snap), recurse the
+# tree, stay quiet for an unattended timer run.
+zfs_replication_default_options: "--recursive --no-sync-snap --quiet"
+
+# --- Replication jobs (EMPTY by default → role is a NO-OP) -----------------
+# Each job: { name, source_dataset, target_dataset, recursive?, sync_snaps?,
+#             options? }. `recursive`/`sync_snaps` are convenience toggles; an
+# explicit `options` string overrides them entirely.
+# Example (commented — keep the live list empty):
+#   zfs_replication_jobs:
+#     # Media library: bulk/data on the media node -> the standby's replica slot
+#     - name: media-data
+#       source_dataset: "bulk/data"
+#       target_dataset: "bulk/replica/proxmox-2/data"
+#       recursive: true
+#       sync_snaps: false
+#     # A pve1 service volume -> the standby's pve1 replica slot
+#     - name: service-volume
+#       source_dataset: "rpool/data/<service-volume>"
+#       target_dataset: "bulk/replica/proxmox-1/<service-volume>"
+#       recursive: false
+#       sync_snaps: false
+zfs_replication_jobs: []
+
+# --- systemd timer schedule -----------------------------------------------
+zfs_replication_timer_enabled: true
+# Frequent-but-sane cadence so the standby is near-current the moment it boots.
+# OnCalendar fires every 15 minutes by default; override per host if needed.
+zfs_replication_on_calendar: "*:0/15"
+# Add jitter so multiple sources do not all hammer the standby at once.
+zfs_replication_randomized_delay_sec: 120
+# Persistent=false: do NOT catch up a missed trigger after a long downtime; the
+# next scheduled tick handles it, avoiding a thundering replication on boot.
+zfs_replication_timer_persistent: false
+
+# --- Optional vzdump backup leg (separate, also off by default) -----------
+# Schedules `vzdump` of named guests to a backup storage. Independent of the
+# syncoid replication above. Disabled until explicitly enabled AND given guests.
+zfs_replication_vzdump_enabled: false
+# Proxmox storage id that vzdump writes to (must already exist on the node and
+# be backed by a dataset such as bulk/backups). No real id committed.
+zfs_replication_vzdump_storage: "<backup-storage-id>"
+zfs_replication_vzdump_mode: snapshot
+zfs_replication_vzdump_compress: zstd
+# vmid list of guests to back up (CT or VM ids). Empty → the vzdump leg no-ops.
+zfs_replication_vzdump_guests: []
+zfs_replication_vzdump_on_calendar: "*-*-* 01:30:00"
+zfs_replication_vzdump_extra_options: ""

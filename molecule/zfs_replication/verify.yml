@@ -1,0 +1,41 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered replication wrapper
+      ansible.builtin.slurp:
+        src: /usr/local/bin/zfs-replicate.sh
+      register: repl_wrapper
+
+    - name: Read the rendered service unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/zfs-replication.service
+      register: repl_service
+
+    - name: Read the rendered timer unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/zfs-replication.timer
+      register: repl_timer
+
+    - name: Assert the inert (no-op) contract rendered
+      ansible.builtin.assert:
+        that:
+          # Wrapper exists with the reachability gate and the no-target guard.
+          - "'clean skip' in (repl_wrapper.content | b64decode)"
+          - "'no target host configured' in (repl_wrapper.content | b64decode)"
+          # With an empty jobs list, no replicate calls were templated in.
+          - "'# job:' not in (repl_wrapper.content | b64decode)"
+          # systemd units rendered the expected contract.
+          - "'Type=oneshot' in (repl_service.content | b64decode)"
+          - "'/usr/local/bin/zfs-replicate.sh' in (repl_service.content | b64decode)"
+          - "'OnCalendar=*:0/15' in (repl_timer.content | b64decode)"
+          - "'WantedBy=timers.target' in (repl_timer.content | b64decode)"
+        fail_msg: "zfs_replication did not render the expected inert contract"
+
+    # The timer must NOT be active under the inert default. Converge succeeding
+    # (the enable task is guarded off by the empty jobs list + Docker skip)
+    # proves the no-op; the wrapper/unit assertions above prove the contract —
+    # mirroring the slurp-only sanoid / node_auto_poweroff verifiers.
