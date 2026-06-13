@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.2](https://github.com/dryvist/ansible-proxmox/compare/v1.27.1...v1.27.2) (2026-06-13)
+
+
+### Bug Fixes
+
+* **media_lxc_features:** reconcile TUN passthrough like idmap (pmxcfs-safe) ([#279](https://github.com/dryvist/ansible-proxmox/issues/279)) ([501ed56](https://github.com/dryvist/ansible-proxmox/commit/501ed56f6a575fb695abeb6283fbe89bccee2347))
+
 ## [1.27.1](https://github.com/dryvist/ansible-proxmox/compare/v1.27.0...v1.27.1) (2026-06-13)
 
 
