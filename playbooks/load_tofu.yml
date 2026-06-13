@@ -19,6 +19,19 @@
     tofu_inventory_local: "{{ playbook_dir }}/../inventory/tofu_inventory.json"
     tofu_inventory_s3_uri: "{{ lookup('env', 'TOFU_INVENTORY_S3_URI') | default('', true) }}"
     tofu_inventory_s3_region: "{{ lookup('env', 'TOFU_INVENTORY_S3_REGION') | default('us-east-2', true) }}"
+    # Escape hatch: set non-empty to permit the (possibly STALE) local cache even
+    # when AWS creds are present but the S3 fetch failed. Off by default so the
+    # boto3-missing / S3-unreachable trap fails loud instead of silently
+    # deploying a stale inventory.
+    tofu_inventory_allow_stale: "{{ lookup('env', 'TOFU_INVENTORY_ALLOW_STALE') | default('', true) }}"
+    # Whether AWS credentials appear present. When true, the operator clearly
+    # INTENDED to reach S3, so a failed S3 resolution is an error worth stopping
+    # for — not a cue to silently fall back to the local cache.
+    tofu_inventory_aws_creds_present: >-
+      {{ (lookup('env', 'AWS_ACCESS_KEY_ID') | default('', true) | length > 0)
+         or (lookup('env', 'AWS_PROFILE') | default('', true) | length > 0)
+         or (lookup('env', 'AWS_VAULT') | default('', true) | length > 0)
+         or (lookup('env', 'AWS_ROLE_ARN') | default('', true) | length > 0) }}
 
   tasks:
     - name: Stat the explicit TOFU_INVENTORY_PATH
@@ -98,11 +111,43 @@
                 tofu_inventory_resolved: "{{ tofu_inv_tmp.path }}"
               when: (tofu_inv_s3_stat.stat.size | default(0)) > 0
 
+    # The boto3-missing / S3-unreachable trap: AWS creds are present (operator
+    # intended S3) but the S3 inventory did not resolve. Silently using the local
+    # cache here deploys a STALE inventory (wrong VMIDs/IPs) with confusing
+    # downstream failures. Fail loud instead, unless explicitly overridden.
+    - name: Fail loud when AWS creds are present but the S3 inventory did not resolve
+      ansible.builtin.fail:
+        msg: |
+          AWS credentials are present but the published S3 inventory could not be
+          resolved — refusing to silently fall back to a possibly-STALE local cache.
+
+          Most likely cause: boto3/botocore is not importable in this interpreter
+          (install it in the dev shell), or an S3/creds problem. aws_caller_info said:
+            {{ tofu_inv_aws_acct.msg | default('(skipped or no message)') }}
+
+          To proceed with the local cache anyway, set TOFU_INVENTORY_ALLOW_STALE=1
+          (or pin TOFU_INVENTORY_PATH=/path/to/ansible_inventory.json).
+      when:
+        - tofu_inventory_resolved is not defined
+        - tofu_inventory_path | length == 0
+        - tofu_inventory_aws_creds_present | bool
+        - tofu_inventory_allow_stale | length == 0
+
     - name: Stat the local inventory cache
       ansible.builtin.stat:
         path: "{{ tofu_inventory_local }}"
       register: tofu_inv_localstat
       when: tofu_inventory_resolved is not defined
+
+    - name: Warn that a local (possibly stale) inventory cache is being used
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: using the local inventory cache {{ tofu_inventory_local }} —
+          no explicit path and no S3 resolution. Ensure it is current (run a
+          terraform-proxmox apply to refresh) or pin TOFU_INVENTORY_PATH.
+      when:
+        - tofu_inventory_resolved is not defined
+        - tofu_inv_localstat.stat.exists | default(false)
 
     - name: Resolve inventory from the local cache when present
       ansible.builtin.set_fact:
