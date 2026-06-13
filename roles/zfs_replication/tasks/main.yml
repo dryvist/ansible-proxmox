@@ -1,0 +1,109 @@
+---
+# zfs_replication tasks — install syncoid, render the reachability-gated
+# replication wrapper, schedule it via a systemd timer, and (optionally)
+# schedule vzdump backups. Package install, daemon-reload, and timer enablement
+# are skipped under Docker (molecule) where systemd is not PID 1; the templated
+# wrapper and unit files still render so the contract is verifiable in-container.
+
+- name: Install sanoid (provides syncoid)
+  ansible.builtin.apt:
+    name: "{{ zfs_replication_package }}"
+    state: present
+    update_cache: true
+  when:
+    - zfs_replication_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - zfs_replication
+
+- name: Ensure the replication log directory exists
+  ansible.builtin.file:
+    path: "{{ zfs_replication_log_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: zfs_replication_enabled | bool
+  tags:
+    - zfs_replication
+
+- name: Deploy the reachability-gated replication wrapper
+  ansible.builtin.template:
+    src: zfs-replicate.sh.j2
+    dest: /usr/local/bin/zfs-replicate.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: zfs_replication_enabled | bool
+  tags:
+    - zfs_replication
+
+- name: Render the replication service unit
+  ansible.builtin.template:
+    src: zfs-replication.service.j2
+    dest: /etc/systemd/system/zfs-replication.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: zfs_replication_enabled | bool
+  notify: Reload systemd daemon
+  tags:
+    - zfs_replication
+
+- name: Render the replication timer unit
+  ansible.builtin.template:
+    src: zfs-replication.timer.j2
+    dest: /etc/systemd/system/zfs-replication.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: zfs_replication_enabled | bool
+  notify: Reload systemd daemon
+  tags:
+    - zfs_replication
+
+# Apply any pending daemon-reload now so the timer below enables against the
+# freshly written unit (handlers otherwise run only at end of play).
+- name: Reload systemd before enabling the timer
+  ansible.builtin.meta: flush_handlers
+
+# Enable the timer only when there is something to replicate AND a target is
+# set. An empty job list or an unset target keeps the role a clean no-op.
+- name: Enable and start the replication timer
+  ansible.builtin.systemd:
+    name: zfs-replication.timer
+    enabled: true
+    state: started
+  when:
+    - zfs_replication_enabled | bool
+    - zfs_replication_timer_enabled | bool
+    - zfs_replication_jobs | length > 0
+    - zfs_replication_target_host | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - zfs_replication
+
+# Stop/disable the timer if the role is enabled but there is nothing to do, so a
+# previously-configured node returns cleanly to inert when its jobs are removed.
+- name: Disable the replication timer when no jobs/target are configured
+  ansible.builtin.systemd:
+    name: zfs-replication.timer
+    enabled: false
+    state: stopped
+  when:
+    - zfs_replication_enabled | bool
+    - (zfs_replication_jobs | length == 0) or (zfs_replication_target_host | length == 0)
+    - ansible_virtualization_type | default('') != 'docker'
+  failed_when: false
+  changed_when: false
+  tags:
+    - zfs_replication
+
+- name: Schedule optional vzdump guest backups
+  ansible.builtin.include_tasks: vzdump.yml
+  when:
+    - zfs_replication_enabled | bool
+    - zfs_replication_vzdump_enabled | bool
+  tags:
+    - zfs_replication
+    - zfs_replication_vzdump

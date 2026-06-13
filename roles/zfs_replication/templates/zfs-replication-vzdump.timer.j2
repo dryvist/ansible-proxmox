@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Periodic vzdump guest backups (zfs_replication)
+Documentation=ansible role zfs_replication
+
+[Timer]
+OnCalendar={{ zfs_replication_vzdump_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

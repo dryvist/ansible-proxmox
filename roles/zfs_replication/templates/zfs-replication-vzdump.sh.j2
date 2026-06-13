@@ -1,0 +1,28 @@
+#!/bin/bash
+{{ ansible_managed | comment }}
+# Optional vzdump backup of named guests to a backup storage. Per-guest logging;
+# a single failed guest does NOT abort the rest.
+set -uo pipefail
+
+LOG_DIR="{{ zfs_replication_log_dir }}"
+STORAGE="{{ zfs_replication_vzdump_storage }}"
+mkdir -p "$LOG_DIR"
+log="$LOG_DIR/vzdump-$(date +%Y-%m-%d).log"
+say() { echo "$(date +%H:%M:%S) $*" >>"$log"; }
+
+backup() {
+  local vmid="$1"
+  say "=== vzdump $vmid ==="
+  local rc=0
+  vzdump "$vmid" \
+    --storage "$STORAGE" \
+    --mode {{ zfs_replication_vzdump_mode }} \
+    --compress {{ zfs_replication_vzdump_compress }} \
+    {{ zfs_replication_vzdump_extra_options }} >>"$log" 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] && say "  FAILED (rc=$rc)"
+  return 0
+}
+
+{% for vmid in zfs_replication_vzdump_guests %}
+backup {{ vmid }}
+{% endfor %}

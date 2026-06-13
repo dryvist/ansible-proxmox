@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Scheduled vzdump guest backups (zfs_replication)
+Documentation=ansible role zfs_replication
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/zfs-replication-vzdump.sh
+Nice=10
+IOSchedulingClass=idle

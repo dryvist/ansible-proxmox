@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Periodic ZFS replication to the standby node
+Documentation=ansible role zfs_replication
+
+[Timer]
+OnCalendar={{ zfs_replication_on_calendar }}
+RandomizedDelaySec={{ zfs_replication_randomized_delay_sec }}
+# Persistent={{ zfs_replication_timer_persistent | bool | lower }}: when false,
+# a missed trigger (host or standby was down) is NOT caught up on boot; the next
+# scheduled tick handles it, avoiding a thundering replication right after boot.
+Persistent={{ zfs_replication_timer_persistent | bool | lower }}
+
+[Install]
+WantedBy=timers.target
