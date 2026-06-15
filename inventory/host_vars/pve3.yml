@@ -38,3 +38,10 @@ syncoid_jobs:
   - name: "databases"
     source: "root@pve2:bulk/databases"
     target: "bulk/replica/pve2/databases"
+  # App config/state DR: pull the whole bulk/appdata namespace from the always-on
+  # pve2 (recursive via default options, so every bulk/appdata/<app> child comes
+  # along). Same pull pattern as the databases job. Refreshes only during pve3
+  # power-on windows.
+  - name: "appdata"
+    source: "root@pve2:bulk/appdata"
+    target: "bulk/replica/pve2/appdata"

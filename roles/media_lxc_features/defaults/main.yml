@@ -18,7 +18,10 @@
 # commit.
 #
 # Per-service shape:
-#   mounts:     list of { src: <host path>, dst: <in-container path>, ro: <bool, default false> }
+#   mounts:     list of { src: <host path>, dst: <in-container path>, ro: <bool,
+#               default false>, owner_user: <optional in-container user that must
+#               OWN this host dataset — chowns src to that user's mapped host
+#               uid/gid; for app-private config dirs, vs the shared-GID /data> }
 #   keyctl:     bool — ensure features contains keyctl=1, MERGED into existing
 #               features (tofu-set nesting=1 is preserved, never dropped)
 #   tun:        bool — passthrough /dev/net/tun (char 10:200) into the container
@@ -32,16 +35,24 @@
 # Only vmids that actually exist on the target host are acted on; absent vmids
 # are skipped (tofu may not have created them yet). All tasks are skipped
 # under Docker virtualization (molecule).
-# Mount layout (bulk-node rebuild): ONE bind-mount per service — the unified
-# `bulk/data` dataset (host /bulk/data) -> /data in-container. The single
-# dataset is what lets qBittorrent and the *arrs HARDLINK between
-# /data/torrents/* and /data/media/* (hardlinks cannot cross the old
-# downloads/media dataset boundary). All mounts stay read-write (the role's
-# existing convention; plex is read-mostly by usage, not by mount flag).
+# Mount layout (bulk-node rebuild): every service bind-mounts the unified
+# `bulk/data` dataset (host /bulk/data) -> /data in-container. The single dataset
+# is what lets qBittorrent and the *arrs HARDLINK between /data/torrents/* and
+# /data/media/* (hardlinks cannot cross the old downloads/media dataset
+# boundary). All mounts stay read-write (the role's existing convention; plex is
+# read-mostly by usage, not by mount flag).
+#
+# Plex additionally bind-mounts a PERSISTENT app-config dataset (bulk/appdata/plex)
+# over its home, so its identity (Preferences.xml machineIdentifier + claim +
+# publish) and watch-history DB survive a container restart OR rebuild instead of
+# living on the disposable rootfs. The whole home is mounted (no spaces in the
+# path, so the command-module mount task stays trivial); ownership is the plex
+# USER's mapped host id (owner_user), not the shared media GID.
 media_lxc_features_map:
   plex:  # media streaming
     mounts:
       - { src: /bulk/data, dst: /data }
+      - { src: /bulk/appdata/plex, dst: /var/lib/plexmediaserver, owner_user: plex }
     keyctl: false
     tun: false
     data_idmap: true
@@ -145,3 +156,15 @@ media_lxc_features_data_idmap_lines:
     lxc.idmap: g {{ media_lxc_features_data_gid | int + 1 }}
     {{ 100000 + (media_lxc_features_data_gid | int) + 1 }}
     {{ 65536 - (media_lxc_features_data_gid | int) - 1 }}
+
+# ---------------------------------------------------------------------------
+# Per-app config-dataset ownership (unprivileged-LXC mapped UID/GID)
+# ---------------------------------------------------------------------------
+# A mount carrying `owner_user: <name>` (e.g. plex on bulk/appdata/plex) holds an
+# app's PRIVATE config, owned by the app USER — unlike the shared /bulk/data,
+# which is group-owned via the GID-13000 idmap punch-through. The plex container
+# leaves its UID map at the default offset, so the in-container app user (uid N)
+# maps to host UID `unpriv_base + N`. The role chowns the HOST dataset to that
+# mapped uid/gid (resolved LIVE per container — the ids are package-assigned,
+# never hardcoded) so the dir appears as <user>:<user> and stays writable inside.
+media_lxc_features_unpriv_base: 100000

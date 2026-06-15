@@ -1,0 +1,66 @@
+---
+# Chown one host config dataset to the MAPPED host uid/gid of its in-container
+# owner. Looped from configure_container.yml with:
+#   media_cfg_mp = a mount dict carrying { src: <host path>, owner_user: <name> }
+#   media_ct     = { key: <vmid>, value: {...} }
+#
+# An unprivileged LXC maps in-container uid/gid N -> host (unpriv_base + N) on the
+# default offset, so the host dataset must be owned by that mapped pair for the
+# app user to read+write its config. The in-container ids are package-assigned,
+# so resolve them LIVE (never hardcode). Idempotent (stat then chown only on
+# drift); non-fatal (skip cleanly when the user isn't installed yet — a fresh
+# build before the apps converge installs it; the dataset data is off the rootfs
+# and never at risk).
+
+- name: "Resolve config-owner uid on {{ media_ct.key }}"
+  ansible.builtin.command:
+    cmd: "pct exec {{ media_ct.key }} -- id -u {{ media_cfg_mp.owner_user }}"
+  register: media_lxc_features_cfg_owner_uid
+  changed_when: false
+  failed_when: false
+  tags:
+    - media_lxc_features
+
+- name: "Resolve config-owner gid on {{ media_ct.key }}"
+  ansible.builtin.command:
+    cmd: "pct exec {{ media_ct.key }} -- id -g {{ media_cfg_mp.owner_user }}"
+  register: media_lxc_features_cfg_owner_gid
+  changed_when: false
+  failed_when: false
+  tags:
+    - media_lxc_features
+
+- name: "Stat the host config dataset on {{ media_ct.key }}"
+  ansible.builtin.stat:
+    path: "{{ media_cfg_mp.src }}"
+  register: media_lxc_features_cfg_owner_stat
+  tags:
+    - media_lxc_features
+
+- name: "Apply config-owner chown when resolved on {{ media_ct.key }}"
+  when:
+    - media_lxc_features_cfg_owner_uid.rc == 0
+    - media_lxc_features_cfg_owner_gid.rc == 0
+    - media_lxc_features_cfg_owner_uid.stdout | length > 0
+    - media_lxc_features_cfg_owner_gid.stdout | length > 0
+    - media_lxc_features_cfg_owner_stat.stat.exists | default(false)
+  tags:
+    - media_lxc_features
+  block:
+    - name: "Compute the mapped host owner on {{ media_ct.key }}"
+      ansible.builtin.set_fact:
+        media_lxc_features_cfg_host_uid: >-
+          {{ media_lxc_features_unpriv_base + (media_lxc_features_cfg_owner_uid.stdout | int) }}
+        media_lxc_features_cfg_host_gid: >-
+          {{ media_lxc_features_unpriv_base + (media_lxc_features_cfg_owner_gid.stdout | int) }}
+
+    - name: "Chown the host config dataset to its mapped owner on {{ media_ct.key }}"
+      ansible.builtin.command:
+        cmd: >-
+          chown -R
+          {{ media_lxc_features_cfg_host_uid | int }}:{{ media_lxc_features_cfg_host_gid | int }}
+          {{ media_cfg_mp.src }}
+      when: >-
+        media_lxc_features_cfg_owner_stat.stat.uid != (media_lxc_features_cfg_host_uid | int)
+        or media_lxc_features_cfg_owner_stat.stat.gid != (media_lxc_features_cfg_host_gid | int)
+      changed_when: true
