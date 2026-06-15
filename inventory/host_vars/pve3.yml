@@ -31,17 +31,19 @@ syncoid_jobs:
     source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
     target: "bulk/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
   # Database warm-standby DR: pull the whole bulk/databases namespace from the
-  # always-on pve2 into this offline-DR leg (recursive via default options, so
-  # every bulk/databases/<instance> child comes along). Source is pve2 by design
-  # (the warm-standby home), unlike the splunk jobs whose source node is derived
-  # from tofu. Refreshes only during pve3 power-on windows.
+  # always-on node 2 into this offline-DR leg (recursive via default options, so
+  # every bulk/databases/<instance> child comes along). The source node is fixed
+  # by design (node 2, the warm-standby home), unlike the splunk jobs whose source
+  # node is derived from tofu; the prefix comes from proxmox_node_prefix so the
+  # node name is never hard-coded. Refreshes only during this node's power-on
+  # windows.
   - name: "databases"
-    source: "root@pve2:bulk/databases"
-    target: "bulk/replica/pve2/databases"
+    source: "root@{{ proxmox_node_prefix }}2:bulk/databases"
+    target: "bulk/replica/{{ proxmox_node_prefix }}2/databases"
   # App config/state DR: pull the whole bulk/appdata namespace from the always-on
-  # pve2 (recursive via default options, so every bulk/appdata/<app> child comes
-  # along). Same pull pattern as the databases job. Refreshes only during pve3
-  # power-on windows.
+  # node 2 (recursive via default options, so every bulk/appdata/<app> child comes
+  # along). Same pull pattern (and same proxmox_node_prefix parameterization) as
+  # the databases job. Refreshes only during this node's power-on windows.
   - name: "appdata"
-    source: "root@pve2:bulk/appdata"
-    target: "bulk/replica/pve2/appdata"
+    source: "root@{{ proxmox_node_prefix }}2:bulk/appdata"
+    target: "bulk/replica/{{ proxmox_node_prefix }}2/appdata"

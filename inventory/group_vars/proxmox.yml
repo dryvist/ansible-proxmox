@@ -1,6 +1,13 @@
 ---
 # Group variables for Proxmox VE servers
 
+# Node naming: every Proxmox node is addressed as <proxmox_node_prefix><N> — a node
+# is just its number with this prefix prepended. Parameterized so node references in
+# roles and host_vars never hard-code the real prefix. The REAL prefix is injected at
+# runtime via the PROXMOX_NODE_PREFIX env var (e.g. from Doppler); the committed
+# default below is a neutral EXAMPLE only and must never carry the real value.
+proxmox_node_prefix: "{{ lookup('env', 'PROXMOX_NODE_PREFIX') | default('proxmox', true) }}"
+
 # ZFS Swap Configuration
 zfs_swap_size: "96G"
 zfs_swap_pool: "rpool"

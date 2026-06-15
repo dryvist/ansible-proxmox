@@ -64,7 +64,7 @@ what lets qBittorrent and the *arrs **hardlink** between `/data/torrents/*` and
 `/data/media/*` — hardlinks cannot cross dataset boundaries. All bind-mounts are
 **read-write** (no `ro=1`), the role's existing convention (plex is read-mostly
 by usage, not by mount flag). `/dev/net/tun` is char device **10:200** (verified
-on pve1). Plex additionally gets a **persistent config mount** — see below.
+on the primary node). Plex additionally gets a **persistent config mount** — see below.
 
 A mount may carry `owner_user: <name>`. That marks an app-**private** config
 dataset that must be owned by the app *user* (not the shared `media` group), and
@@ -105,9 +105,9 @@ survive any restart **or** rebuild.
   the home for app *config/state* (distinct from `bulk/databases`, which is for
   database engines, and `bulk/data`, the re-acquirable media library).
 - **Snapshots + DR**: `bulk/appdata` gets the **`critical`** sanoid template
-  (hourly point-in-time — right for constantly-changing watch progress) on pve2,
-  and a recursive syncoid pull to pve3. Both are configured in host_vars and
-  cover every `bulk/appdata/<app>` child.
+  (hourly point-in-time — right for constantly-changing watch progress) on the
+  always-on storage node, and a recursive syncoid pull to the offline-DR leg.
+  Both are configured in host_vars and cover every `bulk/appdata/<app>` child.
 - **Ownership**: the mount carries `owner_user: plex`. Plex's config is owned by
   the `plex` *user*; the container leaves its UID map at the default offset, so
   the role chowns the host dataset to `unpriv_base + <live in-container plex
