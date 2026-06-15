@@ -59,8 +59,8 @@
         cmd: >-
           chown -R
           {{ media_lxc_features_cfg_host_uid | int }}:{{ media_lxc_features_cfg_host_gid | int }}
-          {{ media_cfg_mp.src }}
+          "{{ media_cfg_mp.src }}"
       when: >-
-        media_lxc_features_cfg_owner_stat.stat.uid != (media_lxc_features_cfg_host_uid | int)
-        or media_lxc_features_cfg_owner_stat.stat.gid != (media_lxc_features_cfg_host_gid | int)
+        (media_lxc_features_cfg_owner_stat.stat.uid | default(-1)) != (media_lxc_features_cfg_host_uid | int)
+        or (media_lxc_features_cfg_owner_stat.stat.gid | default(-1)) != (media_lxc_features_cfg_host_gid | int)
       changed_when: true
