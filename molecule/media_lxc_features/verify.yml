@@ -32,13 +32,16 @@
           - "'725140' not in media_lxc_features_map"
         fail_msg: "media_lxc_features_map must be keyed by service name, not vmid"
 
-    - name: Assert plex gets the single unified data mount, read-write
+    - name: Assert plex gets the unified data mount plus its persistent appdata mount
       ansible.builtin.assert:
         that:
-          - media_lxc_features_map['plex'].mounts | length == 1
+          - media_lxc_features_map['plex'].mounts | length == 2
           - media_lxc_features_map['plex'].mounts[0].src == '/bulk/data'
           - media_lxc_features_map['plex'].mounts[0].dst == '/data'
           - not (media_lxc_features_map['plex'].mounts[0].ro | default(false))
+          - media_lxc_features_map['plex'].mounts[1].src == '/bulk/appdata/plex'
+          - media_lxc_features_map['plex'].mounts[1].dst == '/var/lib/plexmediaserver'
+          - media_lxc_features_map['plex'].mounts[1].owner_user == 'plex'
           - not (media_lxc_features_map['plex'].keyctl | bool)
           - not (media_lxc_features_map['plex'].tun | bool)
         fail_msg: "plex feature contract did not resolve as expected"
