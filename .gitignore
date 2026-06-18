@@ -37,6 +37,9 @@ secrets.yml
 .vault_password
 SECRETS_SETUP.md
 .doppler.yaml
+# Doppler secrets fallback cache (encrypted snapshot of the whole config - never commit)
+doppler.json
+.doppler/
 
 # SOPS age private keys (never commit)
 *.age
@@ -62,3 +65,6 @@ tmp/
 
 # Nix/direnv
 .direnv/
+
+# Claude Code local settings (machine-specific permissions - never commit)
+.claude/settings.local.json

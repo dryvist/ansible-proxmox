@@ -74,31 +74,18 @@
     state: started
   when: proxmox_monitoring_enable_atop
 
-- name: Configure crash monitor
-  when: proxmox_monitoring_enable_crash_monitor
+- name: Remove legacy crash monitor script and cron job
   block:
-    - name: Create crash monitor log directory
-      ansible.builtin.file:
-        path: /var/log/crash-monitor
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Deploy crash monitor script
-      ansible.builtin.template:
-        src: crash-monitor.sh.j2
-        dest: /usr/local/bin/crash-monitor.sh
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Configure crash monitor cron job
+    - name: Remove crash monitor cron job
       ansible.builtin.cron:
         name: "crash-monitor"
-        job: "/usr/local/bin/crash-monitor.sh"
-        minute: "*/{{ proxmox_monitoring_crash_monitor_interval }}"
+        state: absent
         user: root
+
+    - name: Remove crash monitor script
+      ansible.builtin.file:
+        path: /usr/local/bin/crash-monitor.sh
+        state: absent
 
 - name: Configure healthchecks.io ping
   when:
