@@ -1,8 +1,6 @@
 ---
 # Monitoring configuration defaults
 
-# Crash monitor logging interval (minutes via cron)
-proxmox_monitoring_crash_monitor_interval: 1
 
 # Healthchecks.io ping interval (minutes via cron)
 proxmox_monitoring_healthchecks_interval: 1
@@ -17,7 +15,6 @@ proxmox_monitoring_healthchecks_ping_url: ""
 # Enable/disable individual monitoring components
 proxmox_monitoring_enable_sysstat: true
 proxmox_monitoring_enable_atop: true
-proxmox_monitoring_enable_crash_monitor: true
 proxmox_monitoring_enable_healthchecks: true
 proxmox_monitoring_enable_zfs_capacity: true
 
