@@ -4,6 +4,14 @@
 # failed job (e.g. source offline) is logged and does NOT abort the rest.
 set -uo pipefail
 
+# syncoid/sanoid install to /usr/sbin on Debian, which is NOT on cron's default
+# PATH (/usr/bin:/bin). Without this, the scheduled run dies with
+# "syncoid: command not found" (rc=127) on every job — and because replicate()
+# logs the failure but keeps going, the script still exits 0, so the breakage is
+# silent. Pin a complete PATH so cron resolves the binary the same way an
+# interactive shell does.
+export PATH="/usr/sbin:/sbin:/usr/bin:/bin${PATH:+:$PATH}"
+
 LOG_DIR="{{ syncoid_log_dir }}"
 mkdir -p "$LOG_DIR"
 log="$LOG_DIR/$(date +%Y-%m-%d).log"
