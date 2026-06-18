@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.29.0](https://github.com/dryvist/ansible-proxmox/compare/v1.28.1...v1.29.0) (2026-06-18)
+
+
+### Features
+
+* **media_lxc_features:** persist Plex config on bulk/appdata to survive rebuilds ([#286](https://github.com/dryvist/ansible-proxmox/issues/286)) ([c058ac3](https://github.com/dryvist/ansible-proxmox/commit/c058ac3704812f1caab4d82c0ba2d74c774800ad))
+
 ## [1.28.1](https://github.com/dryvist/ansible-proxmox/compare/v1.28.0...v1.28.1) (2026-06-18)
 
 
