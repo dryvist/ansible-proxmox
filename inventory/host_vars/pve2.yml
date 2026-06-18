@@ -43,6 +43,14 @@ sanoid_datasets:
   "bulk/databases":
     use_template: database
     recursive: "yes"
+  # Persistent app config/state (e.g. bulk/appdata/plex = Plex identity + watch
+  # history). HOT data that changes constantly (watch progress) and wants
+  # point-in-time recovery, so the `critical` template (hourly) — not the
+  # daily-cadence `database` one. Recursive so every bulk/appdata/<app> child
+  # inherits it.
+  "bulk/appdata":
+    use_template: critical
+    recursive: "yes"
 
 # Insert-only SQLite warm-standby jobs (sqlite_standby role). The storage is
 # engine-agnostic and generic; the per-database specifics (source host/path,
