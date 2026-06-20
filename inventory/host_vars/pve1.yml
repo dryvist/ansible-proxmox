@@ -16,3 +16,12 @@ sanoid_datasets:
     use_template: critical
   "rpool/data/vm-200-disk-2":
     use_template: critical
+  # Object-storage (RustFS) data volume — the `splunk-addons` bucket (Splunkbase
+  # app tarballs + manifest). subvol-202000-disk-1 is the 100G mp0 (/srv/object-
+  # storage); disk-0 is the 8G rootfs, Ansible-reproducible, so not snapshotted.
+  # The bucket itself has object-versioning on, so this layer is volume-level DR
+  # (corruption / ransomware / fat-finger rm), not app-version history. The
+  # `database` template = daily cadence + long tail (monthly12 / yearly3); the
+  # store changes ~weekly, so hourly snapshots would be pure churn.
+  "rpool/data/subvol-202000-disk-1":
+    use_template: database

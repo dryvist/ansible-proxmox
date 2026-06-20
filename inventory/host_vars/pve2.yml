@@ -25,6 +25,15 @@ syncoid_jobs:
   - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk2"
     source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
     target: "bulk/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
+  # Object-storage (RustFS) DR: pull the splunk-addons data volume
+  # (subvol-202000-disk-1 = /srv/object-storage) from node 1. The container is
+  # pinned to node 1, so the source node is fixed via proxmox_node_prefix — the
+  # same "fixed node" pattern the pve3 databases/appdata jobs use for node 2,
+  # never a hard-coded node name. bulk/replica/<node1> already exists (the
+  # splunk jobs above target it); syncoid creates the per-disk leaf.
+  - name: "object-storage-disk1"
+    source: "root@{{ proxmox_node_prefix }}1:rpool/data/subvol-202000-disk-1"
+    target: "bulk/replica/{{ proxmox_node_prefix }}1/subvol-202000-disk-1"
 
 # Layer-1 protection (local ZFS snapshots via sanoid) for the warm-standby
 # database namespace. Recursive so any bulk/databases/<instance> child inherits
