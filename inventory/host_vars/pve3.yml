@@ -38,6 +38,12 @@ syncoid_jobs:
   - name: "object-storage-disk1"
     source: "root@{{ proxmox_node_prefix }}1:rpool/data/subvol-202000-disk-1"
     target: "bulk/replica/{{ proxmox_node_prefix }}1/subvol-202000-disk-1"
+  # MinIO (vmid 107) data volume — CURRENT live splunk-addons store during the
+  # MinIO->RustFS migration soak (holds the real app tarballs today). Offline-DR
+  # leg; same pull pattern as above. Drop after MinIO decommission.
+  - name: "minio-disk1"
+    source: "root@{{ proxmox_node_prefix }}1:rpool/data/subvol-107-disk-1"
+    target: "bulk/replica/{{ proxmox_node_prefix }}1/subvol-107-disk-1"
   # Database warm-standby DR: pull the whole bulk/databases namespace from the
   # always-on node 2 into this offline-DR leg (recursive via default options, so
   # every bulk/databases/<instance> child comes along). The source node is fixed

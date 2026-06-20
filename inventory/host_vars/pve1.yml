@@ -25,3 +25,10 @@ sanoid_datasets:
   # store changes ~weekly, so hourly snapshots would be pure churn.
   "rpool/data/subvol-202000-disk-1":
     use_template: database
+  # MinIO (vmid 107) data volume — the CURRENT live splunk-addons store during the
+  # MinIO->RustFS migration soak. subvol-107-disk-1 is the 100G /opt/minio mount and
+  # holds the actual app tarballs + manifest TODAY (the object-storage/RustFS volume
+  # above is still empty until its role converge). Protect both during the soak;
+  # drop this entry after MinIO is decommissioned post-cutover.
+  "rpool/data/subvol-107-disk-1":
+    use_template: database

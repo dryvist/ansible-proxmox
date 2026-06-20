@@ -34,6 +34,12 @@ syncoid_jobs:
   - name: "object-storage-disk1"
     source: "root@{{ proxmox_node_prefix }}1:rpool/data/subvol-202000-disk-1"
     target: "bulk/replica/{{ proxmox_node_prefix }}1/subvol-202000-disk-1"
+  # MinIO (vmid 107) data volume — the CURRENT live splunk-addons store during the
+  # MinIO->RustFS migration soak (holds the real app tarballs today). Same pull
+  # pattern as the object-storage job above; drop after MinIO decommission.
+  - name: "minio-disk1"
+    source: "root@{{ proxmox_node_prefix }}1:rpool/data/subvol-107-disk-1"
+    target: "bulk/replica/{{ proxmox_node_prefix }}1/subvol-107-disk-1"
 
 # Layer-1 protection (local ZFS snapshots via sanoid) for the warm-standby
 # database namespace. Recursive so any bulk/databases/<instance> child inherits
