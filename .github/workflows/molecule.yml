@@ -4,6 +4,10 @@ name: Molecule Test
 on:
   push:
     branches: [main]
+  # Callable so the upstream-revalidate listener can re-run role tests when
+  # terraform-proxmox cuts a release; manual trigger for ad-hoc runs.
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
