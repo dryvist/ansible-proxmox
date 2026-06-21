@@ -1,0 +1,27 @@
+---
+# Re-run role tests when an upstream source-of-truth repo (terraform-proxmox)
+# cuts a release. Triggered in real time via repository_dispatch
+# (event_type=upstream-released), fanned out by terraform-proxmox's release
+# workflow.
+#
+# ponytail: this repo has no inventory data-contract workflow, so it re-runs
+# molecule (roles against a MOCK inventory) — lower fidelity than the
+# apps/splunk listeners, which hit _data-contract.yml against the real schema.
+# If a _data-contract.yml lands here later, repoint `uses:` at it.
+#
+# Security: client_payload.* (sender-controlled) is not interpolated anywhere
+# here — this listener only calls a local reusable workflow with no inputs.
+name: Upstream Revalidate
+
+on:
+  repository_dispatch:
+    types: [upstream-released]
+
+permissions:
+  contents: read
+
+jobs:
+  revalidate:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/molecule.yml
