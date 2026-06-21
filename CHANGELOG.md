@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.30.0](https://github.com/dryvist/ansible-proxmox/compare/v1.29.1...v1.30.0) (2026-06-21)
+
+
+### Features
+
+* **backup:** protect object-storage data volume via sanoid+syncoid ([#296](https://github.com/dryvist/ansible-proxmox/issues/296)) ([ec23db7](https://github.com/dryvist/ansible-proxmox/commit/ec23db7568b6ba571eb4cb1cc7f17a5897f90b94))
+
 ## [1.29.1](https://github.com/dryvist/ansible-proxmox/compare/v1.29.0...v1.29.1) (2026-06-18)
 
 
