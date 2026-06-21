@@ -16,3 +16,19 @@ sanoid_datasets:
     use_template: critical
   "rpool/data/vm-200-disk-2":
     use_template: critical
+  # Object-storage (RustFS) data volume — the `splunk-addons` bucket (Splunkbase
+  # app tarballs + manifest). subvol-202000-disk-1 is the 100G mp0 (/srv/object-
+  # storage); disk-0 is the 8G rootfs, Ansible-reproducible, so not snapshotted.
+  # The bucket itself has object-versioning on, so this layer is volume-level DR
+  # (corruption / ransomware / fat-finger rm), not app-version history. The
+  # `database` template = daily cadence + long tail (monthly12 / yearly3); the
+  # store changes ~weekly, so hourly snapshots would be pure churn.
+  "rpool/data/subvol-202000-disk-1":
+    use_template: database
+  # MinIO (vmid 107) data volume — the CURRENT live splunk-addons store during the
+  # MinIO->RustFS migration soak. subvol-107-disk-1 is the 100G /opt/minio mount and
+  # holds the actual app tarballs + manifest TODAY (the object-storage/RustFS volume
+  # above is still empty until its role converge). Protect both during the soak;
+  # drop this entry after MinIO is decommissioned post-cutover.
+  "rpool/data/subvol-107-disk-1":
+    use_template: database
