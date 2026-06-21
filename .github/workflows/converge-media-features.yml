@@ -3,14 +3,16 @@
 # After terraform-proxmox recreates the bare download-vpn shell it fires a
 # repository_dispatch (event_type: rebuild-download-vpn) at this repo. The
 # media_lxc_features role re-applies the host bind-mounts, /dev/net/tun, and
-# keyctl over root@pam (the BPG API token cannot) — REQUIRED before the app
-# converge, since WireGuard cannot start without /dev/net/tun. On success this
-# dispatches the final hop at ansible-proxmox-apps.
+# keyctl over the privileged Proxmox SSH user (the BPG API token cannot) —
+# REQUIRED before the app converge, since WireGuard cannot start without
+# /dev/net/tun. On success this dispatches the final hop at ansible-proxmox-apps.
 #
-# Requires a self-hosted runner ([self-hosted, Linux]) with Nix and the Doppler
-# token (project iac-conf-mgmt, config prd — provides the root@pam SSH key) in
-# its environment, plus the synced tofu_inventory.json (load_tofu.yml). See
-# dryvist/terraform-proxmox docs/REBUILD.md for the full prerequisites.
+# Requires a self-hosted runner ([self-hosted, Linux]) with Nix and a Doppler
+# service token (repo/org secret DOPPLER_TOKEN). The token is config-scoped, so
+# it alone resolves the Proxmox SSH key + API credentials — the project/config
+# names are derived from it and never appear in this file. Also requires the
+# synced tofu_inventory.json (load_tofu.yml). See dryvist/terraform-proxmox
+# docs/REBUILD.md for the full prerequisites.
 name: Converge media LXC features
 
 "on":
@@ -27,20 +29,28 @@ concurrency:
 
 jobs:
   converge:
-    name: Apply media_lxc_features (root@pam)
+    name: Apply media LXC features
     runs-on: [self-hosted, Linux]
     timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # run-ansible.sh loads the Doppler-provided SSH key into ssh-agent (never to
-      # disk) and runs the play; the media_lxc_features tag scopes it to the
-      # root@pam-only container features (mounts, /dev/net/tun, keyctl).
+      # Service token is config-scoped, so project/config are derived from it and
+      # never appear here. inject-env-vars exposes the Proxmox SSH key + API
+      # credentials to the following step's environment.
+      - name: Fetch Doppler secrets
+        uses: dopplerhq/secrets-fetch-action@451892f16195f9ac360e1a5bcbf0b5fd0e957534 # v2.0.0
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          inject-env-vars: true
+
+      # run-ansible.sh loads the SSH key into ssh-agent (never to disk) and runs
+      # the play; the media_lxc_features tag scopes it to the privileged-user-only
+      # container features (mounts, /dev/net/tun, keyctl).
       - name: Apply media LXC features
         run: >-
           nix develop --command
-          doppler run -p iac-conf-mgmt -c prd --
           ./scripts/run-ansible.sh playbooks/site.yml --tags media_lxc_features
 
   dispatch:
