@@ -54,7 +54,7 @@ doppler run -- ansible-playbook playbooks/site.yml
 - **Swap management**: Configures swappiness and ZFS swap devices
 - **Monitoring setup**: Installs sysstat, atop, and crash-monitor
 
-Note: All playbooks use `doppler run` to inject secrets (SSH credentials, API tokens) from the Doppler `iac-conf-mgmt` project.
+Note: All playbooks use `doppler run` to inject secrets (SSH credentials, API tokens) from your Doppler config.
 
 ## Development Environment
 
