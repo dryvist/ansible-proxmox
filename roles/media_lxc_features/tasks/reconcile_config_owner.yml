@@ -40,10 +40,13 @@
     # Explicit owner_uid/owner_gid take precedence; otherwise use the live `id`
     # lookups. `_resolved` gates the chown: true when an explicit id pair is given
     # OR both lookups succeeded with non-empty output (app user installed).
+    # `| trim` guards the `| int` downstream: any stray whitespace (CRLF, padding)
+    # in pct-exec output would otherwise make `| int` silently return 0 and chown
+    # the dataset to the wrong (base-offset) owner instead of failing loud.
     media_lxc_features_cfg_in_uid: >-
-      {{ media_cfg_mp.owner_uid | default(media_lxc_features_cfg_owner_uid.stdout | default('')) }}
+      {{ media_cfg_mp.owner_uid | default(media_lxc_features_cfg_owner_uid.stdout | default('')) | trim }}
     media_lxc_features_cfg_in_gid: >-
-      {{ media_cfg_mp.owner_gid | default(media_lxc_features_cfg_owner_gid.stdout | default('')) }}
+      {{ media_cfg_mp.owner_gid | default(media_lxc_features_cfg_owner_gid.stdout | default('')) | trim }}
     media_lxc_features_cfg_resolved: >-
       {{
         (media_cfg_mp.owner_uid is defined and media_cfg_mp.owner_gid is defined)
