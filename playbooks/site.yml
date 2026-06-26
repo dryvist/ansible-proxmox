@@ -22,7 +22,7 @@
         idrac_power_action: "on"
       when:
         - pve_power_managed | default(false) | bool
-        - idrac_power_autocycle | bool
+        - idrac_power_autocycle | default(true) | bool
       tags:
         - idrac_power
 
@@ -170,6 +170,6 @@
         idrac_power_action: "off"
       when:
         - pve_power_managed | default(false) | bool
-        - idrac_power_autocycle | bool
+        - idrac_power_autocycle | default(true) | bool
       tags:
         - idrac_power
