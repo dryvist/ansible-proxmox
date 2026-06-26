@@ -34,6 +34,6 @@ node_scheduled_wake_bmc_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"
 
 # Targets to wake (empty => the role is inert). Each entry:
 #   - name: <node>            # target node name (used for unit naming)
-#     bmc_ip: "{{ ... }}"     # target BMC address (from env/SOPS, never committed)
+#     bmc_host: "{{ ... }}"   # target BMC address — FQDN preferred (env/SOPS, never committed)
 #     on_calendar: [...]      # optional per-target schedule override
 node_scheduled_wake_targets: []

@@ -5,7 +5,7 @@
 # and comes up only for its backup windows:
 #   - WAKE: the always-on controller (see pve1 host_vars node_scheduled_wake_
 #     targets) issues an IPMI power-on twice a day. The BMC address comes from the
-#     environment (Doppler PVE3_BMC_IP) — never committed.
+#     environment (Doppler PVE3_BMC_HOSTNAME, FQDN preferred) — never committed.
 #   - REPLICATE: on boot, the syncoid role runs the PULL jobs below once
 #     (syncoid_trigger: boot). The wall-clock cron is the WRONG trigger here — it
 #     would never fire inside a short power-on window.
@@ -16,7 +16,7 @@
 # pve_power_managed also lets a manual site.yml run power-cycle pve3 for
 # maintenance (the idrac_power auto-cycle bookends).
 pve_power_managed: true
-idrac_power_bmc_ip: "{{ lookup('env', 'PVE3_BMC_IP') | default('', true) }}"
+idrac_power_bmc_host: "{{ lookup('env', 'PVE3_BMC_HOSTNAME') | default('', true) }}"
 node_auto_poweroff_enabled: true
 syncoid_trigger: boot
 syncoid_boot_poweroff_on_complete: true

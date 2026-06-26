@@ -41,7 +41,7 @@ Each `node_scheduled_wake_targets` entry:
 ```yaml
 node_scheduled_wake_targets:
   - name: <node>                       # target node name (unit naming)
-    bmc_ip: "{{ lookup('env', 'X') }}" # BMC address (env/SOPS — never committed)
+    bmc_host: "{{ lookup('env', 'X') }}" # BMC address — FQDN preferred (env/SOPS, never committed)
     on_calendar:                       # optional per-target schedule override
       - "*-*-* 03:00:00"
       - "*-*-* 15:00:00"

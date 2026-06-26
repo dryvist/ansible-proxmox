@@ -42,4 +42,4 @@ sanoid_datasets:
 # primary. Default schedule (03:00 + 15:00) lives in the role defaults.
 node_scheduled_wake_targets:
   - name: pve3
-    bmc_ip: "{{ lookup('env', 'PVE3_BMC_IP') | default('', true) }}"
+    bmc_host: "{{ lookup('env', 'PVE3_BMC_HOSTNAME') | default('', true) }}"
