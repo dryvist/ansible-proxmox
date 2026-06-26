@@ -6,16 +6,11 @@
 
   vars:
     # Stand in for the tofu inventory's service -> vmid resolution that
-    # playbooks/load_tofu.yml injects on a real host. Uses the NEW 6-digit
-    # Media-node VMID mapping (703040 plex, 736030 seerr, 715240 sonarr,
-    # 715340 radarr, 725140 download-vpn) so converge proves the role follows
-    # a renumber with no change to the service-keyed feature map.
-    media_lxc_features_service_vmids_from_tofu:
-      plex: 703040
-      seerr: 736030
-      sonarr: 715240
-      radarr: 715340
-      download-vpn: 725140
+    # playbooks/load_tofu.yml injects on a real host. The fixture
+    # (media_lxc_features_test_service_vmids) is defined ONCE in molecule.yml and
+    # holds arbitrary ids — never the real production VMIDs — so converge proves
+    # the role follows ANY renumber with no change to the service-keyed map.
+    media_lxc_features_service_vmids_from_tofu: "{{ media_lxc_features_test_service_vmids }}"
 
   roles:
     # Under Docker the role short-circuits every `pct`/blockinfile task AND
