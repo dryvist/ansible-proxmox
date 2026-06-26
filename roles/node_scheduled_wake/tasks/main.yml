@@ -10,6 +10,25 @@
 # verify the contract); the ipmitool install, daemon-reload, and timer enable are
 # skipped under Docker, matching the node_auto_poweroff / sanoid pattern.
 
+# Fail loud at converge time if a target's BMC address is empty/undefined (e.g.
+# its env var is unset). Otherwise the unit renders `ipmitool -H` with no host
+# and the wake fails silently at runtime, when nobody is watching. Mirrors the
+# idrac_power role's bmc_host guard.
+- name: Assert each wake target has a non-empty bmc_host
+  ansible.builtin.assert:
+    that:
+      - item.bmc_host | default('') | trim | length > 0
+    fail_msg: >-
+      node_scheduled_wake target '{{ item.name }}' has an empty/undefined
+      bmc_host — check the BMC address env var (e.g. PVE3_BMC_HOSTNAME) is set.
+  loop: "{{ node_scheduled_wake_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - node_scheduled_wake_enabled | bool
+  tags:
+    - node_scheduled_wake
+
 - name: Ensure ipmitool is installed (the controller issues the IPMI power-on)
   ansible.builtin.apt:
     name: ipmitool
@@ -88,16 +107,24 @@
 - name: Reload systemd before enabling the timers
   ansible.builtin.meta: flush_handlers
 
-- name: Enable and start each wake timer
+# Drive enabled/state off the flag (not gated on it) so flipping the feature
+# off actively stops + disables the timers instead of leaving previously
+# enabled ones running — otherwise a disabled controller would keep waking the
+# DR node. The units are still on disk (render is enabled-gated), so systemd can
+# act on them either way.
+- name: Set each wake timer's enabled/state from the feature flag
   ansible.builtin.systemd:
     name: "node-scheduled-wake-{{ item.name }}.timer"
-    enabled: true
-    state: started
+    enabled: "{{ node_scheduled_wake_enabled | bool }}"
+    state: "{{ 'started' if (node_scheduled_wake_enabled | bool) else 'stopped' }}"
   loop: "{{ node_scheduled_wake_targets }}"
   loop_control:
     label: "{{ item.name }}"
+  # Tolerate the disable path acting on a unit that was never rendered (the
+  # render task is enabled-gated): stopping a non-existent timer is a no-op, not
+  # an error.
+  failed_when: false
   when:
-    - node_scheduled_wake_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - node_scheduled_wake
