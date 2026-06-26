@@ -46,50 +46,71 @@
           - not (media_lxc_features_map['plex'].tun | bool)
         fail_msg: "plex feature contract did not resolve as expected"
 
-    - name: Assert seerr gets keyctl only, no bind-mounts, no tun
+    - name: Assert seerr persists only its own config dataset (no shared /data mount)
       ansible.builtin.assert:
         that:
-          - media_lxc_features_map['seerr'].mounts | default([]) | length == 0
+          - media_lxc_features_map['seerr'].mounts | length == 1
+          - media_lxc_features_map['seerr'].mounts[0].src == '/bulk/appdata/seerr'
+          - media_lxc_features_map['seerr'].mounts[0].dst == '/opt/seerr/config'
+          # seerr's Docker `node` has no named LXC user — owned by raw uid/gid 1000.
+          - media_lxc_features_map['seerr'].mounts[0].owner_uid | int == 1000
+          - media_lxc_features_map['seerr'].mounts[0].owner_gid | int == 1000
           - media_lxc_features_map['seerr'].keyctl | bool
           - not (media_lxc_features_map['seerr'].tun | bool)
         fail_msg: "seerr feature contract did not resolve as expected"
 
-    - name: Assert sonarr/radarr get the single unified data mount, no keyctl, no tun
+    - name: Assert sonarr/radarr get the unified data mount plus their appdata config mount
       ansible.builtin.assert:
         that:
-          - media_lxc_features_map['sonarr'].mounts | length == 1
+          - media_lxc_features_map['sonarr'].mounts | length == 2
           - media_lxc_features_map['sonarr'].mounts[0].src == '/bulk/data'
           - media_lxc_features_map['sonarr'].mounts[0].dst == '/data'
-          - media_lxc_features_map['radarr'].mounts | length == 1
+          - media_lxc_features_map['sonarr'].mounts[1].src == '/bulk/appdata/sonarr'
+          - media_lxc_features_map['sonarr'].mounts[1].dst == '/var/lib/sonarr'
+          - media_lxc_features_map['sonarr'].mounts[1].owner_user == 'sonarr'
+          - media_lxc_features_map['radarr'].mounts | length == 2
           - media_lxc_features_map['radarr'].mounts[0].src == '/bulk/data'
           - media_lxc_features_map['radarr'].mounts[0].dst == '/data'
+          - media_lxc_features_map['radarr'].mounts[1].src == '/bulk/appdata/radarr'
+          - media_lxc_features_map['radarr'].mounts[1].dst == '/var/lib/radarr'
+          - media_lxc_features_map['radarr'].mounts[1].owner_user == 'radarr'
           - not (media_lxc_features_map['sonarr'].keyctl | bool)
           - not (media_lxc_features_map['radarr'].keyctl | bool)
           - not (media_lxc_features_map['sonarr'].tun | bool)
           - not (media_lxc_features_map['radarr'].tun | bool)
         fail_msg: "sonarr/radarr feature contract did not resolve as expected"
 
-    - name: Assert download-vpn gets the single unified data mount, keyctl, and tun
+    - name: Assert download-vpn gets the data mount plus qbittorrent + prowlarr config mounts, keyctl, tun
       ansible.builtin.assert:
         that:
-          - media_lxc_features_map['download-vpn'].mounts | length == 1
+          - media_lxc_features_map['download-vpn'].mounts | length == 3
           - media_lxc_features_map['download-vpn'].mounts[0].src == '/bulk/data'
           - media_lxc_features_map['download-vpn'].mounts[0].dst == '/data'
+          - media_lxc_features_map['download-vpn'].mounts[1].src == '/bulk/appdata/qbittorrent'
+          - media_lxc_features_map['download-vpn'].mounts[1].dst == '/home/qbittorrent'
+          - media_lxc_features_map['download-vpn'].mounts[1].owner_user == 'qbittorrent'
+          - media_lxc_features_map['download-vpn'].mounts[2].src == '/bulk/appdata/prowlarr'
+          - media_lxc_features_map['download-vpn'].mounts[2].dst == '/var/lib/prowlarr'
+          # Prowlarr runs as the qbittorrent user (download_vpn_user), so both
+          # config mounts in this container share that owner.
+          - media_lxc_features_map['download-vpn'].mounts[2].owner_user == 'qbittorrent'
           - media_lxc_features_map['download-vpn'].keyctl | bool
           - media_lxc_features_map['download-vpn'].tun | bool
         fail_msg: "download-vpn feature contract did not resolve as expected"
 
-    - name: Assert every mounted service shares the SAME dataset (hardlink contract)
+    - name: Assert every shared /data mount uses the SAME dataset (hardlink contract)
       ansible.builtin.assert:
         that:
-          # qBittorrent + the *arrs can only hardlink within one dataset, so
-          # every declared mount across all services must share one source.
+          # qBittorrent + the *arrs can only hardlink within one dataset, so every
+          # shared-library (/data) mount must share one source. App-private
+          # /bulk/appdata/<app> config mounts are exempt — per-app, never hardlinked.
           - >-
             media_lxc_features_map | dict2items
             | map(attribute='value.mounts') | map('default', [])
-            | flatten | map(attribute='src') | unique | list
+            | flatten | selectattr('dst', 'eq', '/data')
+            | map(attribute='src') | unique | list
             == ['/bulk/data']
-        fail_msg: "all mounted media services must share the single /bulk/data dataset"
+        fail_msg: "all /data media mounts must share the single /bulk/data dataset"
 
     - name: Assert the tun device numbers are the TUN/TAP allocation (10:200)
       ansible.builtin.assert:
@@ -144,23 +165,23 @@
     - name: Assert the join puts each service's features on its NEW vmid
       ansible.builtin.assert:
         that:
-          # NEW: 703040 plex (single data mount, no keyctl, no tun)
+          # NEW: 703040 plex (unified data mount + persistent appdata, no keyctl, no tun)
           - "'703040' in media_lxc_features_verify_resolved"
-          - media_lxc_features_verify_resolved['703040'].mounts | length == 1
+          - media_lxc_features_verify_resolved['703040'].mounts | length == 2
           - media_lxc_features_verify_resolved['703040'].mounts[0].dst == '/data'
           - not (media_lxc_features_verify_resolved['703040'].keyctl | bool)
           - not (media_lxc_features_verify_resolved['703040'].tun | bool)
-          # NEW: 736030 seerr (keyctl only, no mounts, no tun)
-          - media_lxc_features_verify_resolved['736030'].mounts | length == 0
+          # NEW: 736030 seerr (own config mount, keyctl, no tun)
+          - media_lxc_features_verify_resolved['736030'].mounts | length == 1
           - media_lxc_features_verify_resolved['736030'].keyctl | bool
           - not (media_lxc_features_verify_resolved['736030'].tun | bool)
-          # NEW: 715240 sonarr / 715340 radarr (single data mount, no keyctl, no tun)
-          - media_lxc_features_verify_resolved['715240'].mounts | length == 1
-          - media_lxc_features_verify_resolved['715340'].mounts | length == 1
+          # NEW: 715240 sonarr / 715340 radarr (data mount + appdata config mount, no keyctl, no tun)
+          - media_lxc_features_verify_resolved['715240'].mounts | length == 2
+          - media_lxc_features_verify_resolved['715340'].mounts | length == 2
           - not (media_lxc_features_verify_resolved['715240'].keyctl | bool)
           - not (media_lxc_features_verify_resolved['715340'].tun | bool)
-          # NEW: 725140 download-vpn (single data mount + keyctl + tun)
-          - media_lxc_features_verify_resolved['725140'].mounts | length == 1
+          # NEW: 725140 download-vpn (data + qbittorrent + prowlarr mounts + keyctl + tun)
+          - media_lxc_features_verify_resolved['725140'].mounts | length == 3
           - media_lxc_features_verify_resolved['725140'].keyctl | bool
           - media_lxc_features_verify_resolved['725140'].tun | bool
         fail_msg: "service -> vmid join did not place features on the new vmids"

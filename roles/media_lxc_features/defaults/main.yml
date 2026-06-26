@@ -21,7 +21,11 @@
 #   mounts:     list of { src: <host path>, dst: <in-container path>, ro: <bool,
 #               default false>, owner_user: <optional in-container user that must
 #               OWN this host dataset — chowns src to that user's mapped host
-#               uid/gid; for app-private config dirs, vs the shared-GID /data> }
+#               uid/gid; for app-private config dirs, vs the shared-GID /data>,
+#               owner_uid/owner_gid: <optional explicit in-container uid:gid when
+#               the owner is a raw numeric id with no named user — e.g. seerr's
+#               Docker `node` (uid 1000). Same mapped-host chown as owner_user,
+#               but skips the name lookup. Use one of owner_user OR owner_uid> }
 #   keyctl:     bool — ensure features contains keyctl=1, MERGED into existing
 #               features (tofu-set nesting=1 is preserved, never dropped)
 #   tun:        bool — passthrough /dev/net/tun (char 10:200) into the container
@@ -30,7 +34,8 @@
 #               container. Without it, host GID 13000 falls below the unpriv map
 #               base (100000) and /data appears as nobody:nogroup inside —
 #               read-only to the container's `media` user. Set on every service
-#               that bind-mounts /data (all but seerr, which has no mount).
+#               that bind-mounts /data (all but seerr, which mounts only its own
+#               config dataset, not the shared /data).
 #
 # Only vmids that actually exist on the target host are acted on; absent vmids
 # are skipped (tofu may not have created them yet). All tasks are skipped
@@ -42,12 +47,26 @@
 # boundary). All mounts stay read-write (the role's existing convention; plex is
 # read-mostly by usage, not by mount flag).
 #
-# Plex additionally bind-mounts a PERSISTENT app-config dataset (bulk/appdata/plex)
-# over its home, so its identity (Preferences.xml machineIdentifier + claim +
-# publish) and watch-history DB survive a container restart OR rebuild instead of
-# living on the disposable rootfs. The whole home is mounted (no spaces in the
-# path, so the command-module mount task stays trivial); ownership is the plex
-# USER's mapped host id (owner_user), not the shared media GID.
+# EVERY media service additionally bind-mounts a PERSISTENT app-config dataset
+# (bulk/appdata/<service>) over the directory holding its database + settings, so
+# all of its own state survives a container restart OR rebuild instead of living
+# on the disposable rootfs. The app rebuilds itself from its own DB on startup —
+# no export/replay needed. What each persists:
+#   plex          /var/lib/plexmediaserver  identity (machineIdentifier + claim +
+#                                            publish) + watch-history DB
+#   sonarr        /var/lib/sonarr           sonarr.db (series, history, queue,
+#                                            blocklist) + config.xml
+#   radarr        /var/lib/radarr           radarr.db + config.xml
+#   download-vpn  /home/qbittorrent         qBittorrent prefs + .local/share BT_backup
+#                                            (active torrents / resume / seeding)
+#   download-vpn  /var/lib/prowlarr         prowlarr.db (indexers, private-tracker
+#                                            auth, app-sync links)
+#   seerr         /opt/seerr/config         settings.json + db.sqlite3 (users,
+#                                            requests, service registrations)
+# Ownership is the app's OWN mapped host id (owner_user, or owner_uid for seerr's
+# unnamed Docker uid 1000), not the shared media GID. WireGuard config lives at
+# /etc/wireguard (outside /home/qbittorrent), so the whole-home qBittorrent mount
+# is safe.
 media_lxc_features_map:
   plex:  # media streaming
     mounts:
@@ -56,26 +75,31 @@ media_lxc_features_map:
     keyctl: false
     tun: false
     data_idmap: true
-  seerr:  # request UI (Docker-in-LXC); no bind-mounts
-    mounts: []
+  seerr:  # request UI (Docker-in-LXC); config-only persistence, no /data mount
+    mounts:
+      - { src: /bulk/appdata/seerr, dst: /opt/seerr/config, owner_uid: 1000, owner_gid: 1000 }
     keyctl: true
     tun: false
     data_idmap: false
   sonarr:  # TV PVR
     mounts:
       - { src: /bulk/data, dst: /data }
+      - { src: /bulk/appdata/sonarr, dst: /var/lib/sonarr, owner_user: sonarr }
     keyctl: false
     tun: false
     data_idmap: true
   radarr:  # movie PVR
     mounts:
       - { src: /bulk/data, dst: /data }
+      - { src: /bulk/appdata/radarr, dst: /var/lib/radarr, owner_user: radarr }
     keyctl: false
     tun: false
     data_idmap: true
-  download-vpn:  # qBittorrent + Prowlarr behind Proton WireGuard
+  download-vpn:  # qBittorrent + Prowlarr behind Proton WireGuard (both run as the qbittorrent user)
     mounts:
       - { src: /bulk/data, dst: /data }
+      - { src: /bulk/appdata/qbittorrent, dst: /home/qbittorrent, owner_user: qbittorrent }
+      - { src: /bulk/appdata/prowlarr, dst: /var/lib/prowlarr, owner_user: qbittorrent }
     keyctl: true
     tun: true
     data_idmap: true
