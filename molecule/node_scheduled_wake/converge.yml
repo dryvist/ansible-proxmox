@@ -1,0 +1,22 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # Under Docker the ipmitool install, daemon-reload, and timer enable are
+  # skipped (ansible_virtualization_type == 'docker'); the unit + credentials
+  # files still render, so this proves the role templates a service + timer per
+  # target from the contract. Live IPMI power-on is validated on real hardware,
+  # not in molecule. A placeholder BMC IP (192.168.0.x per public-repo policy) is
+  # used since no real BMC is reachable in the container.
+  vars:
+    node_scheduled_wake_targets:
+      - name: dr-node
+        bmc_ip: "192.168.0.10"
+        on_calendar:
+          - "*-*-* 03:00:00"
+          - "*-*-* 15:00:00"
+
+  roles:
+    - role: node_scheduled_wake

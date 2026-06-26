@@ -1,0 +1,7 @@
+---
+# Reload systemd so it picks up the freshly written on-boot service unit. Skipped
+# under Docker (molecule), where systemd is not PID 1.
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'

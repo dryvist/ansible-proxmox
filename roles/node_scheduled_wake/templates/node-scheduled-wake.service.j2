@@ -1,0 +1,12 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Scheduled IPMI power-on of {{ item.name }} (offline-DR wake)
+Documentation=ansible role node_scheduled_wake
+
+[Service]
+Type=oneshot
+# Password comes from the root-only EnvironmentFile; ipmitool -E reads
+# $IPMITOOL_PASSWORD so it never appears on the command line or in `systemctl
+# cat`. `chassis power on` is idempotent — a no-op if the target is already on.
+EnvironmentFile=/etc/node-scheduled-wake/{{ item.name }}.env
+ExecStart=/usr/bin/ipmitool -I lanplus -H {{ item.bmc_ip }} -U {{ node_scheduled_wake_bmc_username }} -E chassis power on
