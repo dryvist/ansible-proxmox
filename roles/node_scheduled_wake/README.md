@@ -50,6 +50,17 @@ node_scheduled_wake_targets:
 Set `node_scheduled_wake_targets` only in the **controller's** host_vars so the
 role stays inert everywhere else.
 
+## Operational caveat: maintenance converges
+
+Once the woken node carries `syncoid_trigger: boot` + `node_auto_poweroff_on_complete`,
+**every** boot (including the power-on at the start of a `site.yml` maintenance
+run) triggers the on-boot replicate, which powers the node off on completion —
+so a converge can be cut short ~1 min in. Before a maintenance converge of such a
+node, hold it up: `systemctl mask node-auto-poweroff.service` on the target (the
+on-boot replicate's `OnSuccess=` then no-ops), and unmask when done. A
+site.yml-level fix (mask during the power-managed window, unmask before the
+explicit IPMI power-off) is tracked as a follow-up.
+
 ## Molecule
 
 Under Docker the ipmitool install, daemon-reload, and timer enable are skipped;
