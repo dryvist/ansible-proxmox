@@ -2,12 +2,15 @@
 # Chown one host config dataset to the MAPPED host uid/gid of its in-container
 # owner. Looped from configure_container.yml with:
 #   media_cfg_mp = a mount dict carrying { src: <host path>, owner_user: <name> }
+#                  OR { src: <host path>, owner_uid: <n>, owner_gid: <n> }
 #   media_ct     = { key: <vmid>, value: {...} }
 #
 # An unprivileged LXC maps in-container uid/gid N -> host (unpriv_base + N) on the
 # default offset, so the host dataset must be owned by that mapped pair for the
-# app user to read+write its config. The in-container ids are package-assigned,
-# so resolve them LIVE (never hardcode). Idempotent (stat then chown only on
+# app user to read+write its config. With `owner_user` the in-container ids are
+# package-assigned, so resolve them LIVE (never hardcode). With `owner_uid` the
+# owner is a raw numeric id with no named user inside the LXC (e.g. seerr's
+# Docker `node` = 1000) and is used directly. Idempotent (stat then chown only on
 # drift); non-fatal (skip cleanly when the user isn't installed yet — a fresh
 # build before the apps converge installs it; the dataset data is off the rootfs
 # and never at risk).
@@ -18,6 +21,7 @@
   register: media_lxc_features_cfg_owner_uid
   changed_when: false
   failed_when: false
+  when: media_cfg_mp.owner_user is defined
   tags:
     - media_lxc_features
 
@@ -27,6 +31,32 @@
   register: media_lxc_features_cfg_owner_gid
   changed_when: false
   failed_when: false
+  when: media_cfg_mp.owner_user is defined
+  tags:
+    - media_lxc_features
+
+- name: "Normalize the in-container owner id on {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    # Explicit owner_uid/owner_gid take precedence; otherwise use the live `id`
+    # lookups. `_resolved` gates the chown: true when an explicit id pair is given
+    # OR both lookups succeeded with non-empty output (app user installed).
+    # `| trim` guards the `| int` downstream: any stray whitespace (CRLF, padding)
+    # in pct-exec output would otherwise make `| int` silently return 0 and chown
+    # the dataset to the wrong (base-offset) owner instead of failing loud.
+    media_lxc_features_cfg_in_uid: >-
+      {{ media_cfg_mp.owner_uid | default(media_lxc_features_cfg_owner_uid.stdout | default('')) | trim }}
+    media_lxc_features_cfg_in_gid: >-
+      {{ media_cfg_mp.owner_gid | default(media_lxc_features_cfg_owner_gid.stdout | default('')) | trim }}
+    media_lxc_features_cfg_resolved: >-
+      {{
+        (media_cfg_mp.owner_uid is defined and media_cfg_mp.owner_gid is defined)
+        or (
+          (media_lxc_features_cfg_owner_uid.rc | default(1)) == 0
+          and (media_lxc_features_cfg_owner_gid.rc | default(1)) == 0
+          and (media_lxc_features_cfg_owner_uid.stdout | default('') | length) > 0
+          and (media_lxc_features_cfg_owner_gid.stdout | default('') | length) > 0
+        )
+      }}
   tags:
     - media_lxc_features
 
@@ -39,10 +69,7 @@
 
 - name: "Apply config-owner chown when resolved on {{ media_ct.key }}"
   when:
-    - media_lxc_features_cfg_owner_uid.rc == 0
-    - media_lxc_features_cfg_owner_gid.rc == 0
-    - media_lxc_features_cfg_owner_uid.stdout | length > 0
-    - media_lxc_features_cfg_owner_gid.stdout | length > 0
+    - media_lxc_features_cfg_resolved | bool
     - media_lxc_features_cfg_owner_stat.stat.exists | default(false)
   tags:
     - media_lxc_features
@@ -50,9 +77,9 @@
     - name: "Compute the mapped host owner on {{ media_ct.key }}"
       ansible.builtin.set_fact:
         media_lxc_features_cfg_host_uid: >-
-          {{ media_lxc_features_unpriv_base + (media_lxc_features_cfg_owner_uid.stdout | int) }}
+          {{ media_lxc_features_unpriv_base + (media_lxc_features_cfg_in_uid | int) }}
         media_lxc_features_cfg_host_gid: >-
-          {{ media_lxc_features_unpriv_base + (media_lxc_features_cfg_owner_gid.stdout | int) }}
+          {{ media_lxc_features_unpriv_base + (media_lxc_features_cfg_in_gid | int) }}
 
     - name: "Chown the host config dataset to its mapped owner on {{ media_ct.key }}"
       ansible.builtin.command:

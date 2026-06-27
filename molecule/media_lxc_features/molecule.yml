@@ -27,6 +27,17 @@ provisioner:
     group_vars:
       all:
         ansible_connection: docker
+        # SINGLE source for the test's service -> vmid fixture, inherited by both
+        # converge and verify (a vmid is therefore defined in exactly one place).
+        # These are ARBITRARY test ids — NEVER the real production VMIDs, which
+        # live only in deployment.json. Using arbitrary ids is precisely what
+        # proves the service-keyed feature map follows ANY renumber unchanged.
+        media_lxc_features_test_service_vmids:
+          plex: 90001
+          seerr: 90002
+          sonarr: 90003
+          radarr: 90004
+          download-vpn: 90005
 
 verifier:
   name: ansible

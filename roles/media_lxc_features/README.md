@@ -53,10 +53,10 @@ service, never a hardcoded VMID:
 | service | bind-mounts (host -> container) | keyctl | /dev/net/tun |
 | --- | --- | --- | --- |
 | plex | `/bulk/data`->`/data`, `/bulk/appdata/plex`->`/var/lib/plexmediaserver` | no | no |
-| seerr | (none) | yes | no |
-| sonarr | `/bulk/data`->`/data` | no | no |
-| radarr | `/bulk/data`->`/data` | no | no |
-| download-vpn | `/bulk/data`->`/data` | yes | yes |
+| seerr | `/bulk/appdata/seerr`->`/opt/seerr/config` | yes | no |
+| sonarr | `/bulk/data`->`/data`, `/bulk/appdata/sonarr`->`/var/lib/sonarr` | no | no |
+| radarr | `/bulk/data`->`/data`, `/bulk/appdata/radarr`->`/var/lib/radarr` | no | no |
+| download-vpn | `/bulk/data`->`/data`, `/bulk/appdata/qbittorrent`->`/home/qbittorrent`, `/bulk/appdata/prowlarr`->`/var/lib/prowlarr` | yes | yes |
 
 Every mounted service gets the unified `bulk/data` dataset -> `/data`. One
 dataset (replacing the old separate `downloads` + `media` datasets/mounts) is
@@ -64,11 +64,14 @@ what lets qBittorrent and the *arrs **hardlink** between `/data/torrents/*` and
 `/data/media/*` — hardlinks cannot cross dataset boundaries. All bind-mounts are
 **read-write** (no `ro=1`), the role's existing convention (plex is read-mostly
 by usage, not by mount flag). `/dev/net/tun` is char device **10:200** (verified
-on the primary node). Plex additionally gets a **persistent config mount** — see below.
+on the primary node). Every service additionally gets a **persistent config
+mount** — see below.
 
-A mount may carry `owner_user: <name>`. That marks an app-**private** config
-dataset that must be owned by the app *user* (not the shared `media` group), and
-the role chowns the host path to that user's mapped host uid/gid.
+A mount may carry `owner_user: <name>` (or `owner_uid`/`owner_gid` for an owner
+with no named user, e.g. seerr's Docker `node` uid 1000). That marks an
+app-**private** config dataset that must be owned by the app itself (not the
+shared `media` group), and the role chowns the host path to that owner's mapped
+host uid/gid.
 
 ## Shared data root (host side)
 
@@ -88,41 +91,53 @@ Hosts without the data root (no bulk pool, or `zfs_pools` not yet applied)
 skip these tasks entirely; the role never invents a plain directory on the
 root filesystem.
 
-## Plex config persistence (`bulk/appdata/plex`)
+## App config persistence (`bulk/appdata/<app>`)
 
-Plex stores its **identity + state** — `Preferences.xml` (the
-`machineIdentifier`, the plex.tv claim token, and the "publish to plex.tv" flag)
-and the library database (watch history) — under `/var/lib/plexmediaserver`. On
-a plain LXC that directory lives on the **disposable rootfs**, so a container
-**rebuild** wipes it: Plex comes back as a *brand-new server* (new identity →
-orphaned history + shares, a "sign in / set up again" prompt). To stop that, the
-plex service bind-mounts the dedicated **`bulk/appdata/plex`** dataset over
-`/var/lib/plexmediaserver`, so identity + history live **off the rootfs** and
-survive any restart **or** rebuild.
+Every media app keeps its **own database + settings** under a single config
+directory. On a plain LXC that directory lives on the **disposable rootfs**, so a
+container **rebuild** wipes it. To stop that, each service bind-mounts a dedicated
+**`bulk/appdata/<app>`** dataset over its config dir, so all of its state lives
+**off the rootfs** and survives any restart **or** rebuild. The app rebuilds
+itself from its own DB on startup — there is no export/replay step.
 
-- **Dataset**: `bulk/appdata` (parent) + `bulk/appdata/plex` are declared in
-  terraform-proxmox `node_storage` and realized by `zfs_pools`. `bulk/appdata` is
-  the home for app *config/state* (distinct from `bulk/databases`, which is for
-  database engines, and `bulk/data`, the re-acquirable media library).
+| service | config dir | what persists |
+| --- | --- | --- |
+| plex | `/var/lib/plexmediaserver` | identity (`machineIdentifier` + claim + publish) + watch-history DB |
+| sonarr | `/var/lib/sonarr` | `sonarr.db` (series, history, queue, blocklist) + `config.xml` |
+| radarr | `/var/lib/radarr` | `radarr.db` + `config.xml` |
+| download-vpn | `/home/qbittorrent` | qBittorrent prefs + `.local/share` `BT_backup` (active torrents / resume / seeding) |
+| download-vpn | `/var/lib/prowlarr` | `prowlarr.db` (indexers, private-tracker auth, app-sync links) |
+| seerr | `/opt/seerr/config` | `settings.json` + `db.sqlite3` (users, requests, registrations) |
+
+- **Dataset**: `bulk/appdata` (parent) + one `bulk/appdata/<app>` child per
+  service are declared in terraform-proxmox `node_storage` and realized by
+  `zfs_pools`. `bulk/appdata` is the home for app *config/state* (distinct from
+  `bulk/databases`, for database engines, and `bulk/data`, the re-acquirable
+  media library).
 - **Snapshots + DR**: `bulk/appdata` gets the **`critical`** sanoid template
-  (hourly point-in-time — right for constantly-changing watch progress) on the
-  always-on storage node, and a recursive syncoid pull to the offline-DR leg.
-  Both are configured in host_vars and cover every `bulk/appdata/<app>` child.
-- **Ownership**: the mount carries `owner_user: plex`. Plex's config is owned by
-  the `plex` *user*; the container leaves its UID map at the default offset, so
-  the role chowns the host dataset to `unpriv_base + <live in-container plex
-  uid/gid>` (resolved per container; the ids are package-assigned, never
-  hardcoded).
+  (hourly point-in-time — right for constantly-changing state) on the always-on
+  storage node, and a recursive syncoid pull to the offline-DR leg. Both are
+  configured in host_vars and cover every `bulk/appdata/<app>` child, so a new
+  child inherits hourly snapshots + DR with no extra config.
+- **Ownership**: each config mount carries `owner_user: <app>` (or
+  `owner_uid: 1000` for seerr's unnamed Docker `node`). The config is owned by the
+  app itself; the container leaves its UID map at the default offset, so the role
+  chowns the host dataset to `unpriv_base + <in-container uid/gid>` (resolved live
+  for named users; the ids are package-assigned, never hardcoded). qBittorrent and
+  Prowlarr both run as the `qbittorrent` user, so download-vpn's two config mounts
+  share that owner. WireGuard config lives at `/etc/wireguard` (outside
+  `/home/qbittorrent`), so the whole-home qBittorrent mount is safe.
 - **Fresh-build ordering caveat**: on a *from-scratch* shell this role runs
-  **before** the apps converge installs Plex, so `id plex` does not resolve yet
-  and the ownership chown is skipped (non-fatal). Run order on a new build is:
-  `media_lxc_features` (mount) → apps converge (installs Plex) →
+  **before** the apps converge installs each app, so `id <app>` does not resolve
+  yet and the ownership chown is skipped (non-fatal). Run order on a new build is:
+  `media_lxc_features` (mount) → apps converge (installs the apps) →
   `media_lxc_features` once more (ownership reconciles). The dataset **data** is
   never at risk — it lives outside the rootfs that the rebuild replaces.
-
-`bulk/appdata/<app>` is the correct future home for the Sonarr / Radarr /
-qBittorrent / Prowlarr configs too (same rootfs-only vulnerability) — add a
-second mount with `owner_user: <app>` per service to extend it.
+- **First cutover (existing live data)**: an app already running on the rootfs has
+  its current DB there, not yet on the empty dataset. Mounting the empty dataset
+  over it would hide that DB. Seed each `bulk/appdata/<app>` from the app's live
+  config **once** before the mount takes over (see the repo rollout notes); after
+  that the dataset is the source of truth and every future rebuild is safe.
 
 ### VMID resolution (renumber-proof)
 
