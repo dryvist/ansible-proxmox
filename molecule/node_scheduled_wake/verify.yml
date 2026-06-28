@@ -1,0 +1,40 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered service unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/node-scheduled-wake-dr-node.service
+      register: wake_service
+
+    - name: Read the rendered timer unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/node-scheduled-wake-dr-node.timer
+      register: wake_timer
+
+    - name: Read the rendered credentials EnvironmentFile
+      ansible.builtin.slurp:
+        src: /etc/node-scheduled-wake/dr-node.env
+      register: wake_env
+
+    - name: Assert the units rendered the expected contract
+      ansible.builtin.assert:
+        that:
+          - "'Type=oneshot' in (wake_service.content | b64decode)"
+          - "'chassis power on' in (wake_service.content | b64decode)"
+          - "'-H 192.168.0.10' in (wake_service.content | b64decode)"
+          - "'EnvironmentFile=/etc/node-scheduled-wake/dr-node.env' in (wake_service.content | b64decode)"
+          - "'OnCalendar=*-*-* 03:00:00' in (wake_timer.content | b64decode)"
+          - "'OnCalendar=*-*-* 15:00:00' in (wake_timer.content | b64decode)"
+          - "'Persistent=false' in (wake_timer.content | b64decode)"
+          - "'WantedBy=timers.target' in (wake_timer.content | b64decode)"
+          - "'IPMITOOL_PASSWORD=' in (wake_env.content | b64decode)"
+        fail_msg: "node_scheduled_wake units did not render the expected contract"
+
+    # The Docker-skip on the ipmitool install + daemon-reload + timer enable is
+    # proven by this converge succeeding (those tasks are guarded off, not
+    # failed). The unit contract is verified by the slurp assertions above —
+    # mirroring the node_auto_poweroff verifier.

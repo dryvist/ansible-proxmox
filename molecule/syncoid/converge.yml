@@ -5,9 +5,12 @@
   gather_facts: true
 
   vars:
-    # Pull model: this node is the target (pve2), pulling pve1 datasets.
-    # Package + cron are Docker-skipped; this proves the wrapper renders the
-    # expected syncoid invocations from the job contract.
+    # Pull model: this node is the target (an offline-DR leg), pulling source
+    # datasets. Package + cron + enable are Docker-skipped; this proves both the
+    # wrapper renders the expected syncoid invocations AND (boot trigger) the
+    # on-boot service unit renders with poweroff-on-complete from the contract.
+    syncoid_trigger: boot
+    syncoid_boot_poweroff_on_complete: true
     syncoid_jobs:
       - name: pve1-nas
         source: "root@pve1:rpool/data/nas"

@@ -32,7 +32,7 @@ ansible-galaxy collection install -r requirements.yml
 - `idrac_power_action: off` → graceful ACPI `chassis power soft` (if on), then
   polls until the BMC reports power off.
 - `idrac_power_action: status` (default) → query only, no change.
-- Skipped under Docker (molecule) and when `idrac_power_bmc_ip` is unset.
+- Skipped under Docker (molecule) and when `idrac_power_bmc_host` is unset.
 
 ## Variables
 
@@ -45,7 +45,7 @@ ansible-galaxy collection install -r requirements.yml
 | `idrac_power_boot_timeout` | `720` | Seconds to wait for SSH after power-on (old hardware boots slowly) |
 | `idrac_power_off_retries` | `60` | Poll budget (×10s ⇒ 10 min) for graceful off |
 | `idrac_power_username` / `_password` | `IDRAC_USERNAME` / `IDRAC_PASSWORD` env | BMC creds (no_log) |
-| `idrac_power_bmc_ip` | _(unset)_ | Per-host BMC address (host_vars / tofu) |
+| `idrac_power_bmc_host` | _(unset)_ | Per-host BMC address — FQDN preferred over IP (host_vars / env) |
 
 ## Usage
 

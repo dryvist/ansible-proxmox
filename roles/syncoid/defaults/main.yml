@@ -16,6 +16,24 @@ syncoid_cron_minute: 17
 # Set true to seed/refresh a normally-off DR node while it is up for a window;
 # the scheduled cron never fires on a node that is powered off at cron time.
 syncoid_run_now: false
+
+# How replication is triggered on this node:
+#   cron — a daily cron at syncoid_cron_hour:syncoid_cron_minute (always-on nodes)
+#   boot — a systemd oneshot that runs once each boot, for a normally-off DR node
+#          woken (node_scheduled_wake) for short windows where the wall-clock
+#          cron would never fire. Pairs with poweroff-on-complete below.
+syncoid_trigger: cron
+# Cap the on-boot run so a hung pull cannot keep a DR node powered up forever
+# (the node_auto_poweroff timer is the ultimate backstop). systemd TimeoutStartSec.
+syncoid_boot_timeout: "2h"
+# When syncoid_trigger == boot, chain to this unit via systemd OnSuccess=/
+# OnFailure= so the node powers OFF the moment the on-boot run finishes (success
+# OR failure). Reuses node_auto_poweroff's poweroff oneshot, so that role must be
+# enabled (node_auto_poweroff_enabled: true). Set false to leave the node up
+# after the boot run and rely only on the node_auto_poweroff timer.
+syncoid_boot_poweroff_on_complete: false
+syncoid_boot_oncomplete_unit: node-auto-poweroff.service
+
 # Integrate with sanoid: replicate existing sanoid snapshots instead of making
 # syncoid's own (--no-sync-snap), recurse the tree, stay quiet for cron.
 syncoid_default_options: "--recursive --no-sync-snap --quiet"

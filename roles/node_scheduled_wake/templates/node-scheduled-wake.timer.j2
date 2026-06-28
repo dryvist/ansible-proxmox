@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Scheduled IPMI power-on of {{ item.name }} (offline-DR wake)
+Documentation=ansible role node_scheduled_wake
+
+[Timer]
+{% for cal in item.on_calendar | default(node_scheduled_wake_on_calendar) %}
+OnCalendar={{ cal }}
+{% endfor %}
+# Persistent=false is deliberate: do NOT catch up a missed wake. If the
+# controller was down at the scheduled time, do not power the DR node on late —
+# wait for the next window.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

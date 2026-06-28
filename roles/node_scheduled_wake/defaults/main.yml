@@ -1,0 +1,39 @@
+---
+# node_scheduled_wake role defaults — power a normally-off node ON via IPMI on a
+# schedule.
+#
+# This is the WAKE counterpart to node_auto_poweroff (the SLEEP half). It runs on
+# an always-on CONTROLLER that can reach the BMC subnet and installs a systemd
+# timer + oneshot per target that issues `ipmitool ... chassis power on`. An
+# offline-DR node therefore wakes for its replication windows with no human and
+# no scheduled ansible run. Once up, the target runs its on-boot replication
+# (syncoid_trigger: boot) and powers itself back off on completion. Powering ON
+# needs the BMC (the OS cannot wake itself once off); powering OFF is the OS's
+# own job (node_auto_poweroff) — the mirror image of that role's contract.
+#
+# Inert by default: opt a controller in by setting node_scheduled_wake_targets in
+# its host_vars. ipmitool runs locally on the controller; the target may be off.
+# Skipped under Docker (molecule); the unit files still render so the contract is
+# verifiable in-container.
+
+node_scheduled_wake_enabled: true
+
+# Default wake schedule (systemd OnCalendar expressions, local time). Two windows
+# a day keep a normally-off DR node's replicas fresh while minimizing on-time.
+# Override per target with the target's `on_calendar` key.
+node_scheduled_wake_on_calendar:
+  - "*-*-* 03:00:00"
+  - "*-*-* 15:00:00"
+
+# BMC credentials for ipmitool — injected from the environment (Doppler), never
+# committed. Same source as the idrac_power role. The password reaches the unit
+# via a root-only EnvironmentFile (ipmitool -E reads $IPMITOOL_PASSWORD), so it
+# never appears on the command line or in `systemctl cat`.
+node_scheduled_wake_bmc_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
+node_scheduled_wake_bmc_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"
+
+# Targets to wake (empty => the role is inert). Each entry:
+#   - name: <node>            # target node name (used for unit naming)
+#     bmc_host: "{{ ... }}"   # target BMC address — FQDN preferred (env/SOPS, never committed)
+#     on_calendar: [...]      # optional per-target schedule override
+node_scheduled_wake_targets: []

@@ -22,3 +22,19 @@
           # failure isolation present so an offline source does not abort the run
           - "'FAILED (rc=' in syncoid_wrapper_text"
         fail_msg: "syncoid wrapper did not render the expected jobs"
+
+    - name: Read the rendered on-boot replication service (boot trigger)
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/syncoid-replicate-on-boot.service
+      register: syncoid_boot_service
+
+    - name: Assert the on-boot service renders the boot + poweroff-on-complete contract
+      ansible.builtin.assert:
+        that:
+          - "'Type=oneshot' in (syncoid_boot_service.content | b64decode)"
+          - "'ExecStart=/usr/local/bin/syncoid-replicate.sh' in (syncoid_boot_service.content | b64decode)"
+          - "'After=network-online.target zfs.target zfs-mount.service' in (syncoid_boot_service.content | b64decode)"
+          - "'OnSuccess=node-auto-poweroff.service' in (syncoid_boot_service.content | b64decode)"
+          - "'OnFailure=node-auto-poweroff.service' in (syncoid_boot_service.content | b64decode)"
+          - "'WantedBy=multi-user.target' in (syncoid_boot_service.content | b64decode)"
+        fail_msg: "syncoid on-boot service did not render the expected contract"

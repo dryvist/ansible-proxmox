@@ -44,6 +44,7 @@ idrac_power_off_retries: 60
 idrac_power_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
 idrac_power_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"
 
-# Per-host BMC address. Set in host_vars/<node>.yml (e.g. from the tofu
-# rack_servers output / SOPS); there is no safe default.
-# idrac_power_bmc_ip: "10.x.x.x"
+# Per-host BMC address (ipmitool -H). FQDN preferred over an IP — a hostname
+# insulates this from BMC re-addressing (the golden rule). Set in host_vars/<node>
+# .yml from the environment (Doppler) / SOPS; never committed, no safe default.
+# idrac_power_bmc_host: "node-idrac.<subdomain>"

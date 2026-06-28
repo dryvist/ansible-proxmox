@@ -36,7 +36,10 @@
   tags:
     - syncoid
 
-- name: Schedule syncoid replication
+# Trigger == cron: the default for always-on nodes. A node that is powered off at
+# cron time never fires it — which is why a normally-off DR node uses trigger ==
+# boot below instead.
+- name: Schedule syncoid replication (cron trigger)
   ansible.builtin.cron:
     name: "syncoid-replicate"
     job: "/usr/local/bin/syncoid-replicate.sh"
@@ -45,6 +48,43 @@
     user: "{{ syncoid_user }}"
   when:
     - syncoid_enabled
+    - syncoid_trigger == 'cron'
+    - syncoid_jobs | length > 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
+# Trigger == boot: a oneshot that runs the wrapper once each boot, for a
+# normally-off DR node woken (node_scheduled_wake) for short windows where the
+# wall-clock cron would never fire. With syncoid_boot_poweroff_on_complete it
+# chains to the node_auto_poweroff oneshot so the node powers off when done. The
+# unit always renders (so molecule verifies the contract); enable is Docker-skipped.
+- name: Deploy the on-boot syncoid replication service (boot trigger)
+  ansible.builtin.template:
+    src: syncoid-replicate-on-boot.service.j2
+    dest: /etc/systemd/system/syncoid-replicate-on-boot.service
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - syncoid_enabled
+    - syncoid_trigger == 'boot'
+    - syncoid_jobs | length > 0
+  notify: Reload systemd daemon
+  tags:
+    - syncoid
+
+# Apply any pending daemon-reload now so the enable below acts on the fresh unit.
+- name: Reload systemd before enabling the on-boot service
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the on-boot syncoid replication service (boot trigger)
+  ansible.builtin.systemd:
+    name: syncoid-replicate-on-boot.service
+    enabled: true
+  when:
+    - syncoid_enabled
+    - syncoid_trigger == 'boot'
     - syncoid_jobs | length > 0
     - ansible_virtualization_type != 'docker'
   tags:

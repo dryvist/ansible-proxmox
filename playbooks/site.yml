@@ -22,7 +22,7 @@
         idrac_power_action: "on"
       when:
         - pve_power_managed | default(false) | bool
-        - idrac_power_autocycle | bool
+        - idrac_power_autocycle | default(true) | bool
       tags:
         - idrac_power
 
@@ -144,6 +144,16 @@
       tags:
         - node_auto_poweroff
 
+    # Scheduled IPMI power-ON (systemd timer) so a normally-off DR node wakes for
+    # its backup windows with no human and no scheduled ansible run — the wake
+    # half of the autonomous cycle (node_auto_poweroff is the sleep half). Runs on
+    # the always-on controller; inert unless a host sets node_scheduled_wake_
+    # targets (e.g. pve1 -> pve3). The woken node replicates on boot (syncoid
+    # boot trigger) and powers itself off on completion.
+    - role: node_scheduled_wake
+      tags:
+        - node_scheduled_wake
+
 # Gracefully power down the power-managed nodes at the very END of the run (the
 # offline-DR leg returns to off after its targets are seeded). NOTE: a mid-run
 # failure stops subsequent plays, so the node may be left powered on (re-run or
@@ -160,6 +170,6 @@
         idrac_power_action: "off"
       when:
         - pve_power_managed | default(false) | bool
-        - idrac_power_autocycle | bool
+        - idrac_power_autocycle | default(true) | bool
       tags:
         - idrac_power

@@ -1,0 +1,130 @@
+---
+# node_scheduled_wake tasks — render a systemd timer + oneshot service per wake
+# target on this (controller) node.
+#
+# The oneshot's ExecStart is a single `ipmitool ... chassis power on` (idempotent
+# — a no-op if the target is already on); there is no custom orchestration
+# script. The BMC password reaches the unit via a root-only 0600 EnvironmentFile
+# (ipmitool -E reads $IPMITOOL_PASSWORD) so it never lands on the command line or
+# in `systemctl cat`. The unit + credentials files always render (so molecule can
+# verify the contract); the ipmitool install, daemon-reload, and timer enable are
+# skipped under Docker, matching the node_auto_poweroff / sanoid pattern.
+
+# Fail loud at converge time if a target's BMC address is empty/undefined (e.g.
+# its env var is unset). Otherwise the unit renders `ipmitool -H` with no host
+# and the wake fails silently at runtime, when nobody is watching. Mirrors the
+# idrac_power role's bmc_host guard.
+- name: Assert each wake target has a non-empty bmc_host
+  ansible.builtin.assert:
+    that:
+      - item.bmc_host | default('') | trim | length > 0
+    fail_msg: >-
+      node_scheduled_wake target '{{ item.name }}' has an empty/undefined
+      bmc_host — check the BMC address env var (e.g. PVE3_BMC_HOSTNAME) is set.
+  loop: "{{ node_scheduled_wake_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - node_scheduled_wake_enabled | bool
+  tags:
+    - node_scheduled_wake
+
+- name: Ensure ipmitool is installed (the controller issues the IPMI power-on)
+  ansible.builtin.apt:
+    name: ipmitool
+    state: present
+    update_cache: true
+  when:
+    - node_scheduled_wake_enabled | bool
+    - node_scheduled_wake_targets | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - node_scheduled_wake
+
+- name: Create the node_scheduled_wake credentials directory
+  ansible.builtin.file:
+    path: /etc/node-scheduled-wake
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when:
+    - node_scheduled_wake_enabled | bool
+    - node_scheduled_wake_targets | length > 0
+  tags:
+    - node_scheduled_wake
+
+- name: Write the per-target BMC credentials EnvironmentFile
+  ansible.builtin.template:
+    src: wake-credentials.env.j2
+    dest: "/etc/node-scheduled-wake/{{ item.name }}.env"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ node_scheduled_wake_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  when:
+    - node_scheduled_wake_enabled | bool
+  tags:
+    - node_scheduled_wake
+
+- name: Render the wake service unit per target
+  ansible.builtin.template:
+    src: node-scheduled-wake.service.j2
+    dest: "/etc/systemd/system/node-scheduled-wake-{{ item.name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ node_scheduled_wake_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - node_scheduled_wake_enabled | bool
+  notify: Reload systemd daemon
+  tags:
+    - node_scheduled_wake
+
+- name: Render the wake timer unit per target
+  ansible.builtin.template:
+    src: node-scheduled-wake.timer.j2
+    dest: "/etc/systemd/system/node-scheduled-wake-{{ item.name }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ node_scheduled_wake_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - node_scheduled_wake_enabled | bool
+  notify: Reload systemd daemon
+  tags:
+    - node_scheduled_wake
+
+# Apply any pending daemon-reload now so the timers below enable against the
+# freshly written units (handlers otherwise run only at end of play).
+- name: Reload systemd before enabling the timers
+  ansible.builtin.meta: flush_handlers
+
+# Drive enabled/state off the flag (not gated on it) so flipping the feature
+# off actively stops + disables the timers instead of leaving previously
+# enabled ones running — otherwise a disabled controller would keep waking the
+# DR node. The units are still on disk (render is enabled-gated), so systemd can
+# act on them either way.
+- name: Set each wake timer's enabled/state from the feature flag
+  ansible.builtin.systemd:
+    name: "node-scheduled-wake-{{ item.name }}.timer"
+    enabled: "{{ node_scheduled_wake_enabled | bool }}"
+    state: "{{ 'started' if (node_scheduled_wake_enabled | bool) else 'stopped' }}"
+  loop: "{{ node_scheduled_wake_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  # Tolerate the disable path acting on a unit that was never rendered (the
+  # render task is enabled-gated): stopping a non-existent timer is a no-op, not
+  # an error.
+  failed_when: false
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - node_scheduled_wake
