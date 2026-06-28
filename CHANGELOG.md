@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.33.0](https://github.com/dryvist/ansible-proxmox/compare/v1.32.0...v1.33.0) (2026-06-28)
+
+
+### Features
+
+* **backup:** autonomous DR-node wake → replicate → sleep cycle ([#301](https://github.com/dryvist/ansible-proxmox/issues/301)) ([ea5d16f](https://github.com/dryvist/ansible-proxmox/commit/ea5d16fe1c5931cbf430e6a62ccd82fd5251809a))
+
 ## [1.32.0](https://github.com/dryvist/ansible-proxmox/compare/v1.31.0...v1.32.0) (2026-06-27)
 
 
