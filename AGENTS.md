@@ -28,7 +28,7 @@ configured by `ansible-proxmox-apps` and `ansible-splunk`.
 ### Upstream inventory (read-only consumer)
 
 `terraform-proxmox` provisions the hosts and publishes the inventory this repo
-consumes (`inventory/load_tofu.yml`). This repo **never reads `deployment.json`**;
+consumes (`playbooks/load_tofu.yml`). This repo **never reads `deployment.json`**;
 the published inventory is the source of truth, fetched fresh with no
 authoritative local copy. The upstream desired-state's ACID single-writer
 contract is documented once at
