@@ -1,5 +1,5 @@
 # {{ ansible_managed }}
-{% if ntp_prefer_gateway | default(false) | bool and ansible_default_ipv4.gateway is defined and ansible_default_ipv4.gateway %}
+{% if ntp_prefer_gateway | default(false) | bool and ansible_default_ipv4 is defined and ansible_default_ipv4.gateway is defined and ansible_default_ipv4.gateway %}
 # Primary: the network core (gateway) on this host's subnet, derived at runtime
 # -- never hardcoded. Falls back to the pools below if it is unreachable.
 server {{ ansible_default_ipv4.gateway }} iburst prefer
