@@ -135,9 +135,19 @@ itself from its own DB on startup — there is no export/replay step.
   never at risk — it lives outside the rootfs that the rebuild replaces.
 - **First cutover (existing live data)**: an app already running on the rootfs has
   its current DB there, not yet on the empty dataset. Mounting the empty dataset
-  over it would hide that DB. Seed each `bulk/appdata/<app>` from the app's live
-  config **once** before the mount takes over (see the repo rollout notes); after
-  that the dataset is the source of truth and every future rebuild is safe.
+  over it would hide that DB. The role handles this **automatically and safely**:
+  - It **stats every host mount source first** and only applies a bind-mount whose
+    source already exists. A missing `bulk/appdata/<app>` dataset (zfs_pools not yet
+    run) is warned and **skipped**, never `pct`-auto-created as an empty dir over a
+    live config.
+  - For each app-config mount it then runs a **one-time seed** (`seed_config_dataset.yml`):
+    if the dataset exists but is empty and the in-container config dir is populated
+    and the mount is not yet applied, it streams the live config dir into the
+    dataset **before** the mount is set. Guarded to run exactly once — once the
+    dataset is non-empty (or the mount is present) it is a no-op forever.
+  - Order on a first cutover: zfs_pools (creates the dataset) → media_lxc_features
+    (seed → mount → ownership reconcile → restart). The app restarts onto the
+    seeded dataset; every future rebuild then persists with no manual step.
 
 ### VMID resolution (renumber-proof)
 
