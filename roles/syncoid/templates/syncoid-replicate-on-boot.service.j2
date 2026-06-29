@@ -4,6 +4,15 @@ Description=Pull ZFS replication on boot (offline-DR window)
 Documentation=ansible role syncoid
 Wants=network-online.target
 After=network-online.target zfs.target zfs-mount.service
+{% if syncoid_boot_poweroff_on_complete | bool %}
+# Power the node off the moment replication completes — success OR failure — so a
+# normally-off DR node is up only for boot + replication. Reuses the
+# node_auto_poweroff poweroff oneshot (that role must be enabled). OnSuccess= and
+# OnFailure= are [Unit]-section directives; systemd silently ignores them (logging
+# "Unknown key ... in section [Service]") if placed under [Service].
+OnSuccess={{ syncoid_boot_oncomplete_unit }}
+OnFailure={{ syncoid_boot_oncomplete_unit }}
+{% endif %}
 
 [Service]
 Type=oneshot
@@ -11,13 +20,6 @@ Type=oneshot
 # node_auto_poweroff timer is the ultimate backstop.
 TimeoutStartSec={{ syncoid_boot_timeout }}
 ExecStart=/usr/local/bin/syncoid-replicate.sh
-{% if syncoid_boot_poweroff_on_complete | bool %}
-# Power the node off the moment replication completes — success OR failure — so a
-# normally-off DR node is up only for boot + replication. Reuses the
-# node_auto_poweroff poweroff oneshot (that role must be enabled).
-OnSuccess={{ syncoid_boot_oncomplete_unit }}
-OnFailure={{ syncoid_boot_oncomplete_unit }}
-{% endif %}
 
 [Install]
 WantedBy=multi-user.target
