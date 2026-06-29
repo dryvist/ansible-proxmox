@@ -19,8 +19,18 @@
     owner: root
     group: root
     mode: "0644"
-    validate: chronyd -p -f %s
   notify: Restart chrony
+  tags:
+    - ntp
+
+# chrony's AppArmor profile on Debian 13 forbids chronyd from reading the
+# template module's temp file under /root/.ansible/tmp, so an inline `validate:`
+# aborts with "Permission denied". Validate the deployed file in place instead
+# (its path is within chronyd's allowed profile), preserving the syntax check.
+- name: Validate the deployed chrony configuration
+  ansible.builtin.command: "chronyd -p -f {{ ntp_config_file }}"
+  changed_when: false
+  check_mode: false
   tags:
     - ntp
 
