@@ -42,8 +42,8 @@
     media_lxc_features_src_exists: >-
       {{
         dict(
-          (media_lxc_features_src_stats.results | map(attribute='media_src_path') | list)
-          | zip(media_lxc_features_src_stats.results | map(attribute='stat.exists') | list)
+          (media_lxc_features_src_stats.results | default([]) | map(attribute='media_src_path') | list)
+          | zip(media_lxc_features_src_stats.results | default([]) | map(attribute='stat.exists') | list)
         )
       }}
   tags:
