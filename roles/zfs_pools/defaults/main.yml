@@ -3,7 +3,7 @@
 #
 # Consumes the per-node ZFS storage declaration produced by terraform-proxmox
 # (ansible_inventory.node_storage[<node>]) and injected onto the host by
-# inventory/load_tofu.yml as `zfs_pools_from_tofu`.
+# playbooks/load_tofu.yml as `zfs_pools_from_tofu`.
 
 zfs_pools_config: >-
   {{

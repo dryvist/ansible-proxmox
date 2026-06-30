@@ -1,7 +1,7 @@
 ---
 # NAS Storage role defaults
 
-# OpenTofu-sourced NAS config injected by inventory/load_tofu.yml.
+# OpenTofu-sourced NAS config injected by playbooks/load_tofu.yml.
 nas_storage_config: >-
   {{
     nas_storage_from_tofu

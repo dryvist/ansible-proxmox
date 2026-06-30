@@ -51,7 +51,7 @@ doppler run -- ansible-playbook playbooks/site.yml
 ```
 
 > **`--limit` must include `localhost`.** The inventory loader
-> (`inventory/load_tofu.yml`) runs on `hosts: localhost` and populates the
+> (`playbooks/load_tofu.yml`) runs on `hosts: localhost` and populates the
 > dynamic inventory via `add_host`. Running with `--limit <group>` but **not**
 > `localhost` silently skips the loader, so no hosts are added and every play
 > reports "no hosts matched". Use `--limit <group>,localhost`, or invoke via

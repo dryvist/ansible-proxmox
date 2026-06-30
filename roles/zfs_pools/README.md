@@ -41,7 +41,7 @@ zfs_pools_devices:
 
 ## Inputs
 
-`inventory/load_tofu.yml` injects `zfs_pools_from_tofu` onto each
+`playbooks/load_tofu.yml` injects `zfs_pools_from_tofu` onto each
 proxmox host: the `node_storage[<node>]` entry for that host, keyed by the
 host's `proxmox_node_name` (defaults to the inventory hostname). Set
 `proxmox_node_name` in `host_vars` when the inventory name differs from the
