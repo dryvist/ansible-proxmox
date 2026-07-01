@@ -40,7 +40,7 @@ sops exec-env secrets.sops.yml 'doppler run -- ./scripts/run-ansible.sh playbook
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `nas_storage_config` | OpenTofu host_services.nas | Source config injected by `inventory/load_tofu.yml` |
+| `nas_storage_config` | OpenTofu host_services.nas | Source config injected by `playbooks/load_tofu.yml` |
 | `nas_storage_group_name` | `nas` | Unix/Samba group for shared access |
 | `nas_storage_managed_users` | `[]` | Declarative Samba-backed service accounts |
 | `nas_storage_shares` | single `nas` share fallback | Declarative Samba shares |
