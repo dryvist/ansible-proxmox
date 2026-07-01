@@ -1,0 +1,113 @@
+---
+# ONE-TIME cutover seed of a single app-config dataset. Looped from
+# configure_container.yml with:
+#   media_cfg_mp = a mount dict carrying owner_user/owner_uid (an app-private
+#                  config mount, e.g. bulk/appdata/sonarr -> /var/lib/sonarr)
+#   media_ct     = { key: <vmid>, value: {...} }
+#
+# An app-config bind-mount shadows the in-container config dir with the host
+# dataset. On the FIRST cutover the dataset is empty, so without this step the
+# mount would hide the app's live database and the app would re-initialise (data
+# loss). This copies the live config dir into the dataset BEFORE the mount is
+# applied, but ONLY when ALL of:
+#   - the mount is NOT already applied (first cutover only), AND
+#   - the host dataset EXISTS and is EMPTY (zfs_pools realised it; nothing seeded
+#     yet — a non-empty dataset is already the source of truth, never overwritten), AND
+#   - the in-container config dir EXISTS and is non-empty (there is state to save).
+# After the first successful run the dataset is non-empty, so this is a no-op
+# forever. tar preserves the tree + perms (incl. SQLite -wal/-shm for crash-safe
+# recovery on the post-mount restart); reconcile_config_owner maps ownership after
+# the mount. All tasks are skipped under Docker (the role's top-level guard).
+
+- name: "Seed: detect whether this config mount is already applied on {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    # True once the bind-mount for this dst is present in `pct config` — then the
+    # cutover already happened and we must never touch the dataset again.
+    media_lxc_features_seed_mounted: >-
+      {{
+        media_lxc_features_cfg.stdout_lines | default([])
+        | select('search', ',mp=' ~ media_cfg_mp.dst ~ '$') | list | length > 0
+      }}
+  tags:
+    - media_lxc_features
+
+- name: "Seed: list the current host config-dataset contents on {{ media_ct.key }}"
+  ansible.builtin.find:
+    paths: "{{ media_cfg_mp.src }}"
+    file_type: any
+    hidden: true
+  register: media_lxc_features_seed_dst_content
+  when:
+    - not media_lxc_features_seed_mounted
+    - media_lxc_features_src_exists[media_cfg_mp.src] | default(false)
+  tags:
+    - media_lxc_features
+
+- name: "Seed: read the container run state on {{ media_ct.key }}"
+  ansible.builtin.command:
+    cmd: "pct status {{ media_ct.key }}"
+  register: media_lxc_features_seed_status
+  changed_when: false
+  failed_when: false
+  when:
+    - not media_lxc_features_seed_mounted
+    - media_lxc_features_src_exists[media_cfg_mp.src] | default(false)
+  tags:
+    - media_lxc_features
+
+# FAIL-LOUD safety: if the dataset is empty and the container is NOT running, we
+# cannot read its config dir to seed it, yet the bind-mount below would still
+# apply and shadow the live config with emptiness (data loss). A stopped container
+# during this converge is anomalous (terraform starts the guests; the role runs
+# while they are up), so refuse rather than risk it. A non-empty dataset (already
+# seeded / steady state) is unaffected.
+- name: "Seed: refuse to mount an empty config dataset over a stopped container on {{ media_ct.key }}"
+  ansible.builtin.fail:
+    msg: >-
+      Container {{ media_ct.key }} is not running, so {{ media_cfg_mp.dst }} cannot
+      be read to seed the empty dataset {{ media_cfg_mp.src }}. Applying the mount
+      now would shadow the live config with emptiness and lose data. Start the
+      container and re-run (or seed {{ media_cfg_mp.src }} manually first).
+  when:
+    - not media_lxc_features_seed_mounted
+    - media_lxc_features_src_exists[media_cfg_mp.src] | default(false)
+    - (media_lxc_features_seed_dst_content.matched | default(0)) == 0
+    - "'status: running' not in (media_lxc_features_seed_status.stdout | default(''))"
+  tags:
+    - media_lxc_features
+
+- name: "Seed: detect whether the in-container config dir holds state on {{ media_ct.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      pct exec {{ media_ct.key }} --
+      sh -c 'test -d "{{ media_cfg_mp.dst }}" && [ -n "$(ls -A "{{ media_cfg_mp.dst }}" 2>/dev/null)" ]'
+  register: media_lxc_features_seed_src_populated
+  changed_when: false
+  failed_when: false
+  when:
+    - not media_lxc_features_seed_mounted
+    - media_lxc_features_src_exists[media_cfg_mp.src] | default(false)
+  tags:
+    - media_lxc_features
+
+- name: "Seed the config dataset from the live container dir on {{ media_ct.key }}"
+  # noqa: risky-shell-pipe command-instead-of-module
+  # One-time cutover copy: stream the container's config dir into the still-empty
+  # host dataset so the bind-mount below does not shadow the live database with
+  # emptiness. `set -o pipefail` so a failed `pct exec` fails the task instead of
+  # silently extracting an empty tar over the dataset.
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail &&
+      pct exec {{ media_ct.key }} -- tar -C "{{ media_cfg_mp.dst }}" -cf - . |
+      tar -C "{{ media_cfg_mp.src }}" -xf -
+    executable: /bin/bash
+  register: media_lxc_features_seed_run
+  when:
+    - not media_lxc_features_seed_mounted
+    - media_lxc_features_src_exists[media_cfg_mp.src] | default(false)
+    - (media_lxc_features_seed_dst_content.matched | default(0)) == 0
+    - (media_lxc_features_seed_src_populated.rc | default(1)) == 0
+  changed_when: true
+  tags:
+    - media_lxc_features
