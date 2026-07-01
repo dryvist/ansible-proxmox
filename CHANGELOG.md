@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.34.0](https://github.com/dryvist/ansible-proxmox/compare/v1.33.1...v1.34.0) (2026-07-01)
+
+
+### Features
+
+* **ntp:** prefer the network gateway as primary source; fix Debian 13 validate ([#318](https://github.com/dryvist/ansible-proxmox/issues/318)) ([21693b7](https://github.com/dryvist/ansible-proxmox/commit/21693b7293b014cd7fa8ee0456f729db0fbec0da))
+
 ## [1.33.1](https://github.com/dryvist/ansible-proxmox/compare/v1.33.0...v1.33.1) (2026-06-29)
 
 
