@@ -12,14 +12,37 @@
   tags:
     - ntp
 
-- name: Deploy chrony configuration
+# Stage the rendered config, validate it, then promote — so the live file is
+# replaced only after validation passes (transactional). An inline template
+# `validate:` cannot be used: chronyd validates with dropped privileges (the
+# _chrony user) and cannot read the template module's temp file under root-only
+# /root/.ansible/tmp. The staged file lives in chronyd's own config dir and is
+# world-readable (0644), so the privilege-dropped validator can read it.
+- name: Render the chrony configuration to a staging file
   ansible.builtin.template:
     src: chrony.conf.j2
-    dest: "{{ ntp_config_file }}"
+    dest: "{{ ntp_config_file }}.staged"
     owner: root
     group: root
     mode: "0644"
-    validate: chronyd -p -f %s
+  tags:
+    - ntp
+
+- name: Validate the staged chrony configuration
+  ansible.builtin.command: "chronyd -p -f {{ ntp_config_file }}.staged"
+  changed_when: false
+  check_mode: false
+  tags:
+    - ntp
+
+- name: Promote the validated chrony configuration
+  ansible.builtin.copy:
+    src: "{{ ntp_config_file }}.staged"
+    dest: "{{ ntp_config_file }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
   notify: Restart chrony
   tags:
     - ntp

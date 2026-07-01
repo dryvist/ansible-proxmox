@@ -1,16 +1,20 @@
 ---
 # NTP role defaults
 
-# Internal NTP servers to sync from. Rendered alongside ntp_pools so chrony
-# always has the public pool available as additional sources. Chrony picks
-# the best source by stratum and jitter — to *prefer* internal entries
-# strictly, include the `prefer` keyword in the entry itself (e.g.,
-# "192.168.0.10 iburst prefer"). Use this on clients to point at the
-# Proxmox stratum-2 servers; leave empty on the Proxmox hosts themselves.
+# Prefer the network core (this host's default gateway / router) as the primary
+# time source: rendered as `server <gateway> iburst prefer` from the
+# ansible_default_ipv4.gateway fact — derived at runtime, never hardcoded.
+# The pools below stay as fallback if the gateway is unreachable or not (yet)
+# serving NTP.
+ntp_prefer_gateway: true
+
+# Additional explicit NTP servers, rendered alongside the gateway and pools.
+# Each entry is a full chrony `server` line (e.g. "192.168.0.10 iburst prefer").
+# Normally empty — the gateway is the primary source.
 ntp_servers: []
 
-# Public NTP pool. Always rendered into chrony.conf alongside ntp_servers
-# so public sources stay reachable if internal stratum-2 servers go down.
+# Public NTP pool — always rendered as fallback sources so time sync survives
+# the gateway (or any internal source) being unreachable.
 ntp_pools:
   - "0.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
   - "1.debian.pool.ntp.org iburst minpoll 5 maxpoll 7"
