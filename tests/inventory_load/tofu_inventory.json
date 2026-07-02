@@ -1,5 +1,25 @@
 {
   "domain": "example.com",
+  "splunk_vm": {
+    "splunk": {
+      "ansible_connection": "ssh",
+      "hostname": "splunk-aio",
+      "ip": "192.168.0.200",
+      "node": "pve1",
+      "vmid": 90200
+    }
+  },
+  "containers": {
+    "object-storage": {
+      "ansible_connection": "community.proxmox.proxmox_pct_remote",
+      "hostname": "s3",
+      "ip": "192.168.0.20",
+      "node": "pve1",
+      "pool_id": "infrastructure",
+      "tags": ["container", "object-storage", "storage"],
+      "vmid": 902000
+    }
+  },
   "host_services": {
     "nas": {
       "zfs_dataset": "rpool/data/nas",

@@ -50,6 +50,11 @@ syncoid_jobs:
     target: "tank/replica/pve1/nas"
 ```
 
+Per-host identity (VMIDs, the source node) is derived at runtime from the S3
+tofu inventory injected by `playbooks/load_tofu.yml` — `splunk_vm_from_tofu` and
+`containers_from_tofu` (see `inventory/host_vars/pve{2,3}.yml`) — never
+hard-coded, so a VMID renumber flows through with no edit.
+
 ```bash
 doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags syncoid
 ```

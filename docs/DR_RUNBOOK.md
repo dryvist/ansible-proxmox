@@ -46,7 +46,7 @@ a primary node is lost.
 | --- | --- | --- | --- |
 | `bulk/replica/proxmox-1/vm-<id>-disk-0` | SIEM VM OS disk | Warm | Whole-disk zvol |
 | `bulk/replica/proxmox-1/vm-<id>-disk-2` | SIEM VM `/opt/splunk` | Warm | Config **and** indexes share this disk — see note |
-| `bulk/replica/proxmox-1/subvol-<id>-disk-1` | object-storage (RustFS/MinIO) | Warm | The app-tarball store |
+| `bulk/replica/proxmox-1/subvol-<id>-disk-1` | object-storage (RustFS) | Warm | The app-tarball store |
 | `bulk/replica/proxmox-2/databases` (recursive) | `bulk/databases` | Warm | Warm-standby DB namespace |
 | `bulk/replica/proxmox-2/appdata` (recursive) | `bulk/appdata` | Warm | App config/state (incl. media app identity) |
 
