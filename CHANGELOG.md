@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.34.2](https://github.com/dryvist/ansible-proxmox/compare/v1.34.1...v1.34.2) (2026-07-02)
+
+
+### Bug Fixes
+
+* point callers at renamed cc- reusable workflows ([d3daa9f](https://github.com/dryvist/ansible-proxmox/commit/d3daa9f30a71390e2287c72f98940e07c1e4b87e))
+
 ## [1.34.1](https://github.com/dryvist/ansible-proxmox/compare/v1.34.0...v1.34.1) (2026-07-01)
 
 
