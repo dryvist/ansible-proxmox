@@ -29,7 +29,7 @@ jobs:
     #   github.event.workflow_run.head_branch != 'main' &&
     #   github.event.workflow_run.head_repository.full_name == github.repository
     # --- END DISABLED ---
-    uses: dryvist/ai-workflows/.github/workflows/ci-fix.yml@main
+    uses: dryvist/ai-workflows/.github/workflows/cc-ci-fix.yml@main
     with:
       repo_context: "Ansible playbooks and roles for configuring Proxmox VE host"
       ci_structure: "ansible-lint.yml (Ansible Lint checks) + molecule.yml (Molecule Test integration tests)"
