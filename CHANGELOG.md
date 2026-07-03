@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.36.0](https://github.com/dryvist/ansible-proxmox/compare/v1.35.0...v1.36.0) (2026-07-03)
+
+
+### Features
+
+* add review-thread-resolver caller for instant bot-thread resolution ([#330](https://github.com/dryvist/ansible-proxmox/issues/330)) ([6ab0e1a](https://github.com/dryvist/ansible-proxmox/commit/6ab0e1ab80c4821ff20913957c1a23dc12196547))
+
 ## [1.35.0](https://github.com/dryvist/ansible-proxmox/compare/v1.34.3...v1.35.0) (2026-07-03)
 
 
