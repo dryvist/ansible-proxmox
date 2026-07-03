@@ -100,8 +100,8 @@
         - media_lxc_features
 
     # Root-only AMD GPU passthrough (/dev/dri + /dev/kfd) for the inference LXC
-    # (hermes-infer, vmid 167) — same root@pam-only contract as media_lxc_features.
-    # Runs after OpenTofu creates the shell, before ansible-proxmox-apps installs Ollama.
+    # (llm-fast) — same root@pam-only contract as media_lxc_features.
+    # Runs after OpenTofu creates the shell, before ansible-proxmox-apps installs llama.cpp.
     - role: lxc_gpu_features
       tags:
         - lxc_gpu_features

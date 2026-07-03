@@ -8,7 +8,7 @@
 # SSH, idempotently. Mirrors the media_lxc_features pattern exactly.
 #
 # Ordering: terraform-proxmox (shell) -> THIS role (devices) ->
-# ansible-proxmox-apps role: ollama (inference stack). See README.md.
+# ansible-proxmox-apps role: llama_cpp (inference stack). See README.md.
 #
 # Per-service shape:
 #   dri: bool — bind /dev/dri (card0 + renderD128, char major 226) for compute
@@ -19,7 +19,7 @@
 # needs no change here. Only vmids present on the host are acted on; every task
 # is skipped under Docker virtualization (molecule). No IPs, no secrets.
 lxc_gpu_features_map:
-  hermes-infer:  # Ollama + ROCm on the RX 6800 (privileged LXC)
+  llm-fast:  # llama.cpp + llama-swap + ROCm on the RX 6800 (privileged LXC)
     dri: true
     kfd: true
 
