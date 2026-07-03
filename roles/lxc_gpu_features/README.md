@@ -23,10 +23,10 @@ the download-vpn LXC).
 
 ## Ordering
 
-1. `terraform-proxmox` — creates `hermes-infer` (vmid 167) as a privileged shell.
+1. `terraform-proxmox` — creates `llm-fast` as a privileged shell.
 2. **this role** — binds `/dev/dri` (226) + `/dev/kfd` (235), reboots on change.
-3. `ansible-proxmox-apps` (role `ollama`) — installs Ollama + ROCm, adds the
-   service user to `render`/`video`, pulls Hermes 4.
+3. `ansible-proxmox-apps` (role `llama_cpp`) — installs llama.cpp + llama-swap +
+   ROCm, adds the service user to `render`/`video`, stages the GGUF models.
 
 ## What it writes
 
@@ -44,7 +44,7 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 
 | Var | Default | Purpose |
 | --- | --- | --- |
-| `lxc_gpu_features_map` | `{ hermes-infer: { dri: true, kfd: true } }` | Service → which device groups to bind |
+| `lxc_gpu_features_map` | `{ llm-fast: { dri: true, kfd: true } }` | Service → which device groups to bind |
 | `lxc_gpu_features_dri_major` | `226` | `/dev/dri` char major |
 | `lxc_gpu_features_kfd_major` | `235` | `/dev/kfd` char major |
 | `lxc_gpu_features_service_vmids` | from tofu inventory | Service → current vmid (auto) |
@@ -72,8 +72,9 @@ env -u DOPPLER_PROJECT -u DOPPLER_CONFIG -u DOPPLER_ENVIRONMENT doppler run -- \
   ./scripts/run-ansible.sh playbooks/site.yml --limit pve1 --tags lxc_gpu_features
 ```
 
-Verify the devices landed inside the container:
+Verify the devices landed inside the container (substitute the `llm-fast`
+vmid the tofu inventory resolved):
 
 ```bash
-pct exec 167 -- ls -l /dev/dri /dev/kfd
+pct exec <vmid> -- ls -l /dev/dri /dev/kfd
 ```
