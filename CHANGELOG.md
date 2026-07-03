@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.38.0](https://github.com/dryvist/ansible-proxmox/compare/v1.37.0...v1.38.0) (2026-07-03)
+
+
+### Features
+
+* add issue-backlog-sweep caller ([#337](https://github.com/dryvist/ansible-proxmox/issues/337)) ([6a06b95](https://github.com/dryvist/ansible-proxmox/commit/6a06b95316b0f274ae1adce5e0516a282f66da23))
+
 ## [1.37.0](https://github.com/dryvist/ansible-proxmox/compare/v1.36.0...v1.37.0) (2026-07-03)
 
 
