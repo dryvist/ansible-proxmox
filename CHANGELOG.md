@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.35.0](https://github.com/dryvist/ansible-proxmox/compare/v1.34.3...v1.35.0) (2026-07-03)
+
+
+### Features
+
+* add AI PR care caller (dep review + release highlights) ([#328](https://github.com/dryvist/ansible-proxmox/issues/328)) ([1fbc71f](https://github.com/dryvist/ansible-proxmox/commit/1fbc71fb10e769b2f2a2aad6ed8c407603cf5877))
+
 ## [1.34.3](https://github.com/dryvist/ansible-proxmox/compare/v1.34.2...v1.34.3) (2026-07-02)
 
 
