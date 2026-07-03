@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.37.0](https://github.com/dryvist/ansible-proxmox/compare/v1.36.0...v1.37.0) (2026-07-03)
+
+
+### Features
+
+* add cluster node pve4 to Proxmox inventory ([#332](https://github.com/dryvist/ansible-proxmox/issues/332)) ([1b2f06b](https://github.com/dryvist/ansible-proxmox/commit/1b2f06b14d063130012466764a84bfc24cfe8bd7))
+
 ## [1.36.0](https://github.com/dryvist/ansible-proxmox/compare/v1.35.0...v1.36.0) (2026-07-03)
 
 
