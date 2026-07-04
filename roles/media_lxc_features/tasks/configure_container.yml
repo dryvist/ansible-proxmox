@@ -135,6 +135,49 @@
     - media_lxc_features
 
 # ---------------------------------------------------------------------------
+# Prune orphaned bind-mount slots left behind when the mounts list SHRINKS
+# ---------------------------------------------------------------------------
+# Bind-mounts are POSITION-indexed: the loop above assigns mp0, mp1, ... by the
+# desired list's order. When that list shrinks (an entry removed), every slot at
+# an index >= the new length is orphaned — `pct set --mpN` rewrites the lower
+# slots but never deletes the now-surplus higher ones, leaving a stale duplicate
+# mount on the live container. Parse the mpN indices actually present and delete
+# any the (now shorter) desired list no longer reaches.
+- name: "Compute orphaned bind-mount slot indices on {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    media_lxc_features_stale_mp_idxs: >-
+      {{
+        media_lxc_features_cfg.stdout_lines
+        | select('match', '^mp[0-9]+:')
+        | map('regex_replace', '^mp([0-9]+):.*$', '\1')
+        | map('int')
+        | select('ge', media_ct.value.mounts | default([]) | list | length)
+        | list
+      }}
+  tags:
+    - media_lxc_features
+
+- name: "Delete orphaned bind-mount slots on {{ media_ct.key }}"
+  ansible.builtin.command:
+    cmd: "pct set {{ media_ct.key }} --delete mp{{ media_stale_mp_idx }}"
+  loop: "{{ media_lxc_features_stale_mp_idxs }}"
+  loop_control:
+    loop_var: media_stale_mp_idx
+    label: "{{ media_ct.key }} delete mp{{ media_stale_mp_idx }}"
+  changed_when: true
+  notify: Restart changed media containers
+  register: media_lxc_features_mp_del
+  tags:
+    - media_lxc_features
+
+- name: "Record orphaned bind-mount deletion for container {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"
+  when: media_lxc_features_mp_del is defined and media_lxc_features_mp_del.changed
+  tags:
+    - media_lxc_features
+
+# ---------------------------------------------------------------------------
 # Per-app config-mount ownership (mounts carrying `owner_user` or `owner_uid`)
 # ---------------------------------------------------------------------------
 # A mount whose host dataset must be owned by an in-container app owner (e.g. the
