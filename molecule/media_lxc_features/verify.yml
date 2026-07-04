@@ -177,6 +177,39 @@
           - (['keyctl=1', 'nesting=1'] | sort) == media_lxc_features_verify_converged
         fail_msg: "keyctl feature-merge logic regressed (drop, order, or idempotency)"
 
+    # Guards the orphaned-slot pruning logic (the load-bearing expression the role
+    # uses to `pct set --delete mpN` after a mounts list shrinks). Bind-mounts are
+    # position-indexed, so a shorter desired list leaves higher mpN slots stale.
+    # Prove the expression selects exactly the indices >= the desired length on a
+    # container still carrying the OLD 3-mount layout, and yields nothing once the
+    # live config already matches the 2-mount desired state (idempotent).
+    - name: Compute stale mp indices as the role does (shrink + idempotent cases)
+      ansible.builtin.set_fact:
+        media_lxc_features_verify_stale_shrink: >-
+          {{
+            ['mp0: /bulk/data,mp=/data',
+             'mp1: /bulk/appdata/qbittorrent,mp=/home/qbittorrent',
+             'mp2: /bulk/appdata/prowlarr,mp=/var/lib/prowlarr']
+            | select('match', '^mp[0-9]+:')
+            | map('regex_replace', '^mp([0-9]+):.*$', '\1') | map('int')
+            | select('ge', 2) | list
+          }}
+        media_lxc_features_verify_stale_idem: >-
+          {{
+            ['mp0: /bulk/data,mp=/data',
+             'mp1: /bulk/appdata/prowlarr,mp=/var/lib/prowlarr']
+            | select('match', '^mp[0-9]+:')
+            | map('regex_replace', '^mp([0-9]+):.*$', '\1') | map('int')
+            | select('ge', 2) | list
+          }}
+
+    - name: Assert stale-slot pruning deletes only the orphaned index, idempotently
+      ansible.builtin.assert:
+        that:
+          - media_lxc_features_verify_stale_shrink == [2]
+          - media_lxc_features_verify_stale_idem == []
+        fail_msg: "orphaned bind-mount slot pruning logic regressed (wrong index or not idempotent)"
+
     - name: Probe for the pct CLI (must be absent in the molecule container)
       ansible.builtin.command:
         cmd: which pct

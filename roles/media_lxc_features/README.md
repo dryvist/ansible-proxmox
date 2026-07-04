@@ -56,7 +56,7 @@ service, never a hardcoded VMID:
 | seerr | `/bulk/appdata/seerr`->`/opt/seerr/config` | yes | no |
 | sonarr | `/bulk/data`->`/data`, `/bulk/appdata/sonarr`->`/var/lib/sonarr` | no | no |
 | radarr | `/bulk/data`->`/data`, `/bulk/appdata/radarr`->`/var/lib/radarr` | no | no |
-| download-vpn | `/bulk/data`->`/data`, `/bulk/appdata/qbittorrent`->`/home/qbittorrent`, `/bulk/appdata/prowlarr`->`/var/lib/prowlarr` | yes | yes |
+| download-vpn | `/bulk/data`->`/data`, `/bulk/appdata/prowlarr`->`/var/lib/prowlarr` | yes | yes |
 
 Every mounted service gets the unified `bulk/data` dataset -> `/data`. One
 dataset (replacing the old separate `downloads` + `media` datasets/mounts) is
@@ -105,7 +105,6 @@ itself from its own DB on startup — there is no export/replay step.
 | plex | `/var/lib/plexmediaserver` | identity (`machineIdentifier` + claim + publish) + watch-history DB |
 | sonarr | `/var/lib/sonarr` | `sonarr.db` (series, history, queue, blocklist) + `config.xml` |
 | radarr | `/var/lib/radarr` | `radarr.db` + `config.xml` |
-| download-vpn | `/home/qbittorrent` | qBittorrent prefs + `.local/share` `BT_backup` (active torrents / resume / seeding) |
 | download-vpn | `/var/lib/prowlarr` | `prowlarr.db` (indexers, private-tracker auth, app-sync links) |
 | seerr | `/opt/seerr/config` | `settings.json` + `db.sqlite3` (users, requests, registrations) |
 
@@ -123,10 +122,9 @@ itself from its own DB on startup — there is no export/replay step.
   `owner_uid: 1000` for seerr's unnamed Docker `node`). The config is owned by the
   app itself; the container leaves its UID map at the default offset, so the role
   chowns the host dataset to `unpriv_base + <in-container uid/gid>` (resolved live
-  for named users; the ids are package-assigned, never hardcoded). qBittorrent and
-  Prowlarr both run as the `qbittorrent` user, so download-vpn's two config mounts
-  share that owner. WireGuard config lives at `/etc/wireguard` (outside
-  `/home/qbittorrent`), so the whole-home qBittorrent mount is safe.
+  for named users; the ids are package-assigned, never hardcoded). download-vpn's
+  Prowlarr config mount is owned by the `qbittorrent` user (both processes run
+  under that user).
 - **Fresh-build ordering caveat**: on a *from-scratch* shell this role runs
   **before** the apps converge installs each app, so `id <app>` does not resolve
   yet and the ownership chown is skipped (non-fatal). Run order on a new build is:
