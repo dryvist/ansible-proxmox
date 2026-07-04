@@ -46,6 +46,16 @@ lxc_features_containers:
   "110": "nesting=1,keyctl=1,fuse=1" # mailpit - Docker SMTP relay
   "111": "nesting=1,keyctl=1,fuse=1" # ntfy - Docker push notifications
   "130": "nesting=1,keyctl=1,fuse=1" # mssql - Docker MS SQL Server
+  # LLM fabric Docker-in-LXC guests (tofu creates them nesting-only; keyctl
+  # and fuse are root@pam-only, so this role applies them post-create)
+  "405000": "nesting=1,keyctl=1,fuse=1" # langfuse - Docker LLM observability
+  "505000": "nesting=1,keyctl=1,fuse=1" # open-webui - Docker chat UI
+  "505010": "nesting=1,keyctl=1,fuse=1" # dify - Docker LLMOps platform
+  "505020": "nesting=1,keyctl=1,fuse=1" # langflow - Docker flow builder
+  "512000": "nesting=1,keyctl=1,fuse=1" # llm-router-1 - Docker LiteLLM proxy
+  "512010": "nesting=1,keyctl=1,fuse=1" # llm-router-2 - Docker LiteLLM proxy
+  "512020": "nesting=1,keyctl=1,fuse=1" # llm-router-3 - Docker LiteLLM proxy
+  "514000": "nesting=1,keyctl=1,fuse=1" # qdrant - Docker vector database
 
 # Common packages to install
 common_packages:
