@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.3](https://github.com/dryvist/ansible-proxmox/compare/v1.39.2...v1.39.3) (2026-07-04)
+
+
+### Bug Fixes
+
+* normalize issue-auto-resolve to the proven template and enable the loop ([#344](https://github.com/dryvist/ansible-proxmox/issues/344)) ([308069e](https://github.com/dryvist/ansible-proxmox/commit/308069e7aa848ef3163f071ee9b7bf4cf3ea3155))
+
 ## [1.39.2](https://github.com/dryvist/ansible-proxmox/compare/v1.39.1...v1.39.2) (2026-07-04)
 
 
