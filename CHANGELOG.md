@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.1](https://github.com/dryvist/ansible-proxmox/compare/v1.39.0...v1.39.1) (2026-07-04)
+
+
+### Bug Fixes
+
+* **lxc_features:** per-node vmid filter + LLM fabric docker guests ([#340](https://github.com/dryvist/ansible-proxmox/issues/340)) ([417c113](https://github.com/dryvist/ansible-proxmox/commit/417c11319febd2a2fadb87bb3773f9fe840d8ad4))
+
 ## [1.39.0](https://github.com/dryvist/ansible-proxmox/compare/v1.38.0...v1.39.0) (2026-07-03)
 
 
