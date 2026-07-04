@@ -3,9 +3,20 @@
 # Uses pct set to apply feature flags (nesting, keyctl, fuse, etc.)
 # Requires stopping the container, so will briefly interrupt service.
 
+# The map in group_vars spans the whole cluster; only apply entries whose
+# container actually lives on this node (same pattern as lxc_gpu_features).
+- name: Build the set of vmids present on this host
+  ansible.builtin.command: pct list
+  register: lxc_features_pct_list
+  changed_when: false
+  when: lxc_features_containers | length > 0
+
 - name: Configure LXC container features
   ansible.builtin.include_tasks: configure_container.yml
   loop: "{{ lxc_features_containers | dict2items }}"
   loop_control:
     label: "Container {{ item.key }}: {{ item.value }}"
-  when: lxc_features_containers | length > 0
+  when:
+    - lxc_features_containers | length > 0
+    - item.key in (lxc_features_pct_list.stdout_lines | default([])
+        | map('trim') | map('split') | map('first') | list)
