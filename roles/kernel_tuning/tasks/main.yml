@@ -192,3 +192,73 @@
             backup: true
           notify: Refresh proxmox boot
           when: kernel_tuning_cmdline_stat.stat.exists
+
+# ------------------------------------------------------------------------------
+# Zen1 C6 hard-lock erratum mitigation (opt-in via kernel_tuning_disable_zen_c6)
+# ------------------------------------------------------------------------------
+- name: Disable Zen1 C6 idle states via MSR
+  when: kernel_tuning_disable_zen_c6 | bool
+  block:
+    - name: Install msr-tools (rdmsr/wrmsr)
+      ansible.builtin.apt:
+        name: msr-tools
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Load the msr kernel module at boot
+      ansible.builtin.copy:
+        content: "msr\n"
+        dest: /etc/modules-load.d/msr.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Load the msr kernel module now
+      community.general.modprobe:
+        name: msr
+        state: present
+
+    - name: Deploy the zen-c6-disable oneshot unit
+      ansible.builtin.template:
+        src: zen-c6-disable.service.j2
+        dest: /etc/systemd/system/zen-c6-disable.service
+        owner: root
+        group: root
+        mode: "0644"
+      register: kernel_tuning_zen_c6_unit
+
+    - name: Enable and run zen-c6-disable
+      ansible.builtin.systemd:
+        name: zen-c6-disable
+        enabled: true
+        state: "{{ 'restarted' if kernel_tuning_zen_c6_unit.changed else 'started' }}"
+        daemon_reload: true
+
+    - name: Verify the package C6 enable bit is clear
+      ansible.builtin.command:
+        cmd: rdmsr -c 0xC0010292
+      register: kernel_tuning_pkg_c6
+      changed_when: false
+      # bit 32 set would mean package C6 is still enabled; trim first — a
+      # stray trailing newline would make int() silently return 0 and the
+      # verification would falsely pass.
+      failed_when: ((kernel_tuning_pkg_c6.stdout | trim | int(base=16)) // 4294967296) % 2 != 0
+  rescue:
+    - name: Fail loud — the C6 mitigation did not apply
+      ansible.builtin.fail:
+        msg: >-
+          kernel_tuning_disable_zen_c6 is enabled but the MSR mitigation could
+          not be applied/verified on this host. Do not run GPU or heavy loads
+          until this is resolved — the C6 erratum hard-locks the machine.
+
+# Reverse path: flipping the flag off must actually stop and disable the unit,
+# not just stop managing it. failed_when: false tolerates hosts where the unit
+# was never rendered.
+- name: Disable zen-c6-disable when the mitigation is turned off
+  ansible.builtin.systemd:
+    name: zen-c6-disable
+    enabled: false
+    state: stopped
+  failed_when: false
+  when: not (kernel_tuning_disable_zen_c6 | bool)

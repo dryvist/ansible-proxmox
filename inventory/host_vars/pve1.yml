@@ -43,3 +43,7 @@ sanoid_datasets:
 node_scheduled_wake_targets:
   - name: pve3
     bmc_host: "{{ lookup('env', 'PVE3_BMC_HOSTNAME') | default('', true) }}"
+
+# Clear the CPU C6-state enable MSR bits at boot (kernel_tuning role);
+# the cmdline max_cstate limit alone does not cover this idle state.
+kernel_tuning_disable_zen_c6: true

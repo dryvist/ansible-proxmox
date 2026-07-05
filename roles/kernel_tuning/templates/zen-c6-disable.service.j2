@@ -1,0 +1,25 @@
+{{ ansible_managed | comment }}
+# Zen1 C6 hard-lock erratum mitigation (managed by the kernel_tuning role).
+#
+# First-generation Zen parts can hard-lock the whole host when a core enters
+# the C6 idle state under certain power transients. processor.max_cstate=1 on
+# the kernel cmdline does NOT prevent package/core C6 entry on these parts, so
+# the enable bits are cleared directly in the AMD power-management MSRs at
+# boot (same registers the BIOS "Global C-State Control" toggle drives):
+#   0xC0010292 bit 32           — package C6 enable
+#   0xC0010296 bits 22, 14, 6   — core C6 enables (CCR2/CCR1/CCR0)
+[Unit]
+Description=Disable Zen1 core+package C6 idle states (hard-lock erratum)
+DefaultDependencies=no
+After=systemd-modules-load.service
+Before=sysinit.target
+ConditionVirtualization=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'v=$(rdmsr -c 0xC0010292) && wrmsr -a 0xC0010292 $((v & ~(1<<32)))'
+ExecStart=/bin/sh -c 'v=$(rdmsr -c 0xC0010296) && wrmsr -a 0xC0010296 $((v & ~((1<<22)|(1<<14)|(1<<6))))'
+
+[Install]
+WantedBy=sysinit.target
