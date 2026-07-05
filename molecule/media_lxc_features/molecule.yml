@@ -38,6 +38,7 @@ provisioner:
           sonarr: 90003
           radarr: 90004
           download-vpn: 90005
+          sortarr: 90006
 
 verifier:
   name: ansible
