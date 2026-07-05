@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.4](https://github.com/dryvist/ansible-proxmox/compare/v1.39.3...v1.39.4) (2026-07-05)
+
+
+### Bug Fixes
+
+* **media:** resolve appdata owner by the actual in-container user ([#347](https://github.com/dryvist/ansible-proxmox/issues/347)) ([6d7c261](https://github.com/dryvist/ansible-proxmox/commit/6d7c261c98ef2c4fdca844dc40aa52476986d27e))
+
 ## [1.39.3](https://github.com/dryvist/ansible-proxmox/compare/v1.39.2...v1.39.3) (2026-07-04)
 
 
