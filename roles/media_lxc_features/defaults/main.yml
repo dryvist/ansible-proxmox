@@ -80,14 +80,14 @@ media_lxc_features_map:
   sonarr:  # TV PVR
     mounts:
       - { src: /bulk/data, dst: /data }
-      - { src: /bulk/appdata/sonarr, dst: /var/lib/sonarr, owner_user: sonarr }
+      - { src: /bulk/appdata/sonarr, dst: /var/lib/sonarr, owner_user: media }
     keyctl: false
     tun: false
     data_idmap: true
   radarr:  # movie PVR
     mounts:
       - { src: /bulk/data, dst: /data }
-      - { src: /bulk/appdata/radarr, dst: /var/lib/radarr, owner_user: radarr }
+      - { src: /bulk/appdata/radarr, dst: /var/lib/radarr, owner_user: media }
     keyctl: false
     tun: false
     data_idmap: true
