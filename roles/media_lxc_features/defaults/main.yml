@@ -9,7 +9,7 @@
 # SSH, idempotently.
 #
 # The feature map is keyed by SERVICE NAME (plex, seerr, sonarr, radarr,
-# download-vpn) — NOT by raw VMID. Each service's current VMID is resolved at
+# download-vpn, sortarr) — NOT by raw VMID. Each service's current VMID is resolved at
 # run time from the tofu inventory (containers keyed by hostname, each with
 # a `vmid`), injected onto proxmox hosts by playbooks/load_tofu.yml as
 # `media_lxc_features_service_vmids_from_tofu`. A future VMID renumber needs
@@ -61,8 +61,12 @@
 #                                            auth, app-sync links)
 #   seerr         /opt/seerr/config         settings.json + db.sqlite3 (users,
 #                                            requests, service registrations)
+#   sortarr       /opt/sortarr/data         app config + cache (Sortarr calls
+#                                            Sonarr/Radarr/Plex over HTTP; no
+#                                            /data mount of its own)
 # Ownership is the app's OWN mapped host id (owner_user, or owner_uid for seerr's
-# unnamed Docker uid 1000), not the shared media GID.
+# unnamed Docker uid 1000, or sortarr's root uid 0 — its image has no
+# PUID/PGID support), not the shared media GID.
 media_lxc_features_map:
   plex:  # media streaming
     mounts:
@@ -98,6 +102,12 @@ media_lxc_features_map:
     keyctl: true
     tun: true
     data_idmap: true
+  sortarr:  # media-library insights dashboard (Docker-in-LXC); config-only persistence, no /data mount
+    mounts:
+      - { src: /bulk/appdata/sortarr, dst: /opt/sortarr/data, owner_uid: 0, owner_gid: 0 }
+    keyctl: true
+    tun: false
+    data_idmap: false
 
 # Service -> VMID resolution, sourced from the tofu inventory and injected
 # onto proxmox hosts by playbooks/load_tofu.yml. Defaults to {} when unset

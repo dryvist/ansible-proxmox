@@ -82,7 +82,7 @@
           - >-
             media_lxc_features_map | dict2items | selectattr('value.keyctl', 'defined')
             | selectattr('value.keyctl') | map(attribute='key') | sort | list
-            == ['download-vpn', 'seerr']
+            == ['download-vpn', 'seerr', 'sortarr']
         fail_msg: "tun/keyctl drifted from the services that require them"
 
     - name: Assert the tun device numbers are the TUN/TAP allocation (10:200)
