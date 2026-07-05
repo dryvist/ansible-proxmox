@@ -2,36 +2,40 @@
 # Host vars for pve1 (primary, always-on — currently the Splunk node).
 #
 # Layer-1 protection (local ZFS snapshots via sanoid) for the Splunk all-in-one
-# VM disks, so the snapshots exist for syncoid to pull (and as a rollback
-# point). vm-<id>-disk-<n> is Proxmox's default zvol naming, kept as-is. The
-# empty leftover disk-1 was removed; we snapshot the OS disk (0) and
-# /opt/splunk config+indexes (2). Whole-disk for now; the critical/volatile
-# SSD split is a tracked follow-up.
+# VM disks + the object-storage data volume, so the snapshots exist for syncoid
+# to pull (and as a rollback point). VMIDs are NEVER hard-coded: they resolve at
+# runtime from the S3 tofu inventory injected by load_tofu.yml
+# (splunk_vm_from_tofu / containers_from_tofu), so a renumber flows through with
+# no edit here. vm-<id>-disk-<n> / subvol-<id>-disk-<n> is Proxmox's default zvol
+# naming; the disk index is policy (which volume to protect).
+#
+# Splunk: snapshot the OS disk (0) and /opt/splunk config+indexes (2) with the
+# `critical` template. The empty leftover disk-1 is skipped. Whole-disk for now;
+# the critical/volatile SSD split is a tracked follow-up.
+#
+# Object-storage (RustFS): the `splunk-addons` bucket data volume
+# (subvol-<id>-disk-1 = the 100G mp0 /srv/object-storage); disk-0 is the 8G
+# rootfs, Ansible-reproducible, so not snapshotted. The bucket has
+# object-versioning on, so this layer is volume-level DR (corruption / ransomware
+# / fat-finger rm), not app-version history. The `database` template = daily
+# cadence + long tail (monthly12 / yearly3); the store changes ~weekly, so hourly
+# snapshots would be pure churn.
 #
 # NOTE (generalization, follow-up): this assumes Splunk runs on pve1. When the
 # layout is generalized (data-driven from splunk_vm_from_tofu across nodes),
 # this moves out of a per-host file. See docs design + follow-up issue.
-sanoid_datasets:
-  "rpool/data/vm-200-disk-0":
-    use_template: critical
-  "rpool/data/vm-200-disk-2":
-    use_template: critical
-  # Object-storage (RustFS) data volume — the `splunk-addons` bucket (Splunkbase
-  # app tarballs + manifest). subvol-202000-disk-1 is the 100G mp0 (/srv/object-
-  # storage); disk-0 is the 8G rootfs, Ansible-reproducible, so not snapshotted.
-  # The bucket itself has object-versioning on, so this layer is volume-level DR
-  # (corruption / ransomware / fat-finger rm), not app-version history. The
-  # `database` template = daily cadence + long tail (monthly12 / yearly3); the
-  # store changes ~weekly, so hourly snapshots would be pure churn.
-  "rpool/data/subvol-202000-disk-1":
-    use_template: database
-  # MinIO (vmid 107) data volume — the CURRENT live splunk-addons store during the
-  # MinIO->RustFS migration soak. subvol-107-disk-1 is the 100G /opt/minio mount and
-  # holds the actual app tarballs + manifest TODAY (the object-storage/RustFS volume
-  # above is still empty until its role converge). Protect both during the soak;
-  # drop this entry after MinIO is decommissioned post-cutover.
-  "rpool/data/subvol-107-disk-1":
-    use_template: database
+# Nested `| default` guards below: sanoid_datasets is only rendered when the
+# sanoid role runs, which can happen without load_tofu.yml if an operator scopes
+# a run with --limit excluding localhost (--limit filters hosts, not tags, so
+# tags: always on the localhost play does not save it). Falling back to the
+# test-fixture vmids here means a scoped run still protects the right disks by
+# default; a genuine renumber always flows through load_tofu.yml on a full run.
+sanoid_datasets: >-
+  {{ {
+       'rpool/data/vm-' ~ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') ~ '-disk-0': {'use_template': 'critical'},
+       'rpool/data/vm-' ~ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') ~ '-disk-2': {'use_template': 'critical'},
+       'rpool/data/subvol-' ~ ((containers_from_tofu | default({}))['object-storage'] | default({})).vmid | default('902000') ~ '-disk-1': {'use_template': 'database'}
+     } }}
 
 # Offline-DR wake controller. pve1 is always-on and can reach the BMC subnet, so
 # it runs the node_scheduled_wake timers that power the normally-off DR node ON

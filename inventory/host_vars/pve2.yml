@@ -18,28 +18,29 @@
 # disk-1 was an empty leftover (removed); replicate the OS disk (0) and
 # /opt/splunk config+indexes (2). Whole-disk for now; excluding the volatile
 # index tier is the tracked critical/volatile follow-up.
+# Nested `| default` guards: these vars are only rendered when the syncoid role
+# runs, which can happen without load_tofu.yml if an operator scopes a run with
+# --limit excluding localhost (--limit filters hosts, not tags, so tags: always
+# on the localhost play does not save it). Falling back to the test-fixture
+# vmid/node here means a scoped run still replicates the right disks by
+# default; a genuine renumber always flows through load_tofu.yml on a full run.
 syncoid_jobs:
-  - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk0"
-    source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-0"
-    target: "bulk/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-0"
-  - name: "splunk-{{ splunk_vm_from_tofu.splunk.vmid }}-disk2"
-    source: "root@{{ splunk_vm_from_tofu.splunk.node }}:rpool/data/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
-    target: "bulk/replica/{{ splunk_vm_from_tofu.splunk.node }}/vm-{{ splunk_vm_from_tofu.splunk.vmid }}-disk-2"
+  - name: "splunk-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk0"
+    source: "root@{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node | default(proxmox_node_prefix ~ '1') }}:rpool/data/vm-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk-0"
+    target: "bulk/replica/{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node | default(proxmox_node_prefix ~ '1') }}/vm-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk-0"
+  - name: "splunk-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk2"
+    source: "root@{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node | default(proxmox_node_prefix ~ '1') }}:rpool/data/vm-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk-2"
+    target: "bulk/replica/{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node | default(proxmox_node_prefix ~ '1') }}/vm-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk-2"
   # Object-storage (RustFS) DR: pull the splunk-addons data volume
-  # (subvol-202000-disk-1 = /srv/object-storage) from node 1. The container is
-  # pinned to node 1, so the source node is fixed via proxmox_node_prefix — the
-  # same "fixed node" pattern the pve3 databases/appdata jobs use for node 2,
-  # never a hard-coded node name. bulk/replica/<node1> already exists (the
-  # splunk jobs above target it); syncoid creates the per-disk leaf.
+  # (subvol-<id>-disk-1 = /srv/object-storage) from node 1. The vmid resolves from
+  # the tofu inventory (containers_from_tofu['object-storage']), never hard-coded.
+  # The container is pinned to node 1, so the source node is fixed via
+  # proxmox_node_prefix — the same "fixed node" pattern the pve3 databases/appdata
+  # jobs use for node 2, never a hard-coded node name. bulk/replica/<node1> already
+  # exists (the splunk jobs above target it); syncoid creates the per-disk leaf.
   - name: "object-storage-disk1"
-    source: "root@{{ proxmox_node_prefix }}1:rpool/data/subvol-202000-disk-1"
-    target: "bulk/replica/{{ proxmox_node_prefix }}1/subvol-202000-disk-1"
-  # MinIO (vmid 107) data volume — the CURRENT live splunk-addons store during the
-  # MinIO->RustFS migration soak (holds the real app tarballs today). Same pull
-  # pattern as the object-storage job above; drop after MinIO decommission.
-  - name: "minio-disk1"
-    source: "root@{{ proxmox_node_prefix }}1:rpool/data/subvol-107-disk-1"
-    target: "bulk/replica/{{ proxmox_node_prefix }}1/subvol-107-disk-1"
+    source: "root@{{ proxmox_node_prefix }}1:rpool/data/subvol-{{ ((containers_from_tofu | default({}))['object-storage'] | default({})).vmid | default('902000') }}-disk-1"
+    target: "bulk/replica/{{ proxmox_node_prefix }}1/subvol-{{ ((containers_from_tofu | default({}))['object-storage'] | default({})).vmid | default('902000') }}-disk-1"
 
 # Layer-1 protection (local ZFS snapshots via sanoid) for the warm-standby
 # database namespace. Recursive so any bulk/databases/<instance> child inherits

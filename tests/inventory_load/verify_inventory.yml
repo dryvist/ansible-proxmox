@@ -20,3 +20,13 @@
           - "'ha-backups' in (hostvars['pve1'].nas_storage_from_tofu.shares | map(attribute='name') | list)"
           - "'ha-media' in (hostvars['pve1'].nas_storage_from_tofu.shares | map(attribute='name') | list)"
         fail_msg: "load_tofu.yml did not inject the expected NAS contract onto pve1"
+
+    - name: Assert pve1 host received OpenTofu replication identity (containers + splunk_vm)
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve1'].containers_from_tofu is defined
+          - hostvars['pve1'].containers_from_tofu['object-storage'].vmid == 902000
+          - hostvars['pve1'].splunk_vm_from_tofu.splunk.vmid == 90200
+        fail_msg: >-
+          load_tofu.yml did not inject the container/splunk identity that
+          sanoid_datasets and syncoid_jobs derive VMIDs from.
