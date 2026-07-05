@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.40.0](https://github.com/dryvist/ansible-proxmox/compare/v1.39.4...v1.40.0) (2026-07-05)
+
+
+### Features
+
+* **kernel_tuning:** opt-in C6 idle-state disable via MSR at boot ([#349](https://github.com/dryvist/ansible-proxmox/issues/349)) ([d3c5bd9](https://github.com/dryvist/ansible-proxmox/commit/d3c5bd93f9cab3fbe630d755ac93f4835f0a8aa7))
+
 ## [1.39.4](https://github.com/dryvist/ansible-proxmox/compare/v1.39.3...v1.39.4) (2026-07-05)
 
 
