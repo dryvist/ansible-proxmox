@@ -240,8 +240,10 @@
         cmd: rdmsr -c 0xC0010292
       register: kernel_tuning_pkg_c6
       changed_when: false
-      # bit 32 set would mean package C6 is still enabled
-      failed_when: ((kernel_tuning_pkg_c6.stdout | int(base=16)) // 4294967296) % 2 != 0
+      # bit 32 set would mean package C6 is still enabled; trim first — a
+      # stray trailing newline would make int() silently return 0 and the
+      # verification would falsely pass.
+      failed_when: ((kernel_tuning_pkg_c6.stdout | trim | int(base=16)) // 4294967296) % 2 != 0
   rescue:
     - name: Fail loud — the C6 mitigation did not apply
       ansible.builtin.fail:
@@ -249,3 +251,14 @@
           kernel_tuning_disable_zen_c6 is enabled but the MSR mitigation could
           not be applied/verified on this host. Do not run GPU or heavy loads
           until this is resolved — the C6 erratum hard-locks the machine.
+
+# Reverse path: flipping the flag off must actually stop and disable the unit,
+# not just stop managing it. failed_when: false tolerates hosts where the unit
+# was never rendered.
+- name: Disable zen-c6-disable when the mitigation is turned off
+  ansible.builtin.systemd:
+    name: zen-c6-disable
+    enabled: false
+    state: stopped
+  failed_when: false
+  when: not (kernel_tuning_disable_zen_c6 | bool)
