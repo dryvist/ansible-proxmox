@@ -24,11 +24,17 @@
 # NOTE (generalization, follow-up): this assumes Splunk runs on pve1. When the
 # layout is generalized (data-driven from splunk_vm_from_tofu across nodes),
 # this moves out of a per-host file. See docs design + follow-up issue.
+# Nested `| default` guards below: sanoid_datasets is only rendered when the
+# sanoid role runs, which can happen without load_tofu.yml if an operator scopes
+# a run with --limit excluding localhost (--limit filters hosts, not tags, so
+# tags: always on the localhost play does not save it). Falling back to the
+# test-fixture vmids here means a scoped run still protects the right disks by
+# default; a genuine renumber always flows through load_tofu.yml on a full run.
 sanoid_datasets: >-
   {{ {
-       'rpool/data/vm-' ~ splunk_vm_from_tofu.splunk.vmid ~ '-disk-0': {'use_template': 'critical'},
-       'rpool/data/vm-' ~ splunk_vm_from_tofu.splunk.vmid ~ '-disk-2': {'use_template': 'critical'},
-       'rpool/data/subvol-' ~ containers_from_tofu['object-storage'].vmid ~ '-disk-1': {'use_template': 'database'}
+       'rpool/data/vm-' ~ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') ~ '-disk-0': {'use_template': 'critical'},
+       'rpool/data/vm-' ~ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') ~ '-disk-2': {'use_template': 'critical'},
+       'rpool/data/subvol-' ~ ((containers_from_tofu | default({}))['object-storage'] | default({})).vmid | default('902000') ~ '-disk-1': {'use_template': 'database'}
      } }}
 
 # Offline-DR wake controller. pve1 is always-on and can reach the BMC subnet, so
