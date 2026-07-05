@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.41.0](https://github.com/dryvist/ansible-proxmox/compare/v1.40.0...v1.41.0) (2026-07-05)
+
+
+### Features
+
+* **media:** add sortarr to media_lxc_features persistence map ([#351](https://github.com/dryvist/ansible-proxmox/issues/351)) ([a3a3844](https://github.com/dryvist/ansible-proxmox/commit/a3a3844d871a2e029bce6056c448e6874d8574e6))
+
 ## [1.40.0](https://github.com/dryvist/ansible-proxmox/compare/v1.39.4...v1.40.0) (2026-07-05)
 
 
