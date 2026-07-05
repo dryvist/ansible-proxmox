@@ -48,3 +48,11 @@ kernel_tuning_mce_level: 3
 
 # EDAC error reporting
 kernel_tuning_edac_report: 1
+
+# Zen1 C6 hard-lock erratum mitigation: clear the core+package C6 enable bits
+# in the AMD power-management MSRs at boot (msr-tools + a oneshot unit).
+# processor.max_cstate=1 alone does NOT prevent C6 entry on first-gen Zen —
+# this is the software equivalent of the BIOS "Global C-State Control=Disabled"
+# / "Power Supply Idle Control=Typical Current Idle" mitigations. Opt-in per
+# host (first-gen Zen parts only).
+kernel_tuning_disable_zen_c6: false
