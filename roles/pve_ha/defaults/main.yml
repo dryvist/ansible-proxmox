@@ -27,9 +27,13 @@
 pve_ha_enabled: false
 
 # Inventory hostname of the SINGLE node the ha-manager commands run on. HA state
-# is cluster-wide, so one node is sufficient and correct. Defaults to the
-# cluster primary (same default identity the pve_cluster role uses).
-pve_ha_config_host: pve
+# is cluster-wide, so one node is sufficient and correct. Defaults to
+# pve_cluster_primary_host (the pve_cluster role's own primary, set in
+# inventory/group_vars/pve_cluster_members.yml as "{{ proxmox_node_prefix }}1")
+# so the two roles always agree on which node is primary. Falls back to the
+# same "{{ proxmox_node_prefix }}1" expression directly when pve_cluster_primary_host
+# is undefined (e.g. a playbook run without the pve_cluster group vars loaded).
+pve_ha_config_host: "{{ pve_cluster_primary_host | default(proxmox_node_prefix ~ '1', true) }}"
 
 # Per-guest HA restart/relocate bounds and desired state.
 pve_ha_max_restart: 3
