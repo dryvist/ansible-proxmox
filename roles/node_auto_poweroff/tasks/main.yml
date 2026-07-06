@@ -37,31 +37,19 @@
 - name: Reload systemd before enabling the timer
   ansible.builtin.meta: flush_handlers
 
-- name: Enable and start the auto-poweroff timer
+# Drive enabled/state off the flag (not gated on it) so flipping the feature
+# off actively stops + disables an already-installed timer instead of leaving
+# it running — the render tasks above only skip writing the unit when disabled,
+# they never touch an existing one. Same pattern as node_scheduled_wake's
+# timer-state task. failed_when: false tolerates a host whose unit was never
+# rendered (stopping a non-existent timer is a no-op, not an error).
+- name: Set the auto-poweroff timer's enabled/state from the feature flag
   ansible.builtin.systemd:
     name: node-auto-poweroff.timer
-    enabled: true
-    state: started
+    enabled: "{{ node_auto_poweroff_enabled | bool }}"
+    state: "{{ 'started' if (node_auto_poweroff_enabled | bool) else 'stopped' }}"
   when:
-    - node_auto_poweroff_enabled | bool
-    - ansible_virtualization_type | default('') != 'docker'
-  tags:
-    - node_auto_poweroff
-
-# A host that flips node_auto_poweroff_enabled from true to false would
-# otherwise keep an already-installed timer running (the tasks above only
-# skip creating/starting it, they never touch an existing unit). Mirrors the
-# zfs_replication role's disable-when-inert pattern. failed_when: false
-# tolerates a host that never had the timer installed.
-- name: Stop and disable the auto-poweroff timer when the role is disabled
-  ansible.builtin.systemd:
-    name: node-auto-poweroff.timer
-    enabled: false
-    state: stopped
-  when:
-    - not (node_auto_poweroff_enabled | bool)
     - ansible_virtualization_type | default('') != 'docker'
   failed_when: false
-  changed_when: false
   tags:
     - node_auto_poweroff
