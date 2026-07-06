@@ -128,3 +128,60 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - node_scheduled_wake
+
+# Retire orphaned per-target units: a target dropped from
+# node_scheduled_wake_targets (e.g. a node that became always-on) would
+# otherwise leave its previously-installed timer running and waking a node that
+# no longer sleeps. Find every installed wake timer, and for any whose target
+# is no longer in the current list, stop+disable+remove its unit and env files.
+# Self-heals for any future removed target.
+- name: List installed wake timer units
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: "node-scheduled-wake-*.timer"
+    file_type: file
+  register: node_scheduled_wake_installed
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - node_scheduled_wake
+
+- name: Compute orphaned wake target names
+  ansible.builtin.set_fact:
+    node_scheduled_wake_orphans: >-
+      {{ (node_scheduled_wake_installed.files | default([]) | map(attribute='path')
+          | map('basename')
+          | map('regex_replace', '^node-scheduled-wake-(.*)\.timer$', '\1') | list)
+         | difference(node_scheduled_wake_targets | map(attribute='name') | list) }}
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - node_scheduled_wake
+
+- name: Stop and disable orphaned wake timers
+  ansible.builtin.systemd:
+    name: "node-scheduled-wake-{{ item }}.timer"
+    enabled: false
+    state: stopped
+  loop: "{{ node_scheduled_wake_orphans | default([]) }}"
+  failed_when: false
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - node_scheduled_wake
+
+- name: Remove orphaned wake unit and credential files
+  ansible.builtin.file:
+    path: "{{ item.1 | format(item.0) }}"
+    state: absent
+  loop: "{{ node_scheduled_wake_orphans | default([])
+           | product(['/etc/systemd/system/node-scheduled-wake-%s.timer',
+                      '/etc/systemd/system/node-scheduled-wake-%s.service',
+                      '/etc/node-scheduled-wake/%s.env']) }}"
+  loop_control:
+    label: "{{ item.1 | format(item.0) }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+  notify: Reload systemd daemon
+  tags:
+    - node_scheduled_wake
