@@ -1,0 +1,28 @@
+---
+# Configure Proxmox VE HA (resources + anti-affinity) for the tier-0 guests.
+#
+# INERT by default — the pve_ha role does nothing unless pve_ha_enabled=true.
+# HA state is cluster-wide, so the role acts on a single node (pve_ha_config_host)
+# and is a no-op on the rest.
+#
+#   # Preview (nothing changes; role asserts-out because enabled=false):
+#   doppler run -- ansible-playbook -i inventory playbooks/ha.yml
+#
+#   # LIVE enable (gated — changes cluster HA behaviour for tier-0 guests):
+#   doppler run -- ansible-playbook -i inventory playbooks/ha.yml \
+#     -e pve_ha_enabled=true
+#
+# See roles/pve_ha/README.md for the guest set, the anti-affinity model, and the
+# non-destructive failover drill (scripts/ha-failover-drill.sh).
+
+- name: Load OpenTofu inventory (containers_from_tofu -> proxmox hosts)
+  ansible.builtin.import_playbook: load_tofu.yml
+
+- name: Configure Proxmox VE HA for tier-0 guests
+  hosts: proxmox
+  become: true
+  gather_facts: true
+  roles:
+    - role: pve_ha
+      tags:
+        - pve_ha
