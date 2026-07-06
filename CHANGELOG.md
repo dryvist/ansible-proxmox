@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.43.0](https://github.com/dryvist/ansible-proxmox/compare/v1.42.0...v1.43.0) (2026-07-06)
+
+
+### Features
+
+* **pve_cluster:** guard against stale corosync vote overrides (DR/HA W4) ([#359](https://github.com/dryvist/ansible-proxmox/issues/359)) ([2b55113](https://github.com/dryvist/ansible-proxmox/commit/2b551135fe8c8f0a880426cf77746802be5f5c7e))
+* **pve_ha:** autonomous HA role for tier-0 guests (DR/HA W5) ([#358](https://github.com/dryvist/ansible-proxmox/issues/358)) ([842ff92](https://github.com/dryvist/ansible-proxmox/commit/842ff92af5f6dc7c7bb11f1d7f43e2014905632c))
+
 ## [1.42.0](https://github.com/dryvist/ansible-proxmox/compare/v1.41.1...v1.42.0) (2026-07-06)
 
 
