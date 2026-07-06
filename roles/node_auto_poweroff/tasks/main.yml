@@ -37,13 +37,19 @@
 - name: Reload systemd before enabling the timer
   ansible.builtin.meta: flush_handlers
 
-- name: Enable and start the auto-poweroff timer
+# Drive enabled/state off the flag (not gated on it) so flipping the feature
+# off actively stops + disables an already-installed timer instead of leaving
+# it running — the render tasks above only skip writing the unit when disabled,
+# they never touch an existing one. Same pattern as node_scheduled_wake's
+# timer-state task. failed_when: false tolerates a host whose unit was never
+# rendered (stopping a non-existent timer is a no-op, not an error).
+- name: Set the auto-poweroff timer's enabled/state from the feature flag
   ansible.builtin.systemd:
     name: node-auto-poweroff.timer
-    enabled: true
-    state: started
+    enabled: "{{ node_auto_poweroff_enabled | bool }}"
+    state: "{{ 'started' if (node_auto_poweroff_enabled | bool) else 'stopped' }}"
   when:
-    - node_auto_poweroff_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+  failed_when: false
   tags:
     - node_auto_poweroff
