@@ -78,3 +78,40 @@
     - pve_cluster_status.cluster_status is defined
   tags:
     - pve_cluster
+
+# --- Corosync vote-integrity guard (DR/HA W4) -------------------------------
+# A healthy N-node cluster wants exactly N real votes and NEITHER a `two_node`
+# nor a manual `expected_votes` override in corosync.conf. A leftover `two_node`
+# from the pre-multi-node era is dangerous once fencing is enabled: it changes
+# the quorum math (a lone survivor can stay quorate and skip self-fencing, or a
+# stale expected_votes can wedge quorum). This guard fails loud if either
+# override reappears, so HA fencing (see the pve_ha role) always runs on honest
+# N-of-N vote math. Read-only grep (rc=1 = clean, no match).
+- name: Read corosync for stale vote overrides
+  ansible.builtin.command: grep -E 'two_node|expected_votes' /etc/pve/corosync.conf
+  register: pve_cluster_corosync_overrides
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - pve_cluster_role == 'primary'
+  tags:
+    - pve_cluster
+
+- name: Assert no stale two_node / expected_votes override remains
+  ansible.builtin.assert:
+    that:
+      - (pve_cluster_corosync_overrides.stdout | default('') | trim | length) == 0
+    fail_msg: >-
+      corosync.conf carries a two_node/expected_votes override
+      "{{ pve_cluster_corosync_overrides.stdout | default('') | trim }}". With
+      {{ pve_cluster_member_hosts | length }} real voters this must be removed —
+      it breaks HA fencing math. Edit /etc/pve/corosync.conf (bump
+      config_version) to drop it, then reload corosync.
+    success_msg: "corosync has no stale vote overrides (honest N-of-N votes)."
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - pve_cluster_role == 'primary'
+    - pve_cluster_corosync_overrides.stdout is defined
+  tags:
+    - pve_cluster
