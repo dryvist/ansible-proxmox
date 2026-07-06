@@ -1,0 +1,73 @@
+---
+# pve_ha — Proxmox VE HA (High Availability) resource + affinity manager.
+#
+# Configures ha-manager (Proxmox VE 9 "HA rules", not the legacy HA groups) for
+# the tier-0 guests so a node failure is handled with ZERO manual action:
+#   * a crashed guest auto-restarts (max_restart), and
+#   * the redundant PAIRS (the two OpenBao Raft voters, the two Technitium DNS
+#     instances, the two Traefik ingress LXCs) are pinned to SEPARATE nodes by
+#     anti-affinity, so a single node loss can never take out both halves.
+#
+# SAFETY: this role is INERT by default. It does nothing unless pve_ha_enabled is
+# true. HA config is CLUSTER-WIDE (/etc/pve/ha/*, replicated by pmxcfs) so it is
+# applied ONCE from a single node (run_once against pve_ha_config_host), never
+# per-node. All CLI work is skipped under Docker so the role is molecule-testable
+# in containers without a live cluster.
+#
+# STORAGE NOTE (why max_relocate is deliberately low): these tier-0 guests live
+# on LOCAL ZFS, not shared storage. On a node FAILURE ha-manager can only start
+# a guest on another node if that guest's rootfs already exists there (PVE
+# storage replication, pvesr). Today it does not — and that is fine: every
+# tier-0 guest has a redundant PEER on another node (OpenBao Raft quorum after
+# the third voter lands / the second Technitium instance / the keepalived VRRP
+# VIP), so the surviving peer covers the outage and the failed guest returns
+# when its node heals. Real cross-node relocation via pvesr is a tracked
+# follow-up, NOT required for the node-loss story. So the payload here is
+# anti-affinity + in-place auto-restart + orderly return-home, not migration.
+pve_ha_enabled: false
+
+# Inventory hostname of the SINGLE node the ha-manager commands run on. HA state
+# is cluster-wide, so one node is sufficient and correct. Defaults to the
+# cluster primary (same default identity the pve_cluster role uses).
+pve_ha_config_host: pve
+
+# Per-guest HA restart/relocate bounds and desired state.
+pve_ha_max_restart: 3
+pve_ha_max_relocate: 1
+pve_ha_state: started
+
+# Tier-0 LXC guests to place under HA, identified by HOSTNAME (stable across a
+# VMID renumber). The VMID + "ct:" SID are resolved in tasks/main.yml from the
+# tofu inventory (containers_from_tofu, injected by load_tofu.yml), so a
+# renumber flows through with no edit here. A hostname absent from the inventory
+# is skipped with a warning rather than failing the run.
+pve_ha_ct_hostnames:
+  - openbao-01
+  - openbao-02
+  - technitium-dns
+  - technitium-dns-2
+  - traefik
+# Extra HA SIDs to manage verbatim (e.g. a VM the tofu container map does not
+# cover: "vm:110130"). Merged with the resolved CT SIDs. Empty by default.
+pve_ha_extra_sids: []
+
+# Anti-affinity groups: guests that must NEVER share a node (redundant pairs).
+# Each: {name, hostnames:[...]}. Rendered as ha-manager resource-affinity rules
+# with affinity=negative over the resolved SIDs. A group whose members do not
+# all currently resolve is skipped (a half-present pair has nothing to separate).
+pve_ha_anti_affinity_groups:
+  - name: openbao-voters
+    hostnames:
+      - openbao-01
+      - openbao-02
+  - name: technitium-dns
+    hostnames:
+      - technitium-dns
+      - technitium-dns-2
+  # The Traefik ingress pair — activates automatically once traefik-2 exists in
+  # deployment.json (the VRRP VIP peer). With a single ingress node it is a
+  # no-op (skipped: not both members resolve).
+  - name: ingress-traefik
+    hostnames:
+      - traefik
+      - traefik-2

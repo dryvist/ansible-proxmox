@@ -1,0 +1,146 @@
+---
+# pve_ha — configure Proxmox VE HA resources + anti-affinity rules for tier-0
+# guests. HA state is CLUSTER-WIDE (/etc/pve/ha/*, replicated by pmxcfs), so all
+# work runs on exactly ONE node (pve_ha_config_host). Inert unless
+# pve_ha_enabled; all CLI work is skipped under Docker so the role is
+# molecule-testable without a live cluster.
+
+- name: Refuse to run unless explicitly enabled
+  ansible.builtin.assert:
+    that:
+      - pve_ha_enabled | bool
+    fail_msg: >-
+      pve_ha is inert by default. Set pve_ha_enabled=true only when you intend to
+      place tier-0 guests under Proxmox HA — this changes live cluster behaviour
+      (guests become ha-manager-controlled: auto-restart, fence-on-node-loss).
+    quiet: true
+  tags:
+    - pve_ha
+
+- name: Configure cluster-wide HA from the single config host
+  when:
+    - pve_ha_enabled | bool
+    - inventory_hostname == pve_ha_config_host
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_ha
+  block:
+    # Reuse the same hostname -> vmid projection load_tofu.yml builds for the
+    # media/GPU feature maps, so a VMID renumber flows through with no edit.
+    - name: Map container hostname -> vmid from the tofu inventory
+      ansible.builtin.set_fact:
+        pve_ha_vmid_by_host: >-
+          {{
+            dict(
+              (containers_from_tofu | default({})) | dict2items
+              | selectattr('value.vmid', 'defined')
+              | map(attribute='key') | list
+              | zip(
+                  (containers_from_tofu | default({})) | dict2items
+                  | selectattr('value.vmid', 'defined')
+                  | map(attribute='value.vmid') | list
+                )
+            )
+          }}
+
+    - name: Resolve managed tier-0 SIDs (present hosts only) + any extra SIDs
+      ansible.builtin.set_fact:
+        pve_ha_managed_sids: >-
+          {{ (pve_ha_ct_hostnames | select('in', pve_ha_vmid_by_host)
+              | map('extract', pve_ha_vmid_by_host) | map('string')
+              | map('regex_replace', '^(.+)$', 'ct:\1') | list)
+             + (pve_ha_extra_sids | default([])) }}
+
+    - name: Warn about tier-0 hostnames missing from the inventory (skipped)
+      ansible.builtin.debug:
+        msg: >-
+          pve_ha: these tier-0 hostnames are not in the tofu inventory and are
+          SKIPPED: {{ pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host)
+          | list }}
+      when: (pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host) | list)
+        | length > 0
+
+    - name: Read current HA resources
+      ansible.builtin.command: pvesh get /cluster/ha/resources --output-format json
+      register: pve_ha_resources_raw
+      changed_when: false
+
+    - name: Parse existing HA resource SIDs
+      ansible.builtin.set_fact:
+        pve_ha_existing_sids: >-
+          {{ (pve_ha_resources_raw.stdout | from_json)
+             | map(attribute='sid') | list }}
+
+    - name: Add tier-0 guests to HA (only those not yet managed)
+      ansible.builtin.command: >-
+        ha-manager add {{ item }}
+        --state {{ pve_ha_state }}
+        --max_restart {{ pve_ha_max_restart }}
+        --max_relocate {{ pve_ha_max_relocate }}
+      loop: "{{ pve_ha_managed_sids }}"
+      when: item not in pve_ha_existing_sids
+      changed_when: true
+
+    - name: Enforce HA params on already-managed guests
+      ansible.builtin.command: >-
+        ha-manager set {{ item }}
+        --state {{ pve_ha_state }}
+        --max_restart {{ pve_ha_max_restart }}
+        --max_relocate {{ pve_ha_max_relocate }}
+      loop: "{{ pve_ha_managed_sids }}"
+      when: item in pve_ha_existing_sids
+      # ponytail: ha-manager set is idempotent server-side; we do not diff each
+      # field, so report unchanged rather than a spurious change every converge.
+      changed_when: false
+
+    - name: Resolve anti-affinity rule SID sets (present members only)
+      ansible.builtin.set_fact:
+        pve_ha_affinity_rules: >-
+          {{ pve_ha_affinity_rules | default([]) + [ {
+               'name': item.name,
+               'sids': (item.hostnames | select('in', pve_ha_vmid_by_host)
+                        | map('extract', pve_ha_vmid_by_host) | map('string')
+                        | map('regex_replace', '^(.+)$', 'ct:\1') | list)
+             } ] }}
+      loop: "{{ pve_ha_anti_affinity_groups }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Read current HA rules
+      ansible.builtin.command: pvesh get /cluster/ha/rules --output-format json
+      register: pve_ha_rules_raw
+      changed_when: false
+
+    - name: Parse existing HA rule names
+      ansible.builtin.set_fact:
+        pve_ha_existing_rules: >-
+          {{ (pve_ha_rules_raw.stdout | from_json)
+             | map(attribute='rule') | list }}
+
+    - name: Add anti-affinity (negative) rules for redundant pairs
+      ansible.builtin.command: >-
+        ha-manager rules add resource-affinity {{ item.name }}
+        --resources {{ item.sids | join(',') }}
+        --affinity negative
+        --comment 'pve_ha: keep {{ item.name }} members on separate nodes'
+      loop: "{{ pve_ha_affinity_rules }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - item.sids | length >= 2
+        - item.name not in pve_ha_existing_rules
+      changed_when: true
+
+    - name: Enforce membership on existing anti-affinity rules
+      ansible.builtin.command: >-
+        ha-manager rules set resource-affinity {{ item.name }}
+        --resources {{ item.sids | join(',') }}
+        --affinity negative
+      loop: "{{ pve_ha_affinity_rules }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - item.sids | length >= 2
+        - item.name in pve_ha_existing_rules
+      # ponytail: idempotent enforce, same rationale as the resource set above.
+      changed_when: false
