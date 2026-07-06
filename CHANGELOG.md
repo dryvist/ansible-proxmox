@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.43.1](https://github.com/dryvist/ansible-proxmox/compare/v1.43.0...v1.43.1) (2026-07-06)
+
+
+### Bug Fixes
+
+* **pve_ha:** derive HA config host from cluster primary, not literal pve ([#361](https://github.com/dryvist/ansible-proxmox/issues/361)) ([a016b10](https://github.com/dryvist/ansible-proxmox/commit/a016b10d5405bbe925343e6f8690e8a5c8b1fcd0))
+
 ## [1.43.0](https://github.com/dryvist/ansible-proxmox/compare/v1.42.0...v1.43.0) (2026-07-06)
 
 
