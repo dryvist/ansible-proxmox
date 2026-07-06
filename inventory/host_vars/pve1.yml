@@ -37,16 +37,15 @@ sanoid_datasets: >-
        'rpool/data/subvol-' ~ ((containers_from_tofu | default({}))['object-storage'] | default({})).vmid | default('902000') ~ '-disk-1': {'use_template': 'database'}
      } }}
 
-# Offline-DR wake controller. pve1 is always-on and can reach the BMC subnet, so
-# it runs the node_scheduled_wake timers that power the normally-off DR node ON
-# twice a day for its replication windows (the node then replicates on boot and
-# powers itself back off — see pve3 host_vars). The BMC address + credentials come
-# from the environment (Doppler), never committed. If pve1 itself is down the DR
-# node simply will not wake that window — an accepted limitation for the always-on
-# primary. Default schedule (03:00 + 15:00) lives in the role defaults.
-node_scheduled_wake_targets:
-  - name: pve3
-    bmc_host: "{{ lookup('env', 'PVE3_BMC_HOSTNAME') | default('', true) }}"
+# Offline-DR wake controller. This node is always-on and can reach the BMC
+# subnet, so it runs the node_scheduled_wake timers that power a normally-off
+# DR node ON for its replication windows. The BMC address + credentials come
+# from the environment (Doppler), never committed. Default schedule (03:00 +
+# 15:00) lives in the role defaults.
+#
+# Empty: the only previous target is now always-on and no longer needs waking.
+# Add an entry here again if a future normally-off DR leg needs this mechanism.
+node_scheduled_wake_targets: []
 
 # Clear the CPU C6-state enable MSR bits at boot (kernel_tuning role);
 # the cmdline max_cstate limit alone does not cover this idle state.

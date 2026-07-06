@@ -1,29 +1,21 @@
 ---
-# Host vars for pve3 (the R710 — a normally-off offline-DR leg).
+# Host vars for this node (the R710).
 #
-# Autonomous wake -> replicate -> sleep cycle. pve3 is normally OFF to save power
-# and comes up only for its backup windows:
-#   - WAKE: the always-on controller (see pve1 host_vars node_scheduled_wake_
-#     targets) issues an IPMI power-on twice a day. The BMC address comes from the
-#     environment (Doppler PVE3_BMC_HOSTNAME, FQDN preferred) — never committed.
-#   - REPLICATE: on boot, the syncoid role runs the PULL jobs below once
-#     (syncoid_trigger: boot). The wall-clock cron is the WRONG trigger here — it
-#     would never fire inside a short power-on window.
-#   - SLEEP: syncoid chains to the node_auto_poweroff oneshot on completion
-#     (syncoid_boot_poweroff_on_complete), so pve3 powers off the moment
-#     replication finishes (success OR failure). The 22:00 node_auto_poweroff
-#     timer stays as a guaranteed-off backstop if a run ever hangs.
-# pve_power_managed also lets a manual site.yml run power-cycle pve3 for
+# This node is always-on:
+#   - node_auto_poweroff_enabled is false: no scheduled poweroff timer.
+#   - syncoid still runs its on-boot replication trigger (syncoid_trigger:
+#     boot), but syncoid_boot_poweroff_on_complete is false, so it no longer
+#     chains to a poweroff on completion.
+# pve_power_managed still lets a manual site.yml run power-cycle this node for
 # maintenance (the idrac_power auto-cycle bookends).
 pve_power_managed: true
 idrac_power_bmc_host: "{{ lookup('env', 'PVE3_BMC_HOSTNAME') | default('', true) }}"
-node_auto_poweroff_enabled: true
+node_auto_poweroff_enabled: false
 syncoid_trigger: boot
-syncoid_boot_poweroff_on_complete: true
+syncoid_boot_poweroff_on_complete: false
 
-# Normally-off node: do NOT run the per-minute healthchecks liveness ping — it
-# would sit "down" and alarm whenever pve3 is (intentionally) off. A freshness
-# deadman for the DR replicas is a tracked follow-up.
+# Per-minute healthchecks liveness ping stays off pending its own follow-up
+# (unrelated to the always-on change above).
 proxmox_monitoring_enable_healthchecks: false
 
 # Layer-2 protection (cross-node ZFS replication via syncoid, PULL model): pve3

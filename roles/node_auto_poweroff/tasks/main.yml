@@ -47,3 +47,21 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - node_auto_poweroff
+
+# A host that flips node_auto_poweroff_enabled from true to false would
+# otherwise keep an already-installed timer running (the tasks above only
+# skip creating/starting it, they never touch an existing unit). Mirrors the
+# zfs_replication role's disable-when-inert pattern. failed_when: false
+# tolerates a host that never had the timer installed.
+- name: Stop and disable the auto-poweroff timer when the role is disabled
+  ansible.builtin.systemd:
+    name: node-auto-poweroff.timer
+    enabled: false
+    state: stopped
+  when:
+    - not (node_auto_poweroff_enabled | bool)
+    - ansible_virtualization_type | default('') != 'docker'
+  failed_when: false
+  changed_when: false
+  tags:
+    - node_auto_poweroff
