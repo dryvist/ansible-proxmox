@@ -1,0 +1,61 @@
+---
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/requirements.yml
+
+driver:
+  name: docker
+
+platforms:
+  - name: proxmox-docker-lxc-features-test
+    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    pre_build_image: true
+    privileged: true
+    tmpfs:
+      - /run
+      - /tmp
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      interpreter_python: auto_silent
+      gathering: smart
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+  inventory:
+    group_vars:
+      all:
+        ansible_connection: docker
+        docker_lxc_features_test_containers:
+          n8n:
+            vmid: 90001
+          langgraph:
+            vmid: 90002
+          dify:
+            vmid: 90003
+            tags:
+              - container
+              - docker
+              - ai-orchestration
+          langflow:
+            vmid: 90004
+            tags:
+              - container
+              - docker
+              - ai-orchestration
+          assistant-01:
+            vmid: 90005
+            tags:
+              - container
+              - docker
+              - ai-orchestration
+          analytics:
+            vmid: 90006
+            tags:
+              - container
+              - docker
+              - analytics
+
+verifier:
+  name: ansible

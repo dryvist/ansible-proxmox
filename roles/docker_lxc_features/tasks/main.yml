@@ -1,0 +1,100 @@
+---
+# docker_lxc_features role tasks
+#
+# Applies root-only Docker-in-LXC features on the Proxmox host. Selection is
+# driven by the tofu inventory: containers tagged `docker` + `ai-orchestration`
+# are targeted automatically, with `n8n` and `langgraph` kept as fallbacks for
+# the live guests already called out in the problem report.
+
+- name: Reset the AI Docker service accumulator
+  ansible.builtin.set_fact:
+    docker_lxc_features_selected: []
+  tags:
+    - docker_lxc_features
+
+- name: Select tagged AI Docker services from the tofu inventory
+  ansible.builtin.set_fact:
+    docker_lxc_features_selected: "{{ docker_lxc_features_selected + [item] }}"
+  loop: "{{ (containers_from_tofu | default({})) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - item.value.vmid is defined
+    - "'docker' in (item.value.tags | default([]))"
+    - "'ai-orchestration' in (item.value.tags | default([]))"
+  tags:
+    - docker_lxc_features
+
+- name: Add fallback AI Docker services when tags are not present yet
+  ansible.builtin.set_fact:
+    docker_lxc_features_selected: >-
+      {{
+        docker_lxc_features_selected
+        + [ { 'key': item, 'value': (containers_from_tofu | default({}))[item] } ]
+      }}
+  loop: "{{ docker_lxc_features_fallback_services }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - item in (containers_from_tofu | default({}))
+    - item not in (docker_lxc_features_selected | map(attribute='key') | list)
+  tags:
+    - docker_lxc_features
+
+- name: Build the service to vmid map for AI Docker services
+  ansible.builtin.set_fact:
+    docker_lxc_features_service_vmids: >-
+      {{
+        dict(
+          (docker_lxc_features_selected | map(attribute='key') | list)
+          | zip(
+              docker_lxc_features_selected
+              | map(attribute='value')
+              | map(attribute='vmid')
+              | map('string')
+              | list
+            )
+        )
+      }}
+  tags:
+    - docker_lxc_features
+
+- name: Enumerate LXC containers present on this host
+  ansible.builtin.command:
+    cmd: pct list
+  register: docker_lxc_features_pct_list
+  changed_when: false
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - docker_lxc_features
+
+- name: Build the set of vmids present on this host
+  ansible.builtin.set_fact:
+    docker_lxc_features_present: >-
+      {{
+        docker_lxc_features_pct_list.stdout_lines | default([])
+        | map('regex_search', '^\d+')
+        | select('truthy')
+        | list
+      }}
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - docker_lxc_features
+
+- name: Reset the changed-container accumulator
+  ansible.builtin.set_fact:
+    docker_lxc_features_changed: []
+  tags:
+    - docker_lxc_features
+
+- name: Apply AI Docker features to each present container
+  ansible.builtin.include_tasks: configure_container.yml
+  loop: "{{ docker_lxc_features_service_vmids | default({}) | dict2items }}"
+  loop_control:
+    loop_var: docker_ct
+    label: "{{ docker_ct.key }} -> {{ docker_ct.value }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - docker_ct.value in docker_lxc_features_present | default([])
+  tags:
+    - docker_lxc_features

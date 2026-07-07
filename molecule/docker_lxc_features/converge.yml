@@ -1,0 +1,11 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    containers_from_tofu: "{{ docker_lxc_features_test_containers }}"
+
+  roles:
+    - role: docker_lxc_features
