@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+# Forward all logs to the central syslog pipeline:
+#   this node -> {{ pve_syslog_forwarder_target_host }}:{{ pve_syslog_forwarder_target_port }} ({{ pve_syslog_forwarder_protocol }})
+#   -> HAProxy syslog VIP -> Cribl Edge -> Splunk (os index).
+# rsyslog ingests the systemd journal by default on Debian, so this captures
+# host logs + every systemd service (pveproxy, pvedaemon, corosync, ZFS event
+# daemon, ...). The disk-assisted queue survives a receiver outage instead of
+# dropping logs.
+*.* action(type="omfwd"
+           target="{{ pve_syslog_forwarder_target_host }}"
+           port="{{ pve_syslog_forwarder_target_port }}"
+           protocol="{{ pve_syslog_forwarder_protocol }}"
+           queue.type="LinkedList"
+           queue.filename="cribl_fwd"
+           queue.maxDiskSpace="{{ pve_syslog_forwarder_queue_max_disk_space }}"
+           queue.saveOnShutdown="on"
+           action.resumeRetryCount="-1")

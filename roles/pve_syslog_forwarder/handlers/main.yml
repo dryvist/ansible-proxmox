@@ -1,0 +1,9 @@
+---
+# pve_syslog_forwarder role handlers
+
+- name: Restart rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: restarted
+    daemon_reload: true
+  listen: Restart rsyslog

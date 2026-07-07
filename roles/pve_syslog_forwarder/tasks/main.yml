@@ -1,0 +1,50 @@
+---
+# Install rsyslog and add a single forward rule so this PVE node's logs
+# (systemd journal + everything rsyslog sees) flow to the central syslog VIP ->
+# Cribl Edge -> Splunk. Ports/hostnames are never hardcoded: the target comes
+# from the PROXMOX_SUBDOMAIN env var and the port default mirrors the
+# terraform-proxmox pipeline constants (see defaults/main.yml).
+
+- name: Assert the syslog target host resolved
+  ansible.builtin.assert:
+    that:
+      - lookup('env', 'PROXMOX_SUBDOMAIN') | length > 0
+      - pve_syslog_forwarder_target_port | string | length > 0
+    fail_msg: >-
+      pve_syslog_forwarder needs PROXMOX_SUBDOMAIN (for the syslog CNAME
+      target). Run via doppler (doppler run -- ansible-playbook ...) or export
+      PROXMOX_SUBDOMAIN.
+    quiet: true
+  tags:
+    - pve_syslog_forwarder
+
+- name: Install rsyslog
+  ansible.builtin.apt:
+    name: rsyslog
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags:
+    - pve_syslog_forwarder
+
+- name: Deploy the Cribl syslog-forward rule
+  ansible.builtin.template:
+    src: 10-forward-cribl.conf.j2
+    dest: "{{ pve_syslog_forwarder_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: rsyslogd -N1 -f %s
+  notify: Restart rsyslog
+  tags:
+    - pve_syslog_forwarder
+
+- name: Enable and start rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_syslog_forwarder

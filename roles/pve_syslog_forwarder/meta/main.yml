@@ -1,0 +1,24 @@
+---
+# PVE syslog forwarder role metadata
+
+galaxy_info:
+  role_name: pve_syslog_forwarder
+  author: ansible-proxmox
+  description: Forward PVE host logs to the central syslog pipeline (HAProxy VIP -> Cribl Edge -> Splunk)
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - syslog
+    - rsyslog
+    - logging
+    - observability
+
+dependencies: []
