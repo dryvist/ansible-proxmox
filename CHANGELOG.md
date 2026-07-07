@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.46.0](https://github.com/dryvist/ansible-proxmox/compare/v1.45.0...v1.46.0) (2026-07-07)
+
+
+### Features
+
+* **pve_syslog_forwarder:** forward PVE node logs to the central syslog pipeline ([#368](https://github.com/dryvist/ansible-proxmox/issues/368)) ([c6c9ee9](https://github.com/dryvist/ansible-proxmox/commit/c6c9ee9987c9f23c1f9c8318fa9581bdf23efb88))
+
 ## [1.45.0](https://github.com/dryvist/ansible-proxmox/compare/v1.44.0...v1.45.0) (2026-07-07)
 
 
