@@ -56,6 +56,8 @@ lxc_features_containers:
   "512010": "nesting=1,keyctl=1,fuse=1" # llm-router-2 - Docker LiteLLM proxy
   "512020": "nesting=1,keyctl=1,fuse=1" # llm-router-3 - Docker LiteLLM proxy
   "514000": "nesting=1,keyctl=1,fuse=1" # qdrant - Docker vector database
+  "505030": "nesting=1,keyctl=1,fuse=1" # n8n - Docker workflow automation
+  "505040": "nesting=1,keyctl=1,fuse=1" # langgraph - Docker agent orchestration
 
 # Common packages to install
 common_packages:
