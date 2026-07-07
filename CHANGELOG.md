@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.44.0](https://github.com/dryvist/ansible-proxmox/compare/v1.43.1...v1.44.0) (2026-07-07)
+
+
+### Features
+
+* **lxc_features:** add n8n + langgraph feature entries ([#364](https://github.com/dryvist/ansible-proxmox/issues/364)) ([4961c60](https://github.com/dryvist/ansible-proxmox/commit/4961c60d4db2ef3a86f676b223017734cb1890aa))
+
 ## [1.43.1](https://github.com/dryvist/ansible-proxmox/compare/v1.43.0...v1.43.1) (2026-07-06)
 
 
