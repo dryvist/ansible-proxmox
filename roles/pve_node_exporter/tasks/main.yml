@@ -5,6 +5,18 @@
 # /usr/local/bin/node_exporter is only rewritten when the pinned version
 # changes — so re-runs are no-ops and a version bump is one variable.
 
+- name: Assert critical variables are defined and valid
+  ansible.builtin.assert:
+    that:
+      - ansible_architecture in ['x86_64', 'aarch64']
+      - ansible_default_ipv4.address is defined and ansible_default_ipv4.address | length > 0
+      - pve_node_exporter_version is defined and pve_node_exporter_version | length > 0
+      - pve_node_exporter_port is defined and pve_node_exporter_port | string | length > 0
+    fail_msg: "One or more critical configuration variables (architecture, default IPv4 address, version, or port) are undefined, empty, or unsupported."
+    quiet: true
+  tags:
+    - pve_node_exporter
+
 - name: Create node_exporter system user
   ansible.builtin.user:
     name: "{{ pve_node_exporter_user }}"
@@ -80,12 +92,16 @@
   tags:
     - pve_node_exporter
 
+- name: Flush handlers to apply systemd changes
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - pve_node_exporter
+
 - name: Enable and start node_exporter
   ansible.builtin.systemd:
     name: node_exporter
     state: started
     enabled: true
-    daemon_reload: true
   when: ansible_virtualization_type | default('') != 'docker'
   tags:
     - pve_node_exporter
