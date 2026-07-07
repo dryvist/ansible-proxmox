@@ -1,0 +1,31 @@
+---
+# Forward each Proxmox VE node's logs (the systemd journal + everything rsyslog
+# ingests) to the central syslog pipeline: HAProxy syslog VIP -> Cribl Edge ->
+# Splunk (os index). rsyslog reads the journal by default on Debian, so
+# installing it and adding one forward rule captures host logs plus every
+# systemd service (pveproxy, pvedaemon, corosync, ...).
+#
+# No literals: the target is the stable `syslog` CNAME (-> haproxy) sized off
+# the PROXMOX_SUBDOMAIN env var (e.g. from Doppler), mirroring how
+# proxmox_node_prefix keeps the real environment value out of the repo.
+
+# Stable syslog entry point: the `syslog` CNAME (-> the HAProxy VIP). Sized off
+# PROXMOX_SUBDOMAIN, never a committed literal.
+pve_syslog_forwarder_target_host: "syslog.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
+
+# Linux-family syslog port (routes to the Splunk os index). This repo's
+# inventory loader (playbooks/load_tofu.yml) does not inject
+# tofu_data.constants, so the value is pinned here; the source of truth is
+# terraform-proxmox `locals.tf` -> pipeline_constants.syslog_ports.linux
+# (published as ansible_inventory.constants.syslog_ports.linux). Keep in sync.
+pve_syslog_forwarder_target_port: 517
+
+# tcp (omfwd protocol=tcp) is reliable; udp drops under load. Cribl accepts both.
+pve_syslog_forwarder_protocol: tcp
+
+# Drop-in rsyslog config file owned by this role.
+pve_syslog_forwarder_config_path: /etc/rsyslog.d/10-forward-cribl.conf
+
+# Disk-assisted action queue: buffer through a HAProxy/Cribl outage instead of
+# dropping logs (capped so a long outage can't fill the root filesystem).
+pve_syslog_forwarder_queue_max_disk_space: 256m
