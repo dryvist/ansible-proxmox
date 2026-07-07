@@ -1,0 +1,19 @@
+---
+# Restart only the containers whose live config changed.
+
+- name: Restart changed docker containers
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      if pct status {{ item }} | grep -q 'status: running'; then
+        pct stop {{ item }}
+      fi
+      pct start {{ item }}
+    executable: /bin/bash
+  loop: "{{ docker_lxc_features_changed | default([]) | unique }}"
+  loop_control:
+    label: "container {{ item }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - docker_lxc_features_changed | default([]) | length > 0
+  changed_when: true

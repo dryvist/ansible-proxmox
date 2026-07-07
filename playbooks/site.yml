@@ -99,6 +99,13 @@
       tags:
         - media_lxc_features
 
+    # Root-only Docker-in-LXC features (nesting, keyctl, fuse) for the AI
+    # orchestration guests. Selection is tofu-tag driven and keeps the role
+    # VMID-agnostic.
+    - role: docker_lxc_features
+      tags:
+        - docker_lxc_features
+
     # Root-only AMD GPU passthrough (/dev/dri + /dev/kfd) for the inference LXC
     # (llm-fast) — same root@pam-only contract as media_lxc_features.
     # Runs after OpenTofu creates the shell, before ansible-proxmox-apps installs llama.cpp.

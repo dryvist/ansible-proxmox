@@ -54,6 +54,13 @@
       tags:
         - lxc_features
 
+    # Root-only Docker-in-LXC features (nesting, keyctl, fuse) for the AI
+    # orchestration guests. Safe no-op here unless a rack server also hosts
+    # those LXCs.
+    - role: docker_lxc_features
+      tags:
+        - docker_lxc_features
+
     - role: nas_storage
       tags:
         - nas_storage

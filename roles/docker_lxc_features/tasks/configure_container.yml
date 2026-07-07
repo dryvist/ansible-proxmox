@@ -1,0 +1,50 @@
+---
+# docker_ct.key   = service name
+# docker_ct.value = vmid
+#
+# Compare the live `features:` line first, then set the exact desired
+# `nesting=1,keyctl=1,fuse=1` string only when keyctl or fuse are missing.
+
+- name: "Read current config for container {{ docker_ct.value }}"
+  ansible.builtin.command:
+    cmd: "pct config {{ docker_ct.value }}"
+  register: docker_lxc_features_cfg
+  changed_when: false
+  tags:
+    - docker_lxc_features
+
+- name: "Parse current features for container {{ docker_ct.value }}"
+  ansible.builtin.set_fact:
+    docker_lxc_features_current_tokens: >-
+      {{
+        docker_lxc_features_cfg.stdout_lines
+        | select('match', '^features:')
+        | map('regex_replace', '^features:\s*', '')
+        | list | first | default('')
+        | split(',') | select('truthy') | list
+      }}
+  tags:
+    - docker_lxc_features
+
+- name: "Apply Docker features to container {{ docker_ct.value }}"
+  when:
+    - (docker_lxc_features_current_tokens | sort)
+      != (docker_lxc_features_desired_tokens | sort)
+  tags:
+    - docker_lxc_features
+  block:
+    - name: "Set Docker features on container {{ docker_ct.value }}"
+      ansible.builtin.command:
+        cmd: >-
+          pct set {{ docker_ct.value }} --features
+          {{ docker_lxc_features_desired_features }}
+      changed_when: true
+      notify: Restart changed docker containers
+      register: docker_lxc_features_set
+
+    - name: "Record feature change for container {{ docker_ct.value }}"
+      ansible.builtin.set_fact:
+        docker_lxc_features_changed: "{{ docker_lxc_features_changed + [docker_ct.value] }}"
+      when: docker_lxc_features_set is defined and docker_lxc_features_set.changed
+      tags:
+        - docker_lxc_features

@@ -1,0 +1,21 @@
+---
+# docker_lxc_features role defaults
+#
+# Root-only LXC feature flags for AI-orchestration Docker guests. The BPG
+# Proxmox provider's API token cannot set `keyctl` or `fuse` on these shells,
+# so this role applies the host-side `pct set --features` step after create.
+#
+# The role targets containers whose tofu inventory tags include both `docker`
+# and `ai-orchestration`. `n8n` and `langgraph` remain explicit fallbacks so
+# they stay covered even if the tags have not landed in inventory yet.
+
+docker_lxc_features_desired_tokens:
+  - nesting=1
+  - keyctl=1
+  - fuse=1
+
+docker_lxc_features_desired_features: "{{ docker_lxc_features_desired_tokens | join(',') }}"
+
+docker_lxc_features_fallback_services:
+  - n8n
+  - langgraph
