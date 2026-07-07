@@ -1,0 +1,29 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Prometheus node_exporter (v{{ pve_node_exporter_version }})
+Documentation=https://github.com/prometheus/node_exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ pve_node_exporter_user }}
+Group={{ pve_node_exporter_user }}
+ExecStart=/usr/local/bin/node_exporter \
+    --web.listen-address={{ pve_node_exporter_listen_address }}:{{ pve_node_exporter_port }}{% if pve_node_exporter_textfile_collector_enabled %} \
+    --collector.textfile.directory={{ pve_node_exporter_textfile_collector_dir }}{% endif %}{% for arg in pve_node_exporter_extra_args %} \
+    {{ arg }}{% endfor %}
+
+Restart=on-failure
+RestartSec=5s
+
+# Read-only metrics daemon: lock it down.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

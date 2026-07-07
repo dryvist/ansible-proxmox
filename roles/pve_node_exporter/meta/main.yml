@@ -1,0 +1,24 @@
+---
+# PVE node_exporter role metadata
+
+galaxy_info:
+  role_name: pve_node_exporter
+  author: ansible-proxmox
+  description: Install prometheus node_exporter as a pinned-version systemd service on PVE hosts
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - prometheus
+    - metrics
+    - monitoring
+    - observability
+
+dependencies: []

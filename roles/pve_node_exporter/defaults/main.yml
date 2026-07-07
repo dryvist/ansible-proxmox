@@ -1,0 +1,45 @@
+---
+# Prometheus node_exporter for Proxmox VE hosts: a pinned upstream release
+# installed as a native systemd service, exposing host metrics on :9100 for
+# the central Prometheus/Cribl scrape.
+
+# Pinned upstream release. Renovate-friendly single source for the version;
+# bump deliberately (the checksum below must move with it when set).
+pve_node_exporter_version: "1.9.1"
+
+# Where the release tarball comes from. Standard GitHub releases URL; override
+# to point at a local mirror (e.g. the apt-cacher / artifact LXC) if nodes
+# must not reach the internet at converge time.
+pve_node_exporter_download_url: >-
+  https://github.com/prometheus/node_exporter/releases/download/v{{ pve_node_exporter_version }}/node_exporter-{{ pve_node_exporter_version }}.linux-{{ pve_node_exporter_arch }}.tar.gz
+
+# Optional integrity pin for the tarball ("sha256:<hex>"). Empty skips the
+# check (get_url still only downloads when the versioned dest is absent).
+# Fill from the release's sha256sums.txt when bumping the version.
+pve_node_exporter_checksum: ""
+
+# GOARCH name derived from the host fact; covers the amd64/arm64 fleet.
+pve_node_exporter_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(ansible_architecture, 'amd64') }}"
+
+# Bind to the node's management IP (the default-route interface fact — derived
+# at runtime, never hardcoded) so metrics are only reachable on the management
+# VLAN. Set to 0.0.0.0 to listen on every interface.
+pve_node_exporter_listen_address: "{{ (ansible_default_ipv4 | default({})).address | default('0.0.0.0') }}"
+
+# Standard node_exporter port.
+pve_node_exporter_port: 9100
+
+# Dedicated no-login system user the service runs as.
+pve_node_exporter_user: node-exporter
+
+# Versioned install root; the active binary is /usr/local/bin/node_exporter.
+pve_node_exporter_install_dir: /opt/node_exporter
+
+# Optional textfile collector: drop *.prom files into this directory (cron
+# jobs, ZFS scripts, ...) and node_exporter exposes them as metrics.
+pve_node_exporter_textfile_collector_enabled: true
+pve_node_exporter_textfile_collector_dir: /var/lib/node_exporter/textfile_collector
+
+# Extra CLI flags appended verbatim to the service ExecStart (e.g.
+# ["--no-collector.wifi"]).
+pve_node_exporter_extra_args: []

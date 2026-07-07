@@ -82,6 +82,13 @@
         - pve_syslog_forwarder
         - syslog
 
+    # Prometheus node_exporter (pinned version, systemd) on :9100, bound to the
+    # node's management IP so host metrics stay on the management VLAN.
+    - role: pve_node_exporter
+      tags:
+        - pve_node_exporter
+        - node_exporter
+
     - role: lxc_features
       tags:
         - lxc_features

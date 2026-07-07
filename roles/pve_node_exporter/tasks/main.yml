@@ -1,0 +1,107 @@
+---
+# Install prometheus node_exporter as a pinned-version systemd service.
+# Everything is versioned: the tarball and unpacked tree live under
+# {{ pve_node_exporter_install_dir }}/node_exporter-<version>..., and
+# /usr/local/bin/node_exporter is only rewritten when the pinned version
+# changes — so re-runs are no-ops and a version bump is one variable.
+
+- name: Assert critical variables are defined and valid
+  ansible.builtin.assert:
+    that:
+      - ansible_architecture in ['x86_64', 'aarch64']
+      - ansible_default_ipv4.address is defined and ansible_default_ipv4.address | length > 0
+      - pve_node_exporter_version is defined and pve_node_exporter_version | length > 0
+      - pve_node_exporter_port is defined and pve_node_exporter_port | string | length > 0
+    fail_msg: "One or more critical configuration variables (architecture, default IPv4 address, version, or port) are undefined, empty, or unsupported."
+    quiet: true
+  tags:
+    - pve_node_exporter
+
+- name: Create node_exporter system user
+  ansible.builtin.user:
+    name: "{{ pve_node_exporter_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+  tags:
+    - pve_node_exporter
+
+- name: Create node_exporter install directory
+  ansible.builtin.file:
+    path: "{{ pve_node_exporter_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - pve_node_exporter
+
+- name: Download the pinned node_exporter release tarball
+  ansible.builtin.get_url:
+    url: "{{ pve_node_exporter_download_url }}"
+    dest: "{{ pve_node_exporter_install_dir }}/node_exporter-{{ pve_node_exporter_version }}.linux-{{ pve_node_exporter_arch }}.tar.gz"
+    checksum: "{{ pve_node_exporter_checksum | default('', true) or omit }}"
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - pve_node_exporter
+
+- name: Unpack the node_exporter release
+  ansible.builtin.unarchive:
+    src: "{{ pve_node_exporter_install_dir }}/node_exporter-{{ pve_node_exporter_version }}.linux-{{ pve_node_exporter_arch }}.tar.gz"
+    dest: "{{ pve_node_exporter_install_dir }}"
+    remote_src: true
+    owner: root
+    group: root
+    creates: "{{ pve_node_exporter_install_dir }}/node_exporter-{{ pve_node_exporter_version }}.linux-{{ pve_node_exporter_arch }}/node_exporter"
+  tags:
+    - pve_node_exporter
+
+- name: Install the node_exporter binary
+  ansible.builtin.copy:
+    src: "{{ pve_node_exporter_install_dir }}/node_exporter-{{ pve_node_exporter_version }}.linux-{{ pve_node_exporter_arch }}/node_exporter"
+    dest: /usr/local/bin/node_exporter
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart node_exporter
+  tags:
+    - pve_node_exporter
+
+- name: Create the textfile collector directory
+  ansible.builtin.file:
+    path: "{{ pve_node_exporter_textfile_collector_dir }}"
+    state: directory
+    owner: "{{ pve_node_exporter_user }}"
+    group: "{{ pve_node_exporter_user }}"
+    mode: "0755"
+  when: pve_node_exporter_textfile_collector_enabled
+  tags:
+    - pve_node_exporter
+
+- name: Deploy the node_exporter systemd unit
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart node_exporter
+  tags:
+    - pve_node_exporter
+
+- name: Flush handlers to apply systemd changes
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - pve_node_exporter
+
+- name: Enable and start node_exporter
+  ansible.builtin.systemd:
+    name: node_exporter
+    state: started
+    enabled: true
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_node_exporter
