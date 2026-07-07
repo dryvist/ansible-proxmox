@@ -44,7 +44,6 @@
     name: rsyslog
     state: started
     enabled: true
-    daemon_reload: true
   when: ansible_virtualization_type | default('') != 'docker'
   tags:
     - pve_syslog_forwarder
