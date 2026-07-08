@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.49.2](https://github.com/dryvist/ansible-proxmox/compare/v1.49.1...v1.49.2) (2026-07-08)
+
+
+### Bug Fixes
+
+* **idrac_kiosk:** FQDN default instead of a hardcoded internal IP ([#388](https://github.com/dryvist/ansible-proxmox/issues/388)) ([e6fbcba](https://github.com/dryvist/ansible-proxmox/commit/e6fbcba3f84d0cb961ee317bba628141ae3f9508)), closes [#378](https://github.com/dryvist/ansible-proxmox/issues/378)
+
 ## [1.49.1](https://github.com/dryvist/ansible-proxmox/compare/v1.49.0...v1.49.1) (2026-07-08)
 
 
