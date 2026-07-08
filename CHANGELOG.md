@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.47.1](https://github.com/dryvist/ansible-proxmox/compare/v1.47.0...v1.47.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **media_lxc_features:** honor idmap punch-through in config-owner chown ([#372](https://github.com/dryvist/ansible-proxmox/issues/372)) ([2bc9686](https://github.com/dryvist/ansible-proxmox/commit/2bc9686165b43d4e3cdf29d78cb30b0139abb1d5))
+
 ## [1.47.0](https://github.com/dryvist/ansible-proxmox/compare/v1.46.0...v1.47.0) (2026-07-07)
 
 
