@@ -15,3 +15,30 @@
            queue.maxDiskSpace="{{ pve_syslog_forwarder_queue_max_disk_space }}"
            queue.saveOnShutdown="on"
            action.resumeRetryCount="-1")
+
+# PVE firewall drops: pvefw-logger writes {{ pve_syslog_forwarder_firewall_log }}
+# directly (a file, NOT the journal), so the journal-fed *.* rule above never
+# sees a single DROP line. Tail the file and forward it through a dedicated
+# ruleset so the lines are ONLY forwarded — never re-written into local log
+# files by the default ruleset. Lands in the same os index, searchable as
+# process=pve-firewall "policy DROP". If drop volume ever warrants its own
+# index, promote it to a dedicated syslog family in terraform-proxmox
+# syslog_port_map instead of filtering here.
+module(load="imfile")
+ruleset(name="pve_firewall_fwd") {
+  action(type="omfwd"
+         target="{{ pve_syslog_forwarder_target_host }}"
+         port="{{ pve_syslog_forwarder_target_port }}"
+         protocol="{{ pve_syslog_forwarder_protocol }}"
+         queue.type="LinkedList"
+         queue.filename="cribl_fwd_pvefw"
+         queue.maxDiskSpace="{{ pve_syslog_forwarder_queue_max_disk_space }}"
+         queue.saveOnShutdown="on"
+         action.resumeRetryCount="-1")
+}
+input(type="imfile"
+      file="{{ pve_syslog_forwarder_firewall_log }}"
+      tag="pve-firewall:"
+      severity="warning"
+      facility="local0"
+      ruleset="pve_firewall_fwd")
