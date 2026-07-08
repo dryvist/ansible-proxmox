@@ -24,9 +24,9 @@ removing it from the play.
 
 The kiosk only shows content if the upstream viewers are live:
 
-- **LXC 251** (`10.0.1.251`) must be serving the two iDRAC6 noVNC viewers:
-  - `http://10.0.1.251:5410/` — Dell R410
-  - `http://10.0.1.251:5710/` — Dell R710
+- The `idrac-kvm` LXC must be serving the two iDRAC6 noVNC viewers:
+  - `http://idrac-kvm.<subdomain>:5410/` — Dell R410
+  - `http://idrac-kvm.<subdomain>:5710/` — Dell R710
 - That LXC and its ports are provisioned by the companion
   `terraform-proxmox` and `ansible-proxmox-apps` iDRAC work.
 
@@ -35,14 +35,14 @@ stays up and retries on the browser's normal schedule.
 
 ## Variables
 
-| Variable                | Default            | Description                                   |
-| ----------------------- | ------------------ | --------------------------------------------- |
-| `idrac_kiosk_enabled`   | `true`             | Master switch; `false` makes the role a no-op |
-| `idrac_kiosk_kvm_ip`    | `10.0.1.251`       | LXC serving the noVNC viewers                 |
-| `idrac_kiosk_r410_port` | `5410`             | R410 viewer port                              |
-| `idrac_kiosk_r710_port` | `5710`             | R710 viewer port                              |
-| `idrac_kiosk_data_dir`  | `/opt/idrac-kiosk` | On-host dir for the landing page              |
-| `idrac_kiosk_user`      | `kiosk`            | Unprivileged user running the session         |
+| Variable                | Default                        | Description                                   |
+| ----------------------- | ------------------------------ | --------------------------------------------- |
+| `idrac_kiosk_enabled`   | `true`                         | Master switch; `false` makes the role a no-op |
+| `idrac_kiosk_kvm_host`  | `idrac-kvm.$PROXMOX_SUBDOMAIN` | FQDN of the LXC serving the noVNC viewers     |
+| `idrac_kiosk_r410_port` | `5410`                         | R410 viewer port                              |
+| `idrac_kiosk_r710_port` | `5710`                         | R710 viewer port                              |
+| `idrac_kiosk_data_dir`  | `/opt/idrac-kiosk`             | On-host dir for the landing page              |
+| `idrac_kiosk_user`      | `kiosk`                        | Unprivileged user running the session         |
 
 ## Installation
 
@@ -62,7 +62,7 @@ Override the vars to change targets without editing the template:
   roles:
     - role: idrac_kiosk
       vars:
-        idrac_kiosk_kvm_ip: "10.0.1.99"
+        idrac_kiosk_kvm_host: "idrac-kvm.example.com"
         idrac_kiosk_r410_port: 6410
         idrac_kiosk_r710_port: 6710
 ```

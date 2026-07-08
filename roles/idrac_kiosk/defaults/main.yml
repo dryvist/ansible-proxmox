@@ -8,8 +8,11 @@
 # are touched.
 idrac_kiosk_enabled: true
 
-# LXC 251 serves the two iDRAC6 noVNC viewers (Dell R410 + R710).
-idrac_kiosk_kvm_ip: "10.0.1.251"
+# The LXC serving the two iDRAC6 noVNC viewers (Dell R410 + R710). FQDN, never
+# a literal IP — a hostname insulates this from the guest re-addressing (the
+# golden rule), and resolves via the managed DNS A record. PROXMOX_SUBDOMAIN
+# comes from the environment (Doppler), mirroring pve_syslog_forwarder.
+idrac_kiosk_kvm_host: "idrac-kvm.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
 
 # Per-server viewer ports on the LXC.
 idrac_kiosk_r410_port: 5410
