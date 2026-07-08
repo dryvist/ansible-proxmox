@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.47.2](https://github.com/dryvist/ansible-proxmox/compare/v1.47.1...v1.47.2) (2026-07-08)
+
+
+### Bug Fixes
+
+* **media_lxc_features:** add the *arr recycle bin to the /data skeleton ([#374](https://github.com/dryvist/ansible-proxmox/issues/374)) ([1610ff1](https://github.com/dryvist/ansible-proxmox/commit/1610ff1b3e9fc812d869d5824cd349dea1e8cec5))
+
 ## [1.47.1](https://github.com/dryvist/ansible-proxmox/compare/v1.47.0...v1.47.1) (2026-07-08)
 
 
