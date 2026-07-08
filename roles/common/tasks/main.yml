@@ -8,6 +8,18 @@
 # no-subscription channel automatically, before any apt operation here. This role
 # only refreshes the cache and installs the baseline packages.
 
+# Estate timezone doctrine: every host logs UTC so no consumer ever needs a
+# per-source timezone override (which the Cribl pipeline provably strips).
+# Nodes installed interactively defaulted to a local zone and stamped every
+# RFC3164 syslog line hours off; enforce UTC here so a rebuilt or newly
+# commissioned node can never reintroduce the skew.
+- name: Set the system timezone to UTC
+  community.general.timezone:
+    name: Etc/UTC
+  notify: Restart rsyslog for the timezone change
+  tags:
+    - common
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true

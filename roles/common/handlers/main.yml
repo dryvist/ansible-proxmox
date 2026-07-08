@@ -4,3 +4,13 @@
 - name: Reload systemd daemon
   ansible.builtin.systemd:
     daemon_reload: true
+
+# glibc caches /etc/localtime per process: after a timezone change rsyslog
+# keeps stamping outgoing syslog headers in the old zone until restarted.
+# failed_when: false — rsyslog may not be installed yet on a node whose first
+# converge runs common before pve_syslog_forwarder.
+- name: Restart rsyslog for the timezone change
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: restarted
+  failed_when: false
