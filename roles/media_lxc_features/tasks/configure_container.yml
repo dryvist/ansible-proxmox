@@ -182,8 +182,10 @@
 # ---------------------------------------------------------------------------
 # A mount whose host dataset must be owned by an in-container app owner (e.g. the
 # plex user on bulk/appdata/plex, or seerr's raw uid 1000 on bulk/appdata/seerr)
-# gets chowned to that owner's MAPPED host uid/gid (unpriv_base + the in-container
-# id). Looped over every owner-bearing mount, so a container with more than one
+# gets chowned to that owner's MAPPED host uid/gid (unpriv_base + the
+# in-container id — except a punched-through shared-data gid, which maps to
+# itself; see reconcile_config_owner.yml). Looped over every owner-bearing
+# mount, so a container with more than one
 # app-config mount (download-vpn: qbittorrent + prowlarr) reconciles each. A mount
 # carries EITHER owner_user (named, resolved live) OR owner_uid/owner_gid
 # (explicit) — the union below selects both; no mount carries both keys.

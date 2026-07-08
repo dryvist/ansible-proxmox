@@ -170,8 +170,11 @@ Every change is gated on a config diff read from `pct config` / the live
 - **keyctl**: current `features` tokens are parsed, any `keyctl=*` dropped,
   `keyctl=1` appended, sorted; `pct set --features` runs only when the token set
   differs. OpenTofu-set `nesting=1` is preserved.
-- **/dev/net/tun**: a marker-guarded `blockinfile` writes the two raw LXC lines
-  to `/etc/pve/lxc/<vmid>.conf`; reports changed only on an actual edit.
+- **/dev/net/tun**: the two raw LXC lines are reconciled the same
+  drop-all/re-add way as the idmap lines (read the live line-set, rewrite only
+  on a diff) — a marker-guarded `blockinfile` is NOT usable here because pmxcfs
+  relocates raw `lxc.*` keys and strips comment markers, which would re-append
+  duplicates on every run; reports changed only on an actual edit.
 
 A container is **restarted only if its config changed** (handler `pct reboot`,
 notified by the mutating tasks). A fully converged host performs **zero**
