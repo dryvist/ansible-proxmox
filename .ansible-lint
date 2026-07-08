@@ -27,7 +27,7 @@ enable_list:
   - no-changed-when
 
 kinds:
-  - playbook: "**/load_terraform.yml"
+  - playbook: "**/load_tofu.yml"
 
 use_default_rules: true
 offline: false
