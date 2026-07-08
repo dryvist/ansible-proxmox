@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.48.0](https://github.com/dryvist/ansible-proxmox/compare/v1.47.3...v1.48.0) (2026-07-08)
+
+
+### Features
+
+* **pve_syslog_forwarder:** ship pve-firewall drop logs to the os index ([#379](https://github.com/dryvist/ansible-proxmox/issues/379)) ([8a3f9a8](https://github.com/dryvist/ansible-proxmox/commit/8a3f9a8dec69012918d1202aec787fa8e24c968e))
+
 ## [1.47.3](https://github.com/dryvist/ansible-proxmox/compare/v1.47.2...v1.47.3) (2026-07-08)
 
 
