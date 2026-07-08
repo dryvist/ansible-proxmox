@@ -29,3 +29,8 @@ pve_syslog_forwarder_config_path: /etc/rsyslog.d/10-forward-cribl.conf
 # Disk-assisted action queue: buffer through a HAProxy/Cribl outage instead of
 # dropping logs (capped so a long outage can't fill the root filesystem).
 pve_syslog_forwarder_queue_max_disk_space: 256m
+
+# PVE firewall log written by pvefw-logger (guest-layer DROP lines with the
+# terraform firewall module's log_level_in/out=warning). File-only — never in
+# the journal — so it needs its own imfile tail (see the template).
+pve_syslog_forwarder_firewall_log: /var/log/pve-firewall.log
