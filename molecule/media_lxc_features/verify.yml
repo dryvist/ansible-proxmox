@@ -104,6 +104,9 @@
           - "'torrents/tv' in media_lxc_features_data_directories"
           - "'media/movies' in media_lxc_features_data_directories"
           - "'media/tv' in media_lxc_features_data_directories"
+          # *arr recycle bin — the *arrs validate it exists+writable, so the
+          # skeleton must create it (servarr_wiring points them at it).
+          - "'media/.recycle' in media_lxc_features_data_directories"
         fail_msg: "shared media data-root contract regressed"
 
     # ---------------------------------------------------------------------------
