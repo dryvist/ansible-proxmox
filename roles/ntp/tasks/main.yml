@@ -47,11 +47,23 @@
   tags:
     - ntp
 
+- name: Detect if running inside a system container
+  # systemd-detect-virt --container: exit 0 = inside a container, exit 1 = not.
+  # More reliable than ansible_virtualization_type, which LXC containers with
+  # extra capabilities (e.g. nftables/WireGuard) often mis-report.
+  # Proxmox host syncs the clock for LXC guests, so chrony needn't start there.
+  ansible.builtin.command: systemd-detect-virt --container
+  register: _ntp_virt_container
+  changed_when: false
+  failed_when: false
+  tags:
+    - ntp
+
 - name: Enable and start chrony service
   ansible.builtin.systemd:
     name: chrony
     state: "{{ ntp_service_state }}"
     enabled: "{{ ntp_service_enabled }}"
-  when: ansible_virtualization_type | default('') != 'docker'
+  when: _ntp_virt_container.rc != 0
   tags:
     - ntp
