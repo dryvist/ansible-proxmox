@@ -7,7 +7,11 @@
 #
 # An unprivileged LXC maps in-container uid/gid N -> host (unpriv_base + N) on the
 # default offset, so the host dataset must be owned by that mapped pair for the
-# app user to read+write its config. With `owner_user` the in-container ids are
+# app user to read+write its config. EXCEPTION: on a container carrying the
+# shared-data idmap, the punch-through lines map the shared media gid straight
+# through (container gid == host gid) and carve it OUT of the offset range — an
+# owner whose primary group is that gid maps to the gid itself, never base+gid
+# (see the host-gid computation below). With `owner_user` the in-container ids are
 # package-assigned, so resolve them LIVE (never hardcode). With `owner_uid` the
 # owner is a raw numeric id with no named user inside the LXC (e.g. seerr's
 # Docker `node` = 1000) and is used directly. Idempotent (stat then chown only on
@@ -78,8 +82,24 @@
       ansible.builtin.set_fact:
         media_lxc_features_cfg_host_uid: >-
           {{ media_lxc_features_unpriv_base + (media_lxc_features_cfg_in_uid | int) }}
+        # The gid map is NOT a pure offset on containers carrying the shared-data
+        # idmap: those lxc.idmap lines punch the shared media gid straight through
+        # (container gid -> the SAME host gid) and carve it out of the offset
+        # range. For an owner whose primary group IS that punched-through gid, the
+        # mapped host gid is the gid itself. base+gid there lands on a host gid
+        # with NO in-container mapping — the dir shows group `nogroup` and
+        # container root loses DAC_OVERRIDE over it (the kernel grants
+        # capabilities only on files whose uid AND gid both map into the
+        # namespace), which breaks delegated Ansible writes into the mount.
         media_lxc_features_cfg_host_gid: >-
-          {{ media_lxc_features_unpriv_base + (media_lxc_features_cfg_in_gid | int) }}
+          {{
+            (media_lxc_features_cfg_in_gid | int)
+            if (
+              (media_ct.value.data_idmap | default(false) | bool)
+              and (media_lxc_features_cfg_in_gid | int) == (media_lxc_features_data_gid | int)
+            )
+            else (media_lxc_features_unpriv_base + (media_lxc_features_cfg_in_gid | int))
+          }}
 
     - name: "Chown the host config dataset to its mapped owner on {{ media_ct.key }}"
       ansible.builtin.command:

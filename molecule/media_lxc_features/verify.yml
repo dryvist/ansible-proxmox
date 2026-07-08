@@ -177,6 +177,36 @@
           - (['keyctl=1', 'nesting=1'] | sort) == media_lxc_features_verify_converged
         fail_msg: "keyctl feature-merge logic regressed (drop, order, or idempotency)"
 
+    # Guards the config-owner host-gid mapping (the load-bearing expression
+    # reconcile_config_owner.yml feeds its chown). On a container carrying the
+    # shared-data idmap, the punch-through maps the shared media gid to ITSELF
+    # on the host and carves it out of the offset range — so an owner whose
+    # primary group is that gid must map to the gid itself. base+gid there is
+    # a host gid with no in-container mapping: the dir shows group `nogroup`
+    # and container root loses DAC_OVERRIDE, breaking delegated config writes
+    # (the Prowlarr config.xml permission-denied regression).
+    - name: Assert the config-owner host-gid map honors the punch-through carve-out
+      ansible.builtin.assert:
+        that:
+          - >-
+            ((item.in_gid | int)
+             if ((item.data_idmap | bool)
+                 and (item.in_gid | int) == (media_lxc_features_data_gid | int))
+             else (media_lxc_features_unpriv_base + (item.in_gid | int)))
+            == (item.expect | int)
+        fail_msg: >-
+          host-gid mapping regressed for in_gid={{ item.in_gid }}
+          (data_idmap={{ item.data_idmap }}): expected {{ item.expect }}
+      loop:
+        # shared media gid on a /data container -> punched straight through
+        - { data_idmap: true, in_gid: "{{ media_lxc_features_data_gid }}", expect: "{{ media_lxc_features_data_gid | int }}" }
+        # app-private gid on a /data container -> normal offset
+        - { data_idmap: true, in_gid: 991, expect: 100991 }
+        # any gid on a container without the shared-data idmap -> normal offset
+        - { data_idmap: false, in_gid: 1000, expect: 101000 }
+      loop_control:
+        label: "data_idmap={{ item.data_idmap }} in_gid={{ item.in_gid }}"
+
     # Guards the orphaned-slot pruning logic (the load-bearing expression the role
     # uses to `pct set --delete mpN` after a mounts list shrinks). Bind-mounts are
     # position-indexed, so a shorter desired list leaves higher mpN slots stale.
