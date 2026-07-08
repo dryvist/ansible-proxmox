@@ -163,6 +163,10 @@ media_lxc_features_data_directories:
   - media
   - media/movies
   - media/tv
+  # *arr recycle bin (soft-delete). MUST share the /data filesystem so
+  # deletes are atomic moves; the *arrs validate it exists and is writable
+  # by the media user before accepting it, so the skeleton owns creating it.
+  - media/.recycle
 
 # ---------------------------------------------------------------------------
 # Unprivileged-container GID passthrough for the shared data root
