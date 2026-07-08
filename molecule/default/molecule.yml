@@ -1,12 +1,4 @@
 ---
-dependency:
-  name: galaxy
-  options:
-    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/requirements.yml
-
-driver:
-  name: docker
-
 platforms:
   - name: proxmox-test
     image: "${MOLECULE_IMAGE:-debian:stable-slim}"
@@ -17,20 +9,10 @@ platforms:
       - /tmp
 
 provisioner:
-  name: ansible
-  config_options:
-    defaults:
-      interpreter_python: auto_silent
-      gathering: smart
-      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
   inventory:
     group_vars:
       all:
-        ansible_connection: docker
         # Override defaults for testing environment
         zfs_swap_size: "1G"
         common_packages:
           - htop
-
-verifier:
-  name: ansible
