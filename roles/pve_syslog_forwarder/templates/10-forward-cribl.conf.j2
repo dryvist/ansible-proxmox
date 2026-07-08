@@ -24,7 +24,12 @@
 # process=pve-firewall "policy DROP". If drop volume ever warrants its own
 # index, promote it to a dedicated syslog family in terraform-proxmox
 # syslog_port_map instead of filtering here.
-module(load="imfile")
+# statefile.directory: the deploy-time `rsyslogd -N1 -f <this file>` validate
+# runs the drop-in in isolation, where the main config's workDirectory is not
+# visible — without an explicit state dir imfile warns and -N1 exits 1,
+# failing every converge. /var/spool/rsyslog is the Debian package's standard
+# spool dir (created on install).
+module(load="imfile" statefile.directory="/var/spool/rsyslog")
 ruleset(name="pve_firewall_fwd") {
   action(type="omfwd"
          target="{{ pve_syslog_forwarder_target_host }}"
