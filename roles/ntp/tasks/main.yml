@@ -64,6 +64,6 @@
     name: chrony
     state: "{{ ntp_service_state }}"
     enabled: "{{ ntp_service_enabled }}"
-  when: _ntp_virt_container.rc != 0
+  when: (_ntp_virt_container.rc | default(1)) != 0
   tags:
     - ntp
