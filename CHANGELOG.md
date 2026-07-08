@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.48.1](https://github.com/dryvist/ansible-proxmox/compare/v1.48.0...v1.48.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **pve_syslog_forwarder:** pin imfile state dir so the isolated -N1 validate passes ([#381](https://github.com/dryvist/ansible-proxmox/issues/381)) ([8f0e43c](https://github.com/dryvist/ansible-proxmox/commit/8f0e43c3611a7990b74a7ff2b00a7f56c0e40e9a))
+
 ## [1.48.0](https://github.com/dryvist/ansible-proxmox/compare/v1.47.3...v1.48.0) (2026-07-08)
 
 
