@@ -32,6 +32,11 @@ jobs:
       - name: Install Ansible collections
         run: ansible-galaxy collection install -r requirements.yml
 
+      # load_tofu.yml (imported by verify_inventory.yml) include_role's the
+      # shared inventory_resolve role, so it must be installed before the run.
+      - name: Install Ansible roles
+        run: ansible-galaxy role install -r requirements.yml
+
       - name: Verify OpenTofu inventory loading
         run: |
           cp tests/inventory_load/tofu_inventory.json inventory/tofu_inventory.json
