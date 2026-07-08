@@ -13,3 +13,12 @@ collections:
   # deliberately rather than inherit the change silently.
   - name: community.proxmox
     version: ">=1.6.0,<2.0.0"
+
+roles:
+  # Shared inventory resolver consumed by playbooks/load_tofu.yml — replaces the
+  # per-repo resolution-tier copy-paste. Pinned to the release that first ships
+  # the role.
+  - name: inventory_resolve
+    src: https://github.com/dryvist/homelab-contracts.git
+    scm: git
+    version: v1.10.0
