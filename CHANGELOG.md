@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.47.3](https://github.com/dryvist/ansible-proxmox/compare/v1.47.2...v1.47.3) (2026-07-08)
+
+
+### Bug Fixes
+
+* **pve_node_exporter:** pin the 1.9.1 tarball checksums from the release sums ([#376](https://github.com/dryvist/ansible-proxmox/issues/376)) ([bdb8340](https://github.com/dryvist/ansible-proxmox/commit/bdb83405e2ef3ed71cc45dadd2dbd1827149a78a))
+
 ## [1.47.2](https://github.com/dryvist/ansible-proxmox/compare/v1.47.1...v1.47.2) (2026-07-08)
 
 
