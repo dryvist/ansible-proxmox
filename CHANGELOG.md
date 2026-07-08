@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.49.1](https://github.com/dryvist/ansible-proxmox/compare/v1.49.0...v1.49.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **ntp,lint:** converge container guard drift + fix stale lint glob ([#385](https://github.com/dryvist/ansible-proxmox/issues/385)) ([1383f90](https://github.com/dryvist/ansible-proxmox/commit/1383f901306b3ccdcf0be89c512e3262a830116e))
+
 ## [1.49.0](https://github.com/dryvist/ansible-proxmox/compare/v1.48.1...v1.49.0) (2026-07-08)
 
 
