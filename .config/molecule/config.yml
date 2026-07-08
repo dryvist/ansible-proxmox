@@ -1,0 +1,29 @@
+---
+# Shared base config, auto-discovered by molecule via find_vcs_root() at
+# .config/molecule/config.yml (see `molecule --help` / molecule/shell.py).
+# Deep-merged under every scenario's molecule.yml, so each scenario file only
+# needs to carry the keys that make it unique (platforms + any test fixtures).
+# `platforms:` is a list and molecule replaces lists wholesale on merge, so it
+# must stay out of this base and be defined in every scenario file.
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/requirements.yml
+
+driver:
+  name: docker
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      interpreter_python: auto_silent
+      gathering: smart
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+  inventory:
+    group_vars:
+      all:
+        ansible_connection: docker
+
+verifier:
+  name: ansible

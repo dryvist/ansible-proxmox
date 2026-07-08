@@ -1,12 +1,4 @@
 ---
-dependency:
-  name: galaxy
-  options:
-    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/requirements.yml
-
-driver:
-  name: docker
-
 platforms:
   - name: proxmox-media-lxc-features-test
     image: "${MOLECULE_IMAGE:-debian:stable-slim}"
@@ -17,16 +9,9 @@ platforms:
       - /tmp
 
 provisioner:
-  name: ansible
-  config_options:
-    defaults:
-      interpreter_python: auto_silent
-      gathering: smart
-      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
   inventory:
     group_vars:
       all:
-        ansible_connection: docker
         # SINGLE source for the test's service -> vmid fixture, inherited by both
         # converge and verify (a vmid is therefore defined in exactly one place).
         # These are ARBITRARY test ids — NEVER the real production VMIDs, which
@@ -39,6 +24,3 @@ provisioner:
           radarr: 90004
           download-vpn: 90005
           sortarr: 90006
-
-verifier:
-  name: ansible
