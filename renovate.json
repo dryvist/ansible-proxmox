@@ -1,21 +1,4 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    "local>dryvist/.github"
-  ],
-  "packageRules": [
-    {
-      "description": "Group Ansible collection updates",
-      "matchManagers": ["ansible-galaxy"],
-      "groupName": "Ansible collections"
-    }
-  ],
-  "pre-commit": {
-    "enabled": true
-  },
-  "ansible-galaxy": {
-    "enabled": true,
-    "fileMatch": ["(^|/)requirements\\.ya?ml$"]
-  }
+  "extends": ["local>dryvist/.github"]
 }
