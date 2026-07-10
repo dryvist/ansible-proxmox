@@ -5,9 +5,10 @@
 # Proxmox provider's API token cannot set `keyctl` or `fuse` on these shells,
 # so this role applies the host-side `pct set --features` step after create.
 #
-# The role targets containers whose tofu inventory tags include both `docker`
-# and `ai-orchestration`. `n8n` and `langgraph` remain explicit fallbacks so
-# they stay covered even if the tags have not landed in inventory yet.
+# The role targets containers whose tofu inventory tags include `docker` plus
+# either `ai-orchestration` or `agentgateway`. `n8n` and `langgraph` remain
+# explicit fallbacks so they stay covered even if the tags have not landed in
+# inventory yet.
 
 docker_lxc_features_desired_tokens:
   - nesting=1
