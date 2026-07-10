@@ -2,9 +2,10 @@
 # docker_lxc_features role tasks
 #
 # Applies root-only Docker-in-LXC features on the Proxmox host. Selection is
-# driven by the tofu inventory: containers tagged `docker` + `ai-orchestration`
-# are targeted automatically, with `n8n` and `langgraph` kept as fallbacks for
-# the live guests already called out in the problem report.
+# driven by the tofu inventory: containers tagged `docker` plus either
+# `ai-orchestration` or `agentgateway` are targeted automatically, with `n8n`
+# and `langgraph` kept as fallbacks for the live guests already called out in
+# the problem report.
 
 - name: Reset the AI Docker service accumulator
   ansible.builtin.set_fact:
@@ -21,7 +22,7 @@
   when:
     - item.value.vmid is defined
     - "'docker' in (item.value.tags | default([]))"
-    - "'ai-orchestration' in (item.value.tags | default([]))"
+    - "(item.value.tags | default([])) | intersect(['ai-orchestration', 'agentgateway']) | length > 0"
   tags:
     - docker_lxc_features
 

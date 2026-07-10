@@ -11,7 +11,8 @@ host with `pct set`.
 
 The role resolves candidate containers from `containers_from_tofu`:
 
-- any container tagged `docker` and `ai-orchestration` is selected
+- any container tagged `docker` plus either `ai-orchestration` or
+  `agentgateway` is selected
 - `n8n` and `langgraph` remain explicit fallbacks until those tags are present
 
 That keeps the role VMID-agnostic and lets a renumber flow through from tofu
