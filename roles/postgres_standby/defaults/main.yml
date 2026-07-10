@@ -1,0 +1,58 @@
+---
+# postgres_standby role defaults — daily pull of pg_dump artifacts into the
+# replicated database archive namespace (see docs/DATABASE_DR_STANDARD.md).
+#
+# One CONSUMER of the generic <pool>/databases storage namespace (see the
+# zfs_pools role). For each configured job it mirrors the source guest's
+# pg_dump backup directory (custom-format `*.dump`, produced by the
+# ansible-proxmox-apps `postgres` role's pg-backup timer) into a local archive
+# directory. The mirror tracks the source's own retention window; pre-prune
+# history is preserved by the storage layer (sanoid snapshots + syncoid
+# replication to the DR node).
+#
+# Tier 2 (cloud/off-site): after the mirror, the newest dump per database is
+# uploaded to each configured S3-compatible target (on-prem RustFS and/or
+# AWS S3). Credentials land in a root-only EnvironmentFile — never in the
+# script, never logged.
+#
+# Inert until postgres_standby_jobs is set. Prerequisites (out of band): SSH
+# trust from this host's root to each source guest (cluster_ssh_trust covers
+# PVE node<->node trust, NOT host->guest), and the source role's backup timer.
+
+postgres_standby_enabled: true
+
+# rsync (pull) always; awscli only when S3 targets are configured.
+postgres_standby_packages:
+  - rsync
+postgres_standby_log_dir: /var/log/postgres-standby
+
+# Daily, after the source pg-backup timer (02:30 + up to 15 min splay) has
+# certainly finished — a warm archive, not a hot replica.
+postgres_standby_on_calendar: "*-*-* 04:00:00"
+# Run a missed schedule on next boot (sensible for a backup job).
+postgres_standby_persistent: true
+
+# Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" on
+# failure. Wire from the play (env-sourced), like sqlite_standby.
+postgres_standby_healthcheck_url: ""
+
+# Opt-in: run the sync immediately during the play (seed/refresh on demand) in
+# addition to installing the timer. Mirrors sqlite_standby_run_now.
+postgres_standby_run_now: false
+
+# Pull jobs (empty -> inert). Each job:
+#   - name: "postgres"                            # log label
+#     source_host: "root@<db-guest-fqdn>"         # ssh target holding the dumps
+#     source_dir: "/var/lib/postgresql/backups"   # pg-backup output dir
+#     archive_dir: "/bulk/databases/postgres"     # replicated archive namespace
+postgres_standby_jobs: []
+
+# Tier-2 S3-compatible upload targets (empty -> Tier 1 only). Each target:
+#   - name: "RUSTFS"                    # env-var prefix in the credentials file
+#     bucket: "db-dr"
+#     prefix: "postgres"                # object key prefix inside the bucket
+#     endpoint_url: "https://..."       # omit/empty for AWS S3
+#     access_key: "..."                 # wire env/SOPS-sourced, never a literal
+#     secret_key: "..."
+postgres_standby_s3_targets: []
+postgres_standby_s3_env_file: /etc/postgres-standby-s3.env

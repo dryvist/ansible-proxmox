@@ -139,6 +139,11 @@ down (avoid split-brain — one writer, always).
      path the container bind-mounts, recreate the CT definition, repoint its bind
      mount at the cloned dataset, then `pct start <ctid>`.
 
+   - **Database data (any engine):** rebuild the guest via its role, then
+     restore the newest logical dump from `bulk/databases/<instance>` (or the
+     Tier-2 cloud copy) per [`DATABASE_DR_STANDARD.md`](./DATABASE_DR_STANDARD.md) —
+     do not clone the live DB volume; the dumps are the app-consistent artifact.
+
 5. **Repoint DNS.** Update the A record(s) for the affected service(s) to the
    standby's address. Internal traffic resolves by name
    (`<service>.${PROXMOX_SUBDOMAIN}`), so only the DNS A record changes — no

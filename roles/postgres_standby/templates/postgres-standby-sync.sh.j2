@@ -1,0 +1,81 @@
+#!/bin/bash
+# postgres-standby-sync — daily Postgres dump archive pull + Tier-2 upload.
+# Managed by Ansible — do not edit manually.
+#
+# Per job: mirror the source guest's pg-backup directory (custom-format
+# `<db>-<utc-stamp>.dump`, already app-consistent) into the replicated archive
+# dataset. `--delete` keeps the mirror bounded by the SOURCE's own retention
+# window; pre-prune history is preserved by sanoid snapshots + syncoid
+# replication of the archive dataset (read a point-in-time view from
+# <dataset>/.zfs/snapshot/). Then upload the newest dump per database to each
+# Tier-2 S3 target. Credentials come from the systemd EnvironmentFile — never
+# echoed. A failed job/upload is logged and does NOT abort the others.
+set -uo pipefail
+
+LOG_DIR="{{ postgres_standby_log_dir }}"
+HC="{{ postgres_standby_healthcheck_url }}"
+mkdir -p "$LOG_DIR"
+log="$LOG_DIR/$(date +%Y-%m-%d).log"
+
+say()     { echo "=== $(date +%H:%M:%S) $* ===" >>"$log"; }
+ping_hc() { [ -n "$HC" ] && curl -fsS -m 10 --retry 3 -o /dev/null "$1" >/dev/null 2>&1 || true; }
+
+# Newest dump per database in a directory. Filenames are
+# `<db>-YYYYmmddTHHMMSSZ.dump` (pg-backup.sh); the UTC stamp contains no
+# hyphen, so stripping the final `-<stamp>.dump` segment yields the database
+# name (which may itself contain hyphens); first (newest-mtime) file wins.
+newest_per_db() {
+  ls -t "$1"/*.dump 2>/dev/null | awk '{
+    db = $0; sub(/-[^-]*\.dump$/, "", db)
+    if (!(db in seen)) { seen[db] = 1; print }
+  }'
+}
+
+sync_job() {
+  local name="$1" src_host="$2" src_dir="$3" archive="$4"
+  say "job $name: ${src_host}:${src_dir}/ -> ${archive}/"
+  mkdir -p "$archive"
+  if ! rsync -a --delete --include='*.dump' --exclude='*' \
+      -e 'ssh -o BatchMode=yes' \
+      "${src_host}:${src_dir}/" "${archive}/" >>"$log" 2>&1; then
+    say "  FAILED: rsync mirror"
+    return 1
+  fi
+  say "  job $name OK ($(ls "$archive"/*.dump 2>/dev/null | wc -l | tr -d ' ') dumps)"
+}
+
+{% if postgres_standby_s3_targets | length > 0 %}
+upload_job() {
+  local name="$1" archive="$2" dump rc=0
+  while IFS= read -r dump; do
+{% for target in postgres_standby_s3_targets %}
+    if AWS_ACCESS_KEY_ID="${{ target.name }}_ACCESS_KEY" \
+       AWS_SECRET_ACCESS_KEY="${{ target.name }}_SECRET_KEY" \
+       aws s3 cp {% if target.endpoint_url | default('') %}--endpoint-url "{{ target.endpoint_url }}" {% endif %}--only-show-errors \
+         "$dump" "s3://{{ target.bucket }}/{{ target.prefix | default(name) }}/$(basename "$dump")" >>"$log" 2>&1; then
+      say "  uploaded $(basename "$dump") -> {{ target.name }}"
+    else
+      say "  FAILED: upload $(basename "$dump") -> {{ target.name }}"
+      rc=1
+    fi
+{% endfor %}
+  done < <(newest_per_db "$archive")
+  return "$rc"
+}
+{% endif %}
+
+rc=0
+{% for job in postgres_standby_jobs %}
+sync_job "{{ job.name }}" "{{ job.source_host }}" "{{ job.source_dir }}" "{{ job.archive_dir }}" || rc=1
+{% if postgres_standby_s3_targets | length > 0 %}
+upload_job "{{ job.name }}" "{{ job.archive_dir }}" || rc=1
+{% endif %}
+{% endfor %}
+
+if [ "$rc" -ne 0 ]; then
+  say "one or more jobs FAILED"
+  ping_hc "${HC}/fail"
+  exit 1
+fi
+say "all jobs OK"
+ping_hc "${HC}"
