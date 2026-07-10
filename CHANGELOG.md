@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.51.0](https://github.com/dryvist/ansible-proxmox/compare/v1.50.0...v1.51.0) (2026-07-10)
+
+
+### Features
+
+* **dr:** postgres_standby role — replicated dump archive + Tier-2 upload ([27cd21a](https://github.com/dryvist/ansible-proxmox/commit/27cd21a9ffd7ff5c622b26e3fe67a57dee70ab8b))
+
 ## [1.50.0](https://github.com/dryvist/ansible-proxmox/compare/v1.49.2...v1.50.0) (2026-07-10)
 
 
