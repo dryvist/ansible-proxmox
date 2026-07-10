@@ -79,3 +79,18 @@ sanoid_datasets:
 #     archive_path: "/bulk/databases/events/archive.db"
 #     tables:
 #       - { name: "events", key: "id" }
+
+# Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).
+# Mirrors the shared-postgres guest's pg-backup directory into the replicated
+# bulk/databases namespace above (sanoid `database` template + pve3 syncoid pull
+# cover it with no per-instance edit). The source guest is addressed by FQDN
+# derived from tofu (hostname + domain) — never a literal IP or domain. Gated on
+# domain_from_tofu so a scoped run without load_tofu.yml stays inert instead of
+# pulling from a bogus host.
+postgres_standby_jobs: >-
+  {{ [] if (domain_from_tofu | default('') | length == 0) else [
+       {'name': 'postgres',
+        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres'] | default({})).hostname | default('postgres')) ~ '.' ~ domain_from_tofu,
+        'source_dir': '/var/lib/postgresql/backups',
+        'archive_dir': '/bulk/databases/postgres'}
+     ] }}

@@ -1,0 +1,137 @@
+---
+# postgres_standby tasks — install the pull engine and render the daily sync
+# script + systemd timer. Package install, directory creation, and the timer
+# enable are Docker-skipped (molecule); the script and unit files always render
+# so the contract is verifiable in-container.
+
+- name: Install postgres_standby packages (rsync)
+  ansible.builtin.apt:
+    name: "{{ postgres_standby_packages }}"
+    state: present
+    update_cache: true
+  when:
+    - postgres_standby_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - postgres_standby
+
+- name: Install awscli for Tier-2 S3 uploads
+  ansible.builtin.apt:
+    name: awscli
+    state: present
+  when:
+    - postgres_standby_enabled
+    - postgres_standby_s3_targets | length > 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - postgres_standby
+
+- name: Ensure log directory exists
+  ansible.builtin.file:
+    path: "{{ postgres_standby_log_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when:
+    - postgres_standby_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - postgres_standby
+
+- name: Ensure archive directories exist
+  ansible.builtin.file:
+    path: "{{ item.archive_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop: "{{ postgres_standby_jobs }}"
+  loop_control:
+    label: "{{ item.archive_dir }}"
+  when:
+    - postgres_standby_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - postgres_standby
+
+# Root-only credentials for the Tier-2 uploads. Rendered even with no targets
+# (empty file) so the service unit's EnvironmentFile= reference always resolves.
+- name: Render the Tier-2 S3 credentials file
+  ansible.builtin.template:
+    src: postgres-standby-s3.env.j2
+    dest: "{{ postgres_standby_s3_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when: postgres_standby_enabled
+  tags:
+    - postgres_standby
+
+- name: Deploy the standby sync script
+  ansible.builtin.template:
+    src: postgres-standby-sync.sh.j2
+    dest: /usr/local/bin/postgres-standby-sync.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: postgres_standby_enabled
+  tags:
+    - postgres_standby
+
+- name: Render the standby service unit
+  ansible.builtin.template:
+    src: postgres-standby.service.j2
+    dest: /etc/systemd/system/postgres-standby.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: postgres_standby_enabled
+  notify: Reload systemd daemon
+  tags:
+    - postgres_standby
+
+- name: Render the standby timer unit
+  ansible.builtin.template:
+    src: postgres-standby.timer.j2
+    dest: /etc/systemd/system/postgres-standby.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: postgres_standby_enabled
+  notify: Reload systemd daemon
+  tags:
+    - postgres_standby
+
+# Apply any pending daemon-reload now so the timer below enables against the
+# freshly written unit (handlers otherwise run only at end of play).
+- name: Reload systemd before enabling the timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the standby timer
+  ansible.builtin.systemd:
+    name: postgres-standby.timer
+    enabled: true
+    state: started
+  when:
+    - postgres_standby_enabled
+    - postgres_standby_jobs | length > 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - postgres_standby
+
+# Opt-in immediate run (seed/refresh on demand) — mirrors sqlite_standby_run_now.
+# Via the service (not the script directly) so the S3 EnvironmentFile loads.
+- name: Run the standby sync now (opt-in seed/refresh)
+  ansible.builtin.systemd:
+    name: postgres-standby.service
+    state: started
+  when:
+    - postgres_standby_enabled
+    - postgres_standby_jobs | length > 0
+    - postgres_standby_run_now | bool
+    - ansible_virtualization_type != 'docker'
+  changed_when: true
+  tags:
+    - postgres_standby

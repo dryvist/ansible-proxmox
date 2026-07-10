@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Postgres dump archive pull + Tier-2 upload
+Documentation=ansible role postgres_standby
+
+[Service]
+Type=oneshot
+EnvironmentFile=-{{ postgres_standby_s3_env_file }}
+ExecStart=/usr/local/bin/postgres-standby-sync.sh

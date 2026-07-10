@@ -117,3 +117,12 @@
         name: "{{ item }}"
         containers_from_tofu: "{{ tofu_data.containers | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
+
+    # Estate domain, so host_vars can build guest FQDNs (e.g. the
+    # postgres_standby source_host) instead of hard-coding an IP or domain.
+    # Empty when absent (test fixture) — consumers gate on non-empty.
+    - name: Inject OpenTofu domain onto proxmox hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        domain_from_tofu: "{{ tofu_data.domain | default('') }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"

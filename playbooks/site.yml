@@ -155,6 +155,30 @@
       vars:
         sqlite_standby_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/sqlite-standby"
 
+    # Postgres dump archive pull + Tier-2 cloud upload — the Postgres consumer
+    # of docs/DATABASE_DR_STANDARD.md. Inert until postgres_standby_jobs is set
+    # (per host). Tier-2 targets are env-wired (Doppler/SOPS); an unset key
+    # drops that target, leaving Tier 1 (sanoid + syncoid) intact.
+    - role: postgres_standby
+      tags:
+        - postgres_standby
+      vars:
+        postgres_standby_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/postgres-standby"
+        postgres_standby_s3_targets: >-
+          {{ [
+               {'name': 'RUSTFS',
+                'bucket': lookup('env', 'POSTGRES_DR_RUSTFS_BUCKET'),
+                'prefix': 'postgres',
+                'endpoint_url': lookup('env', 'POSTGRES_DR_RUSTFS_ENDPOINT'),
+                'access_key': lookup('env', 'POSTGRES_DR_RUSTFS_ACCESS_KEY'),
+                'secret_key': lookup('env', 'POSTGRES_DR_RUSTFS_SECRET_KEY')},
+               {'name': 'AWS',
+                'bucket': lookup('env', 'POSTGRES_DR_AWS_BUCKET'),
+                'prefix': 'postgres',
+                'access_key': lookup('env', 'POSTGRES_DR_AWS_ACCESS_KEY'),
+                'secret_key': lookup('env', 'POSTGRES_DR_AWS_SECRET_KEY')}
+             ] | selectattr('access_key', 'ne', '') | list }}
+
     - role: idrac_kiosk
       tags:
         - idrac_kiosk
