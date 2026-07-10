@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.51.1](https://github.com/dryvist/ansible-proxmox/compare/v1.51.0...v1.51.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* **standby:** accept-new host keys on pull SSH + valid Documentation URLs ([a40c01c](https://github.com/dryvist/ansible-proxmox/commit/a40c01cb0a32e950da6f283187a9225bdd422f17))
+
 ## [1.51.0](https://github.com/dryvist/ansible-proxmox/compare/v1.50.0...v1.51.0) (2026-07-10)
 
 
