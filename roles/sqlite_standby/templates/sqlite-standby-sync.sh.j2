@@ -31,13 +31,13 @@ sync_job() {
   rm -f "$snap"
 
   # 1. Consistent online backup on the source (handles a live WAL DB), pull it.
-  if ! ssh -o BatchMode=yes "$src_host" "${SQLITE} '${src_path}' \".backup '${rtmp}'\"" >>"$log" 2>&1; then
+  if ! ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$src_host" "${SQLITE} '${src_path}' \".backup '${rtmp}'\"" >>"$log" 2>&1; then
     say "  FAILED: online backup on source"
     return 1
   fi
   if ! rsync -a --remove-source-files "${src_host}:${rtmp}" "$snap" >>"$log" 2>&1; then
     say "  FAILED: rsync pull"
-    ssh -o BatchMode=yes "$src_host" "rm -f '${rtmp}'" >>"$log" 2>&1 || true
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$src_host" "rm -f '${rtmp}'" >>"$log" 2>&1 || true
     return 1
   fi
 

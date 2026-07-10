@@ -1,7 +1,7 @@
 {{ ansible_managed | comment }}
 [Unit]
 Description=Daily Postgres dump archive pull + Tier-2 upload
-Documentation=ansible role postgres_standby
+Documentation=https://github.com/dryvist/ansible-proxmox/tree/main/roles/postgres_standby
 
 [Timer]
 OnCalendar={{ postgres_standby_on_calendar }}
