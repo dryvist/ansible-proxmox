@@ -50,3 +50,25 @@ node_scheduled_wake_targets: []
 # Clear the CPU C6-state enable MSR bits at boot (kernel_tuning role);
 # the cmdline max_cstate limit alone does not cover this idle state.
 kernel_tuning_disable_zen_c6: true
+
+# --- STAGED-ONLY: Plex relocation prereqs (issue #395, terraform-proxmox#615) ---
+# Uncomment BOTH blocks only after the staged node_storage entries are applied
+# upstream (fast/appdata parent dataset exists here + the library dataset on the
+# storage node carries its nfs_export) — GATE-A in terraform-proxmox#615.
+# Until then the syncoid cron would fail nightly (no recv parent) and the NFS
+# mount would error (no export), so they stay commented, same staged convention
+# as the upstream deployment manifest.
+#
+# media_lxc_features_nfs_mounts:
+#   - src: "{{ proxmox_node_prefix }}2:/bulk/data"
+#     path: /bulk/data
+#     opts: ro,soft,timeo=150,nofail,_netdev
+#
+# syncoid_jobs:
+#   # Appdata seed/refresh for the relocation: pull Plex's identity +
+#   # watch-history dataset from the storage node into the local fast pool.
+#   # Repeated runs keep it fresh until the cutover flip; after the flip this
+#   # job is REMOVED (the dataset becomes live here, direction would invert).
+#   - name: "plex-appdata-relocation"
+#     source: "root@{{ proxmox_node_prefix }}2:bulk/appdata/plex"
+#     target: "fast/appdata/plex"

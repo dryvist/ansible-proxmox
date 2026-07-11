@@ -161,3 +161,37 @@
     - media_ct.key in media_lxc_features_present | default([])
   tags:
     - media_lxc_features
+
+# ---------------------------------------------------------------------------
+# NFS client mounts (media relocation prereq — issue #395)
+# ---------------------------------------------------------------------------
+# Mounts the storage node's ro library export at the same path the bind-mount
+# map uses, so a relocated container's `mounts` entries work unchanged. No-op
+# wherever media_lxc_features_nfs_mounts is empty (the default).
+
+- name: Install the NFS client for library mounts
+  ansible.builtin.apt:
+    name: nfs-common
+    state: present
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - (media_lxc_features_nfs_mounts | default([])) | length > 0
+  tags:
+    - media_lxc_features
+
+- name: Mount the media library over NFS
+  ansible.posix.mount:
+    src: "{{ item.src }}"
+    path: "{{ item.path }}"
+    fstype: nfs
+    # nofail + _netdev keep a host reboot from hanging when the storage node
+    # is offline: _netdev defers the mount until networking is up, nofail lets
+    # boot proceed if the export is still unreachable.
+    opts: "{{ item.opts | default('ro,soft,timeo=150,nofail,_netdev') }}"
+    state: mounted
+  loop: "{{ media_lxc_features_nfs_mounts | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - media_lxc_features

@@ -201,3 +201,12 @@ media_lxc_features_data_idmap_lines:
 # mapped uid/gid (resolved LIVE per container — the ids are package-assigned,
 # never hardcoded) so the dir appears as <user>:<user> and stays writable inside.
 media_lxc_features_unpriv_base: 100000
+
+# NFS client mounts (media relocation prereq — issue #395, terraform-proxmox#615).
+# Lets a relocation target node reach the media library that stays on the
+# storage node (exported ro via the tofu node_storage `nfs_export` contract)
+# at the SAME host path the `mounts` map expects, so the per-container
+# bind-mounts need zero changes. Empty by default — realized only on hosts
+# whose host_vars declare entries. Shape:
+#   - { src: "<host>:/bulk/data", path: /bulk/data, opts: "ro,soft,timeo=150,nofail,_netdev" }
+media_lxc_features_nfs_mounts: []
