@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.52.0](https://github.com/dryvist/ansible-proxmox/compare/v1.51.1...v1.52.0) (2026-07-11)
+
+
+### Features
+
+* **media_lxc_features:** NFS library mount + staged relocation prereqs ([#395](https://github.com/dryvist/ansible-proxmox/issues/395)) ([#397](https://github.com/dryvist/ansible-proxmox/issues/397)) ([1e5ca32](https://github.com/dryvist/ansible-proxmox/commit/1e5ca3277e6c0b17e904f2d4c8582cf4604d59e2))
+
 ## [1.51.1](https://github.com/dryvist/ansible-proxmox/compare/v1.51.0...v1.51.1) (2026-07-10)
 
 
