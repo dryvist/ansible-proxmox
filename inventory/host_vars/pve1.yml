@@ -62,7 +62,7 @@ kernel_tuning_disable_zen_c6: true
 # media_lxc_features_nfs_mounts:
 #   - src: "{{ proxmox_node_prefix }}2:/bulk/data"
 #     path: /bulk/data
-#     opts: ro,soft,timeo=150
+#     opts: ro,soft,timeo=150,nofail,_netdev
 #
 # syncoid_jobs:
 #   # Appdata seed/refresh for the relocation: pull Plex's identity +

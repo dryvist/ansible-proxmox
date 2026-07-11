@@ -175,7 +175,7 @@
     state: present
   when:
     - ansible_virtualization_type | default('') != 'docker'
-    - media_lxc_features_nfs_mounts | length > 0
+    - (media_lxc_features_nfs_mounts | default([])) | length > 0
   tags:
     - media_lxc_features
 
@@ -184,9 +184,12 @@
     src: "{{ item.src }}"
     path: "{{ item.path }}"
     fstype: nfs
-    opts: "{{ item.opts | default('ro,soft,timeo=150') }}"
+    # nofail + _netdev keep a host reboot from hanging when the storage node
+    # is offline: _netdev defers the mount until networking is up, nofail lets
+    # boot proceed if the export is still unreachable.
+    opts: "{{ item.opts | default('ro,soft,timeo=150,nofail,_netdev') }}"
     state: mounted
-  loop: "{{ media_lxc_features_nfs_mounts }}"
+  loop: "{{ media_lxc_features_nfs_mounts | default([]) }}"
   loop_control:
     label: "{{ item.path }}"
   when: ansible_virtualization_type | default('') != 'docker'
