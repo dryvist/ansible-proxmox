@@ -51,6 +51,10 @@ pve_ha_ct_hostnames:
   - technitium-dns
   - technitium-dns-2
   - traefik
+  # Media tier: in-place crash auto-restart only (no redundant peer, so no
+  # anti-affinity entry; node placement is enforced in the IaC layer — see
+  # terraform-proxmox#615). Issue #396.
+  - plex
 # Extra HA SIDs to manage verbatim (e.g. a VM the tofu container map does not
 # cover: "vm:110130"). Merged with the resolved CT SIDs. Empty by default.
 pve_ha_extra_sids: []
