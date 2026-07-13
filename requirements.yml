@@ -4,10 +4,11 @@ collections:
     version: ">=2.1.0"
   - name: community.general
     version: ">=12.0.0"
-  # S3 inventory resolver (playbooks/load_tofu.yml) — aws_caller_info +
-  # s3_object fetch the published inventory natively (boto3 from the dev shell).
+  # RustFS inventory resolver fetches the published inventory natively.
   - name: amazon.aws
     version: ">=9.0.0"
+  - name: community.hashi_vault
+    version: ">=6.0.0"
   # proxmox_cluster (pve_cluster role) — wraps pvecm create/join via the PVE API.
   # Ceiling at <2.0.0: validate_certs default flips to true at 2.0.0; opt in
   # deliberately rather than inherit the change silently.
@@ -21,4 +22,4 @@ roles:
   - name: inventory_resolve
     src: https://github.com/dryvist/homelab-contracts.git
     scm: git
-    version: v1.10.0
+    version: 9aba451e9de0956f9c308d72a65e86924e243f23

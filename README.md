@@ -79,17 +79,16 @@ containing OpenTofu outputs (such as `host_services`, `node_storage`, and
 order (first that resolves wins):
 
 1. `TOFU_INVENTORY_PATH` — an explicit local file (pin / override, e.g. tests).
-2. **S3 published artifact** — the inventory JSON published to an S3 bucket.
-   Any runner with scoped AWS read creds (CI via OIDC, a cloud agent, or
-   `aws-vault`) fetches it with **no checkout and no terraform toolchain**. The
-   fetch is native (`amazon.aws.aws_caller_info` + `amazon.aws.s3_object`;
-   boto3 comes from the dev shell) — no `aws` CLI required. Override the
-   location with `TOFU_INVENTORY_S3_URI` (else it is derived from the account).
-3. `inventory/tofu_inventory.json` — a local cache for development.
+2. **RustFS published artifact** — the inventory JSON published by the
+   tofu-proxmox Terrakube workspace. The shared resolver fetches it over the
+   homelab network with credentials read directly from OpenBao
+   `secret/platform/object-storage`; only `BAO_ADDR` and `BAO_TOKEN` are needed.
+   Override the object with `TOFU_INVENTORY_S3_URI` when required.
+3. `inventory/tofu_inventory.json` — a local cache for development, only when
+   `TOFU_INVENTORY_ALLOW_STALE=1` is explicitly set.
 
-So in CI or on a cloud agent you only need AWS read creds. The artifact is
-expected to already exist in S3; provisioning and publishing it is outside
-this repo's scope.
+The artifact is expected to already exist in RustFS; provisioning and
+publishing it is outside this repo's scope.
 
 Create the SOPS secrets file:
 

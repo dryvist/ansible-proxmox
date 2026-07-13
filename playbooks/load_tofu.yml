@@ -6,8 +6,8 @@
   tags: always
 
   tasks:
-    # Inventory resolution (TOFU_INVENTORY_PATH -> on-prem store -> legacy AWS
-    # bucket -> opt-in local cache) is delegated to the shared inventory_resolve
+    # Inventory resolution (TOFU_INVENTORY_PATH -> RustFS via OpenBao ->
+    # opt-in local cache) is delegated to the shared inventory_resolve
     # role (dryvist/homelab-contracts), which ends with `tofu_data` loaded. The
     # repo-specific NAS assert and add_host group mapping stay below.
     - name: Resolve the published OpenTofu inventory
@@ -29,10 +29,10 @@
           tofu_data.host_services.nas is missing or incomplete in
           tofu_inventory.json.
 
-          Expected terraform-proxmox ansible_inventory output to include the
+          Expected tofu-proxmox ansible_inventory output to include the
           NAS contract under host_services.nas.
 
-          Re-run terraform-proxmox apply or export ansible_inventory again.
+          Re-run the tofu-proxmox Terrakube workspace or export ansible_inventory again.
 
     - name: Inject OpenTofu NAS config onto proxmox hosts
       ansible.builtin.add_host:
