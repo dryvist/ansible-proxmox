@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.53.0](https://github.com/dryvist/ansible-proxmox/compare/v1.52.0...v1.53.0) (2026-07-13)
+
+
+### Features
+
+* consume RustFS inventory with OpenBao ([#406](https://github.com/dryvist/ansible-proxmox/issues/406)) ([fb4c998](https://github.com/dryvist/ansible-proxmox/commit/fb4c998b7bedb4a43497a997a7150adb88b58827))
+
 ## [1.52.0](https://github.com/dryvist/ansible-proxmox/compare/v1.51.1...v1.52.0) (2026-07-11)
 
 
