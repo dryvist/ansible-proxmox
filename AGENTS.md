@@ -17,6 +17,10 @@ configured by `ansible-proxmox-apps` and `ansible-splunk`.
 
 ## Dependencies
 
+### External Services
+
+- **Doppler**: SSH credentials and API tokens
+
 ### Internal Services
 
 - **OpenBao**: native secret paths, including RustFS inventory credentials
@@ -60,11 +64,14 @@ doppler run -- ansible-playbook playbooks/site.yml
 ### Execution Performance & Optimization
 
 Ansible runs against the Proxmox hosts can be slow due to connection latency and fact-gathering serialization. To increase speed:
-1. **Parallel Execution (`--forks` or `ANSIBLE_FORKS`)**: Increase the concurrency from the default 5 hosts at once. Using `25` forks (e.g. `doppler run -- ansible-playbook ... --forks 25`) runs significantly faster across large fleets.
+
+1. **Parallel Execution (`--forks` or `ANSIBLE_FORKS`)**: Increase the
+   concurrency from the default 5 hosts at once. Using `25` forks (e.g.
+   `doppler run -- ansible-playbook ... --forks 25`) runs significantly
+   faster across large fleets.
 2. **Targeted Runs (`--limit`)**: Restrict play scope to the target hosts and localhost (e.g., `--limit pve-nodes,localhost`).
 3. **Scoping via Tags (`--tags`)**: Use `--tags <tag-name>` to run only a subset of roles.
 4. **Disable Fact Gathering**: Set `gather_facts: false` on ad-hoc plays where facts are not required to bypass the setup step.
-
 
 ### Common Operations
 
