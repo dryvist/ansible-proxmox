@@ -36,12 +36,12 @@ variable is needed for every playbook.
 | `PVE1_VE_HOSTNAME`, `PVE2_VE_HOSTNAME`, `PVE3_VE_HOSTNAME` | Per-node Proxmox hostnames resolved in `inventory/hosts.yml` |
 | `PROXMOX_NODE_PREFIX` | Node-name prefix (without the trailing number) used to derive per-node identifiers |
 | `PROXMOX_VM_SSH_USERNAME` | SSH user for the Proxmox hosts |
-| `PROXMOX_SSH_KEY_PATH` *or* `PROXMOX_SSH_PRIVATE_KEY` | SSH auth: a key **file path**, or the key **contents** (loaded into ssh-agent by `scripts/run-ansible.sh`) |
+| `PROXMOX_SSH_KEY_PATH` *or* `PROXMOX_SSH_PRIVATE_KEY` | SSH auth: a key **file path**, or **contents** (loaded via `scripts/run-ansible.sh`) |
 | `HEALTHCHECK_PING_KEY` | Healthchecks.io ping key (`proxmox_monitoring`, `sqlite_standby`) |
-| AWS creds (via `aws-vault`) + `TOFU_INVENTORY_S3_URI`, `TOFU_INVENTORY_S3_REGION` | S3-first inventory resolution in `playbooks/load_tofu.yml` |
+| `TOFU_INVENTORY_S3_URI` | S3 URI override for RustFS inventory; creds from OpenBao `secret/platform/object-storage` via `inventory_resolve` |
 | `TOFU_INVENTORY_PATH`, `TOFU_INVENTORY_ALLOW_STALE` | Optional inventory overrides (pin a local file / permit a stale cache) |
 | `IDRAC_USERNAME`, `IDRAC_PASSWORD`, `PVE3_BMC_HOSTNAME` | IPMI power control for the offline-DR node (`idrac_power`, `node_scheduled_wake`) |
-| `PROXMOX_VE_HOSTNAME`, `PROXMOX_VE_NODES`, `PROXMOX_VE_USERNAME`, `PROXMOX_VE_TOKEN_ID`, `PROXMOX_VE_TOKEN_SECRET`, `PROXMOX_VE_INSECURE` | Proxmox API token (community.proxmox modules) |
+| `PROXMOX_VE_HOSTNAME`, `PROXMOX_VE_NODES`, `PROXMOX_VE_USERNAME`, `PROXMOX_VE_TOKEN_ID`, `PROXMOX_VE_TOKEN_SECRET`, `PROXMOX_VE_INSECURE` | Proxmox token |
 | `APT_PROXY_URL`, `NAS_HOMEASSISTANT_SMB_PASSWORD` | Optional: apt caching proxy; NAS Samba service account |
 
 `scripts/run-ansible.sh` loads `PROXMOX_SSH_PRIVATE_KEY` into an in-memory
