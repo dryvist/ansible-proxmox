@@ -48,7 +48,7 @@ others; a failure pings `<healthcheck>/fail`.
 - `sqlite3` present on each source host, with transient free space (~the DB
   size) for the online backup.
 - The target dataset (e.g. `bulk/databases`) created by `zfs_pools` from the
-  `terraform-proxmox` declaration.
+  `tofu-proxmox` declaration.
 
 ## Variables
 

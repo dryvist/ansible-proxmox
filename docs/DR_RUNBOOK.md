@@ -16,7 +16,7 @@ a primary node is lost.
 - Storage is **node-local ZFS** — no shared storage, no Ceph. Each node has its
   own `bulk` pool; the standby holds replica datasets
   (`bulk/replica/proxmox-1/...`, `bulk/replica/proxmox-2/...`) declared in
-  terraform-proxmox `node_storage`.
+  tofu-proxmox `node_storage`.
 - Replication uses **syncoid** (from the `sanoid` package) in **PULL** mode: it
   runs **on the standby** and SSHes out to each source to pull that source's
   sanoid snapshots. Pull-from-backup is safer than push (a compromised source
@@ -53,10 +53,10 @@ a primary node is lost.
 **Not replicated to the standby** (by design):
 
 - **The media library** (`bulk/data`) — large and re-acquirable; declared with
-  `com.sun:auto-snapshot=false` in terraform-proxmox. Not a DR target.
+  `com.sun:auto-snapshot=false` in tofu-proxmox. Not a DR target.
 - **Guest definitions** (`/etc/pve/qemu-server/*.conf`, `/etc/pve/lxc/*.conf`).
   syncoid ships **data only**, never the VM/CT config. A failover therefore
-  **recreates the guest definition** (terraform-proxmox apply targeting the
+  **recreates the guest definition** (tofu-proxmox apply targeting the
   standby, or a manual `qm`/`pct create`) and attaches the cloned data — see §4.
 - **SIEM indexed data is acceptable-loss.** The SIEM `/opt/splunk` config is what
   must survive; the indexes ride along on the same disk-2 replica but are volatile
@@ -126,7 +126,7 @@ down (avoid split-brain — one writer, always).
                 bulk/replica/proxmox-1/vm-<id>-disk-$n | tail -1)
        zfs clone "$snap" bulk/vm-<id>-disk-$n     # into a pool Proxmox storage maps
      done
-     # recreate the guest config (terraform-proxmox apply -l <target-node>, or
+     # recreate the guest config (tofu-proxmox apply -l <target-node>, or
      # `qm create <id> ...`), then:
      qm rescan --vmid <id>
      qm start <id>

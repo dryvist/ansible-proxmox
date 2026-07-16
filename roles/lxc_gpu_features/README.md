@@ -16,14 +16,14 @@ repo's Nix dev shell (`direnv allow`); no `pip`/`galaxy` step is required.
 
 The BPG Proxmox provider's API token **cannot** set arbitrary device
 passthrough — Proxmox restricts `lxc.cgroup2.devices.allow` / `lxc.mount.entry`
-to `root@pam` *ticket* auth, so the token gets HTTP 403. So `terraform-proxmox`
+to `root@pam` *ticket* auth, so the token gets HTTP 403. So `tofu-proxmox`
 creates the GPU LXC as a plain **shell**, and this role applies the device
 lines. Identical split to `media_lxc_features` (which passes `/dev/net/tun` to
 the download-vpn LXC).
 
 ## Ordering
 
-1. `terraform-proxmox` — creates `llm-fast` as a privileged shell.
+1. `tofu-proxmox` — creates `llm-fast` as a privileged shell.
 2. **this role** — binds `/dev/dri` (226) + `/dev/kfd` (235), reboots on change.
 3. `ansible-proxmox-apps` (role `llama_cpp`) — installs llama.cpp + llama-swap +
    ROCm, adds the service user to `render`/`video`, stages the GGUF models.

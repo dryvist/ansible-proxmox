@@ -28,7 +28,7 @@ The kiosk only shows content if the upstream viewers are live:
   - `http://idrac-kvm.<subdomain>:5410/` — Dell R410
   - `http://idrac-kvm.<subdomain>:5710/` — Dell R710
 - That LXC and its ports are provisioned by the companion
-  `terraform-proxmox` and `ansible-proxmox-apps` iDRAC work.
+  `tofu-proxmox` and `ansible-proxmox-apps` iDRAC work.
 
 If the viewers are down, the iframes simply fail to load; the kiosk itself
 stays up and retries on the browser's normal schedule.

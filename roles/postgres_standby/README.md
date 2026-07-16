@@ -37,7 +37,7 @@ A failed job or upload is logged to `/var/log/postgres-standby/` and does
   covers PVE node↔node; a database guest is **not** a PVE node, so add that
   trust separately (the apps `postgres` role manages the guest side).
 - The target dataset (e.g. `bulk/databases`) created by `zfs_pools` from the
-  `terraform-proxmox` declaration; `bulk/databases` recursion covers the
+  `tofu-proxmox` declaration; `bulk/databases` recursion covers the
   per-instance child automatically.
 - For Tier-2: the bucket exists and the supplied keys can write it.
 
