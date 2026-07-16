@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.56.0](https://github.com/dryvist/ansible-proxmox/compare/v1.55.0...v1.56.0) (2026-07-16)
+
+
+### Features
+
+* **pve_ha:** pvesr replication + HA enrollment for singleton app guests ([#415](https://github.com/dryvist/ansible-proxmox/issues/415)) ([76de176](https://github.com/dryvist/ansible-proxmox/commit/76de176c42d2f3a8d1cf1982d573d71faa00ff02))
+* **zfs_replication:** mirror vzdump guest backups to S3 ([#414](https://github.com/dryvist/ansible-proxmox/issues/414)) ([92ceff6](https://github.com/dryvist/ansible-proxmox/commit/92ceff635360d0a342b6460ca6fd21ffe73f32f6))
+
 ## [1.55.0](https://github.com/dryvist/ansible-proxmox/compare/v1.54.0...v1.55.0) (2026-07-16)
 
 
