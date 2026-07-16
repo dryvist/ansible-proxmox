@@ -1,0 +1,64 @@
+---
+# ssh_ca_trust/lxc — push CA trust into every RUNNING LXC on this node via
+# pct (works regardless of the guest's network/sshd state — no SSH
+# chicken-and-egg). Stopped containers are reported as blockers: static-key
+# retirement is gated on every guest carrying CA trust, so a skipped guest
+# must be visible, never silent.
+
+- name: List this node's running LXC containers
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: "set -o pipefail; pct list | awk 'NR>1 && $2==\"running\" {print $1}'"
+  register: ssh_ca_trust_lxc_running_raw
+  changed_when: false
+
+- name: List this node's non-running LXC containers
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: "set -o pipefail; pct list | awk 'NR>1 && $2!=\"running\" {print $1}'"
+  register: ssh_ca_trust_lxc_stopped_raw
+  changed_when: false
+
+- name: Build running / stopped container lists
+  ansible.builtin.set_fact:
+    ssh_ca_trust_lxc_running: "{{ ssh_ca_trust_lxc_running_raw.stdout_lines }}"
+    ssh_ca_trust_lxc_stopped: "{{ ssh_ca_trust_lxc_stopped_raw.stdout_lines }}"
+
+- name: Report stopped containers as CA-trust blockers
+  ansible.builtin.debug:
+    msg: >-
+      LXC(s) {{ ssh_ca_trust_lxc_stopped | join(', ') }} are not running and
+      did NOT receive CA trust — static-key retirement stays blocked for them.
+  when: ssh_ca_trust_lxc_stopped | length > 0
+
+# One pct exec per container writes all three artifacts and reloads sshd only
+# when the guest actually runs one (LXCs are converged over pct, so a guest
+# without sshd is fine — it simply has nothing to trust the CA with).
+- name: Push CA trust into running containers
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      pct exec {{ item }} -- mkdir -p {{ ssh_ca_trust_principals_dir }} /etc/ssh/sshd_config.d
+      printf '%s\n' "{{ ([ssh_ca_trust_fetched.content | trim] + ssh_ca_trust_extra_ca_keys) | join('\n') }}" \
+        | pct exec {{ item }} -- tee {{ ssh_ca_trust_ca_file }} > /dev/null
+      {% for user, principals in ssh_ca_trust_lxc_principals.items() %}
+      printf '%s\n' "{{ principals | join('\n') }}" \
+        | pct exec {{ item }} -- tee {{ ssh_ca_trust_principals_dir }}/{{ user }} > /dev/null
+      {% endfor %}
+      printf '%s\n' \
+        "# Managed by ansible-proxmox ssh_ca_trust (via pct) — OpenBao SSH client CA" \
+        "TrustedUserCAKeys {{ ssh_ca_trust_ca_file }}" \
+        "AuthorizedPrincipalsFile {{ ssh_ca_trust_principals_dir }}/%u" \
+        | pct exec {{ item }} -- tee {{ ssh_ca_trust_dropin }} > /dev/null
+      pct exec {{ item }} -- chmod 0644 {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}
+      if pct exec {{ item }} -- sh -c 'command -v sshd' > /dev/null 2>&1; then
+        pct exec {{ item }} -- sshd -t
+        pct exec {{ item }} -- sh -c 'systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true'
+        echo "CONFIGURED-SSHD"
+      else
+        echo "CONFIGURED-NO-SSHD"
+      fi
+  loop: "{{ ssh_ca_trust_lxc_running }}"
+  register: ssh_ca_trust_lxc_push
+  changed_when: "'CONFIGURED' in ssh_ca_trust_lxc_push.stdout"

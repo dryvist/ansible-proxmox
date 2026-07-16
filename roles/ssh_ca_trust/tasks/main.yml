@@ -1,0 +1,167 @@
+---
+# ssh_ca_trust tasks — pinned-fingerprint CA fetch, trust file, principals map,
+# sshd drop-in with EFFECTIVE-config assertion, human-key lockout guard, and
+# (on PVE nodes) pct push into local LXCs. Live-touch tasks skip under Docker
+# (molecule); the structural pieces still run there.
+
+- name: Assert the pinned CA fingerprint and OpenBao address are present
+  ansible.builtin.assert:
+    that:
+      - ssh_ca_trust_ca_fingerprint | length > 0
+      - ssh_ca_trust_bao_addr | length > 0
+    fail_msg: >-
+      ssh_ca_trust needs SSH_CA_FINGERPRINT (the pinned CA fingerprint from
+      the openbao converge's trusted ceremony) and BAO_ADDR. Refusing to
+      distribute trust without a pin — that would be trust-on-first-use.
+  when: ssh_ca_trust_enabled | bool
+  tags: [ssh_ca_trust]
+
+# Certificate validity is time-bound: a drifted clock makes every cert login
+# fail (or worse, accept an expired cert). Preflight, not troubleshooting.
+- name: Assert the host clock is NTP-synchronized
+  ansible.builtin.command:
+    cmd: timedatectl show -p NTPSynchronized --value
+  register: ssh_ca_trust_ntp
+  changed_when: false
+  failed_when: ssh_ca_trust_ntp.stdout != 'yes'
+  when:
+    - ssh_ca_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags: [ssh_ca_trust]
+
+- name: Fetch the CA public key from OpenBao
+  ansible.builtin.uri:
+    url: "{{ ssh_ca_trust_bao_addr }}/v1/{{ ssh_ca_trust_mount }}/public_key"
+    return_content: true
+    follow_redirects: all
+  register: ssh_ca_trust_fetched
+  when: ssh_ca_trust_enabled | bool
+  tags: [ssh_ca_trust]
+
+- name: Compute the fetched CA key's fingerprint
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: >-
+      set -o pipefail;
+      printf '%s\n' "{{ ssh_ca_trust_fetched.content | trim }}"
+      | ssh-keygen -l -f /dev/stdin | awk '{print $2}'
+  register: ssh_ca_trust_fetched_fp
+  changed_when: false
+  when: ssh_ca_trust_enabled | bool
+  tags: [ssh_ca_trust]
+
+- name: Verify the fetched CA key against the pinned fingerprint (fail closed)
+  ansible.builtin.assert:
+    that:
+      - ssh_ca_trust_fetched_fp.stdout == ssh_ca_trust_ca_fingerprint
+    fail_msg: >-
+      CA public key fingerprint mismatch — fetched
+      {{ ssh_ca_trust_fetched_fp.stdout }} but the pin is
+      {{ ssh_ca_trust_ca_fingerprint }}. Possible endpoint substitution or an
+      unrecorded CA rotation. NOT writing trust.
+  when: ssh_ca_trust_enabled | bool
+  tags: [ssh_ca_trust]
+
+# Multi-key file from a list: rotation appends the new issuer here first.
+- name: Write the trusted CA keys file
+  ansible.builtin.copy:
+    dest: "{{ ssh_ca_trust_ca_file }}"
+    content: |
+      {{ ([ssh_ca_trust_fetched.content | trim] + ssh_ca_trust_extra_ca_keys) | join('\n') }}
+    owner: root
+    group: root
+    mode: "0644"
+  when: ssh_ca_trust_enabled | bool
+  notify: Reload sshd
+  tags: [ssh_ca_trust]
+
+- name: Create the principals directory
+  ansible.builtin.file:
+    path: "{{ ssh_ca_trust_principals_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: ssh_ca_trust_enabled | bool
+  tags: [ssh_ca_trust]
+
+- name: Write the per-user principals files
+  ansible.builtin.copy:
+    dest: "{{ ssh_ca_trust_principals_dir }}/{{ item.key }}"
+    content: |
+      {{ item.value | join('\n') }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ ssh_ca_trust_principals | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}: {{ item.value | join(', ') }}"
+  when: ssh_ca_trust_enabled | bool
+  notify: Reload sshd
+  tags: [ssh_ca_trust]
+
+- name: Install the sshd CA drop-in
+  ansible.builtin.copy:
+    dest: "{{ ssh_ca_trust_dropin }}"
+    content: |
+      # Managed by ansible-proxmox ssh_ca_trust — OpenBao SSH client CA trust
+      # (ssh-certificate-authority ADR). Late-numbered to win drop-in merges.
+      TrustedUserCAKeys {{ ssh_ca_trust_ca_file }}
+      AuthorizedPrincipalsFile {{ ssh_ca_trust_principals_dir }}/%u
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  when:
+    - ssh_ca_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  notify: Reload sshd
+  tags: [ssh_ca_trust]
+
+# `sshd -t` above only proves syntax; assert the EFFECTIVE config actually
+# resolves to our CA file and principals map (a competing drop-in or main-file
+# directive would silently win otherwise).
+- name: Read the effective sshd configuration
+  ansible.builtin.command:
+    cmd: sshd -T
+  register: ssh_ca_trust_effective
+  changed_when: false
+  when:
+    - ssh_ca_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags: [ssh_ca_trust]
+
+- name: Assert the effective sshd config trusts the CA and principals map
+  ansible.builtin.assert:
+    that:
+      - ("trustedusercakeys " ~ ssh_ca_trust_ca_file) in ssh_ca_trust_effective.stdout
+      - ("authorizedprincipalsfile " ~ ssh_ca_trust_principals_dir ~ "/%u") in ssh_ca_trust_effective.stdout
+    fail_msg: >-
+      sshd -T does not show the CA trust directives — another config fragment
+      is overriding the drop-in. Effective config must win before certs work.
+  when:
+    - ssh_ca_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags: [ssh_ca_trust]
+
+# Lockout guard: humans stay on static authorized_keys by design. Refuse to
+# proceed if root has no static key to fall back on — a bad CA rollout must
+# never be able to strand the host.
+- name: Assert a static root authorized_key still exists (human break-glass)
+  ansible.builtin.command:
+    cmd: grep -cE '^(ssh|ecdsa)-' /root/.ssh/authorized_keys
+  register: ssh_ca_trust_static_keys
+  changed_when: false
+  failed_when: ssh_ca_trust_static_keys.stdout | int < 1
+  when:
+    - ssh_ca_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags: [ssh_ca_trust]
+
+- name: Distribute CA trust into this node's LXC containers (pct)
+  ansible.builtin.include_tasks: lxc.yml
+  when:
+    - ssh_ca_trust_enabled | bool
+    - ssh_ca_trust_manage_lxc | bool
+    - ansible_virtualization_type != 'docker'
+  tags: [ssh_ca_trust]

@@ -138,6 +138,15 @@
           - "192.168.0.0/16"
           - "10.0.0.0/8"
 
+    # OpenBao SSH client-CA trust (ssh-certificate-authority ADR): pinned-
+    # fingerprint CA fetch, principals map, sshd drop-in with effective-config
+    # assertion + human-key lockout guard, and pct push into local LXCs. Runs
+    # after ntp — certificate validity is time-bound, and the role's first
+    # preflight asserts the clock is synchronized.
+    - role: ssh_ca_trust
+      tags:
+        - ssh_ca_trust
+
     # Cross-node ZFS replication (syncoid, layer 2). Pull model — runs on the
     # backup node; inert until syncoid_jobs is set.
     - role: syncoid
