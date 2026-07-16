@@ -1,14 +1,79 @@
 #!/bin/bash
 {{ ansible_managed | comment }}
-# Optional vzdump backup of named guests to a backup storage. Per-guest logging;
-# a single failed guest does NOT abort the rest.
+# Optional vzdump backup of named guests to a backup storage, then an S3 mirror
+# of each fresh archive. Per-guest logging; a single failed guest does NOT abort
+# the rest. The S3 leg is reachability-gated: if the endpoint is unset or
+# unreachable, the local vzdump still runs and only the S3 copy is skipped.
 set -uo pipefail
 
 LOG_DIR="{{ zfs_replication_log_dir }}"
 STORAGE="{{ zfs_replication_vzdump_storage }}"
+KEEP_LAST="{{ zfs_replication_vzdump_keep_last }}"
 mkdir -p "$LOG_DIR"
 log="$LOG_DIR/vzdump-$(date +%Y-%m-%d).log"
 say() { echo "$(date +%H:%M:%S) $*" >>"$log"; }
+
+# S3 config + credentials live in a root-only env file (0600). Sourcing here
+# means a manual run works exactly like the systemd run. Absent file => S3 off.
+S3_ENV="/etc/default/zfs-replication-vzdump-s3"
+# shellcheck disable=SC1090
+[ -r "$S3_ENV" ] && . "$S3_ENV"
+S3_ENDPOINT="${GUEST_BACKUP_S3_ENDPOINT:-}"
+S3_BUCKET="${GUEST_BACKUP_S3_BUCKET:-}"
+S3_PREFIX="${GUEST_BACKUP_S3_PREFIX:-guests}"
+# aws reads AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION from
+# the sourced env; only the endpoint is a per-command flag.
+AWS_ARGS="--endpoint-url ${S3_ENDPOINT}"
+
+# Probe the endpoint ONCE per run. curl exits 0 on any HTTP response (RustFS
+# answers 403 unauthenticated — still "up"); non-zero on connect/timeout.
+s3_ready() {
+  [ -n "$S3_ENDPOINT" ] || return 1
+  curl -sS -o /dev/null -m "{{ zfs_replication_vzdump_s3_probe_timeout }}" "$S3_ENDPOINT" 2>/dev/null
+}
+if s3_ready; then S3_UP=1; else S3_UP=0; [ -n "$S3_ENDPOINT" ] && say "S3 endpoint unreachable — skipping S3 mirror this run"; fi
+
+# Copy this run's fresh archive + sidecars to s3://bucket/prefix/<vmid>/, keys
+# preserved verbatim. The vmid's newest archive path is read back from the log.
+s3_sync() {
+  local vmid="$1"
+  local archive adir ts dest f
+  archive=$(grep -oE "/[^']*vzdump-[a-z]+-${vmid}-[0-9_-]+\.(tar|vma)\.(zst|gz|lzo)" "$log" | tail -1)
+  [ -n "$archive" ] || { say "  no archive path in log — skipping S3 for $vmid"; return 0; }
+  adir=$(dirname "$archive")
+  ts=$(echo "$archive" | grep -oE '[0-9]{4}_[0-9]{2}_[0-9]{2}-[0-9]{2}_[0-9]{2}_[0-9]{2}')
+  dest="s3://${S3_BUCKET}/${S3_PREFIX}/${vmid}/"
+  for f in "$adir"/*"$ts"*; do
+    [ -e "$f" ] || continue
+    if aws $AWS_ARGS s3 cp "$f" "${dest}$(basename "$f")" >>"$log" 2>&1; then
+      say "  synced $(basename "$f") -> $dest"
+    else
+      say "  S3 cp FAILED for $(basename "$f")"
+    fi
+  done
+}
+
+# Prune S3 to KEEP_LAST backups per guest — same count as the local storage, so
+# the two tiers stay in step. Delete by timestamp token, which uniquely names one
+# backup's whole file set (archive + sidecars).
+s3_prune() {
+  local vmid="$1"
+  local dest count excess old old_ts
+  dest="s3://${S3_BUCKET}/${S3_PREFIX}/${vmid}/"
+  mapfile -t archives < <(aws $AWS_ARGS s3 ls "$dest" 2>>"$log" | awk '{print $NF}' \
+    | grep -E "vzdump-[a-z]+-${vmid}-.*\.(tar|vma)\.(zst|gz|lzo)$" | sort)
+  # Count via printf/grep, not bash array-length syntax: the latter's brace-hash
+  # byte pair would open a Jinja comment while this template renders.
+  count=$(printf '%s\n' "${archives[@]}" | grep -c .)
+  excess=$(( count - KEEP_LAST ))
+  [ "$excess" -le 0 ] && return 0
+  for old in "${archives[@]:0:$excess}"; do
+    old_ts=$(echo "$old" | grep -oE '[0-9]{4}_[0-9]{2}_[0-9]{2}-[0-9]{2}_[0-9]{2}_[0-9]{2}')
+    if aws $AWS_ARGS s3 rm "$dest" --recursive --exclude '*' --include "*${old_ts}*" >>"$log" 2>&1; then
+      say "  pruned S3 backup $old_ts (archive + sidecars)"
+    fi
+  done
+}
 
 backup() {
   local vmid="$1"
@@ -18,8 +83,16 @@ backup() {
     --storage "$STORAGE" \
     --mode {{ zfs_replication_vzdump_mode }} \
     --compress {{ zfs_replication_vzdump_compress }} \
+    --prune-backups keep-last="$KEEP_LAST" \
     {{ zfs_replication_vzdump_extra_options }} >>"$log" 2>&1 || rc=$?
-  [ "$rc" -ne 0 ] && say "  FAILED (rc=$rc)"
+  if [ "$rc" -ne 0 ]; then
+    say "  FAILED (rc=$rc)"
+    return 0
+  fi
+  if [ "$S3_UP" -eq 1 ]; then
+    s3_sync "$vmid"
+    s3_prune "$vmid"
+  fi
   return 0
 }
 

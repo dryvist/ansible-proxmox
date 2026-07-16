@@ -4,6 +4,33 @@
 # zfs_replication_vzdump_enabled is true AND guests are listed; the timer below
 # only enables when there is at least one guest to back up.
 
+# The S3 mirror leg needs the aws CLI and a root-only credentials file. Both are
+# gated on an endpoint being set, so the plain-vzdump case installs nothing extra
+# and stays inert. The env file is absent when S3 is off; the wrapper sources it
+# only if present, so the local vzdump is unaffected either way.
+- name: Install awscli for the vzdump S3 mirror leg
+  ansible.builtin.apt:
+    name: awscli
+    state: present
+    update_cache: true
+  when:
+    - zfs_replication_vzdump_s3_endpoint | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - zfs_replication_vzdump
+
+- name: Deploy the vzdump S3 credentials env file
+  ansible.builtin.template:
+    src: zfs-replication-vzdump-s3.env.j2
+    dest: /etc/default/zfs-replication-vzdump-s3
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when: zfs_replication_vzdump_s3_endpoint | length > 0
+  tags:
+    - zfs_replication_vzdump
+
 - name: Render the vzdump backup wrapper
   ansible.builtin.template:
     src: zfs-replication-vzdump.sh.j2
