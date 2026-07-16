@@ -30,35 +30,67 @@ doppler run -- ansible-playbook -i inventory playbooks/ha.yml -e pve_ha_enabled=
 
 When enabled it:
 
-1. Places each tier-0 LXC under HA (`ha-manager add ct:VMID --state started
+1. Places each managed LXC under HA (`ha-manager add ct:VMID --state started
    --max_restart 3 --max_relocate 1`). VMIDs resolve from the tofu inventory by
    hostname, so a renumber flows through with no edit.
 2. Adds `resource-affinity` **negative** rules so the two halves of each
    redundant pair never share a node.
+3. For the **singleton app guests** (`pve_ha_replication_ct_hostnames`), creates
+   a `pvesr` job shipping each one's rootfs to the always-on partner node, so
+   ha-manager has a replica to relocate onto.
 
 Guests (default `pve_ha_ct_hostnames`): `openbao-01`, `openbao-02`,
-`technitium-dns`, `technitium-dns-2`, `traefik`. Anti-affinity pairs
+`technitium-dns`, `technitium-dns-2`, `traefik`, plus the singleton app guests
+`postgres-apps`, `nautobot`, `vikunja`. Anti-affinity pairs
 (`pve_ha_anti_affinity_groups`): the two OpenBao Raft voters, the two Technitium
 DNS instances, and the Traefik ingress pair (the last auto-activates once
 `traefik-2` exists). A pair whose members do not all resolve is skipped.
 
-## Why anti-affinity is the real payload (and relocation is not)
+## Two guest classes: peer-redundant vs singleton
 
-These tier-0 guests sit on **local ZFS**, not shared storage, and each already
-has a redundant PEER on another node (OpenBao Raft quorum, the second Technitium
-instance, the keepalived VRRP VIP). So:
+Every guest here sits on **local ZFS**, not shared storage, so ha-manager can
+only start a guest on another node if its rootfs already exists there (`pvesr`).
+The guests split on how they survive a node loss:
+
+**Peer-redundant** (`openbao-*`, `technitium-dns*`, `traefik`) — each has a
+redundant PEER on another node (OpenBao Raft quorum, the second Technitium
+instance, the keepalived VRRP VIP):
 
 - On a **crash**, HA auto-restarts the guest in place (`max_restart`).
 - On a **node loss**, the surviving PEER carries the service; the failed guest
-  returns when its node heals. HA cannot start it on another node without the
-  rootfs being there (PVE storage replication / `pvesr`), which is a tracked
-  follow-up — deliberately **not** required for the node-loss story. Hence
-  `max_relocate` is intentionally low.
-- **Anti-affinity** is what keeps the redundancy real: it stops HA (or a manual
-  migrate) from ever collapsing both peers onto one node.
+  returns when its node heals. No replicated storage needed.
+- **Anti-affinity** keeps the redundancy real: it stops HA (or a manual migrate)
+  from ever collapsing both peers onto one node.
+
+**Singleton app guests** (`postgres-apps`, `nautobot`, `vikunja` —
+`pve_ha_replication_ct_hostnames`) — one instance, no peer, so **relocation is
+the only node-loss story**:
+
+- `pvesr` ships each guest's rootfs to the always-on PARTNER node on a schedule
+  (`pve_ha_replication_schedule`, default `*/15`), so a current-enough replica
+  exists to relocate onto.
+- On a **node loss**, ha-manager relocates the guest to the partner and starts
+  it from the replica. `max_relocate=1` is enough: one hop to the partner.
+- A **strict `node-affinity` rule** (`pve_ha_replication_affinity_rule`) pins
+  these guests to `pve_ha_replication_pair`, so ha-manager can never relocate one
+  onto a node without a replica (e.g. `pve3` when it is awake) and then
+  start-fail/flap. `strict` = run only on the listed nodes.
+- The replica is a **relocation enabler, not the durability layer**: the app
+  guests' real data-loss window is covered separately (`postgres-apps` by
+  streaming replication + WAL archiving; `nautobot`/`vikunja` are near-stateless
+  — their state lives in `postgres-apps`).
+
+Membership in `pve_ha_replication_ct_hostnames` is the per-guest "relocation is
+viable" knob. A guest in `pve_ha_ct_hostnames` but not in the replication list
+is treated as peer-redundant and gets no `pvesr` job.
 
 With 4 quorate nodes, HA fencing is safe — losing one node keeps quorum, so no
 surviving node self-fences.
+
+Because a `pvesr` job is node-local (`pvesr create-local-job` runs on the guest's
+source node), the replication tasks run on **every** node and each creates jobs
+only for the guests homed on it; the cluster-wide HA config still runs once on
+`pve_ha_config_host`.
 
 ## Safety
 
@@ -84,3 +116,9 @@ No real service is touched.
 | `pve_ha_extra_sids` | `[]` | Verbatim extra SIDs (e.g. `vm:NNN`). |
 | `pve_ha_anti_affinity_groups` | pairs | Redundant pairs to keep apart. |
 | `pve_ha_max_restart` / `pve_ha_max_relocate` | `3` / `1` | Per-guest bounds. |
+| `pve_ha_replication_ct_hostnames` | app list | Singleton guests that get a `pvesr` replica (relocation-enabled). |
+| `pve_ha_replication_pair` | `[pve1, pve2]` | Always-on nodes; `pvesr` target is the member that is not the guest's home node. |
+| `pve_ha_replication_schedule` | `*/15` | `pvesr` schedule (systemd-calendar subset). |
+| `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
+| `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
+| `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name of the strict node-affinity rule pinning replication guests to the pair. |

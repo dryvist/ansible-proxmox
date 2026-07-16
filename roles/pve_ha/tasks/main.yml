@@ -144,3 +144,128 @@
         - item.name in pve_ha_existing_rules
       # ponytail: idempotent enforce, same rationale as the resource set above.
       changed_when: false
+
+    # SIDs of replication guests that actually have a replica: present in the
+    # inventory AND homed in the pair (same scope as the pvesr jobs). A guest
+    # outside the pair has no replica, so it must NOT go in the strict rule (a
+    # strict rule with no available node would STOP it).
+    - name: Resolve replication guest SIDs (present, homed in the always-on pair)
+      ansible.builtin.set_fact:
+        pve_ha_replication_sids: >-
+          {{ pve_ha_replication_ct_hostnames | select('in', pve_ha_vmid_by_host)
+             | map('extract', containers_from_tofu | default({}))
+             | selectattr('node', 'in', pve_ha_replication_pair)
+             | map(attribute='vmid') | map('string')
+             | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
+
+    - name: Pin replication guests to the always-on pair (strict; add if absent)
+      ansible.builtin.command: >-
+        ha-manager rules add node-affinity {{ pve_ha_replication_affinity_rule }}
+        --resources {{ pve_ha_replication_sids | join(',') }}
+        --nodes {{ pve_ha_replication_pair | join(',') }}
+        --strict 1
+        --comment 'pve_ha: keep singleton app guests on nodes holding their pvesr replica'
+      when:
+        - pve_ha_replication_sids | length > 0
+        - pve_ha_replication_affinity_rule not in pve_ha_existing_rules
+      changed_when: true
+
+    - name: Enforce the replication node-affinity rule (nodes + strict)
+      ansible.builtin.command: >-
+        ha-manager rules set node-affinity {{ pve_ha_replication_affinity_rule }}
+        --resources {{ pve_ha_replication_sids | join(',') }}
+        --nodes {{ pve_ha_replication_pair | join(',') }}
+        --strict 1
+      when:
+        - pve_ha_replication_sids | length > 0
+        - pve_ha_replication_affinity_rule in pve_ha_existing_rules
+      # ponytail: idempotent enforce, same rationale as the resource-affinity set.
+      changed_when: false
+
+# Storage replication (pvesr) for the SINGLETON app guests, so ha-manager can
+# relocate them to the always-on partner node on node loss (see STORAGE NOTE in
+# defaults). Unlike the cluster-wide HA config above (run_once on the config
+# host), a pvesr job is NODE-LOCAL: `pvesr create-local-job` must run on the node
+# that currently hosts the guest (its SOURCE). So this block runs on EVERY node
+# and each node creates jobs only for the guests homed on it. The existing-job
+# read is cluster-wide, so a job already present anywhere is skipped — idempotent
+# across converges and across a later relocation (Proxmox reverses the job's
+# direction itself when a replicated guest migrates). Docker-skipped like above.
+- name: Configure pvesr storage replication for singleton app guests
+  when:
+    - pve_ha_enabled | bool
+    - pve_ha_replication_ct_hostnames | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_ha
+  block:
+    - name: Map container hostname -> {vmid, node} from the tofu inventory
+      ansible.builtin.set_fact:
+        pve_ha_ct_by_host: >-
+          {{
+            dict(
+              (containers_from_tofu | default({})) | dict2items
+              | selectattr('value.vmid', 'defined')
+              | selectattr('value.node', 'defined')
+              | map(attribute='key') | list
+              | zip(
+                  (containers_from_tofu | default({})) | dict2items
+                  | selectattr('value.vmid', 'defined')
+                  | selectattr('value.node', 'defined')
+                  | map(attribute='value') | list
+                )
+            )
+          }}
+
+    # target = the pair member that is NOT the guest's home node. Guests absent
+    # from the inventory, or homed outside the always-on pair, resolve to no job.
+    - name: Resolve replication jobs (present guests homed in the always-on pair)
+      ansible.builtin.set_fact:
+        pve_ha_replication_jobs: >-
+          {{ pve_ha_replication_jobs | default([]) + [ {
+               'hostname': item,
+               'id': (pve_ha_ct_by_host[item].vmid | string) ~ '-'
+                     ~ (pve_ha_replication_jobnum | string),
+               'source': pve_ha_ct_by_host[item].node,
+               'target': (pve_ha_replication_pair
+                          | difference([pve_ha_ct_by_host[item].node]) | first)
+             } ] }}
+      loop: "{{ pve_ha_replication_ct_hostnames }}"
+      when:
+        - item in pve_ha_ct_by_host
+        - pve_ha_ct_by_host[item].node in pve_ha_replication_pair
+
+    - name: Warn about app guests with no replication job (skipped)
+      ansible.builtin.debug:
+        msg: >-
+          pve_ha replication: no job for {{ item }} — absent from the tofu
+          inventory, or its home node is outside the always-on pair
+          {{ pve_ha_replication_pair }}.
+      loop: "{{ pve_ha_replication_ct_hostnames }}"
+      when: item not in (pve_ha_replication_jobs | default([])
+                         | map(attribute='hostname') | list)
+
+    - name: Read current replication jobs (cluster-wide)
+      ansible.builtin.command: pvesh get /cluster/replication --output-format json
+      register: pve_ha_replication_raw
+      changed_when: false
+
+    - name: Parse existing replication job ids
+      ansible.builtin.set_fact:
+        pve_ha_existing_replication_ids: >-
+          {{ (pve_ha_replication_raw.stdout | from_json)
+             | map(attribute='id') | list }}
+
+    - name: Create a pvesr job on each guest's source node (only if absent)
+      ansible.builtin.command: >-
+        pvesr create-local-job {{ item.id }} {{ item.target }}
+        --schedule '{{ pve_ha_replication_schedule }}'
+        {% if pve_ha_replication_rate | string | length > 0 %}--rate {{ pve_ha_replication_rate }}{% endif %}
+        --comment 'pve_ha: relocation replica for {{ item.hostname }} -> {{ item.target }}'
+      loop: "{{ pve_ha_replication_jobs | default([]) }}"
+      loop_control:
+        label: "{{ item.id }} ({{ item.source }} -> {{ item.target }})"
+      when:
+        - inventory_hostname == item.source
+        - item.id not in pve_ha_existing_replication_ids
+      changed_when: true
