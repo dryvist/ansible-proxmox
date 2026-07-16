@@ -1,0 +1,77 @@
+---
+# Pin the pve_ha replication target-derivation logic without the live cluster or
+# the S3 inventory pipeline: feed a fake containers_from_tofu and run the SAME
+# resolution expression tasks/main.yml uses, then assert each guest resolves to
+# the correct partner node (or is skipped). Run: ansible-playbook tests/pve_ha_replication/verify_targets.yml
+- name: Verify pve_ha replication target resolution
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    proxmox_node_prefix: pve
+    pve_ha_replication_jobnum: 0
+    pve_ha_replication_pair:
+      - "{{ proxmox_node_prefix }}1"
+      - "{{ proxmox_node_prefix }}2"
+    pve_ha_replication_ct_hostnames:
+      - postgres-apps   # homed on pve1 -> target pve2
+      - nautobot        # homed on pve2 -> target pve1
+      - stray-on-pve3   # homed on pve3 (outside pair) -> skipped
+      - not-provisioned # absent from inventory -> skipped
+    containers_from_tofu:
+      postgres-apps: {vmid: 602000, node: pve1}
+      nautobot: {vmid: 605000, node: pve2}
+      stray-on-pve3: {vmid: 605010, node: pve3}
+
+  tasks:
+    - name: Map container hostname -> {vmid, node}
+      ansible.builtin.set_fact:
+        pve_ha_ct_by_host: >-
+          {{
+            dict(
+              (containers_from_tofu | default({})) | dict2items
+              | selectattr('value.vmid', 'defined')
+              | selectattr('value.node', 'defined')
+              | map(attribute='key') | list
+              | zip(
+                  (containers_from_tofu | default({})) | dict2items
+                  | selectattr('value.vmid', 'defined')
+                  | selectattr('value.node', 'defined')
+                  | map(attribute='value') | list
+                )
+            )
+          }}
+
+    - name: Resolve replication jobs (present guests homed in the always-on pair)
+      ansible.builtin.set_fact:
+        pve_ha_replication_jobs: >-
+          {{ pve_ha_replication_jobs | default([]) + [ {
+               'hostname': item,
+               'id': (pve_ha_ct_by_host[item].vmid | string) ~ '-'
+                     ~ (pve_ha_replication_jobnum | string),
+               'source': pve_ha_ct_by_host[item].node,
+               'target': (pve_ha_replication_pair
+                          | difference([pve_ha_ct_by_host[item].node]) | first)
+             } ] }}
+      loop: "{{ pve_ha_replication_ct_hostnames }}"
+      when:
+        - item in pve_ha_ct_by_host
+        - pve_ha_ct_by_host[item].node in pve_ha_replication_pair
+
+    - name: Assert exactly the two in-pair guests resolved, to the right partners
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_replication_jobs | map(attribute='hostname') | sort)
+            == ['nautobot', 'postgres-apps']
+          - (pve_ha_replication_jobs
+             | selectattr('hostname', 'eq', 'postgres-apps') | first).target == 'pve2'
+          - (pve_ha_replication_jobs
+             | selectattr('hostname', 'eq', 'postgres-apps') | first).id == '602000-0'
+          - (pve_ha_replication_jobs
+             | selectattr('hostname', 'eq', 'nautobot') | first).target == 'pve1'
+        fail_msg: >-
+          pve_ha replication target derivation is wrong:
+          {{ pve_ha_replication_jobs }}
+        success_msg: >-
+          pve_ha replication targets resolve correctly (pve1-homed -> pve2,
+          pve2-homed -> pve1, pve3 + absent guests skipped).
