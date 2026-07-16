@@ -71,7 +71,10 @@ the only node-loss story**:
   exists to relocate onto.
 - On a **node loss**, ha-manager relocates the guest to the partner and starts
   it from the replica. `max_relocate=1` is enough: one hop to the partner.
-- `pve3` sleeps for DR and holds no replica, so it is never a relocation target.
+- A **strict `node-affinity` rule** (`pve_ha_replication_affinity_rule`) pins
+  these guests to `pve_ha_replication_pair`, so ha-manager can never relocate one
+  onto a node without a replica (e.g. `pve3` when it is awake) and then
+  start-fail/flap. `strict` = run only on the listed nodes.
 - The replica is a **relocation enabler, not the durability layer**: the app
   guests' real data-loss window is covered separately (`postgres-apps` by
   streaming replication + WAL archiving; `nautobot`/`vikunja` are near-stateless
@@ -118,3 +121,4 @@ No real service is touched.
 | `pve_ha_replication_schedule` | `*/15` | `pvesr` schedule (systemd-calendar subset). |
 | `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
 | `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
+| `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name of the strict node-affinity rule pinning replication guests to the pair. |

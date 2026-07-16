@@ -75,3 +75,35 @@
         success_msg: >-
           pve_ha replication targets resolve correctly (pve1-homed -> pve2,
           pve2-homed -> pve1, pve3 + absent guests skipped).
+
+    # Node-affinity scope: the STRICT pin must cover only guests that have a
+    # replica (present + in-pair), so pve3-homed / absent guests are excluded —
+    # a strict rule over a replica-less guest would stop it, and the pin's node
+    # set (the pair, no pve3) is what keeps ha-manager off the awake pve3.
+    - name: Map container hostname -> vmid (node-affinity resolution input)
+      ansible.builtin.set_fact:
+        pve_ha_vmid_by_host: >-
+          {{ dict(containers_from_tofu | dict2items | map(attribute='key') | list
+             | zip(containers_from_tofu | dict2items
+                   | map(attribute='value.vmid') | list)) }}
+
+    - name: Resolve the strict node-affinity SID set
+      ansible.builtin.set_fact:
+        pve_ha_replication_sids: >-
+          {{ pve_ha_replication_ct_hostnames | select('in', pve_ha_vmid_by_host)
+             | map('extract', containers_from_tofu)
+             | selectattr('node', 'in', pve_ha_replication_pair)
+             | map(attribute='vmid') | map('string')
+             | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
+
+    - name: Assert the strict pin covers only the in-pair guests (pve3 excluded)
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_replication_sids | sort) == ['ct:602000', 'ct:605000']
+          - "'pve3' not in pve_ha_replication_pair"
+        fail_msg: >-
+          node-affinity SID scope is wrong (must exclude pve3-homed/absent):
+          {{ pve_ha_replication_sids }}
+        success_msg: >-
+          node-affinity strict pin covers only ct:602000 + ct:605000 over
+          {{ pve_ha_replication_pair }} (pve3-homed + absent guests excluded).

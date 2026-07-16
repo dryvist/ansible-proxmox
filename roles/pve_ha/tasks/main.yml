@@ -145,6 +145,43 @@
       # ponytail: idempotent enforce, same rationale as the resource set above.
       changed_when: false
 
+    # SIDs of replication guests that actually have a replica: present in the
+    # inventory AND homed in the pair (same scope as the pvesr jobs). A guest
+    # outside the pair has no replica, so it must NOT go in the strict rule (a
+    # strict rule with no available node would STOP it).
+    - name: Resolve replication guest SIDs (present, homed in the always-on pair)
+      ansible.builtin.set_fact:
+        pve_ha_replication_sids: >-
+          {{ pve_ha_replication_ct_hostnames | select('in', pve_ha_vmid_by_host)
+             | map('extract', containers_from_tofu | default({}))
+             | selectattr('node', 'in', pve_ha_replication_pair)
+             | map(attribute='vmid') | map('string')
+             | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
+
+    - name: Pin replication guests to the always-on pair (strict; add if absent)
+      ansible.builtin.command: >-
+        ha-manager rules add node-affinity {{ pve_ha_replication_affinity_rule }}
+        --resources {{ pve_ha_replication_sids | join(',') }}
+        --nodes {{ pve_ha_replication_pair | join(',') }}
+        --strict 1
+        --comment 'pve_ha: keep singleton app guests on nodes holding their pvesr replica'
+      when:
+        - pve_ha_replication_sids | length > 0
+        - pve_ha_replication_affinity_rule not in pve_ha_existing_rules
+      changed_when: true
+
+    - name: Enforce the replication node-affinity rule (nodes + strict)
+      ansible.builtin.command: >-
+        ha-manager rules set node-affinity {{ pve_ha_replication_affinity_rule }}
+        --resources {{ pve_ha_replication_sids | join(',') }}
+        --nodes {{ pve_ha_replication_pair | join(',') }}
+        --strict 1
+      when:
+        - pve_ha_replication_sids | length > 0
+        - pve_ha_replication_affinity_rule in pve_ha_existing_rules
+      # ponytail: idempotent enforce, same rationale as the resource-affinity set.
+      changed_when: false
+
 # Storage replication (pvesr) for the SINGLETON app guests, so ha-manager can
 # relocate them to the always-on partner node on node loss (see STORAGE NOTE in
 # defaults). Unlike the cluster-wide HA config above (run_once on the config

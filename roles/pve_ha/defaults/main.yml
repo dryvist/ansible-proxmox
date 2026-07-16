@@ -124,3 +124,10 @@ pve_ha_replication_rate: ""
 
 # Job-number suffix for the pvesr job id (<vmid>-<jobnum>). One job per guest.
 pve_ha_replication_jobnum: 0
+
+# STRICT node-affinity rule pinning the replication guests to pve_ha_replication_pair.
+# This is correctness, not preference: a pvesr replica exists ONLY on the pair, so
+# ha-manager must never start one of these guests on any other node (e.g. pve3,
+# which holds no replica). A strict rule = run ONLY on the listed nodes, so a
+# relocation onto a replica-less node can't happen and then start-fail/flap.
+pve_ha_replication_affinity_rule: apps-replication-nodes
