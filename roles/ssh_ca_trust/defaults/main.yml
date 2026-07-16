@@ -17,7 +17,14 @@
 # here). Fail-closed: no pin, or a mismatch, aborts the role. Never
 # trust-on-first-use.
 
-ssh_ca_trust_enabled: true
+# Two-condition activation gate. The role is a NO-OP unless BOTH a pinned CA
+# fingerprint exists AND rollout is explicitly enabled for this host group.
+# Separating "a pin exists" from "roll out today" keeps a stray/stale
+# SSH_CA_FINGERPRINT from distributing trust estate-wide, and enables staged,
+# host-class-by-host-class activation (flip rollout per group_vars once proven).
+# When active it is still fail-closed on a fingerprint MISMATCH.
+ssh_ca_trust_rollout_enabled: false
+ssh_ca_trust_enabled: "{{ (ssh_ca_trust_ca_fingerprint | length > 0) and (ssh_ca_trust_rollout_enabled | bool) }}"
 
 # OpenBao endpoint. HA standbys 307-redirect; the uri task follows redirects.
 ssh_ca_trust_bao_addr: >-
@@ -28,7 +35,8 @@ ssh_ca_trust_mount: ssh-client-ca
 # PINNED CA public-key fingerprint (the `ssh-keygen -l` SHA256:... form).
 # Recorded from the openbao converge's "SSH CA fingerprint" output — a
 # verified, human-gated session — and committed via group_vars/env. Empty
-# fails the role: distributing trust without a pin would be TOFU.
+# leaves the role a no-op (see the activation gate): distributing trust
+# without a pin would be TOFU.
 ssh_ca_trust_ca_fingerprint: "{{ lookup('env', 'SSH_CA_FINGERPRINT') | default('', true) }}"
 
 # Extra trusted CA public keys (full authorized-keys-format lines). CA
