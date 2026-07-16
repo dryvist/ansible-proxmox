@@ -50,7 +50,7 @@ doppler run -- ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `pve_syslog_forwarder_target_host` | `syslog.{{ PROXMOX_SUBDOMAIN }}` | The `syslog` CNAME (→ HAProxy VIP). Never a literal. |
-| `pve_syslog_forwarder_target_port` | `517` | Linux-family syslog port (→ Splunk `os` index). Pinned because `load_tofu.yml` does not inject `constants`; source of truth is terraform-proxmox `pipeline_constants.syslog_ports.linux`. |
+| `pve_syslog_forwarder_target_port` | `517` | Linux-family syslog port (→ Splunk `os` index). Pinned because `load_tofu.yml` does not inject `constants`; source of truth is tofu-proxmox `pipeline_constants.syslog_ports.linux`. |
 | `pve_syslog_forwarder_protocol` | `tcp` | `tcp` (reliable) or `udp`. |
 | `pve_syslog_forwarder_config_path` | `/etc/rsyslog.d/10-forward-cribl.conf` | Drop-in rule owned by this role. |
 | `pve_syslog_forwarder_queue_max_disk_space` | `256m` | Disk-queue cap so a receiver outage buffers instead of dropping. |

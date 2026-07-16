@@ -91,7 +91,7 @@ See `defaults/main.yml` for the authoritative list and inline rationale.
 
 Result: hosts sync from the Debian public pool and serve NTP to all internal
 RFC1918 traffic on UDP/123. Companion firewall rule lives in
-`terraform-proxmox/modules/firewall/` (see issue #285).
+`tofu-proxmox/modules/firewall/` (see issue #285).
 
 ### Internal clients (used by ansible-proxmox-apps and ansible-splunk)
 

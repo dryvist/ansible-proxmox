@@ -1,7 +1,7 @@
 # zfs_pools
 
 Manages ZFS **datasets, quotas, and Proxmox storage registration** for the
-per-node pools declared in `terraform-proxmox`'s `node_storage` output.
+per-node pools declared in `tofu-proxmox`'s `node_storage` output.
 
 ## Installation
 
@@ -17,7 +17,7 @@ ansible-galaxy collection install -r requirements.yml
 
 ## Scope (and what it deliberately does NOT do)
 
-`terraform-proxmox` declares storage; `ansible-proxmox` realizes it. The
+`tofu-proxmox` declares storage; `ansible-proxmox` realizes it. The
 Proxmox API cannot create ZFS pools (`zpool create` is an OS operation), so the
 contract is split:
 
@@ -25,7 +25,7 @@ contract is split:
 | ------------------------------------------ | ------------------------------------------------ |
 | Host commissioning (auto-install / manual) | `zpool create` from physical devices             |
 | **this role**                              | datasets, quotas, `pvesm` storage registration   |
-| terraform-proxmox                          | references the datastore by `id` on VM/LXC disks |
+| tofu-proxmox                               | references the datastore by `id` on VM/LXC disks |
 
 **Pool creation is opt-in and off by default.** Creating a pool needs the
 host-specific device list (`by-id` paths), which is not in the committed

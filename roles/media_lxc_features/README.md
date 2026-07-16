@@ -20,14 +20,14 @@ ansible-galaxy collection install -r requirements.yml
 
 ## Why this role exists (the contract split)
 
-`terraform-proxmox` creates the media LXCs as **plain shells**. The root-only
+`tofu-proxmox` creates the media LXCs as **plain shells**. The root-only
 bits are deliberately removed from OpenTofu because the API token cannot apply
 them. This role realizes them after creation.
 
 | Layer | Owns |
 | --- | --- |
-| terraform-proxmox | Create the media LXCs (CPU, RAM, disk, network, `nesting`) + declare the `bulk/data` and `bulk/appdata` datasets (`node_storage`) |
-| **this role** | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough, shared `media` group + `/bulk/data` directory skeleton, per-app config-mount ownership |
+| tofu-proxmox | Create the media LXCs (CPU, RAM, disk, network, `nesting`) + declare the `bulk/data` and `bulk/appdata` datasets (`node_storage`) |
+| **this role** | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough, shared `media` group + `/bulk/data` skeleton, per-app config ownership |
 | ansible-proxmox-apps | Converge the services inside each LXC |
 
 `nesting=1` stays **OpenTofu-managed**. This role never drops it: `keyctl=1` is
@@ -37,7 +37,7 @@ written wholesale.
 ## Ordering
 
 ```text
-terraform-proxmox (shells)  ->  media_lxc_features  ->  ansible-proxmox-apps
+tofu-proxmox (shells)  ->  media_lxc_features  ->  ansible-proxmox-apps
 ```
 
 Run this role **after** the LXCs exist and **before** the apps converge. In
@@ -76,7 +76,7 @@ host uid/gid.
 ## Shared data root (host side)
 
 The `bulk/data` **dataset** (recordsize, auto-snapshot, quota) is declared in
-terraform-proxmox `node_storage` and realized by `zfs_pools`. This role owns
+tofu-proxmox `node_storage` and realized by `zfs_pools`. This role owns
 the **POSIX layer** inside it, on hosts where `/bulk/data` exists:
 
 - the shared `media` group at a **fixed GID** (`13000` by default) — the path
@@ -109,7 +109,7 @@ itself from its own DB on startup — there is no export/replay step.
 | seerr | `/opt/seerr/config` | `settings.json` + `db.sqlite3` (users, requests, registrations) |
 
 - **Dataset**: `bulk/appdata` (parent) + one `bulk/appdata/<app>` child per
-  service are declared in terraform-proxmox `node_storage` and realized by
+  service are declared in tofu-proxmox `node_storage` and realized by
   `zfs_pools`. `bulk/appdata` is the home for app *config/state* (distinct from
   `bulk/databases`, for database engines, and `bulk/data`, the re-acquirable
   media library).

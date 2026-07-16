@@ -96,7 +96,7 @@ Each job in `zfs_replication_jobs`:
 - Root SSH trust from this (source) node to the standby — set up out of band
   (the `cluster_ssh_trust` role / PVE cluster keys).
 - The destination parent datasets (`bulk/replica/<node>`) exist on the standby —
-  declared in terraform-proxmox `node_storage` and created by the `zfs_pools`
+  declared in tofu-proxmox `node_storage` and created by the `zfs_pools`
   role; `syncoid` creates the per-dataset leaves.
 - A sanoid snapshot exists on each source (for `--no-sync-snap`).
 

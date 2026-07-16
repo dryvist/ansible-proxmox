@@ -96,6 +96,6 @@ After cloning, run `direnv allow` to enable automatic shell activation.
 
 ## Related Repositories
 
-- \*_terraform-proxmox_: VM/container provisioning
+- \*_tofu-proxmox_: VM/container provisioning
 - **ansible-proxmox-apps**: Application deployment on VMs
 - \*_ansible-splunk_: Splunk configuration
