@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.55.0](https://github.com/dryvist/ansible-proxmox/compare/v1.54.0...v1.55.0) (2026-07-16)
+
+
+### Features
+
+* **scripts:** mint short-lived SSH certificates from the OpenBao CA in run-ansible.sh ([#412](https://github.com/dryvist/ansible-proxmox/issues/412)) ([23600ea](https://github.com/dryvist/ansible-proxmox/commit/23600eaf8ceb3776414802503958bfb85784d4d2))
+
 ## [1.54.0](https://github.com/dryvist/ansible-proxmox/compare/v1.53.0...v1.54.0) (2026-07-16)
 
 
