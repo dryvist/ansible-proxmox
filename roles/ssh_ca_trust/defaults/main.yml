@@ -1,0 +1,59 @@
+---
+# ssh_ca_trust — distribute trust in the OpenBao SSH client CA
+# (ssh-certificate-authority ADR on the docs site).
+#
+# Automation (AI agents, Ansible, CI) authenticates with short-TTL SSH
+# certificates signed by the OpenBao CA at `ssh-client-ca/`; humans stay on
+# static authorized_keys (a CA outage must never lock a human out). This role
+# makes a host TRUST that CA: it writes the CA public key, a per-user
+# AuthorizedPrincipalsFile map, and a late-numbered sshd_config.d drop-in —
+# then proves the EFFECTIVE sshd config and that a static key still works
+# before finishing (lockout guard).
+#
+# The CA public key is fetched from OpenBao's unauthenticated public_key
+# endpoint but is only trusted after its fingerprint matches the PINNED value
+# below — the pin comes from the trusted ceremony (the openbao converge prints
+# it under the human-gated bootstrap token; it is committed and human-reviewed
+# here). Fail-closed: no pin, or a mismatch, aborts the role. Never
+# trust-on-first-use.
+
+ssh_ca_trust_enabled: true
+
+# OpenBao endpoint. HA standbys 307-redirect; the uri task follows redirects.
+ssh_ca_trust_bao_addr: >-
+  {{ lookup('env', 'BAO_ADDR')
+     | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
+ssh_ca_trust_mount: ssh-client-ca
+
+# PINNED CA public-key fingerprint (the `ssh-keygen -l` SHA256:... form).
+# Recorded from the openbao converge's "SSH CA fingerprint" output — a
+# verified, human-gated session — and committed via group_vars/env. Empty
+# fails the role: distributing trust without a pin would be TOFU.
+ssh_ca_trust_ca_fingerprint: "{{ lookup('env', 'SSH_CA_FINGERPRINT') | default('', true) }}"
+
+# Extra trusted CA public keys (full authorized-keys-format lines). CA
+# ROTATION path: append the NEW issuer's public key here first, propagate,
+# re-sign clients via the new issuer, then drop the old key after every old
+# cert's TTL has drained (multi-issuer API on the OpenBao side).
+ssh_ca_trust_extra_ca_keys: []
+
+# principal -> login-user map for THIS host class (per-group data,
+# default-deny: a principal reaches a user only where a group opts in).
+# PVE-node default: only the `ansible` principal may become root. The
+# `ai-agent` principal is NEVER a hypervisor root — it maps to guest-level
+# accounts on hosts that opt in via group_vars.
+ssh_ca_trust_principals:
+  root: [ansible]
+
+# Also push CA trust into this node's LXC containers via pct (no SSH
+# chicken-and-egg: pct reaches a guest regardless of its network/sshd state).
+# Container principals default: converge runs as root over pct today, so
+# `ansible` on root; `ai-agent` only via explicit override.
+ssh_ca_trust_manage_lxc: true
+ssh_ca_trust_lxc_principals:
+  root: [ansible]
+
+ssh_ca_trust_ca_file: /etc/ssh/trusted-user-ca-keys.pem
+ssh_ca_trust_principals_dir: /etc/ssh/principals
+# Late-numbered so it wins over distro/local snippets in sshd_config.d.
+ssh_ca_trust_dropin: /etc/ssh/sshd_config.d/99-openbao-ca.conf
