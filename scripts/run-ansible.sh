@@ -16,18 +16,50 @@ PLAYBOOK="$1"
 shift
 
 AGENT_STARTED=false
+CERT_DIR=""
 
 cleanup() {
   if [[ $AGENT_STARTED == true ]]; then
     ssh-agent -k >/dev/null 2>&1 || true
   fi
+  [[ -n $CERT_DIR ]] && rm -rf "$CERT_DIR"
 }
 trap cleanup EXIT
 
+# --- Preferred auth: short-lived SSH certificate from the OpenBao CA --------
+# ssh-certificate-authority ADR: mint an ephemeral ed25519 keypair, sign it via
+# ssh-client-ca/sign/automation-ansible (principal `ansible`, cert TTL <=1h),
+# and point the inventory at the key (OpenSSH pairs id + id-cert.pub
+# automatically). Requires BAO_ADDR + the ansible-converge AppRole in the
+# ambient env (Doppler). Any failure falls back to the static key path below.
+mint_ssh_cert() {
+  local mount=${SSH_CA_MOUNT:-ssh-client-ca} login token signed
+  CERT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ansible-sshcert.XXXXXX") || return 1
+  chmod 700 "$CERT_DIR"
+  (umask 077 && ssh-keygen -q -t ed25519 -N '' -C "ansible-converge" -f "$CERT_DIR/id") || return 1
+  # No secret material on any command line; xtrace stays off around the login.
+  { set +x; } 2>/dev/null
+  login=$(jq -nc --arg r "$OPENBAO_APPROLE_ANSIBLE_ROLE_ID" --arg s "$OPENBAO_APPROLE_ANSIBLE_SECRET_ID" \
+    '{role_id: $r, secret_id: $s}' \
+    | curl -fsSL --max-time 10 -H 'Content-Type: application/json' --data @- \
+      "$BAO_ADDR/v1/auth/approle/login") || return 1
+  token=$(printf '%s' "$login" | jq -er '.auth.client_token') || return 1
+  signed=$(jq -nc --rawfile pub "$CERT_DIR/id.pub" --arg ttl "${SSH_CERT_TTL:-1h}" \
+    '{public_key: $pub, ttl: $ttl}' \
+    | curl -fsSL --max-time 10 -H "X-Vault-Token: $token" --data @- \
+      "$BAO_ADDR/v1/$mount/sign/automation-ansible" \
+    | jq -er '.data.signed_key') || return 1
+  printf '%s\n' "$signed" > "$CERT_DIR/id-cert.pub"
+  export PROXMOX_SSH_KEY_PATH="$CERT_DIR/id"
+}
+
+if [[ -n ${BAO_ADDR:-} && -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]] \
+  && mint_ssh_cert; then
+  echo "Using a short-lived SSH certificate from the OpenBao CA (automation-ansible)."
 # If key file exists at PROXMOX_SSH_KEY_PATH, export expanded path for inventory.
 # Otherwise load key content into ssh-agent and unset PROXMOX_SSH_KEY_PATH so
 # inventory/hosts.yml omits ansible_ssh_private_key_file (Ansible uses the agent).
-if [[ -n ${PROXMOX_SSH_KEY_PATH:-} ]] && [[ -f ${PROXMOX_SSH_KEY_PATH/#\~/$HOME} ]]; then
+elif [[ -n ${PROXMOX_SSH_KEY_PATH:-} ]] && [[ -f ${PROXMOX_SSH_KEY_PATH/#\~/$HOME} ]]; then
   export PROXMOX_SSH_KEY_PATH="${PROXMOX_SSH_KEY_PATH/#\~/$HOME}"
 elif [[ -n ${PROXMOX_SSH_PRIVATE_KEY:-} ]]; then
   eval "$(ssh-agent -s)" >/dev/null
