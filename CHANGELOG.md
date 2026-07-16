@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.54.0](https://github.com/dryvist/ansible-proxmox/compare/v1.53.0...v1.54.0) (2026-07-16)
+
+
+### Features
+
+* **ssh_ca_trust:** distribute OpenBao SSH client-CA trust to PVE nodes and LXCs ([#410](https://github.com/dryvist/ansible-proxmox/issues/410)) ([ffd9c53](https://github.com/dryvist/ansible-proxmox/commit/ffd9c53b3370adabb047393cc17f5aff8f354ea6))
+
 ## [1.53.0](https://github.com/dryvist/ansible-proxmox/compare/v1.52.0...v1.53.0) (2026-07-13)
 
 
