@@ -1,9 +1,15 @@
 ---
-# Pin the pve_ha replication target-derivation logic without the live cluster or
-# the S3 inventory pipeline: feed a fake containers_from_tofu and run the SAME
-# resolution expression tasks/main.yml uses, then assert each guest resolves to
-# the correct partner node (or is skipped). Run: ansible-playbook tests/pve_ha_replication/verify_targets.yml
-- name: Verify pve_ha replication target resolution
+# Pin the pve_ha replication derivation without a live cluster or the S3
+# inventory pipeline: feed a SYNTHETIC containers_from_tofu and run the SAME
+# expressions tasks/main.yml uses, then assert targets + the strict-pin SID set.
+# Run: ansible-playbook tests/pve_ha_replication/verify_targets.yml -i localhost,
+#
+# The fixture is a code-path model, NOT a snapshot of live inventory, but it
+# tracks reality where it matters: postgres-apps (602000) is ABSENT (not yet
+# provisioned) so it exercises the absent-guest exclusion; nautobot (605000) and
+# vikunja (605010) are PRESENT and in-pair so both must resolve; a made-up
+# out-of-pair-pve3 guest (fake vmid) exercises the node-not-in-pair exclusion.
+- name: Verify pve_ha replication target + node-affinity resolution
   hosts: localhost
   become: false
   gather_facts: false
@@ -14,14 +20,15 @@
       - "{{ proxmox_node_prefix }}1"
       - "{{ proxmox_node_prefix }}2"
     pve_ha_replication_ct_hostnames:
-      - postgres-apps   # homed on pve1 -> target pve2
-      - nautobot        # homed on pve2 -> target pve1
-      - stray-on-pve3   # homed on pve3 (outside pair) -> skipped
-      - not-provisioned # absent from inventory -> skipped
+      - postgres-apps      # ABSENT from the fixture (not provisioned) -> skipped
+      - nautobot           # present, pve2 -> target pve1, in the strict pin
+      - vikunja            # present, pve1 -> target pve2, in the strict pin
+      - out-of-pair-pve3   # present but homed on pve3 (outside pair) -> skipped
     containers_from_tofu:
-      postgres-apps: {vmid: 602000, node: pve1}
       nautobot: {vmid: 605000, node: pve2}
-      stray-on-pve3: {vmid: 605010, node: pve3}
+      vikunja: {vmid: 605010, node: pve1}
+      out-of-pair-pve3: {vmid: 699000, node: pve3}
+      # postgres-apps (602000) deliberately absent — models #662 unapplied.
 
   tasks:
     - name: Map container hostname -> {vmid, node}
@@ -58,23 +65,25 @@
         - item in pve_ha_ct_by_host
         - pve_ha_ct_by_host[item].node in pve_ha_replication_pair
 
-    - name: Assert exactly the two in-pair guests resolved, to the right partners
+    - name: Assert both present in-pair guests resolved, to the right partners
       ansible.builtin.assert:
         that:
           - (pve_ha_replication_jobs | map(attribute='hostname') | sort)
-            == ['nautobot', 'postgres-apps']
+            == ['nautobot', 'vikunja']
           - (pve_ha_replication_jobs
-             | selectattr('hostname', 'eq', 'postgres-apps') | first).target == 'pve2'
+             | selectattr('hostname', 'eq', 'vikunja') | first).target == 'pve2'
           - (pve_ha_replication_jobs
-             | selectattr('hostname', 'eq', 'postgres-apps') | first).id == '602000-0'
+             | selectattr('hostname', 'eq', 'vikunja') | first).id == '605010-0'
           - (pve_ha_replication_jobs
              | selectattr('hostname', 'eq', 'nautobot') | first).target == 'pve1'
+          - (pve_ha_replication_jobs
+             | selectattr('hostname', 'eq', 'nautobot') | first).id == '605000-0'
         fail_msg: >-
           pve_ha replication target derivation is wrong:
           {{ pve_ha_replication_jobs }}
         success_msg: >-
-          pve_ha replication targets resolve correctly (pve1-homed -> pve2,
-          pve2-homed -> pve1, pve3 + absent guests skipped).
+          pve_ha replication targets resolve correctly (vikunja pve1 -> pve2,
+          nautobot pve2 -> pve1; absent postgres-apps + pve3-homed guest skipped).
 
     # Node-affinity scope: the STRICT pin must cover only guests that have a
     # replica (present + in-pair), so pve3-homed / absent guests are excluded —
@@ -96,14 +105,14 @@
              | map(attribute='vmid') | map('string')
              | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
 
-    - name: Assert the strict pin covers only the in-pair guests (pve3 excluded)
+    - name: Assert the strict pin covers exactly the present in-pair guests
       ansible.builtin.assert:
         that:
-          - (pve_ha_replication_sids | sort) == ['ct:602000', 'ct:605000']
+          - (pve_ha_replication_sids | sort) == ['ct:605000', 'ct:605010']
           - "'pve3' not in pve_ha_replication_pair"
         fail_msg: >-
-          node-affinity SID scope is wrong (must exclude pve3-homed/absent):
-          {{ pve_ha_replication_sids }}
+          node-affinity SID scope is wrong (must be every present in-pair guest,
+          excluding pve3-homed/absent): {{ pve_ha_replication_sids }}
         success_msg: >-
-          node-affinity strict pin covers only ct:602000 + ct:605000 over
-          {{ pve_ha_replication_pair }} (pve3-homed + absent guests excluded).
+          node-affinity strict pin covers exactly ct:605000 + ct:605010 over
+          {{ pve_ha_replication_pair }} (absent + pve3-homed guests excluded).
