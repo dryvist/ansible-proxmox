@@ -72,14 +72,13 @@ pve_ha_ct_hostnames:
   - traefik
   # Data platform + shared-Postgres apps tier (live under HA since 2026-07-16;
   # this records what ha-manager already holds so a converge is idempotent).
+  # postgres-apps/nautobot/vikunja are the pvesr-replicated singletons and also
+  # appear in pve_ha_replication_ct_hostnames below.
   - postgres
   - postgres-apps
   - vikunja
   - nautobot
   - zammad
-  - postgres-apps
-  - nautobot
-  - vikunja
 # Extra HA SIDs to manage verbatim (e.g. a VM the tofu container map does not
 # cover: "vm:110130"). Merged with the resolved CT SIDs. Empty by default.
 pve_ha_extra_sids: []
