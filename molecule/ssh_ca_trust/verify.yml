@@ -1,7 +1,9 @@
 ---
 # Molecule verification for ssh_ca_trust (PVE + LXC-via-pct half).
 #
-# 1. Confirms neither no-op converge case wrote any CA trust artifact.
+# 1. Confirms neither no-op converge case wrote any CA trust artifact — paths
+#    come from the role's own defaults/main.yml (vars_files below), not
+#    literals, so a path rename there can't silently false-pass this check.
 # 2. Asserts the activation-gate FORMULA for the pin+rollout-both-true case,
 #    matching defaults/main.yml verbatim — this scenario does not stand up a
 #    live/mocked OpenBao endpoint to exercise the real fetch/pct-push path,
@@ -13,14 +15,17 @@
   become: true
   gather_facts: false
 
+  vars_files:
+    - ../../roles/ssh_ca_trust/defaults/main.yml
+
   tasks:
     - name: Stat the CA trust artifacts (should not exist — gate stayed closed both times)
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
-        - /etc/ssh/trusted-user-ca-keys.pem
-        - /etc/ssh/principals
-        - /etc/ssh/sshd_config.d/99-openbao-ca.conf
+        - "{{ ssh_ca_trust_ca_file }}"
+        - "{{ ssh_ca_trust_principals_dir }}"
+        - "{{ ssh_ca_trust_dropin }}"
       register: ssh_ca_trust_artifacts
 
     - name: Assert no CA trust file was ever written
