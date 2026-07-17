@@ -1,0 +1,60 @@
+---
+# Molecule verification for ssh_ca_trust (PVE + LXC-via-pct half).
+#
+# 1. Confirms neither no-op converge case wrote any CA trust artifact.
+# 2. Asserts the activation-gate FORMULA for the pin+rollout-both-true case,
+#    matching defaults/main.yml verbatim — this scenario does not stand up a
+#    live/mocked OpenBao endpoint to exercise the real fetch/pct-push path,
+#    so a future edit to the boolean logic is what this assertion protects
+#    against. See PR description for what is/isn't covered.
+
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Stat the CA trust artifacts (should not exist — gate stayed closed both times)
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/ssh/trusted-user-ca-keys.pem
+        - /etc/ssh/principals
+        - /etc/ssh/sshd_config.d/99-openbao-ca.conf
+      register: ssh_ca_trust_artifacts
+
+    - name: Assert no CA trust file was ever written
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+        fail_msg: "{{ item.item }} exists — the activation gate did not stay closed"
+      loop: "{{ ssh_ca_trust_artifacts.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Assert the activation-gate formula opens when both conditions hold
+      ansible.builtin.assert:
+        that:
+          - (ca_fp | length > 0) and (rollout | bool)
+        fail_msg: "gate formula did not evaluate true with pin+rollout both set"
+      vars:
+        ca_fp: "SHA256:fakeFAKEfakeFAKEfakeFAKEfakeFAKEfakeFAKEfak"
+        rollout: true
+
+    - name: Assert the activation-gate formula stays closed when rollout is off
+      ansible.builtin.assert:
+        that:
+          - not ((ca_fp | length > 0) and (rollout | bool))
+        fail_msg: "gate formula opened with rollout OFF"
+      vars:
+        ca_fp: "SHA256:fakeFAKEfakeFAKEfakeFAKEfakeFAKEfakeFAKEfak"
+        rollout: false
+
+    - name: Assert the activation-gate formula stays closed with no pin
+      ansible.builtin.assert:
+        that:
+          - not ((ca_fp | length > 0) and (rollout | bool))
+        fail_msg: "gate formula opened with no pin"
+      vars:
+        ca_fp: ""
+        rollout: true

@@ -1,0 +1,31 @@
+---
+# Molecule converge for ssh_ca_trust (PVE + LXC-via-pct half).
+#
+# Exercises the two-condition activation gate's NO-OP paths only: no pin, and
+# pin-without-rollout (the stray-env defense, #418 / P0). Both must produce
+# zero changes with no OpenBao reachable — every task in tasks/main.yml is
+# gated behind `when: ssh_ca_trust_enabled | bool`, so a closed gate touches
+# nothing (no fetch attempted, no pct calls, no files written).
+#
+# The pin+rollout-both-true "activates" path needs a live/mocked OpenBao CA
+# endpoint this scenario does not stand up; verify.yml instead asserts the
+# gate FORMULA directly for that case (see verify.yml header).
+
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Converge — no pin, rollout default (expect no-op)
+      ansible.builtin.include_role:
+        name: ssh_ca_trust
+      vars:
+        ssh_ca_trust_ca_fingerprint: ""
+
+    - name: Converge — pin present, rollout OFF (expect no-op)
+      ansible.builtin.include_role:
+        name: ssh_ca_trust
+      vars:
+        ssh_ca_trust_ca_fingerprint: "SHA256:fakeFAKEfakeFAKEfakeFAKEfakeFAKEfakeFAKEfak"
+        ssh_ca_trust_rollout_enabled: false
