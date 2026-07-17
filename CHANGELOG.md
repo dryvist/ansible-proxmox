@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.57.0](https://github.com/dryvist/ansible-proxmox/compare/v1.56.0...v1.57.0) (2026-07-17)
+
+
+### Features
+
+* **postgres_standby:** pull the ai-VLAN memory cluster's dump archive ([#419](https://github.com/dryvist/ansible-proxmox/issues/419)) ([be8a3f3](https://github.com/dryvist/ansible-proxmox/commit/be8a3f37b94108825080cef435526d7aff878ee2))
+
+
+### Bug Fixes
+
+* **ssh_ca_trust:** gate role activation behind a two-condition switch ([#417](https://github.com/dryvist/ansible-proxmox/issues/417)) ([97ef458](https://github.com/dryvist/ansible-proxmox/commit/97ef45899f170e4bbbf5b77620ef01b2b01d171f))
+
 ## [1.56.0](https://github.com/dryvist/ansible-proxmox/compare/v1.55.0...v1.56.0) (2026-07-16)
 
 
