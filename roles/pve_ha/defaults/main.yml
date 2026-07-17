@@ -60,15 +60,25 @@ pve_ha_state: started
 #     peer, so RELOCATION to a replica is their only node-loss story. They also
 #     appear in pve_ha_replication_ct_hostnames, which ships their rootfs to the
 #     always-on partner node so ha-manager can actually start them there.
+# NAMING: technitium-dns/-2 and traefik are legacy names that violate the
+# multi-instance naming law (two-digit suffix, first digit = node ID). They stay
+# here because this list must match the LIVE hostnames or the role skips them —
+# rename flows through IaC first (tofu-proxmox#679), then this list follows.
 pve_ha_ct_hostnames:
   - openbao-01
   - openbao-02
   - technitium-dns
   - technitium-dns-2
   - traefik
+  # Data platform + shared-Postgres apps tier (live under HA since 2026-07-16;
+  # this records what ha-manager already holds so a converge is idempotent).
+  # postgres-apps/nautobot/vikunja are the pvesr-replicated singletons and also
+  # appear in pve_ha_replication_ct_hostnames below.
+  - postgres
   - postgres-apps
-  - nautobot
   - vikunja
+  - nautobot
+  - zammad
 # Extra HA SIDs to manage verbatim (e.g. a VM the tofu container map does not
 # cover: "vm:110130"). Merged with the resolved CT SIDs. Empty by default.
 pve_ha_extra_sids: []
@@ -93,6 +103,12 @@ pve_ha_anti_affinity_groups:
     hostnames:
       - traefik
       - traefik-2
+  # The Postgres primary/standby pair: a node loss must never take both the
+  # primary and its streaming standby.
+  - name: postgres-pair
+    hostnames:
+      - postgres
+      - postgres-apps
 
 # --- Storage replication (pvesr) for the SINGLETON app guests ----------------
 # The guests here get a pvesr job that ships their rootfs to the always-on
