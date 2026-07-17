@@ -1,0 +1,24 @@
+---
+# root_authorized_keys — declaratively manage the human break-glass keys in
+# /root/.ssh/authorized_keys so they can be ROTATED via IaC instead of a manual
+# one-off. Automation authenticates with OpenBao CA certificates (ssh_ca_trust
+# role); this role governs only the STATIC operator keys that must survive a CA
+# outage. It is intentionally NOT exclusive: it ensures the declared keys are
+# present and the declared retired keys are absent — it never wipes the file to
+# match a list, so a mistake can't lock root out.
+#
+# Rotation flow (zero-downtime): add the NEW key to _present + converge + verify
+# it logs in; then move the OLD key from _present to _absent + converge. The
+# final lockout guard refuses to finish if root would be left with zero static
+# keys.
+
+# Deny-by-default: no-op unless a host group opts in AND supplies keys.
+root_authorized_keys_enabled: false
+
+# Public keys to ENSURE PRESENT (full authorized-keys-format lines, one per
+# list item). Populate per host group from the secrets store — never commit a
+# real key here.
+root_authorized_keys_present: []
+
+# Public keys to ENSURE ABSENT — the rotated-out / leaked key(s) to retire.
+root_authorized_keys_absent: []

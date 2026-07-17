@@ -1,0 +1,18 @@
+---
+# Molecule prepare for root_authorized_keys — runs ONCE before converge.
+#
+# Seeds the "old" operator key so converge's removal path has something to
+# retire. Kept out of converge.yml so converge stays idempotent (the
+# idempotence phase re-runs converge and expects zero changes).
+
+- name: Prepare
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Seed the "old" key so the removal path has something to remove
+      ansible.posix.authorized_key:
+        user: root
+        key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOLDtestkeyBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB operator-old"
+        state: present

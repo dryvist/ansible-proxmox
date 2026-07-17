@@ -1,0 +1,34 @@
+---
+# Molecule converge for root_authorized_keys.
+#
+# Case 1: disabled (default) — must be a pure no-op (no /root/.ssh created).
+# Case 2: enabled — add the new key, retire the "old" key that prepare.yml
+#         seeded, exercising the real add + remove + lockout-guard path (the
+#         authorized_key module works as root inside the container).
+# Idempotent by design: prepare.yml (not converge) seeds the old key, so a
+# second converge run reports zero changes (idempotence phase).
+
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Deterministic throwaway test keys (never real).
+    rak_key_new: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINEWtestkeyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA operator-new"
+    rak_key_old: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOLDtestkeyBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB operator-old"
+
+  tasks:
+    - name: Converge — disabled (expect no-op)
+      ansible.builtin.include_role:
+        name: root_authorized_keys
+
+    - name: Converge — enabled, add new key + retire old key
+      ansible.builtin.include_role:
+        name: root_authorized_keys
+      vars:
+        root_authorized_keys_enabled: true
+        root_authorized_keys_present:
+          - "{{ rak_key_new }}"
+        root_authorized_keys_absent:
+          - "{{ rak_key_old }}"

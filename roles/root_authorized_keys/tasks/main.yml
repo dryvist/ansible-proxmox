@@ -1,0 +1,59 @@
+---
+# Manage the static break-glass keys in /root/.ssh/authorized_keys. See
+# defaults/main.yml for the deny-by-default gate and the rotation flow.
+
+- name: Assert at least one break-glass key is declared present
+  ansible.builtin.assert:
+    that:
+      - root_authorized_keys_present | length > 0
+    fail_msg: >-
+      root_authorized_keys_enabled is true but root_authorized_keys_present is
+      empty. Refusing to manage root's authorized_keys with no key to keep —
+      that would risk locking root out. Supply the operator break-glass key(s).
+  when: root_authorized_keys_enabled | bool
+  tags:
+    - root_authorized_keys
+
+- name: Ensure root .ssh directory exists
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: root_authorized_keys_enabled | bool
+  tags:
+    - root_authorized_keys
+
+- name: Ensure declared break-glass keys are present
+  ansible.posix.authorized_key:
+    user: root
+    key: "{{ item }}"
+    state: present
+  loop: "{{ root_authorized_keys_present }}"
+  when: root_authorized_keys_enabled | bool
+  tags:
+    - root_authorized_keys
+
+- name: Ensure retired keys are absent
+  ansible.posix.authorized_key:
+    user: root
+    key: "{{ item }}"
+    state: absent
+  loop: "{{ root_authorized_keys_absent }}"
+  when: root_authorized_keys_enabled | bool
+  tags:
+    - root_authorized_keys
+
+# Lockout guard: after add+remove, refuse to finish unless root still has at
+# least one static key. A rotation that emptied the file would be caught here
+# before the play completes (the same fail-closed stance as ssh_ca_trust).
+- name: Assert root still has a static authorized_key (lockout guard)
+  ansible.builtin.command:
+    cmd: grep -cE '^(ssh|ecdsa)-' /root/.ssh/authorized_keys
+  register: root_authorized_keys_count
+  changed_when: false
+  failed_when: root_authorized_keys_count.stdout | trim | int < 1
+  when: root_authorized_keys_enabled | bool
+  tags:
+    - root_authorized_keys
