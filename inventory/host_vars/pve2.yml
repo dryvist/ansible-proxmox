@@ -92,5 +92,9 @@ postgres_standby_jobs: >-
        {'name': 'postgres',
         'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres'] | default({})).hostname | default('postgres')) ~ '.' ~ domain_from_tofu,
         'source_dir': '/var/lib/postgresql/backups',
-        'archive_dir': '/bulk/databases/postgres'}
+        'archive_dir': '/bulk/databases/postgres'},
+       {'name': 'postgres-ai',
+        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-ai-1'] | default({})).hostname | default('postgres-ai-1')) ~ '.' ~ domain_from_tofu,
+        'source_dir': '/var/lib/postgresql/backups',
+        'archive_dir': '/bulk/databases/postgres-ai'}
      ] }}
