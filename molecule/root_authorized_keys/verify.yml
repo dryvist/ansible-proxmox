@@ -1,0 +1,41 @@
+---
+# Molecule verification for root_authorized_keys.
+#
+# After converge: the new key is present, the retired key is gone, /root/.ssh
+# is 0700, and root still has >=1 static key (the lockout guard's invariant).
+
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    rak_key_new: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINEWtestkeyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA operator-new"
+    rak_key_old: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOLDtestkeyBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB operator-old"
+
+  tasks:
+    - name: Read root's authorized_keys
+      ansible.builtin.slurp:
+        src: /root/.ssh/authorized_keys
+      register: rak_authorized
+
+    - name: Stat /root/.ssh
+      ansible.builtin.stat:
+        path: /root/.ssh
+      register: rak_ssh_dir
+
+    - name: Assert the new key is present and the retired key is absent
+      ansible.builtin.assert:
+        that:
+          - (rak_authorized.content | b64decode) is search(rak_key_new | regex_escape)
+          - not ((rak_authorized.content | b64decode) is search(rak_key_old | regex_escape))
+          - rak_ssh_dir.stat.mode == "0700"
+        fail_msg: "authorized_keys rotation did not converge to the expected state"
+        success_msg: "new key present, retired key removed, /root/.ssh is 0700"
+
+    - name: Assert the lockout invariant — root still has >=1 static key
+      ansible.builtin.command:
+        cmd: grep -cE '^(ssh|ecdsa)-' /root/.ssh/authorized_keys
+      register: rak_count
+      changed_when: false
+      failed_when: rak_count.stdout | int < 1

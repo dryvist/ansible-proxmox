@@ -74,3 +74,10 @@ jobs:
           ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
           PY_COLORS: "1"
           ANSIBLE_FORCE_COLOR: "1"
+
+      - name: Run root_authorized_keys molecule test
+        run: molecule test -s root_authorized_keys
+        env:
+          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
+          PY_COLORS: "1"
+          ANSIBLE_FORCE_COLOR: "1"
