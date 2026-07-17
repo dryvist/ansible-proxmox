@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.58.0](https://github.com/dryvist/ansible-proxmox/compare/v1.57.0...v1.58.0) (2026-07-17)
+
+
+### Features
+
+* **ssh_ca_trust:** roll out CA trust to PVE nodes + LXCs; fix pct sshd -t ([#422](https://github.com/dryvist/ansible-proxmox/issues/422)) ([f8bb0ef](https://github.com/dryvist/ansible-proxmox/commit/f8bb0ef22bc25248652b63fa948f5f6e1fb3b297))
+
 ## [1.57.0](https://github.com/dryvist/ansible-proxmox/compare/v1.56.0...v1.57.0) (2026-07-17)
 
 
