@@ -31,7 +31,7 @@ trap cleanup EXIT
 # ssh-client-ca/sign/automation-ansible (principal `ansible`, cert TTL <=1h),
 # and point the inventory at the key (OpenSSH pairs id + id-cert.pub
 # automatically). Requires BAO_ADDR + the ansible-converge AppRole in the
-# ambient env (Doppler). Any failure falls back to the static key path below.
+# ambient env (Doppler). With that env present, a mint failure is fatal.
 mint_ssh_cert() {
   local mount=${SSH_CA_MOUNT:-ssh-client-ca} login token signed
   CERT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ansible-sshcert.XXXXXX") || return 1
@@ -95,7 +95,7 @@ if [[ -n ${SSH_KNOWN_HOSTS:-} ]]; then
   fi
   printf '%s\n' "$SSH_KNOWN_HOSTS" > "$CERT_DIR/known_hosts"
   chmod 600 "$CERT_DIR/known_hosts"
-  export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$CERT_DIR/known_hosts -o StrictHostKeyChecking=yes${ANSIBLE_SSH_COMMON_ARGS:+ $ANSIBLE_SSH_COMMON_ARGS}"
+  export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$CERT_DIR/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes${ANSIBLE_SSH_COMMON_ARGS:+ $ANSIBLE_SSH_COMMON_ARGS}"
 fi
 
 # Run ansible-playbook - prefer NIX_SHELL if set, otherwise use PATH
