@@ -53,8 +53,16 @@ mint_ssh_cert() {
   export PROXMOX_SSH_KEY_PATH="$CERT_DIR/id"
 }
 
-if [[ -n ${BAO_ADDR:-} && -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]] \
-  && mint_ssh_cert; then
+if [[ -n ${BAO_ADDR:-} && -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]]; then
+  # FAIL-LOUD: when the cert env is present, a mint failure is an error — never
+  # silently ride the static key (that masked a dead cert path once already).
+  # Break-glass = run WITHOUT the BAO env, with the static key vars set.
+  if ! mint_ssh_cert; then
+    echo "ERROR: OpenBao SSH cert mint FAILED and the cert env is present — refusing" >&2
+    echo "the silent static-key fallback. Fix the cert path, or unset the" >&2
+    echo "OPENBAO_APPROLE_ANSIBLE_* env to deliberately use the static break-glass key." >&2
+    exit 1
+  fi
   echo "Using a short-lived SSH certificate from the OpenBao CA (automation-ansible)."
 # If key file exists at PROXMOX_SSH_KEY_PATH, export expanded path for inventory.
 # Otherwise load key content into ssh-agent and unset PROXMOX_SSH_KEY_PATH so
@@ -75,6 +83,19 @@ else
   echo "ERROR: No SSH key available."
   echo "Set PROXMOX_SSH_KEY_PATH (file path) or PROXMOX_SSH_PRIVATE_KEY (key content) via Doppler."
   exit 1
+fi
+
+# Pin host identities: materialize the reviewed known_hosts (Doppler
+# SSH_KNOWN_HOSTS, harvested over authenticated channels) and verify strictly.
+# A rebuilt guest gets a new host key and fails closed until re-harvested.
+if [[ -n ${SSH_KNOWN_HOSTS:-} ]]; then
+  if [[ -z $CERT_DIR ]]; then
+    CERT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ansible-sshkh.XXXXXX")
+    chmod 700 "$CERT_DIR"
+  fi
+  printf '%s\n' "$SSH_KNOWN_HOSTS" > "$CERT_DIR/known_hosts"
+  chmod 600 "$CERT_DIR/known_hosts"
+  export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$CERT_DIR/known_hosts -o StrictHostKeyChecking=yes${ANSIBLE_SSH_COMMON_ARGS:+ $ANSIBLE_SSH_COMMON_ARGS}"
 fi
 
 # Run ansible-playbook - prefer NIX_SHELL if set, otherwise use PATH
