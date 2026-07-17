@@ -53,6 +53,11 @@
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_dropin }} > /dev/null
       pct exec {{ item }} -- chmod 0644 {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}
       if pct exec {{ item }} -- sh -c 'command -v sshd' > /dev/null 2>&1; then
+        # sshd -t needs the privilege-separation dir, which a bare `pct exec`
+        # shell lacks (systemd normally creates it at sshd start) — create it
+        # so the config test doesn't abort with "Missing privilege separation
+        # directory: /run/sshd".
+        pct exec {{ item }} -- mkdir -p /run/sshd
         pct exec {{ item }} -- sshd -t
         pct exec {{ item }} -- sh -c 'systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true'
         echo "CONFIGURED-SSHD"

@@ -1,6 +1,14 @@
 ---
 # Group variables for Proxmox VE servers
 
+# Trust the OpenBao SSH client CA on the PVE nodes and (via pct) their LXC
+# containers (ssh-certificate-authority ADR). Additive + lockout-guarded (a
+# static break-glass key must still authenticate before the role finishes) and
+# the pinned SSH_CA_FINGERPRINT is verified fail-closed. Principals are
+# deny-by-default: PVE root:[ansible], LXC root:[ansible] — ai-agent is never a
+# hypervisor root. Stopped containers are reported as blockers, not failures.
+ssh_ca_trust_rollout_enabled: true
+
 # Node naming: every Proxmox node is addressed as <proxmox_node_prefix><N> — a node
 # is just its number with this prefix prepended. Parameterized so node references in
 # roles and host_vars never hard-code the real prefix. The REAL prefix is injected at
