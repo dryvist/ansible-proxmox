@@ -60,6 +60,10 @@ pve_ha_state: started
 #     peer, so RELOCATION to a replica is their only node-loss story. They also
 #     appear in pve_ha_replication_ct_hostnames, which ships their rootfs to the
 #     always-on partner node so ha-manager can actually start them there.
+# NAMING: technitium-dns/-2 and traefik are legacy names that violate the
+# multi-instance naming law (two-digit suffix, first digit = node ID). They stay
+# here because this list must match the LIVE hostnames or the role skips them —
+# rename flows through IaC first (tofu-proxmox#679), then this list follows.
 pve_ha_ct_hostnames:
   - openbao-01
   - openbao-02
