@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.60.0](https://github.com/dryvist/ansible-proxmox/compare/v1.59.0...v1.60.0) (2026-07-17)
+
+
+### Features
+
+* **pve_ha:** record the data-platform tier in the default guest list ([#420](https://github.com/dryvist/ansible-proxmox/issues/420)) ([6c0444e](https://github.com/dryvist/ansible-proxmox/commit/6c0444e4e96412c8bd0a731c49ebbb448c0a7426))
+
 ## [1.59.0](https://github.com/dryvist/ansible-proxmox/compare/v1.58.0...v1.59.0) (2026-07-17)
 
 
