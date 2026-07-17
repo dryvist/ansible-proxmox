@@ -31,7 +31,7 @@ trap cleanup EXIT
 # ssh-client-ca/sign/automation-ansible (principal `ansible`, cert TTL <=1h),
 # and point the inventory at the key (OpenSSH pairs id + id-cert.pub
 # automatically). Requires BAO_ADDR + the ansible-converge AppRole in the
-# ambient env (Doppler). Any failure falls back to the static key path below.
+# ambient env (Doppler). With that env present, a mint failure is fatal.
 mint_ssh_cert() {
   local mount=${SSH_CA_MOUNT:-ssh-client-ca} login token signed
   CERT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ansible-sshcert.XXXXXX") || return 1
@@ -53,8 +53,17 @@ mint_ssh_cert() {
   export PROXMOX_SSH_KEY_PATH="$CERT_DIR/id"
 }
 
-if [[ -n ${BAO_ADDR:-} && -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]] \
-  && mint_ssh_cert; then
+if [[ -n ${BAO_ADDR:-} && -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]]; then
+  # FAIL-LOUD: when the cert env is present, a mint failure is an error — never
+  # silently ride the static key (that masked a dead cert path once already).
+  # Break-glass = unset any of BAO_ADDR / OPENBAO_APPROLE_ANSIBLE_* (this branch
+  # only triggers when all three are present) and set the static key vars.
+  if ! mint_ssh_cert; then
+    echo "ERROR: OpenBao SSH cert mint FAILED and the cert env is present — refusing" >&2
+    echo "the silent static-key fallback. Fix the cert path, or unset the" >&2
+    echo "OPENBAO_APPROLE_ANSIBLE_* env to deliberately use the static break-glass key." >&2
+    exit 1
+  fi
   echo "Using a short-lived SSH certificate from the OpenBao CA (automation-ansible)."
 # If key file exists at PROXMOX_SSH_KEY_PATH, export expanded path for inventory.
 # Otherwise load key content into ssh-agent and unset PROXMOX_SSH_KEY_PATH so
@@ -75,6 +84,19 @@ else
   echo "ERROR: No SSH key available."
   echo "Set PROXMOX_SSH_KEY_PATH (file path) or PROXMOX_SSH_PRIVATE_KEY (key content) via Doppler."
   exit 1
+fi
+
+# Pin host identities: materialize the reviewed known_hosts (Doppler
+# SSH_KNOWN_HOSTS, harvested over authenticated channels) and verify strictly.
+# A rebuilt guest gets a new host key and fails closed until re-harvested.
+if [[ -n ${SSH_KNOWN_HOSTS:-} ]]; then
+  if [[ -z $CERT_DIR ]]; then
+    CERT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ansible-sshkh.XXXXXX")
+    chmod 700 "$CERT_DIR"
+  fi
+  printf '%s\n' "$SSH_KNOWN_HOSTS" > "$CERT_DIR/known_hosts"
+  chmod 600 "$CERT_DIR/known_hosts"
+  export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$CERT_DIR/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes${ANSIBLE_SSH_COMMON_ARGS:+ $ANSIBLE_SSH_COMMON_ARGS}"
 fi
 
 # Run ansible-playbook - prefer NIX_SHELL if set, otherwise use PATH
