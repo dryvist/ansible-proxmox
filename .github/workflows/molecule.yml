@@ -67,3 +67,10 @@ jobs:
           ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
           PY_COLORS: "1"
           ANSIBLE_FORCE_COLOR: "1"
+
+      - name: Run ssh_ca_trust molecule test
+        run: molecule test -s ssh_ca_trust
+        env:
+          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
+          PY_COLORS: "1"
+          ANSIBLE_FORCE_COLOR: "1"
