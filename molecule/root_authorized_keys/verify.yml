@@ -38,4 +38,4 @@
         cmd: grep -cE '^(ssh|ecdsa)-' /root/.ssh/authorized_keys
       register: rak_count
       changed_when: false
-      failed_when: rak_count.stdout | int < 1
+      failed_when: rak_count.stdout | trim | int < 1

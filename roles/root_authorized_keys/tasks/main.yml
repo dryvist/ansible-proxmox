@@ -53,7 +53,7 @@
     cmd: grep -cE '^(ssh|ecdsa)-' /root/.ssh/authorized_keys
   register: root_authorized_keys_count
   changed_when: false
-  failed_when: root_authorized_keys_count.stdout | int < 1
+  failed_when: root_authorized_keys_count.stdout | trim | int < 1
   when: root_authorized_keys_enabled | bool
   tags:
     - root_authorized_keys
