@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.59.0](https://github.com/dryvist/ansible-proxmox/compare/v1.58.0...v1.59.0) (2026-07-17)
+
+
+### Features
+
+* **ssh:** fail-loud cert fallback + strict pinned host-key verification ([#425](https://github.com/dryvist/ansible-proxmox/issues/425)) ([431125d](https://github.com/dryvist/ansible-proxmox/commit/431125d06aa81416243a739e3eafea06e25056cb))
+
 ## [1.58.0](https://github.com/dryvist/ansible-proxmox/compare/v1.57.0...v1.58.0) (2026-07-17)
 
 
