@@ -56,7 +56,8 @@ mint_ssh_cert() {
 if [[ -n ${BAO_ADDR:-} && -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]]; then
   # FAIL-LOUD: when the cert env is present, a mint failure is an error — never
   # silently ride the static key (that masked a dead cert path once already).
-  # Break-glass = run WITHOUT the BAO env, with the static key vars set.
+  # Break-glass = unset any of BAO_ADDR / OPENBAO_APPROLE_ANSIBLE_* (this branch
+  # only triggers when all three are present) and set the static key vars.
   if ! mint_ssh_cert; then
     echo "ERROR: OpenBao SSH cert mint FAILED and the cert env is present — refusing" >&2
     echo "the silent static-key fallback. Fix the cert path, or unset the" >&2
