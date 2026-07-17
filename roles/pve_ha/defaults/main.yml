@@ -66,6 +66,13 @@ pve_ha_ct_hostnames:
   - technitium-dns
   - technitium-dns-2
   - traefik
+  # Data platform + shared-Postgres apps tier (live under HA since 2026-07-16;
+  # this records what ha-manager already holds so a converge is idempotent).
+  - postgres
+  - postgres-apps
+  - vikunja
+  - nautobot
+  - zammad
   - postgres-apps
   - nautobot
   - vikunja
@@ -93,6 +100,12 @@ pve_ha_anti_affinity_groups:
     hostnames:
       - traefik
       - traefik-2
+  # The Postgres primary/standby pair: a node loss must never take both the
+  # primary and its streaming standby.
+  - name: postgres-pair
+    hostnames:
+      - postgres
+      - postgres-apps
 
 # --- Storage replication (pvesr) for the SINGLETON app guests ----------------
 # The guests here get a pvesr job that ships their rootfs to the always-on
