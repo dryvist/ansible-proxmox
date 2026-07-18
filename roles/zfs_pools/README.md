@@ -96,6 +96,39 @@ without per-child config; a child can opt out with `sharenfs: "off"` under
 `nfs-kernel-server` is installed and running. Leave it `null` (the default) for
 no export.
 
+### Per-dataset Proxmox storage registration (`pvesm_id`)
+
+`datasets.<name>.pvesm_id` (optional) registers **the dataset itself** as its
+own distinct Proxmox `zfspool` storage ID, so a VM/LXC disk can target the
+dataset directly via `datastore_id`:
+
+```yaml
+datasets:
+  fast-splunk:
+    quota: "500G"
+    pvesm_id: fast-splunk  # register this dataset as its own zfspool storage
+```
+
+**Why a quota is not enough.** A `zfspool`-backed VM disk lands at the pool
+**root** by default (a sibling of any child dataset), so a plain `quota` on a
+child dataset does *not* confine a disk to it. Registering the dataset itself
+(`pvesm add zfspool <pvesm_id> -pool <pool>/<dataset>`) is what makes it a real,
+isolated storage target — the disk lives inside the dataset and is capped by its
+quota. This is the mechanism behind the `fast-splunk` and `bulk-splunk` tiers,
+which give Splunk a volume-level cap so indexed data can no longer fill a pool.
+
+Registration is gated with `pvesm status --storage <pvesm_id>` and only added
+when absent, so re-runs report no change. It is registered with `-content
+images` on the current node (`proxmox_node_name`, defaulting to the inventory
+hostname). Leave `pvesm_id` unset (the default) to skip registration.
+
+Unlike pool creation, this capability is **not** gated by
+`zfs_pools_allow_create` — it is non-destructive against an already-existing
+pool. Creating a *new* pool for a new tier (e.g. `bulk-splunk` on a fresh pool)
+still requires the existing `zfs_pools_allow_create: true` + `zfs_pools_devices`
+opt-in in untracked `host_vars`; only the dataset registration itself runs
+unconditionally on a present pool.
+
 ## Database storage namespace (engine- and tier-agnostic)
 
 A reserved `<pool>/databases/<instance>` namespace standardizes where database
@@ -153,7 +186,8 @@ doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools
   `1T` and `1024G` do not cause spurious changes.
 - Properties: each `properties` entry compared as a string (`zfs get -H -o
   value`) and only `zfs set` when it differs.
-- Registration: `pvesm status --storage <pool>` gates `pvesm add`.
+- Registration: `pvesm status --storage <pool>` gates `pvesm add`; the same
+  check gates per-dataset `pvesm_id` registration.
 
 All ZFS / `pvesm` tasks are skipped under Docker (`ansible_virtualization_type
 == 'docker'`) for molecule testing.

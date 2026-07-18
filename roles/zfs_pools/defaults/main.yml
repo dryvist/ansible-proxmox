@@ -13,7 +13,9 @@ zfs_pools_config: >-
 
 # Map of pools for this node, keyed by pool name. Shape per pool:
 #   { type, raid, protected, register, content,
-#     datasets: { <name>: { quota, mountpoint, nfs_export, properties } } }
+#     datasets: { <name>: { quota, mountpoint, nfs_export, pvesm_id, properties } } }
+# pvesm_id (optional) registers THIS dataset as its own Proxmox zfspool storage
+# ID, so a VM/LXC disk can target the dataset directly (see README).
 # nfs_export (optional) is the exact zfs `sharenfs` value, e.g.
 # "ro=@10.0.0.0/8 ro=@192.168.0.0/16"; children inherit a parent's sharenfs.
 zfs_pools_map: "{{ zfs_pools_config.pools | default({}) }}"
