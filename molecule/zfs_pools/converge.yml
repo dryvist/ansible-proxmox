@@ -8,7 +8,8 @@
     # Mirrors terraform-proxmox ansible_inventory.node_storage["pve2"], the
     # live pve2 contract (tank raidz1 + tank/backups). ZFS/pvesm tasks are
     # skipped under Docker; this proves the role converges and the contract
-    # plumbing resolves.
+    # plumbing resolves. The `splunk` dataset additionally carries `pvesm_id`
+    # to exercise the per-dataset zfspool-registration include gate.
     zfs_pools_from_tofu:
       pools:
         tank:
@@ -25,6 +26,9 @@
               properties:
                 recordsize: "1M"
                 compression: "zstd"
+            splunk:
+              quota: "500G"
+              pvesm_id: tank-splunk
 
   roles:
     - role: zfs_pools

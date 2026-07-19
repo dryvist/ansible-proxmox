@@ -14,6 +14,9 @@
               properties:
                 recordsize: "1M"
                 compression: "zstd"
+            splunk:
+              quota: "500G"
+              pvesm_id: tank-splunk
 
   tasks:
     - name: Re-derive pools from the injected node_storage contract
@@ -31,6 +34,15 @@
           - zfs_pools_check.tank.datasets.backups.properties.recordsize == '1M'
           - zfs_pools_check.tank.datasets.backups.properties.compression == 'zstd'
         fail_msg: "node_storage contract did not resolve as expected"
+
+    - name: Assert the per-dataset pvesm_id registration field resolves
+      ansible.builtin.assert:
+        that:
+          # Confirms `pvesm_id` plumbs through the contract, so the
+          # dataset_pvesm_register include gate would fire on a real host.
+          - zfs_pools_check.tank.datasets.splunk.pvesm_id == 'tank-splunk'
+          - zfs_pools_check.tank.datasets.splunk.pvesm_id | length > 0
+        fail_msg: "pvesm_id did not resolve through the node_storage contract"
 
     - name: Probe for ZFS pools (should be absent in the molecule container)
       ansible.builtin.command:

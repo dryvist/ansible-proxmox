@@ -1,0 +1,33 @@
+---
+# Register a single dataset as its own Proxmox `zfspool` storage ID.
+# Included per-dataset from datasets.yml when `pvesm_id` is set; `zfs_pool` and
+# `zfs_dataset` (dict2items entries) are in scope. A plain ZFS `quota` does NOT
+# make a VM/LXC disk land inside a child dataset — zfspool-backed disks default
+# to the pool root, siblings of any child. Registering the dataset itself as a
+# distinct storage ID (`pvesm add zfspool <pvesm_id> -pool <pool>/<dataset>`)
+# makes it a real, isolated `datastore_id` target that tofu-proxmox can point a
+# disk at, so indexed data is actually capped by the dataset quota. This whole
+# path is already Docker-skipped via the datasets.yml include gate in main.yml,
+# so no per-task docker guard is needed. Non-destructive against an existing
+# pool, so it is NOT gated by zfs_pools_allow_create (that guards zpool create).
+
+- name: "Check Proxmox storage registration for {{ zfs_dataset.value.pvesm_id }}"
+  ansible.builtin.command:
+    cmd: "pvesm status --storage {{ zfs_dataset.value.pvesm_id }}"
+  register: zfs_pools_dataset_pvesm_check
+  changed_when: false
+  failed_when: false
+  tags:
+    - zfs_pools
+
+- name: "Register Proxmox ZFS storage for dataset {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      pvesm add zfspool {{ zfs_dataset.value.pvesm_id }}
+      -pool {{ zfs_pool.key }}/{{ zfs_dataset.key }}
+      -content {{ zfs_dataset.value.content | default(['images', 'rootdir']) | join(',') }}
+      -nodes {{ proxmox_node_name | default(inventory_hostname) }}
+  when: zfs_pools_dataset_pvesm_check.rc != 0
+  changed_when: true
+  tags:
+    - zfs_pools

@@ -81,3 +81,19 @@
     - zfs_dataset.value.nfs_export | default('') | length > 0
   tags:
     - zfs_pools
+
+# Optional: register an individual dataset as its own Proxmox `zfspool` storage
+# ID so a VM/LXC disk can target the dataset directly (a plain quota alone does
+# not confine a disk to a child dataset). Only runs for datasets that set
+# `pvesm_id`.
+- name: "Register datasets as Proxmox zfspool storage in pool {{ zfs_pool.key }}"
+  ansible.builtin.include_tasks: dataset_pvesm_register.yml
+  loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
+  loop_control:
+    loop_var: zfs_dataset
+    label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }}"
+  when:
+    - zfs_dataset.value.pvesm_id | default(None) is not none
+    - zfs_dataset.value.pvesm_id | default('') | length > 0
+  tags:
+    - zfs_pools
