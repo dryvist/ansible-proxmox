@@ -119,8 +119,10 @@ which give Splunk a volume-level cap so indexed data can no longer fill a pool.
 
 Registration is gated with `pvesm status --storage <pvesm_id>` and only added
 when absent, so re-runs report no change. It is registered with `-content
-images` on the current node (`proxmox_node_name`, defaulting to the inventory
-hostname). Leave `pvesm_id` unset (the default) to skip registration.
+{{ content | default(['images', 'rootdir']) }}` (both VM and LXC disks by
+default; override per-dataset with `content`) on the current node
+(`proxmox_node_name`, defaulting to the inventory hostname). Leave `pvesm_id`
+unset (the default) to skip registration.
 
 Unlike pool creation, this capability is **not** gated by
 `zfs_pools_allow_create` — it is non-destructive against an already-existing

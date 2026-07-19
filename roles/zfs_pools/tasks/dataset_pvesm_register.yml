@@ -25,7 +25,7 @@
     cmd: >-
       pvesm add zfspool {{ zfs_dataset.value.pvesm_id }}
       -pool {{ zfs_pool.key }}/{{ zfs_dataset.key }}
-      -content images
+      -content {{ zfs_dataset.value.content | default(['images', 'rootdir']) | join(',') }}
       -nodes {{ proxmox_node_name | default(inventory_hostname) }}
   when: zfs_pools_dataset_pvesm_check.rc != 0
   changed_when: true
