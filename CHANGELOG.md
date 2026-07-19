@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.62.0](https://github.com/dryvist/ansible-proxmox/compare/v1.61.1...v1.62.0) (2026-07-19)
+
+
+### Features
+
+* **zfs_pools:** register individual datasets as Proxmox zfspool storage ([#432](https://github.com/dryvist/ansible-proxmox/issues/432)) ([b999c0e](https://github.com/dryvist/ansible-proxmox/commit/b999c0ea6977ebd312b0370e23aeb901514d64a2))
+
 ## [1.61.1](https://github.com/dryvist/ansible-proxmox/compare/v1.61.0...v1.61.1) (2026-07-17)
 
 
