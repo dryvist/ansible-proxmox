@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.62.1](https://github.com/dryvist/ansible-proxmox/compare/v1.62.0...v1.62.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* **container_start:** add API start-only recovery ([d9a6bdc](https://github.com/dryvist/ansible-proxmox/commit/d9a6bdc8410f3ce5a87c3470bf6c736f43ab5f49))
+* **container_start:** add API start-only recovery ([dce5666](https://github.com/dryvist/ansible-proxmox/commit/dce56667a89c972df82f98973b1c9496a4d29aec))
+
 ## [1.62.0](https://github.com/dryvist/ansible-proxmox/compare/v1.61.1...v1.62.0) (2026-07-19)
 
 
