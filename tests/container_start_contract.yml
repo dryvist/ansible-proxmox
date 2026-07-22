@@ -34,9 +34,7 @@
         container_start_services:
           - example-agent
         container_start_api_host: example.invalid
-        container_start_api_user: test@pve
-        container_start_api_token_id: test
-        container_start_api_token_secret: test
+        container_start_api_token: test@pve!automation-token=fixture-secret
 
     - name: Assert the positive fixture retains its declared identity
       ansible.builtin.assert:
