@@ -17,12 +17,28 @@ shift
 
 AGENT_STARTED=false
 CERT_DIR=""
+RUNNER_BAO_TOKEN=""
+
+revoke_runner_token() {
+  [[ -z $RUNNER_BAO_TOKEN ]] && return 0
+  { set +x; } 2>/dev/null
+  if curl -fsSL --max-time 10 -X POST \
+    -H @<(printf 'X-Vault-Token: %s\n' "$RUNNER_BAO_TOKEN") \
+    "$BAO_ADDR/v1/auth/token/revoke-self" >/dev/null 2>&1; then
+    RUNNER_BAO_TOKEN=""
+    return 0
+  fi
+  return 1
+}
 
 cleanup() {
+  local status=$?
+  revoke_runner_token || true
   if [[ $AGENT_STARTED == true ]]; then
     ssh-agent -k >/dev/null 2>&1 || true
   fi
   [[ -n $CERT_DIR ]] && rm -rf "$CERT_DIR"
+  return "$status"
 }
 trap cleanup EXIT
 
@@ -39,18 +55,30 @@ mint_ssh_cert() {
   (umask 077 && ssh-keygen -q -t ed25519 -N '' -C "ansible-converge" -f "$CERT_DIR/id") || return 1
   # No secret material on any command line; xtrace stays off around the login.
   { set +x; } 2>/dev/null
-  login=$(jq -nc --arg r "$OPENBAO_APPROLE_ANSIBLE_ROLE_ID" --arg s "$OPENBAO_APPROLE_ANSIBLE_SECRET_ID" \
-    '{role_id: $r, secret_id: $s}' \
-    | curl -fsSL --max-time 10 -H 'Content-Type: application/json' --data @- \
+  login=$(jq -nc \
+    '{role_id: env.OPENBAO_APPROLE_ANSIBLE_ROLE_ID, secret_id: env.OPENBAO_APPROLE_ANSIBLE_SECRET_ID}' |
+    curl -fsSL --max-time 10 -H 'Content-Type: application/json' --data @- \
       "$BAO_ADDR/v1/auth/approle/login") || return 1
   token=$(printf '%s' "$login" | jq -er '.auth.client_token') || return 1
+  RUNNER_BAO_TOKEN=$token
   signed=$(jq -nc --rawfile pub "$CERT_DIR/id.pub" --arg ttl "${SSH_CERT_TTL:-1h}" \
-    '{public_key: $pub, ttl: $ttl}' \
-    | curl -fsSL --max-time 10 -H "X-Vault-Token: $token" --data @- \
-      "$BAO_ADDR/v1/$mount/sign/automation-ansible" \
-    | jq -er '.data.signed_key') || return 1
-  printf '%s\n' "$signed" > "$CERT_DIR/id-cert.pub"
+    '{public_key: $pub, ttl: $ttl}' |
+    curl -fsSL --max-time 10 \
+      -H @<(printf 'X-Vault-Token: %s\n' "$RUNNER_BAO_TOKEN") --data @- \
+      "$BAO_ADDR/v1/$mount/sign/automation-ansible" |
+    jq -er '.data.signed_key') || return 1
+  printf '%s\n' "$signed" >"$CERT_DIR/id-cert.pub"
   export PROXMOX_SSH_KEY_PATH="$CERT_DIR/id"
+
+  if [[ -z ${BAO_TOKEN:-} ]]; then
+    # The inventory resolver and controller-side OpenBao reads share this
+    # short-lived token. Cleanup revokes it after ansible-playbook exits.
+    export BAO_TOKEN=$RUNNER_BAO_TOKEN
+  else
+    # A caller-supplied token may carry broader human policy. Preserve it and
+    # revoke the runner-owned signing token as soon as the cert is minted.
+    revoke_runner_token || true
+  fi
 }
 
 if [[ -n ${BAO_ADDR:-} && -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]]; then
@@ -94,7 +122,7 @@ if [[ -n ${SSH_KNOWN_HOSTS:-} ]]; then
     CERT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ansible-sshkh.XXXXXX")
     chmod 700 "$CERT_DIR"
   fi
-  printf '%s\n' "$SSH_KNOWN_HOSTS" > "$CERT_DIR/known_hosts"
+  printf '%s\n' "$SSH_KNOWN_HOSTS" >"$CERT_DIR/known_hosts"
   chmod 600 "$CERT_DIR/known_hosts"
   export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$CERT_DIR/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes${ANSIBLE_SSH_COMMON_ARGS:+ $ANSIBLE_SSH_COMMON_ARGS}"
 fi
