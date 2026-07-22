@@ -97,6 +97,9 @@
 - name: Run the container start contract
   ansible.builtin.import_playbook: ../../tests/container_start_contract.yml
 
+- name: Run the container start authentication contract
+  ansible.builtin.import_playbook: ../../tests/container_start_auth_contract.yml
+
 - name: Run the Ansible runner token contract
   hosts: localhost
   connection: local
@@ -104,6 +107,15 @@
   gather_facts: false
 
   tasks:
+    - name: Verify Proxmox module secret masking
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - tests/test_container_start_module_contract.py
+          - -v
+        chdir: "{{ playbook_dir | dirname | dirname }}"
+      changed_when: false
+
     - name: Verify runner token ownership and cleanup
       ansible.builtin.command:
         argv:

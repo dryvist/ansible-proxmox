@@ -1,0 +1,24 @@
+---
+- name: Assert active Proxmox API credential shape
+  ansible.builtin.assert:
+    that:
+      - container_start_api_host | length > 0
+      - container_start_api_token | length > 0
+      - container_start_api_token | regex_findall('!') | length == 1
+      - container_start_api_token | regex_findall('=') | length == 1
+      - container_start_api_token | regex_findall('\\s') | length == 0
+      - >-
+        container_start_api_token
+        is match('^[^@!=]+@[^@!=]+![^!=]+=[^=]+$')
+    fail_msg: >-
+      An active container start requires PROXMOX_VE_HOSTNAME and one
+      PROXMOX_VE_API_TOKEN formatted as user@realm!token-id=secret.
+  no_log: true
+
+- name: Split the validated Proxmox API token
+  ansible.builtin.set_fact:
+    container_start_api_user: "{{ container_start_api_token.split('!', 1)[0] }}"
+    container_start_api_token_id: >-
+      {{ container_start_api_token.split('!', 1)[1].split('=', 1)[0] }}
+    container_start_api_token_secret: "{{ container_start_api_token.split('=', 1)[1] }}"
+  no_log: true

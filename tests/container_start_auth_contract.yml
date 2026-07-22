@@ -1,0 +1,155 @@
+---
+- name: Verify the container start API authentication contract
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    tofu_data:
+      containers:
+        example-agent:
+          hostname: example-agent
+          node: example-node
+          vmid: 900001
+
+  tasks:
+    - name: Parse one valid full Proxmox API token
+      ansible.builtin.include_role:
+        name: container_start
+        tasks_from: preflight
+      vars:
+        container_start_services:
+          - example-agent
+        container_start_api_host: example.invalid
+        container_start_api_token: test@pve!automation-token=fixture-secret
+
+    - name: Assert the valid token was split for the module contract
+      ansible.builtin.assert:
+        that:
+          - container_start_api_user == 'test@pve'
+          - container_start_api_token_id == 'automation-token'
+          - container_start_api_token_secret == 'fixture-secret'
+
+    - name: Prove a missing token fails closed
+      block:
+        - name: Run preflight without a Proxmox API token
+          ansible.builtin.include_role:
+            name: container_start
+            tasks_from: preflight
+          vars:
+            container_start_services:
+              - example-agent
+            container_start_api_host: example.invalid
+            container_start_api_token: ""
+
+        - name: Fail when the missing token unexpectedly passes
+          ansible.builtin.fail:
+            msg: "A missing Proxmox API token unexpectedly passed preflight."
+      rescue:
+        - name: Assert the missing token reached the credential-shape gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert active Proxmox API credential shape'
+
+        - name: Record missing-token rejection
+          ansible.builtin.set_fact:
+            container_start_missing_token_rejected: true
+
+    - name: Prove a malformed token fails closed
+      block:
+        - name: Run preflight with a malformed Proxmox API token
+          ansible.builtin.include_role:
+            name: container_start
+            tasks_from: preflight
+          vars:
+            container_start_services:
+              - example-agent
+            container_start_api_host: example.invalid
+            container_start_api_token: test@pve=fixture-secret
+
+        - name: Fail when the malformed token unexpectedly passes
+          ansible.builtin.fail:
+            msg: "A malformed Proxmox API token unexpectedly passed preflight."
+      rescue:
+        - name: Assert the malformed token reached the credential-shape gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert active Proxmox API credential shape'
+
+        - name: Record malformed-token rejection
+          ansible.builtin.set_fact:
+            container_start_malformed_token_rejected: true
+
+    - name: Prove repeated equals separators fail closed
+      block:
+        - name: Run preflight with repeated equals separators
+          ansible.builtin.include_role:
+            name: container_start
+            tasks_from: preflight
+          vars:
+            container_start_services:
+              - example-agent
+            container_start_api_host: example.invalid
+            container_start_api_token: test@pve!automation-token=fixture=secret
+
+        - name: Fail when repeated equals separators unexpectedly pass
+          ansible.builtin.fail:
+            msg: "Repeated equals separators unexpectedly passed preflight."
+      rescue:
+        - name: Assert repeated equals reached the credential-shape gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert active Proxmox API credential shape'
+
+        - name: Record repeated-equals rejection
+          ansible.builtin.set_fact:
+            container_start_repeated_equals_rejected: true
+
+    - name: Prove repeated bang separators fail closed
+      block:
+        - name: Run preflight with repeated bang separators
+          ansible.builtin.include_role:
+            name: container_start
+            tasks_from: preflight
+          vars:
+            container_start_services:
+              - example-agent
+            container_start_api_host: example.invalid
+            container_start_api_token: test@pve!automation!token=fixture-secret
+
+        - name: Fail when repeated bang separators unexpectedly pass
+          ansible.builtin.fail:
+            msg: "Repeated bang separators unexpectedly passed preflight."
+      rescue:
+        - name: Assert repeated bangs reached the credential-shape gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert active Proxmox API credential shape'
+
+        - name: Record repeated-bang rejection
+          ansible.builtin.set_fact:
+            container_start_repeated_bangs_rejected: true
+
+    - name: Read the credential parsing task contract
+      ansible.builtin.set_fact:
+        container_start_auth_tasks: >-
+          {{ lookup('file', playbook_dir ~ '/../roles/container_start/tasks/auth.yml')
+             | from_yaml }}
+
+    - name: Assert every credential parsing task suppresses secret output
+      ansible.builtin.assert:
+        that:
+          - container_start_auth_tasks | length == 2
+          - >-
+            container_start_auth_tasks
+            | selectattr('no_log', 'defined')
+            | selectattr('no_log', 'equalto', true)
+            | list | length == container_start_auth_tasks | length
+
+    - name: Assert every negative credential contract failed closed
+      ansible.builtin.assert:
+        that:
+          - container_start_missing_token_rejected | default(false) | bool
+          - container_start_malformed_token_rejected | default(false) | bool
+          - container_start_repeated_equals_rejected | default(false) | bool
+          - container_start_repeated_bangs_rejected | default(false) | bool

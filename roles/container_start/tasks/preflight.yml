@@ -108,15 +108,6 @@
       Requested service aliases must resolve to unique hostname, node, VMID,
       and LXC identities. Refusing a start with aliased targets.
 
-- name: Assert Proxmox API credentials are present for an active run
-  ansible.builtin.assert:
-    that:
-      - container_start_api_host | length > 0
-      - container_start_api_user | length > 0
-      - container_start_api_token_id | length > 0
-      - container_start_api_token_secret | length > 0
-    fail_msg: >-
-      A non-empty container_start_services allowlist requires the existing
-      PROXMOX_VE_HOSTNAME, PROXMOX_VE_USERNAME, PROXMOX_VE_TOKEN_ID, and
-      PROXMOX_VE_TOKEN_SECRET credentials from Doppler/OpenBao.
+- name: Validate and split Proxmox API credentials for an active run
+  ansible.builtin.include_tasks: auth.yml
   when: container_start_services | length > 0
