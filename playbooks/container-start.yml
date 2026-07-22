@@ -1,0 +1,19 @@
+---
+# Start explicitly approved LXC guests through the Proxmox API.
+#
+# The published tofu inventory remains authoritative for node and VMID. The
+# role is inert unless container_start_services is supplied as a non-empty
+# service-name allowlist.
+
+- name: Load OpenTofu host services
+  import_playbook: load_tofu.yml
+
+- name: Start explicitly approved Proxmox containers
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  roles:
+    - role: container_start
+      tags:
+        - container_start

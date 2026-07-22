@@ -1,0 +1,11 @@
+---
+- name: Validate and resolve the container start allowlist
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Start and verify explicitly approved containers
+  ansible.builtin.include_tasks: start.yml
+  loop: "{{ container_start_resolved }}"
+  loop_control:
+    loop_var: container_start_target
+    label: "{{ container_start_target.key }}"
+  when: container_start_services | length > 0

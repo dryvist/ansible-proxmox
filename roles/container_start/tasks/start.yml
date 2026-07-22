@@ -1,0 +1,49 @@
+---
+- name: "Confirm the declared LXC matches: {{ container_start_target.key }}"
+  community.proxmox.proxmox_vm_info:
+    api_host: "{{ container_start_api_host }}"
+    api_user: "{{ container_start_api_user }}"
+    api_token_id: "{{ container_start_api_token_id }}"
+    api_token_secret: "{{ container_start_api_token_secret }}"
+    validate_certs: "{{ container_start_api_validate_certs }}"
+    node: "{{ container_start_target.value.node }}"
+    type: lxc
+    vmid: "{{ container_start_target.value.vmid | int }}"
+  register: container_start_identity_info
+  changed_when: false
+  delegate_to: localhost
+
+- name: "Validate the live LXC identity: {{ container_start_target.key }}"
+  ansible.builtin.include_tasks: validate_identity.yml
+
+- name: "Ensure the container is started: {{ container_start_target.key }}"
+  community.proxmox.proxmox:
+    api_host: "{{ container_start_api_host }}"
+    api_user: "{{ container_start_api_user }}"
+    api_token_id: "{{ container_start_api_token_id }}"
+    api_token_secret: "{{ container_start_api_token_secret }}"
+    validate_certs: "{{ container_start_api_validate_certs }}"
+    node: "{{ container_start_target.value.node }}"
+    vmid: "{{ container_start_target.value.vmid | int }}"
+    state: started
+    timeout: "{{ container_start_timeout_seconds }}"
+  delegate_to: localhost
+
+- name: "Verify the container reaches running: {{ container_start_target.key }}"
+  community.proxmox.proxmox_vm_info:
+    api_host: "{{ container_start_api_host }}"
+    api_user: "{{ container_start_api_user }}"
+    api_token_id: "{{ container_start_api_token_id }}"
+    api_token_secret: "{{ container_start_api_token_secret }}"
+    validate_certs: "{{ container_start_api_validate_certs }}"
+    node: "{{ container_start_target.value.node }}"
+    type: lxc
+    vmid: "{{ container_start_target.value.vmid | int }}"
+  register: container_start_verify_info
+  changed_when: false
+  until:
+    - container_start_verify_info.proxmox_vms | length == 1
+    - container_start_verify_info.proxmox_vms[0].status == 'running'
+  retries: "{{ container_start_verify_retries }}"
+  delay: "{{ container_start_verify_delay_seconds }}"
+  delegate_to: localhost

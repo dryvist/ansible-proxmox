@@ -90,3 +90,9 @@
     - name: Verify strace is installed (crash_diagnostics package)
       ansible.builtin.command: which strace
       changed_when: false
+
+# The shared PR CI runs the default Molecule scenario, so importing the native
+# contract here makes the start-only gates mandatory before merge as well as in
+# the repository's post-merge Molecule workflow.
+- name: Run the container start contract
+  ansible.builtin.import_playbook: ../../tests/container_start_contract.yml
