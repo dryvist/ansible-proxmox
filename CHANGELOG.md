@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.62.2](https://github.com/dryvist/ansible-proxmox/compare/v1.62.1...v1.62.2) (2026-07-22)
+
+
+### Bug Fixes
+
+* **runner:** export minted OpenBao token ([5d83a46](https://github.com/dryvist/ansible-proxmox/commit/5d83a46a3129af6e7202729b967e849c6858d34c))
+* **runner:** export minted OpenBao token ([825db18](https://github.com/dryvist/ansible-proxmox/commit/825db18bc74fcec69c12648d4b7a0a5ee4bca130))
+
 ## [1.62.1](https://github.com/dryvist/ansible-proxmox/compare/v1.62.0...v1.62.1) (2026-07-22)
 
 
