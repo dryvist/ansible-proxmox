@@ -47,7 +47,8 @@ jobs:
           PROXMOX_VM_SSH_USERNAME=root \
           ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
 
-      - name: Run default molecule test
+      # molecule/default/verify.yml imports tests/container_start_contract.yml.
+      - name: Run default molecule test and container start contract
         run: molecule test
         env:
           ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"

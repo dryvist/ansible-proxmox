@@ -1,0 +1,13 @@
+---
+- name: "Assert one exact live LXC was found: {{ container_start_target.key }}"
+  ansible.builtin.assert:
+    that:
+      - container_start_identity_info.proxmox_vms | length == 1
+      - container_start_identity_info.proxmox_vms[0].node == container_start_target.value.node
+      - container_start_identity_info.proxmox_vms[0].vmid | int == container_start_target.value.vmid | int
+      - container_start_identity_info.proxmox_vms[0].type == 'lxc'
+      - container_start_identity_info.proxmox_vms[0].name == container_start_target.value.hostname
+    fail_msg: >-
+      Refusing to start {{ container_start_target.key }}: the live Proxmox API
+      did not return exactly the hostname, node, VMID, and LXC type declared by
+      tofu.

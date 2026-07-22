@@ -1,0 +1,122 @@
+---
+- name: Assert the container start allowlist is a unique list
+  ansible.builtin.assert:
+    that:
+      - container_start_services | type_debug == 'list'
+      - container_start_services | unique | length == container_start_services | length
+    fail_msg: >-
+      container_start_services must be a list of unique service names. It is
+      empty by default so an unscoped run cannot start a guest.
+
+- name: Assert every requested service name is non-empty
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item | trim | length > 0
+    fail_msg: "Every container_start_services entry must be a non-empty service name."
+  loop: "{{ container_start_services }}"
+  loop_control:
+    label: "{{ item | string }}"
+
+- name: Refuse an active container start in check mode
+  ansible.builtin.assert:
+    that:
+      - not ansible_check_mode
+    fail_msg: >-
+      container_start cannot safely predict the community.proxmox start
+      operation in check mode. Re-run without --check after reviewing the
+      explicit container_start_services allowlist.
+  when: container_start_services | length > 0
+
+- name: Assert the published tofu container inventory is available
+  ansible.builtin.assert:
+    that:
+      - tofu_data is mapping
+      - tofu_data.containers is defined
+      - tofu_data.containers is mapping
+    fail_msg: >-
+      container_start requires tofu_data.containers from the existing
+      playbooks/load_tofu.yml inventory resolver.
+
+- name: Resolve approved services from the published tofu inventory
+  ansible.builtin.set_fact:
+    container_start_resolved: >-
+      {{
+        (tofu_data.containers | default({}))
+        | dict2items
+        | selectattr('key', 'in', container_start_services)
+        | list
+      }}
+
+- name: Assert every requested service resolves exactly once
+  ansible.builtin.assert:
+    that:
+      - container_start_resolved | length == container_start_services | length
+      - >-
+        container_start_resolved | map(attribute='key') | sort
+        == container_start_services | sort
+    fail_msg: >-
+      Every requested service must resolve exactly once from
+      tofu_data.containers. Requested={{ container_start_services | sort }},
+      resolved={{ container_start_resolved | map(attribute='key') | list | sort }}.
+
+- name: Assert every resolved service declares one node and VMID
+  ansible.builtin.assert:
+    that:
+      - item.value.hostname is defined
+      - item.value.hostname is string
+      - item.value.hostname | trim | length > 0
+      - item.value.node is defined
+      - item.value.node is string
+      - item.value.node | trim | length > 0
+      - item.value.vmid is defined
+      - item.value.vmid | int > 0
+    fail_msg: >-
+      Service {{ item.key }} must declare a non-empty hostname and node plus a
+      positive VMID in the published tofu inventory.
+  loop: "{{ container_start_resolved }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Initialize the resolved LXC identity list
+  ansible.builtin.set_fact:
+    container_start_identities: []
+
+- name: Build the resolved LXC identity list
+  ansible.builtin.set_fact:
+    container_start_identities: >-
+      {{
+        container_start_identities
+        + [
+            {
+              'hostname': item.value.hostname,
+              'node': item.value.node,
+              'type': 'lxc',
+              'vmid': item.value.vmid | int
+            } | to_json
+          ]
+      }}
+  loop: "{{ container_start_resolved }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Reject aliases that resolve to the same live LXC identity
+  ansible.builtin.assert:
+    that:
+      - container_start_identities | unique | length == container_start_identities | length
+    fail_msg: >-
+      Requested service aliases must resolve to unique hostname, node, VMID,
+      and LXC identities. Refusing a start with aliased targets.
+
+- name: Assert Proxmox API credentials are present for an active run
+  ansible.builtin.assert:
+    that:
+      - container_start_api_host | length > 0
+      - container_start_api_user | length > 0
+      - container_start_api_token_id | length > 0
+      - container_start_api_token_secret | length > 0
+    fail_msg: >-
+      A non-empty container_start_services allowlist requires the existing
+      PROXMOX_VE_HOSTNAME, PROXMOX_VE_USERNAME, PROXMOX_VE_TOKEN_ID, and
+      PROXMOX_VE_TOKEN_SECRET credentials from Doppler/OpenBao.
+  when: container_start_services | length > 0

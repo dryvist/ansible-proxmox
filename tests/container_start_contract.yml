@@ -1,0 +1,227 @@
+---
+- name: Verify the container start resolution contract
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    tofu_data:
+      containers:
+        example-agent:
+          hostname: example-agent
+          node: example-node
+          vmid: 900001
+        example-alias:
+          hostname: example-agent
+          node: example-node
+          vmid: 900001
+
+  tasks:
+    - name: Prove the default allowlist is inert without API credentials
+      ansible.builtin.include_role:
+        name: container_start
+
+    - name: Assert the inert role resolved no targets
+      ansible.builtin.assert:
+        that:
+          - container_start_resolved | length == 0
+
+    - name: Resolve one approved service from synthetic tofu data
+      ansible.builtin.include_role:
+        name: container_start
+        tasks_from: preflight
+      vars:
+        container_start_services:
+          - example-agent
+        container_start_api_host: example.invalid
+        container_start_api_user: test@pve
+        container_start_api_token_id: test
+        container_start_api_token_secret: test
+
+    - name: Assert the positive fixture retains its declared identity
+      ansible.builtin.assert:
+        that:
+          - container_start_resolved | length == 1
+          - container_start_resolved[0].key == 'example-agent'
+          - container_start_resolved[0].value.hostname == 'example-agent'
+          - container_start_resolved[0].value.node == 'example-node'
+          - container_start_resolved[0].value.vmid == 900001
+
+    - name: Prove duplicate allowlist entries fail closed
+      block:
+        - name: Run preflight with a duplicate service
+          ansible.builtin.include_role:
+            name: container_start
+            tasks_from: preflight
+          vars:
+            container_start_services:
+              - example-agent
+              - example-agent
+
+        - name: Fail when duplicate preflight unexpectedly succeeds
+          ansible.builtin.fail:
+            msg: "Duplicate container_start_services unexpectedly passed preflight."
+      rescue:
+        - name: Assert duplicate rejection came from the uniqueness gate
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Assert the container start allowlist is a unique list'
+
+        - name: Record duplicate rejection
+          ansible.builtin.set_fact:
+            container_start_duplicate_rejected: true
+
+    - name: Run the active allowlist probe in check mode
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - localhost,
+          - -c
+          - local
+          - --check
+          - "{{ playbook_dir }}/container_start_check_mode_probe.yml"
+        chdir: "{{ playbook_dir | dirname }}"
+      register: container_start_check_mode_active
+      changed_when: false
+      failed_when: false
+
+    - name: Assert an active allowlist fails early in check mode
+      ansible.builtin.assert:
+        that:
+          - container_start_check_mode_active.rc != 0
+          - >-
+            'container_start cannot safely predict the community.proxmox start'
+            in (container_start_check_mode_active.stdout
+                ~ container_start_check_mode_active.stderr)
+        fail_msg: "{{ container_start_check_mode_active | to_nice_json }}"
+
+    - name: Run the empty allowlist probe in check mode
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - localhost,
+          - -c
+          - local
+          - --check
+          - "{{ playbook_dir }}/container_start_check_mode_probe.yml"
+          - -e
+          - '{"container_start_check_mode_probe_services":[]}'
+        chdir: "{{ playbook_dir | dirname }}"
+      register: container_start_check_mode_empty
+      changed_when: false
+
+    - name: Assert an empty allowlist remains inert in check mode
+      ansible.builtin.assert:
+        that:
+          - container_start_check_mode_empty.rc == 0
+
+    - name: Prove two aliases cannot target one LXC identity
+      block:
+        - name: Run preflight with colliding service aliases
+          ansible.builtin.include_role:
+            name: container_start
+            tasks_from: preflight
+          vars:
+            container_start_services:
+              - example-agent
+              - example-alias
+
+        - name: Fail when alias collision unexpectedly succeeds
+          ansible.builtin.fail:
+            msg: "Two service aliases unexpectedly resolved to one LXC identity."
+      rescue:
+        - name: Assert collision rejection came from the identity gate
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Reject aliases that resolve to the same live LXC identity'
+
+        - name: Record identity collision rejection
+          ansible.builtin.set_fact:
+            container_start_collision_rejected: true
+
+    - name: Prove missing inventory services fail closed
+      block:
+        - name: Run preflight with an absent service
+          ansible.builtin.include_role:
+            name: container_start
+            tasks_from: preflight
+          vars:
+            container_start_services:
+              - absent-agent
+
+        - name: Fail when missing-service preflight unexpectedly succeeds
+          ansible.builtin.fail:
+            msg: "An absent service unexpectedly passed container start preflight."
+      rescue:
+        - name: Assert missing-service rejection came from inventory resolution
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Assert every requested service resolves exactly once'
+
+        - name: Record missing-service rejection
+          ansible.builtin.set_fact:
+            container_start_missing_rejected: true
+
+    - name: Assert both negative contracts failed closed
+      ansible.builtin.assert:
+        that:
+          - container_start_duplicate_rejected | default(false) | bool
+          - container_start_collision_rejected | default(false) | bool
+          - container_start_missing_rejected | default(false) | bool
+
+    - name: Validate a matching synthetic live LXC identity
+      ansible.builtin.include_role:
+        name: container_start
+        tasks_from: validate_identity
+      vars:
+        container_start_target:
+          key: example-agent
+          value:
+            hostname: example-agent
+            node: example-node
+            vmid: 900001
+        container_start_identity_info:
+          proxmox_vms:
+            - name: example-agent
+              node: example-node
+              type: lxc
+              vmid: 900001
+
+    - name: Prove a live identity mismatch fails closed
+      block:
+        - name: Validate a mismatched synthetic live LXC identity
+          ansible.builtin.include_role:
+            name: container_start
+            tasks_from: validate_identity
+          vars:
+            container_start_target:
+              key: example-agent
+              value:
+                hostname: example-agent
+                node: example-node
+                vmid: 900001
+            container_start_identity_info:
+              proxmox_vms:
+                - name: wrong-container
+                  node: example-node
+                  type: lxc
+                  vmid: 900001
+
+        - name: Fail when live identity mismatch unexpectedly succeeds
+          ansible.builtin.fail:
+            msg: "A mismatched live LXC identity unexpectedly passed validation."
+      rescue:
+        - name: Assert mismatch rejection came from live identity validation
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_failed_task.name
+                == 'Assert one exact live LXC was found: example-agent'
