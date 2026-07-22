@@ -96,3 +96,19 @@
 # the repository's post-merge Molecule workflow.
 - name: Run the container start contract
   ansible.builtin.import_playbook: ../../tests/container_start_contract.yml
+
+- name: Run the Ansible runner token contract
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Verify runner token ownership and cleanup
+      ansible.builtin.command:
+        argv:
+          - python3
+          - tests/test_run_ansible_runner.py
+          - -v
+        chdir: "{{ playbook_dir | dirname | dirname }}"
+      changed_when: false
