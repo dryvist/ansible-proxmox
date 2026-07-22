@@ -14,6 +14,8 @@ doppler run -- ansible-playbook -i inventory/hosts.yml \
   -e '{"container_start_services":["service-name"]}'
 ```
 
-Authentication uses the repository's existing `PROXMOX_VE_*` Doppler/OpenBao
-contract. TLS certificate validation follows the same `PROXMOX_VE_INSECURE`
-policy as the `pve_cluster` role.
+Authentication uses `PROXMOX_VE_HOSTNAME` and the existing
+`PROXMOX_VE_API_TOKEN` Doppler/OpenBao value. The token must use Proxmox's
+`user@realm!token-id=secret` format; the role validates and splits it without
+logging the token or secret. TLS certificate validation follows the same
+`PROXMOX_VE_INSECURE` policy as the `pve_cluster` role.

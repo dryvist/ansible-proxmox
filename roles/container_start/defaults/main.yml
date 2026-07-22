@@ -2,12 +2,11 @@
 # Explicit service-name allowlist. Empty means no API reads or writes.
 container_start_services: []
 
-# Proxmox API authentication follows the repository's existing pve_cluster
-# convention. Doppler/OpenBao supplies these values at execution time.
+# Proxmox API authentication follows the live Doppler/OpenBao contract used by
+# the Proxmox provider: user@realm!token-id=secret. Active runs validate and
+# split this value in tasks/auth.yml before any API request.
 container_start_api_host: "{{ lookup('env', 'PROXMOX_VE_HOSTNAME') | default('', true) }}"
-container_start_api_user: "{{ lookup('env', 'PROXMOX_VE_USERNAME') | default('', true) }}"
-container_start_api_token_id: "{{ lookup('env', 'PROXMOX_VE_TOKEN_ID') | default('', true) }}"
-container_start_api_token_secret: "{{ lookup('env', 'PROXMOX_VE_TOKEN_SECRET') | default('', true) }}"
+container_start_api_token: "{{ lookup('env', 'PROXMOX_VE_API_TOKEN') | default('', true) }}"
 container_start_api_validate_certs: >-
   {{ lookup('env', 'PROXMOX_VE_INSECURE')
      | default('false', true) | bool | ternary(false, true) }}
