@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.62.3](https://github.com/dryvist/ansible-proxmox/compare/v1.62.2...v1.62.3) (2026-07-22)
+
+
+### Bug Fixes
+
+* **container_start:** use live Proxmox token contract ([1b10b2c](https://github.com/dryvist/ansible-proxmox/commit/1b10b2cac8befa8a0484d9e1095c7cd0d0ab140f))
+* **container_start:** use live Proxmox token contract ([bdeefd5](https://github.com/dryvist/ansible-proxmox/commit/bdeefd5aae3b3071c7729e4e75d97fc4ef1b01a3))
+
 ## [1.62.2](https://github.com/dryvist/ansible-proxmox/compare/v1.62.1...v1.62.2) (2026-07-22)
 
 
