@@ -46,6 +46,69 @@
     - rasdaemon
 
 # =============================================================================
+# SMART DISK MONITORING (smartd)
+# =============================================================================
+# smartmontools is installed above but smartd is not enabled by default.
+# Deploy a device-agnostic config and enable the daemon so SMART self-tests
+# and attribute-degradation warnings reach syslog (forwarded to Splunk).
+# Physical hosts only — a container/VM has no direct disk access.
+
+- name: Deploy smartd configuration
+  ansible.builtin.template:
+    src: smartd.conf.j2
+    dest: "{{ crash_diagnostics_smartd_conf }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart smartd
+  when: ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - crash_diagnostics
+    - smartd
+
+- name: Enable and start smartd service
+  ansible.builtin.systemd:
+    name: smartd
+    enabled: true
+    state: started
+  when:
+    - ansible_service_mgr == 'systemd'
+    - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - crash_diagnostics
+    - smartd
+
+# =============================================================================
+# IPMI/BMC SYSTEM EVENT LOG (ipmievd)
+# =============================================================================
+# ipmievd (from ipmitool) ships BMC SEL events — PSU/fan/thermal/backplane/DIMM
+# faults the OS never sees — to syslog. Only server-class hosts expose a BMC
+# via /dev/ipmi0; desktop nodes have none, so gate on the device rather than
+# hardcoding which nodes are server-class.
+
+- name: Check for a local IPMI device
+  ansible.builtin.stat:
+    path: /dev/ipmi0
+  register: crash_diagnostics_ipmi_device
+  tags:
+    - crash_diagnostics
+    - ipmi
+
+- name: Enable and start ipmievd (SEL to syslog) on hosts with a BMC
+  ansible.builtin.systemd:
+    name: ipmievd
+    enabled: true
+    state: started
+  when:
+    - ansible_service_mgr == 'systemd'
+    - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+    - crash_diagnostics_ipmi_device.stat.exists
+  tags:
+    - crash_diagnostics
+    - ipmi
+
+# =============================================================================
 # SYSCTL CONFIGURATION
 # =============================================================================
 
