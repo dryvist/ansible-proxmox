@@ -22,3 +22,12 @@
     daemon_reload: true
   when: ansible_service_mgr == 'systemd'
   listen: Reload systemd
+
+- name: Restart smartd
+  ansible.builtin.systemd:
+    name: smartd
+    state: restarted
+  when:
+    - ansible_service_mgr == 'systemd'
+    - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  listen: Restart smartd
