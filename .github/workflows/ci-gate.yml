@@ -1,11 +1,16 @@
 ---
-# CI Gate — thin wrapper around the shared ansible CI gate.
+# CI Gate — thin caller of the org reusable merge gate.
 #
-# All of the lint + molecule + Merge Gate logic lives in
-# dryvist/.github/.github/workflows/_ansible-ci.yml. This repo uses the defaults:
-# ansible-lint over the whole project, the `default` molecule scenario, and
-# molecule deps from requirements-ci.txt. Branch protection requires only the
-# "Merge Gate" check the shared workflow emits.
+# The ansible suite (lint + the default molecule scenario) is delegated to
+# dryvist/.github/.github/workflows/_ci-gate.yml@main via its `ansible_ci`
+# toggle, which wraps the same `_ansible-ci.yml` this repo used directly — so
+# lint and molecule behaviour are unchanged. The gate additionally runs
+# Markdown Lint and File Size. The job id stays `ci`, so the required status
+# check context remains exactly "ci / Merge Gate".
+#
+# dependency_review and zizmor are left off to keep this migration behaviour-
+# preserving on the ansible side (this repo has never run them); enabling them
+# is a fast-follow.
 
 name: CI Gate
 
@@ -26,4 +31,42 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@main
+      # The org gate's queue watchdog cancels stuck sibling jobs via the
+      # Actions API; a called workflow can never exceed the caller's grant, so
+      # actions: write must be granted here or the run fails at graph
+      # validation (startup_failure).
+      actions: write
+    uses: dryvist/.github/.github/workflows/_ci-gate.yml@main
+    with:
+      ansible_ci: true
+      markdown_lint: true
+      file_size: true
+      dependency_review: false
+      zizmor: false
+      filters: |
+        ansible:
+          - '**.yml'
+          - '**.yaml'
+          - '**.j2'
+          - 'roles/**'
+          - 'playbooks/**'
+          - 'inventory/**'
+          - 'molecule/**'
+          - '.ansible-lint'
+          - '.yamllint'
+          - 'requirements.yml'
+        # The shared File Size job keys off the `nix`/`markdown` filter outputs;
+        # the ansible source globs are supplied under `nix` so file-size runs on
+        # non-markdown changes too. `nix_validate` stays off, so this key only
+        # drives file-size.
+        nix:
+          - '**.yml'
+          - '**.yaml'
+          - '**.j2'
+          - 'roles/**'
+          - 'playbooks/**'
+          - 'inventory/**'
+          - 'requirements.yml'
+        markdown:
+          - '**.md'
+          - '.markdownlint*'
