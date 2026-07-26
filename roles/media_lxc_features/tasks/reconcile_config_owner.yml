@@ -111,3 +111,29 @@
         (media_lxc_features_cfg_owner_stat.stat.uid | default(-1)) != (media_lxc_features_cfg_host_uid | int)
         or (media_lxc_features_cfg_owner_stat.stat.gid | default(-1)) != (media_lxc_features_cfg_host_gid | int)
       changed_when: true
+
+    # -------------------------------------------------------------------
+    # vzdump readability — grant "other" read (+conditional execute)
+    # -------------------------------------------------------------------
+    # PVE's vzdump backs up an unprivileged LXC by running `tar` through
+    # `lxc-usernsexec` with the CONTAINER's own lxc.idmap — i.e. as the
+    # container's mapped root, not real host root, so it gets no
+    # DAC_OVERRIDE bypass on this dataset (confirmed on CT 725140 /
+    # bulk/appdata/prowlarr: `lxc-usernsexec -m u:0:100000:65536 -m
+    # g:0:100000:13000 ... -- tar ...` failed with "tar: Cannot open:
+    # Permission denied" on every one of 12/12 retained runs of pve2's
+    # hourly rescue-backup job). A dataset chowned owner-only (rwx------
+    # or rwxr-x---) is unreadable to that mapped-root process because it
+    # is neither the owning uid nor a member of the owning gid. Nothing
+    # besides host root and this container's own usernsexec view can ever
+    # reach these host paths, so widening "other" to read+execute costs
+    # nothing in practice while making the dataset vzdump-readable
+    # regardless of which mapped uid/gid the backup process ends up as.
+    # `X` (not `x`) only sets execute on directories / already-executable
+    # files, so plain config/data files never become executable.
+    - name: "Ensure the config dataset is vzdump-readable on {{ media_ct.key }}"
+      ansible.builtin.file:
+        path: "{{ media_cfg_mp.src }}"
+        state: directory
+        recurse: true
+        mode: o+rX
