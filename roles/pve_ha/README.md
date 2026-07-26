@@ -92,6 +92,15 @@ source node), the replication tasks run on **every** node and each creates jobs
 only for the guests homed on it; the cluster-wide HA config still runs once on
 `pve_ha_config_host`.
 
+Before any `pvesr` job is created, the role hard-fails the converge if a job's
+target node lacks a storage id used by the guest's volumes. `pvesr` replicates
+to the SAME storage id on the target, so a mismatch would otherwise fail
+silently on first sync — Ansible reports success, but no replica ever exists.
+This is read from `pvesh get /storage` (not a hand-rolled parse of
+`/etc/pve/storage.cfg`), against each guest's volumes from
+`pvesh get /nodes/<node>/lxc/<vmid>/config`. A storage entry with no `nodes`
+restriction is treated as available on every node.
+
 ## Safety
 
 **Inert by default.** Nothing happens unless `pve_ha_enabled=true`. Enabling is a
