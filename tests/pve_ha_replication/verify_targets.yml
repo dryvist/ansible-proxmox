@@ -116,3 +116,50 @@
         success_msg: >-
           node-affinity strict pin covers exactly ct:605000 + ct:605010 over
           {{ pve_ha_replication_pair }} (absent + pve3-homed guests excluded).
+
+    # The pin and the replica are both scoped to present in-pair guests. Adding
+    # to HA must be scoped the SAME way, or a guest lands under HA with neither
+    # — and ha-manager then relocates it somewhere it cannot start, after the
+    # source node has self-fenced via the HA watchdog to get there.
+    - name: Resolve singleton app guests with no viable replica
+      ansible.builtin.set_fact:
+        pve_ha_unsafe_singletons: >-
+          {{ pve_ha_replication_ct_hostnames
+             | reject('in',
+                 (containers_from_tofu | default({})) | dict2items
+                 | selectattr('value.vmid', 'defined')
+                 | selectattr('value.node', 'defined')
+                 | selectattr('value.node', 'in', pve_ha_replication_pair)
+                 | map(attribute='key') | list)
+             | list }}
+
+    - name: Resolve the HA-managed SID set with the guard applied
+      ansible.builtin.set_fact:
+        pve_ha_managed_sids: >-
+          {{ ['nautobot', 'vikunja', 'out-of-pair-pve3']
+             | reject('in', pve_ha_unsafe_singletons)
+             | select('in', pve_ha_vmid_by_host)
+             | map('extract', pve_ha_vmid_by_host) | map('string')
+             | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
+
+    - name: Assert replica-less singletons are refused HA membership
+      ansible.builtin.assert:
+        that:
+          # absent (postgres-apps) and out-of-pair (pve3-homed) are both unsafe
+          - (pve_ha_unsafe_singletons | sort)
+            == ['out-of-pair-pve3', 'postgres-apps']
+          # in-pair singletons keep their HA membership
+          - "'ct:605010' in pve_ha_managed_sids"
+          - "'ct:605000' in pve_ha_managed_sids"
+          # the pve3-homed singleton is kept OUT of HA entirely — this is the
+          # regression: it used to be added, with no replica and no pin
+          - "'ct:699000' not in pve_ha_managed_sids"
+          # nothing reaches HA without also being in the strict pin
+          - (pve_ha_managed_sids | reject('in', pve_ha_replication_sids)
+             | list) == []
+        fail_msg: >-
+          the HA-add guard is wrong — unsafe={{ pve_ha_unsafe_singletons }},
+          managed={{ pve_ha_managed_sids }}
+        success_msg: >-
+          replica-less singletons (absent + pve3-homed) are refused HA
+          membership; in-pair singletons keep theirs.
