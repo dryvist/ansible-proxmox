@@ -18,6 +18,16 @@ proxmox_monitoring_enable_atop: true
 proxmox_monitoring_enable_healthchecks: true
 proxmox_monitoring_enable_zfs_capacity: true
 
+# Emit `pvesr status` as key=value telemetry to syslog, which the
+# pve_syslog_forwarder role already ships to Cribl and on into Splunk. This
+# deliberately does NOT alert — Hermes evaluates it out of Splunk, so alerting
+# here would duplicate that and bypass the pipeline of record.
+#
+# Runs at 5 to match the tightest replication schedule in use, so a missed sync
+# is visible within one interval rather than averaged away.
+proxmox_monitoring_enable_pvesr_telemetry: true
+proxmox_monitoring_pvesr_telemetry_interval: 5
+
 # ZFS pool capacity alerts: push via ntfy when a pool crosses a usage band.
 # 85 sits between the old 75 warning and the 90 urgent band so every pool —
 # and with it every quota-less dataset it backs — alerts above 85% capacity.

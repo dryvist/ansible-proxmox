@@ -57,6 +57,46 @@ would only duplicate the pool alert. State is tracked per pool/dataset under
 band (50 → default, 75/85 → high, 90 → urgent). Disabled until
 `proxmox_monitoring_ntfy_url` is set.
 
+### pvesr-telemetry
+
+Emits `pvesr status` for every ZFS replication job as key=value lines to
+syslog every 5 minutes. `pve_syslog_forwarder` already ships host syslog to
+Cribl and on into Splunk, so no extra collection is needed.
+
+**It does not alert.** It states facts only; Hermes evaluates them out of
+Splunk. Alerting here would duplicate that and bypass the pipeline of record —
+which is also why this is not modelled on the ntfy-based `zfs-capacity` check
+above.
+
+```text
+host=pve2 job_id=602000-0 enabled=Yes target=local/pve3 state="OK" \
+  fail_count=0 last_sync=2026-07-26_19:20:13 last_sync_epoch=1785093613 \
+  age_seconds=286 duration_seconds=40.017384
+```
+
+A node with no jobs emits `job_count=0` explicitly, so "configured with zero
+jobs" stays distinguishable from "never reported".
+
+`age_seconds` and `last_sync_epoch` are `-1` when a job has **never completed a
+sync** — the case worth catching, and one that would otherwise parse as `0` and
+read as "just synced".
+
+Suggested Hermes conditions:
+
+| Condition | Meaning |
+| --- | --- |
+| `fail_count > 0` | job erroring |
+| `age_seconds = -1` | **never synced** — the failure mode below |
+| `age_seconds > 3 × schedule` | falling behind |
+| host stops reporting | telemetry or node down |
+
+**Why this exists.** A `pvesr` job that has never run still appears in
+`pvesr list` looking healthy. On 2026-07-26 the `postgres-apps` job had been
+failing silently — it targeted a node with no `bulk` pool, so it could never
+have succeeded — while the guest showed as HA-protected with nothing to fail
+over to. Job existence is not job health, and HA over a replica that does not
+exist is worse than no HA, because it reads green.
+
 ## Variables
 
 | Variable | Default | Description |
