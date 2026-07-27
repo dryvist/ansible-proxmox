@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.64.1](https://github.com/dryvist/ansible-proxmox/compare/v1.64.0...v1.64.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* **deps:** bump homelab-contracts to the cribl-latest merge commit ([#469](https://github.com/dryvist/ansible-proxmox/issues/469)) ([98262d1](https://github.com/dryvist/ansible-proxmox/commit/98262d119332079df3d4091cb920f3cc9d2ffdca))
+* **media_lxc_features:** make config datasets vzdump-readable ([#457](https://github.com/dryvist/ansible-proxmox/issues/457)) ([cd0196a](https://github.com/dryvist/ansible-proxmox/commit/cd0196a2bce5f031c34a0e70bb2538d586041969))
+* **syncoid:** propagate per-dataset replication failures to exit status ([#455](https://github.com/dryvist/ansible-proxmox/issues/455)) ([1943513](https://github.com/dryvist/ansible-proxmox/commit/194351356d4b8430969b5cb565ad0a4e41641792))
+
 ## [1.64.0](https://github.com/dryvist/ansible-proxmox/compare/v1.63.0...v1.64.0) (2026-07-27)
 
 
