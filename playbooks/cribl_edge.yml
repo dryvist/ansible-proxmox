@@ -16,6 +16,9 @@
 #   ansible-galaxy collection install -r requirements.yml
 #   ansible-playbook playbooks/cribl_edge.yml
 
+- name: Resolve the OpenTofu inventory (tofu_data) for standalone runs
+  import_playbook: load_tofu.yml
+
 - name: Install and configure Cribl Edge on Proxmox hosts
   hosts: proxmox
   become: true
