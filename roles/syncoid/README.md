@@ -24,7 +24,10 @@ SSHes to each source (e.g. pve1) and pulls. Pull-from-backup is safer than push
 snapshots `sanoid` already took rather than creating new ones.
 
 A failed job (source offline — expected for the intermittent pve3) is logged to
-`/var/log/syncoid/` and does **not** abort the remaining jobs.
+`/var/log/syncoid/` and does **not** abort the remaining jobs — but it is
+counted: any failed job makes the wrapper exit non-zero and ping
+`syncoid_healthcheck_url/fail` (if set), so a bad run is never silently
+exit-0.
 
 ## Prerequisite (apply-time)
 
@@ -40,6 +43,7 @@ set up out of band. The role schedules replication; it does not distribute keys.
 | `syncoid_default_options` | `--recursive --no-sync-snap --quiet` | Applied when a job omits `options` |
 | `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17` | Replication schedule |
 | `syncoid_user` | `root` | User that runs syncoid (needs SSH to sources) |
+| `syncoid_healthcheck_url` | `""` | healthchecks.io URL; pinged on success, `/fail` pinged if any job failed |
 
 ## Usage
 

@@ -1,7 +1,10 @@
 #!/bin/bash
 # syncoid replication — pull ZFS datasets to this (target) node.
 # Managed by Ansible — do not edit manually. One run per configured job; a
-# failed job (e.g. source offline) is logged and does NOT abort the rest.
+# failed job (e.g. source offline) is logged and does NOT abort the rest — but
+# IS counted. Any failed job makes the script exit non-zero and ping the
+# healthchecks.io /fail endpoint (if configured); a per-dataset failure must
+# never exit 0 silently, or nobody is ever alerted to an incomplete backup.
 set -uo pipefail
 
 # syncoid/sanoid install to /usr/sbin on Debian, which is NOT on cron's default
@@ -13,18 +16,31 @@ set -uo pipefail
 export PATH="/usr/sbin:/sbin:/usr/bin:/bin${PATH:+:$PATH}"
 
 LOG_DIR="{{ syncoid_log_dir }}"
+HC="{{ syncoid_healthcheck_url }}"
 mkdir -p "$LOG_DIR"
 log="$LOG_DIR/$(date +%Y-%m-%d).log"
 
+ping_hc() { [ -n "$HC" ] && curl -fsS -m 10 --retry 3 -o /dev/null "$1" >/dev/null 2>&1 || true; }
+
 replicate() {
+  local name="$1"; shift
   echo "=== $(date +%H:%M:%S) syncoid $* ===" >>"$log"
   local rc=0
   syncoid "$@" >>"$log" 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "  FAILED (rc=$rc)" >>"$log"
+    failed="$failed $name"
   fi
 }
 
+failed=""
 {% for job in syncoid_jobs %}
-replicate {{ job.options | default(syncoid_default_options) }} {{ job.source }} {{ job.target }}
+replicate "{{ job.name }}" {{ job.options | default(syncoid_default_options) }} {{ job.source }} {{ job.target }}
 {% endfor %}
+
+if [ -n "$failed" ]; then
+  echo "=== $(date +%H:%M:%S) FAILED jobs:$failed ===" >>"$log"
+  ping_hc "${HC}/fail"
+  exit 1
+fi
+ping_hc "${HC}"

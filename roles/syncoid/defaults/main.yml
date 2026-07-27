@@ -12,6 +12,12 @@ syncoid_user: root
 syncoid_log_dir: /var/log/syncoid
 syncoid_cron_hour: 2
 syncoid_cron_minute: 17
+
+# Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" if any
+# job failed. Wire from the play (env-sourced), like postgres_standby/
+# sqlite_standby — without this, a failed dataset is exit-code-only (see the
+# wrapper template), so set this to get an actual alert.
+syncoid_healthcheck_url: ""
 # Opt-in: run replication immediately during the play (not just install cron).
 # Set true to seed/refresh a normally-off DR node while it is up for a window;
 # the scheduled cron never fires on a node that is powered off at cron time.
