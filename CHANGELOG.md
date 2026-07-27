@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.64.0](https://github.com/dryvist/ansible-proxmox/compare/v1.63.0...v1.64.0) (2026-07-27)
+
+
+### Features
+
+* **inventory:** add pve540 (Dell R540) as a rack server ([611d83a](https://github.com/dryvist/ansible-proxmox/commit/611d83a66353249ea534a81c5c8069684787b02a))
+
 ## [1.63.0](https://github.com/dryvist/ansible-proxmox/compare/v1.62.3...v1.63.0) (2026-07-27)
 
 
