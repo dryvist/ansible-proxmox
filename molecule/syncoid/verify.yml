@@ -21,6 +21,11 @@
           - "'root@pve1:nvme1/siem/splunk-hot tank/replica/pve1/splunk-hot' in syncoid_wrapper_text"
           # failure isolation present so an offline source does not abort the run
           - "'FAILED (rc=' in syncoid_wrapper_text"
+          # a failed job must be counted and propagate to a non-zero exit — the
+          # bug this contract guards against is a per-dataset failure that logs
+          # but still exits 0, so nothing ever alerts
+          - "'failed=\"$failed' in syncoid_wrapper_text"
+          - "'exit 1' in syncoid_wrapper_text"
         fail_msg: "syncoid wrapper did not render the expected jobs"
 
     - name: Read the rendered on-boot replication service (boot trigger)
