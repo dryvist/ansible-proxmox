@@ -27,8 +27,9 @@
 #     peer, so RELOCATION is the only node-loss story. The replication block
 #     below runs pvesr to ship each one's rootfs to the always-on PARTNER node,
 #     so ha-manager can start it there. max_relocate=1 is enough — one hop to
-#     the partner that holds the replica (pve3 sleeps and holds no replica, so
-#     it is never a relocation target).
+#     the partner that holds the replica. Only nodes in pve_ha_replication_pair
+#     hold a replica, and the strict node-affinity rule keeps ha-manager off
+#     every other node.
 pve_ha_enabled: false
 
 # Inventory hostname of the SINGLE node the ha-manager commands run on. HA state
@@ -122,13 +123,28 @@ pve_ha_replication_ct_hostnames:
   - nautobot
   - vikunja
 
-# The two ALWAYS-ON nodes that form the replication pair. A guest's pvesr target
-# is the pair member that is NOT its current home node. pve3 is deliberately
-# absent: it sleeps for DR and cannot be a live pvesr peer (pvesr needs the
-# target up). A guest whose home node is outside this pair is skipped.
+# The two nodes that form the replication pair. A guest's pvesr target is the
+# pair member that is NOT its current home node. A guest whose home node is
+# outside this pair is skipped.
+#
+# The pair MUST be two nodes that share the guests' storage id. pvesr replicates
+# a volume to the SAME storage name on the target, so a target lacking that
+# storage fails every run with:
+#   (remote_prepare_local_job) storage '<id>' is not available on node '<node>'
+#
+# These guests live on `local-zfs`, and per /etc/pve/storage.cfg that storage is
+# defined on **pve1 and pve3** — pve2 carries `bulk`, not `local-zfs`. The pair
+# was pve1+pve2, so every job failed on first sync and no replica ever existed.
+# That is what let a singleton sit under HA with nothing to relocate to; see the
+# guard in "Resolve singleton app guests with no viable replica" above.
+#
+# pve3 was previously excluded here as a sleeping DR node. It is always-on now
+# (it holds the HA master and runs live services), so it is a valid pvesr peer.
+# If pve3 ever returns to sleeping, this pair must change with it — a sleeping
+# target cannot accept a replication run.
 pve_ha_replication_pair:
   - "{{ proxmox_node_prefix }}1"
-  - "{{ proxmox_node_prefix }}2"
+  - "{{ proxmox_node_prefix }}3"
 
 # pvesr schedule (systemd-calendar subset) and optional rate limit (MB/s; empty
 # = unlimited). */15 matches Proxmox's default; the app guests' real data-loss

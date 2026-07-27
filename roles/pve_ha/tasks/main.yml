@@ -43,10 +43,46 @@
             )
           }}
 
+    # A singleton app guest is only safe under HA if it has somewhere to be
+    # relocated TO. Its two safety mechanisms — the pvesr replica and the strict
+    # node-affinity pin — are both conditional on the guest being homed in
+    # pve_ha_replication_pair, but `ha-manager add` below was not. A guest that
+    # failed that condition still got added, ending up HA-managed with neither a
+    # replica nor a pin.
+    #
+    # That is strictly WORSE than leaving it out of HA. On any node hiccup,
+    # ha-manager relocates it to a node holding no replica, where it cannot
+    # start and parks in `error` — and the source node has already self-fenced
+    # via the HA watchdog to get there. Observed 2026-07-26: one such guest put
+    # its home node into a reset loop, nine hard resets in a day.
+    - name: Resolve singleton app guests with no viable replica
+      ansible.builtin.set_fact:
+        pve_ha_unsafe_singletons: >-
+          {{ pve_ha_replication_ct_hostnames
+             | reject('in',
+                 (containers_from_tofu | default({})) | dict2items
+                 | selectattr('value.vmid', 'defined')
+                 | selectattr('value.node', 'defined')
+                 | selectattr('value.node', 'in', pve_ha_replication_pair)
+                 | map(attribute='key') | list)
+             | list }}
+
+    - name: Refuse to place a replica-less singleton under HA
+      ansible.builtin.debug:
+        msg: >-
+          pve_ha: NOT adding {{ pve_ha_unsafe_singletons }} to HA — each is a
+          singleton with no pvesr replica on {{ pve_ha_replication_pair }}, so
+          ha-manager could only relocate it to a node that cannot start it.
+          Give the guest a home node inside the pair (or a working replication
+          job), then re-converge. If one is ALREADY under HA, remove it until
+          that is true: ha-manager remove ct:<vmid>
+      when: pve_ha_unsafe_singletons | length > 0
+
     - name: Resolve managed tier-0 SIDs (present hosts only) + any extra SIDs
       ansible.builtin.set_fact:
         pve_ha_managed_sids: >-
-          {{ (pve_ha_ct_hostnames | select('in', pve_ha_vmid_by_host)
+          {{ (pve_ha_ct_hostnames | reject('in', pve_ha_unsafe_singletons)
+              | select('in', pve_ha_vmid_by_host)
               | map('extract', pve_ha_vmid_by_host) | map('string')
               | map('regex_replace', '^(.+)$', 'ct:\1') | list)
              + (pve_ha_extra_sids | default([])) }}
@@ -244,6 +280,86 @@
       loop: "{{ pve_ha_replication_ct_hostnames }}"
       when: item not in (pve_ha_replication_jobs | default([])
                          | map(attribute='hostname') | list)
+
+    # pvesr replicates a volume to the SAME storage id on the target node. If the
+    # target lacks that storage, the job fails asynchronously on first sync and
+    # the converge still reports success — no replica ever exists, silently.
+    # (Incident 2026-07-26: pve_ha_replication_pair was pve1+pve2, but the
+    # guests' storage (local-zfs) is only on pve1/pve3; every job failed and a
+    # singleton guest sat under HA with nothing to relocate to.) Prefer pvesh
+    # over parsing /etc/pve/storage.cfg directly: the API already normalizes the
+    # ini-style config into JSON the same way the cluster consumes it, so there
+    # is no risk of a hand-rolled parser disagreeing with pvesr's own view.
+    # run_once: this is a read-only cluster-wide check (pvesh proxies to any
+    # node), so one node doing it is enough — no need to repeat it per node.
+    - name: Read cluster storage configuration
+      ansible.builtin.command: pvesh get /storage --output-format json
+      register: pve_ha_storage_raw
+      changed_when: false
+      run_once: true
+
+    - name: Parse storage-to-nodes availability (empty list = all nodes)
+      ansible.builtin.set_fact:
+        pve_ha_storage_nodes: >-
+          {{ pve_ha_storage_nodes | default({}) | combine({
+               item.storage: (item.nodes | default('') | split(',')
+                              | reject('equalto', '') | list)
+             }) }}
+      loop: "{{ pve_ha_storage_raw.stdout | from_json }}"
+      loop_control:
+        label: "{{ item.storage }}"
+      run_once: true
+
+    - name: Read each replication guest's LXC config (to find its volumes' storage ids)
+      ansible.builtin.command: >-
+        pvesh get /nodes/{{ item.source }}/lxc/{{ pve_ha_ct_by_host[item.hostname].vmid }}/config
+        --output-format json
+      loop: "{{ pve_ha_replication_jobs | default([]) }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      register: pve_ha_guest_configs_raw
+      changed_when: false
+      run_once: true
+
+    - name: Resolve each job's required storage ids from its guest's volumes
+      ansible.builtin.set_fact:
+        pve_ha_replication_job_storages: >-
+          {{ pve_ha_replication_job_storages | default([]) + [ {
+               'hostname': item.item.hostname,
+               'target': item.item.target,
+               'storages': ((item.stdout | from_json) | dict2items
+                 | selectattr('key', 'match', '^(rootfs|mp[0-9]+)$')
+                 | rejectattr('value', 'match', '^/')
+                 | map(attribute='value')
+                 | map('regex_replace', '^([^:]+):.*$', '\1')
+                 | unique | list)
+             } ] }}
+      loop: "{{ pve_ha_guest_configs_raw.results }}"
+      loop_control:
+        label: "{{ item.item.hostname }}"
+      run_once: true
+
+    - name: Fail if a replication target lacks a volume's required storage
+      ansible.builtin.fail:
+        msg: >-
+          pve_ha replication: guest '{{ item.0.hostname }}' has a volume on
+          storage '{{ item.1 }}', but target node '{{ item.0.target }}' does
+          not have that storage. pvesr replicates to the SAME storage id on the
+          target, so this job would fail on every sync and leave the guest with
+          no replica. Nodes that DO have '{{ item.1 }}':
+          {{ (pve_ha_storage_nodes[item.1] | length == 0)
+             | ternary('ALL (no nodes restriction)',
+                       pve_ha_storage_nodes[item.1] | join(', ')) }}.
+          Fix by adding '{{ item.1 }}' to '{{ item.0.target }}' in
+          /etc/pve/storage.cfg, or changing pve_ha_replication_pair to a pair
+          that shares this storage.
+      loop: "{{ pve_ha_replication_job_storages | default([]) | subelements('storages') }}"
+      loop_control:
+        label: "{{ item.0.hostname }} / {{ item.1 }}"
+      when: >-
+        (pve_ha_storage_nodes[item.1] | default([]) | length > 0)
+        and (item.0.target not in pve_ha_storage_nodes[item.1])
+      run_once: true
 
     - name: Read current replication jobs (cluster-wide)
       ansible.builtin.command: pvesh get /cluster/replication --output-format json

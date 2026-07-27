@@ -24,11 +24,37 @@
       - nautobot           # present, pve2 -> target pve1, in the strict pin
       - vikunja            # present, pve1 -> target pve2, in the strict pin
       - out-of-pair-pve3   # present but homed on pve3 (outside pair) -> skipped
+      - shared-app         # present, pve1 -> target pve2, storage on ALL nodes
     containers_from_tofu:
       nautobot: {vmid: 605000, node: pve2}
       vikunja: {vmid: 605010, node: pve1}
       out-of-pair-pve3: {vmid: 699000, node: pve3}
+      shared-app: {vmid: 606000, node: pve1}
       # postgres-apps (602000) deliberately absent — models #662 unapplied.
+
+    # Synthetic `pvesh get /storage` output. Mirrors the real incident: local-zfs
+    # is only on pve1+pve3, NOT pve2 — so vikunja's job (target pve2) must be
+    # detected as broken. `bulk` models the "target HAS the storage" pass case.
+    # `shared-nfs` has no `nodes` key at all (omitted, like /etc/pve/storage.cfg
+    # having no `nodes` line) — must be treated as available on every node.
+    pve_ha_storage_cfg_fixture:
+      - storage: local-zfs
+        nodes: "pve1,pve3"
+      - storage: bulk
+        nodes: "pve1,pve2"
+      - storage: shared-nfs
+        # nodes key deliberately absent -> available on ALL nodes
+
+    # Synthetic per-guest LXC config (what `pvesh get /nodes/<n>/lxc/<v>/config`
+    # returns), keyed by hostname.
+    pve_ha_guest_configs_fixture:
+      vikunja:
+        rootfs: "local-zfs:subvol-605010-disk-0,size=8G"
+        mp0: "local-zfs:subvol-605010-disk-1,mp=/var/lib/vikunja,size=10G"
+      nautobot:
+        rootfs: "bulk:subvol-605000-disk-0,size=8G"
+      shared-app:
+        rootfs: "shared-nfs:subvol-606000-disk-0,size=8G"
 
   tasks:
     - name: Map container hostname -> {vmid, node}
@@ -69,7 +95,7 @@
       ansible.builtin.assert:
         that:
           - (pve_ha_replication_jobs | map(attribute='hostname') | sort)
-            == ['nautobot', 'vikunja']
+            == ['nautobot', 'shared-app', 'vikunja']
           - (pve_ha_replication_jobs
              | selectattr('hostname', 'eq', 'vikunja') | first).target == 'pve2'
           - (pve_ha_replication_jobs
@@ -108,7 +134,8 @@
     - name: Assert the strict pin covers exactly the present in-pair guests
       ansible.builtin.assert:
         that:
-          - (pve_ha_replication_sids | sort) == ['ct:605000', 'ct:605010']
+          - (pve_ha_replication_sids | sort)
+            == ['ct:605000', 'ct:605010', 'ct:606000']
           - "'pve3' not in pve_ha_replication_pair"
         fail_msg: >-
           node-affinity SID scope is wrong (must be every present in-pair guest,
@@ -116,3 +143,132 @@
         success_msg: >-
           node-affinity strict pin covers exactly ct:605000 + ct:605010 over
           {{ pve_ha_replication_pair }} (absent + pve3-homed guests excluded).
+
+    # The pin and the replica are both scoped to present in-pair guests. Adding
+    # to HA must be scoped the SAME way, or a guest lands under HA with neither
+    # — and ha-manager then relocates it somewhere it cannot start, after the
+    # source node has self-fenced via the HA watchdog to get there.
+    - name: Resolve singleton app guests with no viable replica
+      ansible.builtin.set_fact:
+        pve_ha_unsafe_singletons: >-
+          {{ pve_ha_replication_ct_hostnames
+             | reject('in',
+                 (containers_from_tofu | default({})) | dict2items
+                 | selectattr('value.vmid', 'defined')
+                 | selectattr('value.node', 'defined')
+                 | selectattr('value.node', 'in', pve_ha_replication_pair)
+                 | map(attribute='key') | list)
+             | list }}
+
+    - name: Resolve the HA-managed SID set with the guard applied
+      ansible.builtin.set_fact:
+        pve_ha_managed_sids: >-
+          {{ ['nautobot', 'vikunja', 'out-of-pair-pve3', 'shared-app']
+             | reject('in', pve_ha_unsafe_singletons)
+             | select('in', pve_ha_vmid_by_host)
+             | map('extract', pve_ha_vmid_by_host) | map('string')
+             | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
+
+    - name: Assert replica-less singletons are refused HA membership
+      ansible.builtin.assert:
+        that:
+          # absent (postgres-apps) and out-of-pair (pve3-homed) are both unsafe
+          - (pve_ha_unsafe_singletons | sort)
+            == ['out-of-pair-pve3', 'postgres-apps']
+          # in-pair singletons keep their HA membership
+          - "'ct:605010' in pve_ha_managed_sids"
+          - "'ct:605000' in pve_ha_managed_sids"
+          - "'ct:606000' in pve_ha_managed_sids"
+          # the pve3-homed singleton is kept OUT of HA entirely — this is the
+          # regression: it used to be added, with no replica and no pin
+          - "'ct:699000' not in pve_ha_managed_sids"
+          # nothing reaches HA without also being in the strict pin
+          - (pve_ha_managed_sids | reject('in', pve_ha_replication_sids)
+             | list) == []
+        fail_msg: >-
+          the HA-add guard is wrong — unsafe={{ pve_ha_unsafe_singletons }},
+          managed={{ pve_ha_managed_sids }}
+        success_msg: >-
+          replica-less singletons (absent + pve3-homed) are refused HA
+          membership; in-pair singletons keep theirs.
+
+    # --- pvesr target-storage validation (mirrors tasks/main.yml, fed from the
+    # pve_ha_storage_cfg_fixture / pve_ha_guest_configs_fixture vars above
+    # instead of `pvesh get /storage` and `pvesh get .../lxc/<vmid>/config`) ---
+    - name: Parse storage-to-nodes availability (empty list = all nodes)
+      ansible.builtin.set_fact:
+        pve_ha_storage_nodes: >-
+          {{ pve_ha_storage_nodes | default({}) | combine({
+               item.storage: (item.nodes | default('') | split(',')
+                              | reject('equalto', '') | list)
+             }) }}
+      loop: "{{ pve_ha_storage_cfg_fixture }}"
+      loop_control:
+        label: "{{ item.storage }}"
+
+    - name: Assert a storage with no `nodes` line resolves to "available everywhere"
+      ansible.builtin.assert:
+        that:
+          - pve_ha_storage_nodes['shared-nfs'] == []
+          - pve_ha_storage_nodes['local-zfs'] | sort == ['pve1', 'pve3']
+        fail_msg: >-
+          storage-to-nodes parsing is wrong: {{ pve_ha_storage_nodes }}
+        success_msg: >-
+          shared-nfs (no nodes line) resolves to [] (all nodes); local-zfs
+          resolves to exactly its listed nodes.
+
+    - name: Resolve each job's required storage ids from its guest's volumes
+      ansible.builtin.set_fact:
+        pve_ha_replication_job_storages: >-
+          {{ pve_ha_replication_job_storages | default([]) + [ {
+               'hostname': item.hostname,
+               'target': item.target,
+               'storages': (pve_ha_guest_configs_fixture[item.hostname] | dict2items
+                 | selectattr('key', 'match', '^(rootfs|mp[0-9]+)$')
+                 | rejectattr('value', 'match', '^/')
+                 | map(attribute='value')
+                 | map('regex_replace', '^([^:]+):.*$', '\1')
+                 | unique | list)
+             } ] }}
+      loop: "{{ pve_ha_replication_jobs }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Resolve which jobs have a target that lacks a required storage
+      ansible.builtin.set_fact:
+        pve_ha_replication_job_violations: >-
+          {{ pve_ha_replication_job_violations | default([]) + (
+               [ {'hostname': job.hostname, 'target': job.target, 'storage': storage} ]
+               if (pve_ha_storage_nodes[storage] | default([]) | length > 0
+                   and job.target not in pve_ha_storage_nodes[storage])
+               else []
+             ) }}
+      loop: "{{ pve_ha_replication_job_storages | subelements('storages') }}"
+      loop_control:
+        loop_var: pair
+        label: "{{ pair.0.hostname }} / {{ pair.1 }}"
+      vars:
+        job: "{{ pair.0 }}"
+        storage: "{{ pair.1 }}"
+
+    - name: Assert the target-storage check detects the broken job and passes the rest
+      ansible.builtin.assert:
+        that:
+          # vikunja's target (pve2) lacks local-zfs -> DETECTED
+          - (pve_ha_replication_job_violations
+             | selectattr('hostname', 'eq', 'vikunja') | list | length) == 1
+          - (pve_ha_replication_job_violations
+             | selectattr('hostname', 'eq', 'vikunja') | first).storage == 'local-zfs'
+          # nautobot's target (pve1) HAS bulk -> passes, no violation
+          - (pve_ha_replication_job_violations
+             | selectattr('hostname', 'eq', 'nautobot') | list | length) == 0
+          # shared-app's storage has no nodes restriction -> available
+          # everywhere, including its target (pve2) -> passes, no violation
+          - (pve_ha_replication_job_violations
+             | selectattr('hostname', 'eq', 'shared-app') | list | length) == 0
+        fail_msg: >-
+          pvesr target-storage validation is wrong: {{ pve_ha_replication_job_violations }}
+        success_msg: >-
+          target-storage validation detects vikunja's broken pve2 target
+          (missing local-zfs) and passes nautobot (bulk present) + shared-app
+          (no nodes restriction = available everywhere).

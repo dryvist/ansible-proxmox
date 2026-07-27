@@ -27,7 +27,11 @@ crash_diagnostics_packages:
   - psmisc # fuser, killall, pstree
 
   # Hardware monitoring
-  - smartmontools # Disk SMART monitoring
+  - smartmontools # Disk SMART monitoring (provides smartd)
+  - ipmitool # IPMI/BMC query + ipmievd (SEL to syslog) on hosts with a BMC
+  - nvme-cli # NVMe health/SMART CLI (nvme smart-log)
+  # Note: lm-sensors CLI + service are provided by the common role; not
+  # duplicated here.
 
   # MCE/EDAC hardware error detection
   # Note: mcelog is deprecated on newer kernels; rasdaemon handles MCE logging
@@ -37,6 +41,20 @@ crash_diagnostics_packages:
   # DIMM identification and memory testing
   - i2c-tools # decode-dimms for DIMM SPD data
   - memtest86+ # Boot-time memory testing
+
+# =============================================================================
+# SMART DISK MONITORING (smartd)
+# =============================================================================
+
+# smartd config file (device-agnostic; deployed on physical hosts only)
+crash_diagnostics_smartd_conf: /etc/smartd.conf
+
+# smartd DEVICESCAN directive line. Auto-discovers all disks and: -a (all
+# attributes), -o on (offline data collection), -S on (attribute autosave),
+# -s scheduled short (daily 02:00) + long (Saturday 03:00) self-tests, -W
+# temperature warning. The -W thresholds (diff, info, crit degrees C) are the
+# fleet calibration knob — tune per drive class without editing the template.
+crash_diagnostics_smartd_directives: "DEVICESCAN -a -o on -S on -s (S/../.././02|L/../../6/03) -W 4,45,55"
 
 # =============================================================================
 # SYSCTL CONFIGURATION

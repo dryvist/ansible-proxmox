@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+#
+# Crash Diagnostics - smartd configuration
+#
+# Device-agnostic monitoring: smartd auto-discovers every disk, runs scheduled
+# self-tests, tracks SMART attribute changes, and logs warnings to syslog
+# (forwarded to Splunk). No drive-specific stanzas — DEVICESCAN covers the fleet.
+{{ crash_diagnostics_smartd_directives }}
