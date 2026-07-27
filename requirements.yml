@@ -22,10 +22,12 @@ collections:
   # Cribl Edge must run on every Proxmox host — without a local agent, host
   # signals have no approved route into Splunk. Shared with
   # ansible-proxmox-apps (Edge containers) rather than copied.
-  # PIN: update to the merge commit of homelab-contracts#48 before rollout.
+  # PIN: the merge commit of homelab-contracts#48, which first shipped the
+  # collection. An immutable SHA, not a branch — a moving ref would let an
+  # unreviewed contracts change reach a converge here without a PR in this repo.
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: feat/shared-cribl-roles
+    version: 01e42fafa33ec0a2be62d2f4225ad2029153e06a
 
 roles:
   # Shared inventory resolver consumed by playbooks/load_tofu.yml — replaces the
