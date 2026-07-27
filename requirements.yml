@@ -15,6 +15,18 @@ collections:
   - name: community.proxmox
     version: ">=2.0.0,<2.1.0"
 
+  # Shared homelab roles (cribl_edge, cribl_packs). A collection, not `roles:`
+  # git entries: `ansible-galaxy role install` resolves a git source at the
+  # repository ROOT only, so a role kept in a subdirectory is unreachable that
+  # way. A collection installs from the subdirectory that holds galaxy.yml.
+  # Cribl Edge must run on every Proxmox host — without a local agent, host
+  # signals have no approved route into Splunk. Shared with
+  # ansible-proxmox-apps (Edge containers) rather than copied.
+  # PIN: update to the merge commit of homelab-contracts#48 before rollout.
+  - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
+    type: git
+    version: feat/shared-cribl-roles
+
 roles:
   # Shared inventory resolver consumed by playbooks/load_tofu.yml — replaces the
   # per-repo resolution-tier copy-paste. Pinned to the release that first ships
@@ -23,18 +35,3 @@ roles:
     src: https://github.com/dryvist/homelab-contracts.git
     scm: git
     version: 9aba451e9de0956f9c308d72a65e86924e243f23
-  # Cribl Edge must run on every Proxmox host — without a local agent, host
-  # signals have no approved route into Splunk. Shared with
-  # ansible-proxmox-apps (Edge containers) rather than copied, which is why it
-  # lives in homelab-contracts.
-  # PIN: update to the merge commit of homelab-contracts#48 before rollout.
-  - name: cribl_edge
-    src: https://github.com/dryvist/homelab-contracts.git
-    scm: git
-    version: 0b6b244b67b81187a1420cfdd4dedc433df1da25
-  # Packs are the unit of Cribl config. Host collection is defined in a
-  # versioned pack, never templated per node.
-  - name: cribl_packs
-    src: https://github.com/dryvist/homelab-contracts.git
-    scm: git
-    version: 0b6b244b67b81187a1420cfdd4dedc433df1da25

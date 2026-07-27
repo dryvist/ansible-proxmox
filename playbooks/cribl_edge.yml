@@ -9,8 +9,11 @@
 # pipelines: packs are the unit of Cribl config, and templating them per node
 # is the pattern packs replace.
 #
+# The roles are shared with ansible-proxmox-apps and ship in the
+# dryvist.homelab collection from homelab-contracts, hence the FQCN.
+#
 # Usage:
-#   ansible-galaxy install -r requirements.yml
+#   ansible-galaxy collection install -r requirements.yml
 #   ansible-playbook playbooks/cribl_edge.yml
 
 - name: Install and configure Cribl Edge on Proxmox hosts
@@ -35,8 +38,8 @@
       when: not cribl_edge_pve_dir.stat.exists
 
   roles:
-    - role: cribl_edge
-    - role: cribl_packs
+    - role: dryvist.homelab.cribl_edge
+    - role: dryvist.homelab.cribl_packs
 
   post_tasks:
     # "The play succeeded" is not evidence that collection works. Confirm the
