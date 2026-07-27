@@ -6,3 +6,10 @@ common_packages:
   - iotop
   - lm-sensors
   - rasdaemon
+
+# Search domain for host resolv.conf: the tofu-published domain when the
+# inventory is loaded (site.yml), else the node's own domain fact.
+common_dns_search_domain: >-
+  {{ hostvars['localhost'].tofu_data.domain
+     if hostvars['localhost'].tofu_data is defined
+     else ansible_domain }}
