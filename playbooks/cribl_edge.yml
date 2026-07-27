@@ -1,0 +1,52 @@
+---
+# Playbook: Cribl Edge on every Proxmox host.
+#
+# Enforced, not opt-in. Without a local Edge agent, host-level signals (ZFS
+# state, pvesr replication status, PVE task logs, SMART) have no approved route
+# into Splunk — see the observability convention in docs-starlight.
+#
+# Ansible installs and applies packs. It does NOT template inputs/routes/
+# pipelines: packs are the unit of Cribl config, and templating them per node
+# is the pattern packs replace.
+#
+# The roles are shared with ansible-proxmox-apps and ship in the
+# dryvist.homelab collection from homelab-contracts, hence the FQCN.
+#
+# Usage:
+#   ansible-galaxy collection install -r requirements.yml
+#   ansible-playbook playbooks/cribl_edge.yml
+
+- name: Install and configure Cribl Edge on Proxmox hosts
+  hosts: proxmox
+  become: true
+
+  pre_tasks:
+    # A hypervisor is not a general workload host. If the tarball or the
+    # service fails here it must be loud, not silently skipped, or the estate
+    # ends up with hosts that look managed and collect nothing.
+    - name: Assert the host is a Proxmox node
+      ansible.builtin.stat:
+        path: /etc/pve
+      register: cribl_edge_pve_dir
+      changed_when: false
+
+    - name: Fail when /etc/pve is absent
+      ansible.builtin.fail:
+        msg: >-
+          {{ inventory_hostname }} has no /etc/pve — this playbook targets
+          Proxmox hosts only.
+      when: not cribl_edge_pve_dir.stat.exists
+
+  roles:
+    - role: dryvist.homelab.cribl_edge
+    - role: dryvist.homelab.cribl_packs
+
+  post_tasks:
+    # "The play succeeded" is not evidence that collection works. Confirm the
+    # service is actually up before treating the host as covered.
+    - name: Confirm the Cribl Edge service is running
+      ansible.builtin.systemd:
+        name: "{{ cribl_edge_service_name | default('cribl-edge') }}"
+      register: cribl_edge_svc
+      changed_when: false
+      failed_when: cribl_edge_svc.status.ActiveState != 'active'

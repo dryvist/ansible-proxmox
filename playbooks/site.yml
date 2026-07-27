@@ -210,6 +210,15 @@
       tags:
         - node_scheduled_wake
 
+# Cribl Edge on every host. Imported here rather than left as a standalone
+# playbook so it is enforced by the standard converge — a node without a local
+# Edge agent has no approved route for host signals into Splunk, and would
+# otherwise stay silently uncovered until someone remembered to run it.
+# Placed after host configuration so the packages and users it depends on
+# exist, and before the power-down leg so power-managed nodes are still up.
+- name: Cribl Edge on Proxmox hosts
+  import_playbook: cribl_edge.yml
+
 # Gracefully power down the power-managed nodes at the very END of the run (the
 # offline-DR leg returns to off after its targets are seeded). NOTE: a mid-run
 # failure stops subsequent plays, so the node may be left powered on (re-run or
