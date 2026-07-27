@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.63.0](https://github.com/dryvist/ansible-proxmox/compare/v1.62.3...v1.63.0) (2026-07-27)
+
+
+### Features
+
+* **cribl:** enforce Cribl Edge on every Proxmox host ([545680f](https://github.com/dryvist/ansible-proxmox/commit/545680fec822901487c699bfda70d7c0e61fc899))
+* **cribl:** enforce Cribl Edge on every Proxmox host ([fe21f12](https://github.com/dryvist/ansible-proxmox/commit/fe21f12f990e1345a7abb45b0b47a1787df7b0d6))
+
+
+### Bug Fixes
+
+* **cribl:** consume the shared roles as the dryvist.homelab collection ([578733e](https://github.com/dryvist/ansible-proxmox/commit/578733e01c8d25d831c219304ff497dbeda350d5))
+
 ## [1.62.3](https://github.com/dryvist/ansible-proxmox/compare/v1.62.2...v1.62.3) (2026-07-22)
 
 
