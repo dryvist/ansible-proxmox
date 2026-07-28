@@ -1,0 +1,92 @@
+---
+# Detect, and optionally enforce, the host network contract.
+
+- name: Resolve the uplink enslaved to the management bridge
+  ansible.builtin.set_fact:
+    pve_host_network_uplink_resolved: >-
+      {{ pve_host_network_uplink
+         | default('', true)
+         | ternary(pve_host_network_uplink,
+                   (ansible_facts[pve_host_network_bridge] | default({})).interfaces
+                   | default([]) | first | default('')) }}
+  tags: [always]
+
+- name: Collect the interface holding the default route
+  ansible.builtin.set_fact:
+    pve_host_network_primary_iface: "{{ ansible_facts.default_ipv4.interface | default('') }}"
+  tags: [always]
+
+# The fault this role exists to catch. A tagged sub-interface is named
+# <parent>.<vid>, so a dot in the primary interface name means the management
+# address is not on the untagged bridge.
+- name: Detect a management address on a tagged sub-interface
+  ansible.builtin.set_fact:
+    pve_host_network_drift: >-
+      {{ pve_host_network_primary_iface != pve_host_network_bridge
+         and pve_host_network_primary_iface != '' }}
+  tags: [always]
+
+- name: Report the detected host network contract
+  ansible.builtin.debug:
+    msg:
+      - "bridge:  {{ pve_host_network_bridge }}"
+      - "uplink:  {{ pve_host_network_uplink_resolved | default('unresolved') }}"
+      - "primary: {{ pve_host_network_primary_iface | default('none') }}"
+      - "drift:   {{ pve_host_network_drift }}"
+  tags: [always]
+
+- name: Fail when the management address is not on the untagged bridge
+  ansible.builtin.fail:
+    msg: >-
+      Host management address is on '{{ pve_host_network_primary_iface }}'
+      instead of the untagged bridge '{{ pve_host_network_bridge }}'.
+      If the switch port delivers untagged frames this host can transmit but
+      not receive, and will appear powered off while actually running. Move the
+      address onto {{ pve_host_network_bridge }}, or set
+      pve_host_network_fail_on_drift=false if this host is a deliberate
+      exception.
+  when:
+    - pve_host_network_drift | bool
+    - pve_host_network_fail_on_drift | bool
+    - not (pve_host_network_enforce | bool)
+  tags: [always]
+
+- name: Enforce the rendered interfaces file
+  when: pve_host_network_enforce | bool
+  block:
+    - name: Require an address and gateway before rewriting host networking
+      ansible.builtin.assert:
+        that:
+          - pve_host_network_address | length > 0
+          - pve_host_network_gateway | length > 0
+          - pve_host_network_uplink_resolved | length > 0
+        fail_msg: >-
+          Refusing to rewrite host networking without an explicit address,
+          gateway and uplink. Rendering an interfaces file without an address
+          would strand the node.
+
+    - name: Back up the current interfaces file
+      ansible.builtin.copy:
+        src: /etc/network/interfaces
+        dest: "/etc/network/interfaces.bak-{{ ansible_date_time.epoch }}"
+        remote_src: true
+        mode: "0644"
+      changed_when: false
+
+    - name: Render the interfaces file
+      ansible.builtin.template:
+        src: interfaces.j2
+        dest: /etc/network/interfaces
+        mode: "0644"
+        backup: true
+        # Rejects a render that would leave the host with no address.
+        validate: "grep -q '^[[:space:]]*address[[:space:]]' %s && true"
+      register: pve_host_network_render
+
+    - name: Apply the change with ifupdown2
+      ansible.builtin.command:
+        cmd: ifreload -a
+      when:
+        - pve_host_network_render is changed
+        - pve_host_network_apply | bool
+      changed_when: true

@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+#
+# Host management address stays on the untagged bridge so it matches the
+# switch port's native VLAN. The bridge remains VLAN-aware, so guests can tag
+# into any VLAN without the host itself being tagged.
+
+auto lo
+iface lo inet loopback
+
+iface {{ pve_host_network_uplink_resolved }} inet manual
+
+auto {{ pve_host_network_bridge }}
+iface {{ pve_host_network_bridge }} inet static
+    address {{ pve_host_network_address }}
+    gateway {{ pve_host_network_gateway }}
+    bridge-ports {{ pve_host_network_uplink_resolved }}
+    bridge-stp off
+    bridge-fd 0
+{% if pve_host_network_vlan_aware | bool %}
+    bridge-vlan-aware yes
+    bridge-vids {{ pve_host_network_vids }}
+{% endif %}
+
+source /etc/network/interfaces.d/*
