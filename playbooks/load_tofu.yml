@@ -52,6 +52,17 @@
         cluster_nodes_from_tofu: "{{ tofu_data.nodes | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
+    # Base LXC appliance template. tofu creates every container from
+    # `local:vztmpl/<this>`, so each node must hold it; pve_repositories does the
+    # download. Optional on purpose — an inventory published before tofu-proxmox
+    # started emitting the key simply leaves it unset, and pve_repositories then
+    # ensures nothing rather than guessing a filename that would be wrong.
+    - name: Inject the base LXC template name onto proxmox hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        ct_template_from_tofu: "{{ tofu_data.ct_template | default('') }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"
+
     # Service -> VMID resolution for media_lxc_features. The tofu
     # `containers` dict is keyed by service hostname and carries each container's
     # current `vmid`; project it to { service: vmid } so the role can key its

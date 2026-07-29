@@ -21,7 +21,14 @@ pve_repositories_apt_proxy: ""
 # present or container creation fails on a fresh node. Each is downloaded only
 # when missing (see tasks/ct_templates.yml).
 #
-# Canonical source: terraform-proxmox deployment.json `proxmox_ct_template_debian`.
-# Keep this default in lockstep with that value when the base image is bumped.
-pve_repositories_ct_templates:
-  - debian-13-standard_13.1-2_amd64.tar.zst
+# Derived from the published tofu inventory (`ct_template`), injected by
+# playbooks/load_tofu.yml. deployment.json is the single place the base image is
+# named; this used to restate the filename here with a comment asking whoever
+# bumped it to edit both repos, and the two had already drifted.
+#
+# Empty when the inventory was not loaded (playbooks/upgrade.yml deliberately
+# skips it) or predates the key. Empty means ensure nothing — a hardcoded guess
+# would be exactly the drift this replaces, and an OS upgrade has no reason to
+# fetch templates. Override explicitly to pin extra templates on a node.
+pve_repositories_ct_templates: >-
+  {{ [ct_template_from_tofu] if (ct_template_from_tofu | default('') | length > 0) else [] }}
