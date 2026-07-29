@@ -16,10 +16,10 @@
     pve_host_network_primary_iface: "{{ ansible_facts.default_ipv4.interface | default('') }}"
   tags: [always]
 
-# The fault this role exists to catch. A tagged sub-interface is named
-# <parent>.<vid>, so a dot in the primary interface name means the management
-# address is not on the untagged bridge.
-- name: Detect a management address on a tagged sub-interface
+# The fault this role exists to catch. The default route must leave via the
+# untagged bridge; any other interface holding it (typically a tagged
+# <parent>.<vid> sub-interface) means the management address has drifted.
+- name: Detect a management address off the untagged bridge
   ansible.builtin.set_fact:
     pve_host_network_drift: >-
       {{ pve_host_network_primary_iface != pve_host_network_bridge
@@ -65,14 +65,6 @@
           gateway and uplink. Rendering an interfaces file without an address
           would strand the node.
 
-    - name: Back up the current interfaces file
-      ansible.builtin.copy:
-        src: /etc/network/interfaces
-        dest: "/etc/network/interfaces.bak-{{ ansible_date_time.epoch }}"
-        remote_src: true
-        mode: "0644"
-      changed_when: false
-
     - name: Render the interfaces file
       ansible.builtin.template:
         src: interfaces.j2
@@ -80,7 +72,8 @@
         mode: "0644"
         backup: true
         # Rejects a render that would leave the host with no address.
-        validate: "grep -q '^[[:space:]]*address[[:space:]]' %s && true"
+        # validate does not run through a shell, so this must be a single command.
+        validate: grep -q '^[[:space:]]*address[[:space:]]' %s
       register: pve_host_network_render
 
     - name: Apply the change with ifupdown2
