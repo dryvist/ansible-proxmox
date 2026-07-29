@@ -1,0 +1,61 @@
+#!/bin/bash
+set -uo pipefail
+# Emit ZFS replication (pvesr) job status to syslog as key=value telemetry.
+# Managed by Ansible — do not edit manually.
+#
+# DELIBERATELY DOES NOT ALERT. It only states facts; rsyslog forwards them to
+# Cribl and on into Splunk, where Hermes evaluates them. Alerting here would
+# duplicate that and bypass the pipeline of record.
+#
+# Why this exists: a pvesr job that has NEVER run still appears in `pvesr list`
+# looking perfectly healthy. On 2026-07-26 the postgres-apps job had been
+# failing silently — it targeted a node with no `bulk` pool, so it could never
+# have worked — while the guest showed as HA-protected with nothing to fail over
+# to. Job existence is not job health; only `pvesr status` distinguishes them.
+
+TAG="pvesr_status"
+FACILITY="local0"
+
+emit() { logger -t "$TAG" -p "${FACILITY}.info" -- "$1"; }
+
+now=$(date +%s)
+host=$(hostname)
+
+# A failing pvesr command must never read as "no jobs configured" — that is
+# exactly the reads-green-while-broken ambiguity this script exists to kill.
+if ! out=$(pvesr status 2>&1); then
+  detail=$(printf '%s' "$out" | tr -d '"' | tr '\n' ' ' | cut -c1-300)
+  emit "host=${host} error=\"pvesr status failed\" detail=\"${detail}\""
+  exit 0
+fi
+
+# No jobs on this node is a legitimate state, not an error — say so explicitly
+# so a silent node is distinguishable from a node that never reported.
+if [ "$(printf '%s\n' "$out" | tail -n +2 | grep -c .)" -eq 0 ]; then
+  emit "host=${host} job_count=0 msg=\"no replication jobs configured\""
+  exit 0
+fi
+
+printf '%s\n' "$out" | tail -n +2 | while read -r job enabled target last_sync next_sync duration fail_count state_rest; do
+  [ -n "${job:-}" ] || continue
+
+  # pvesr prints "-" for a job that has never completed a sync. That is the
+  # case worth catching, so surface it as an explicit age of -1 rather than
+  # letting it parse as 0 (which would read as "just synced").
+  if [ "$last_sync" = "-" ]; then
+    last_epoch=-1
+    age=-1
+  else
+    last_epoch=$(date -d "$(printf '%s' "$last_sync" | tr '_' ' ')" +%s 2>/dev/null || echo -1)
+    if [ "$last_epoch" -ge 0 ]; then age=$((now - last_epoch)); else age=-1; fi
+  fi
+
+  # Everything after fail_count is pvesr's free-text state/error, which can
+  # contain spaces and quotes; collapse it so the kv line stays parseable.
+  state=$(printf '%s' "${state_rest:-unknown}" | tr -d '"' | tr '\n' ' ' | cut -c1-300)
+  [ -n "$state" ] || state="unknown"
+
+  emit "host=${host} job_id=${job} enabled=${enabled} target=${target} state=\"${state}\" fail_count=${fail_count:-0} last_sync=${last_sync} last_sync_epoch=${last_epoch} age_seconds=${age} duration_seconds=${duration:-0}"
+done
+
+exit 0
