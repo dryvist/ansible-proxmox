@@ -45,6 +45,15 @@
       tags:
         - common
 
+    # Host network contract. Detection is read-only and always runs; it catches
+    # a management address that has drifted off the untagged bridge, which
+    # makes a node unreachable while it is still running. Enforcement is
+    # opt-in via pve_host_network_enforce.
+    - role: pve_host_network
+      tags:
+        - pve_host_network
+        - network
+
     # Inter-node root SSH trust (known_hosts) — must precede anything that SSHes
     # between nodes (syncoid replication, pvecm). Idempotent; survives renames.
     - role: cluster_ssh_trust
