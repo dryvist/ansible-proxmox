@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Emit hypervisor health telemetry to the journal
+Documentation=https://github.com/dryvist/ansible-proxmox/tree/develop/roles/pve_health_telemetry
+
+[Service]
+Type=oneshot
+ExecStart={{ pve_health_telemetry_script_path }}
+
+# The script's whole job is to report on a node that may be unwell, so it must
+# never be the thing that hangs. The timeout is comfortably above the two D-state
+# samples plus every probe, and SIGKILL on expiry guarantees the timer's next
+# firing is never blocked by a wedged predecessor.
+TimeoutStartSec={{ (pve_health_telemetry_dstate_settle_seconds | int) + 45 }}
+KillMode=mixed
+
+# Read-only sampling. No writes anywhere, no network of its own: the only output
+# is a journal line. Locking that down means this can never contribute to an
+# incident it exists to observe.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes

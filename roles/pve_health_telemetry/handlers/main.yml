@@ -1,0 +1,4 @@
+---
+- name: Reload systemd for pve_health_telemetry
+  ansible.builtin.systemd:
+    daemon_reload: true

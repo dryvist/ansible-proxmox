@@ -6,6 +6,31 @@
 # host logs + every systemd service (pveproxy, pvedaemon, corosync, ZFS event
 # daemon, ...). The disk-assisted queue survives a receiver outage instead of
 # dropping logs.
+
+# Hypervisor health telemetry, routed FIRST and terminated with `stop`.
+#
+# Ordering is load-bearing. rsyslog evaluates rules top-down, so this must
+# precede the *.* rule below; and `stop` is what prevents the same line also
+# matching *.* and being delivered twice — once to the health family and once
+# into the shared OS stream, which would defeat the split and double the volume.
+#
+# The health family has its own port because routing by listener is how every
+# other source family here is separated, and it keeps a dense per-minute metric
+# series out of the high-volume free-text OS index. Port comes from the tofu
+# syslog_port_map (family: pve_health); see that map for the index it lands in.
+if ($programname == "{{ pve_syslog_forwarder_health_tag }}") then {
+  action(type="omfwd"
+         target="{{ pve_syslog_forwarder_target_host }}"
+         port="{{ pve_syslog_forwarder_health_port }}"
+         protocol="{{ pve_syslog_forwarder_protocol }}"
+         queue.type="LinkedList"
+         queue.filename="cribl_fwd_health"
+         queue.maxDiskSpace="{{ pve_syslog_forwarder_queue_max_disk_space }}"
+         queue.saveOnShutdown="on"
+         action.resumeRetryCount="-1")
+  stop
+}
+
 *.* action(type="omfwd"
            target="{{ pve_syslog_forwarder_target_host }}"
            port="{{ pve_syslog_forwarder_target_port }}"

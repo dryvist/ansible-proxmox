@@ -20,6 +20,24 @@ pve_syslog_forwarder_target_host: "syslog.{{ lookup('env', 'PROXMOX_SUBDOMAIN') 
 # (published as ansible_inventory.constants.syslog_ports.linux). Keep in sync.
 pve_syslog_forwarder_target_port: 517
 
+# Hypervisor health telemetry family (tofu syslog_port_map key: pve_health).
+# Kept off the linux family above deliberately: that one lands in the shared OS
+# catch-all, and a dense one-line-per-minute metric series does not belong in a
+# high-volume free-text index. Same rationale, same mechanism, as the other
+# per-family splits in that map.
+#
+# Sourced from the published inventory when it is loaded, so the port lives in
+# one place; the literal is the fallback for a credential-free host-only run
+# (mirroring how the linux port above is pinned here for the same reason).
+pve_syslog_forwarder_health_port: >-
+  {{ (hostvars['localhost']['tofu_data']['constants']['syslog_port_map']['pve_health']['standard'] | default(524))
+     if (hostvars['localhost']['tofu_data'] is defined) else 524 }}
+
+# Journal tag identifying health telemetry. Must equal pve_health_telemetry_tag —
+# the telemetry role asserts this at converge, because a mismatch silently routes
+# the data into the shared OS stream rather than failing.
+pve_syslog_forwarder_health_tag: pve-health
+
 # tcp (omfwd protocol=tcp) is reliable; udp drops under load. Cribl accepts both.
 pve_syslog_forwarder_protocol: tcp
 

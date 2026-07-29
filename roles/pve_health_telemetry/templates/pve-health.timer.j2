@@ -1,0 +1,22 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Sample hypervisor health telemetry every {{ pve_health_telemetry_interval }}
+
+[Timer]
+# OnBootSec is short but not zero: sampling during the boot storm would report
+# guest_drift for guests that simply have not started yet, which reads as the
+# bridge fault this is meant to detect.
+OnBootSec=2min
+OnUnitActiveSec={{ pve_health_telemetry_interval }}
+
+# Every node firing on the same wall-clock second would arrive at Cribl as a
+# synchronised burst. A small jitter spreads them without affecting the series.
+RandomizedDelaySec=5
+
+# Do NOT set Persistent=true. A missed sample is worthless after the fact — the
+# node state it would have described is gone — and replaying a backlog of them on
+# boot would emit a burst of stale lines that look like a live incident.
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

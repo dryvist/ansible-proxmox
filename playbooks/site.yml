@@ -99,6 +99,18 @@
         - pve_syslog_forwarder
         - syslog
 
+    # Structured hypervisor health telemetry (stall detection, clocksource,
+    # replication, HA state, memory pressure, guest drift) as one key=value line
+    # per node per minute. Ordered AFTER the forwarder so the rsyslog rule that
+    # routes this tag exists before the timer starts emitting — otherwise the
+    # first samples fall through to the host-syslog rule and land in the shared
+    # OS index, which is precisely the split this avoids.
+    - role: pve_health_telemetry
+      tags:
+        - pve_health_telemetry
+        - syslog
+        - monitoring
+
     # Prometheus node_exporter (pinned version, systemd) on :9100, bound to the
     # node's management IP so host metrics stay on the management VLAN.
     - role: pve_node_exporter
