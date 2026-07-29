@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.65.0](https://github.com/dryvist/ansible-proxmox/compare/v1.64.1...v1.65.0) (2026-07-29)
+
+
+### Features
+
+* **monitoring:** emit pvesr replication status as Splunk telemetry ([#462](https://github.com/dryvist/ansible-proxmox/issues/462)) ([1f8411d](https://github.com/dryvist/ansible-proxmox/commit/1f8411d0109861e0ec406073d4c561604adb2a2a))
+* **network:** detect host management address drift off the untagged bridge ([#474](https://github.com/dryvist/ansible-proxmox/issues/474)) ([19e25ab](https://github.com/dryvist/ansible-proxmox/commit/19e25abcbde4a2fca4005adbfb761149c3159a06))
+* **node_watchdog:** reset a wedged node instead of leaving it dark ([#481](https://github.com/dryvist/ansible-proxmox/issues/481)) ([48e5d1b](https://github.com/dryvist/ansible-proxmox/commit/48e5d1b72c887209c7a38339202fec6a1aaf8361))
+
+
+### Bug Fixes
+
+* **common:** derive host DNS from the node's own gateway ([a33ba8b](https://github.com/dryvist/ansible-proxmox/commit/a33ba8bbfc680f1e944bcf3d7ce82dbc7cde2f31))
+* **common:** relay outbound mail through Mailpit instead of direct-to-MX ([#456](https://github.com/dryvist/ansible-proxmox/issues/456)) ([63b5ad9](https://github.com/dryvist/ansible-proxmox/commit/63b5ad9613862056113d7d9c66b26f42c88c4706))
+* **crash_diagnostics:** persist panic sysctls where systemd actually reads them ([#482](https://github.com/dryvist/ansible-proxmox/issues/482)) ([d73d985](https://github.com/dryvist/ansible-proxmox/commit/d73d98520d1fde22b135b41aa59190a810ac2118))
+* **dns:** derive host resolver from each node's own gateway ([a33ba8b](https://github.com/dryvist/ansible-proxmox/commit/a33ba8bbfc680f1e944bcf3d7ce82dbc7cde2f31))
+* **kernel_tuning:** stop forcing HPET, let the kernel pick its clocksource ([#484](https://github.com/dryvist/ansible-proxmox/issues/484)) ([5b2a831](https://github.com/dryvist/ansible-proxmox/commit/5b2a8311d4e84429a4d85a56881128d7e6befaff))
+* **pve_upgrade:** roll one node at a time and drain HA guests before reboot ([#485](https://github.com/dryvist/ansible-proxmox/issues/485)) ([56cdab4](https://github.com/dryvist/ansible-proxmox/commit/56cdab4b472486b1e32a612388f2f1cd71f402e9))
+* **syncoid:** drive the DR leg off cron, snapshot the dump archive hourly, and clear trigger residue ([#477](https://github.com/dryvist/ansible-proxmox/issues/477)) ([1713f75](https://github.com/dryvist/ansible-proxmox/commit/1713f75a1d479b5c3f78c0f7d7dc5068a028dcf5))
+* **syncoid:** wire the healthcheck ping so a failed replication pages ([#476](https://github.com/dryvist/ansible-proxmox/issues/476)) ([a472cc7](https://github.com/dryvist/ansible-proxmox/commit/a472cc7fe0a66792f6797e854e18224a34cc805f))
+
 ## [1.64.1](https://github.com/dryvist/ansible-proxmox/compare/v1.64.0...v1.64.1) (2026-07-27)
 
 
