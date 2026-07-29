@@ -33,8 +33,11 @@ kernel_tuning_overcommit_memory: 0
 # The crash_diagnostics role ALSO manages GRUB params - they will be merged, not conflict.
 # For UEFI systems, only kernel_tuning manages /etc/kernel/cmdline.
 kernel_tuning_boot_params_enabled: true
-kernel_tuning_clocksource: hpet
-kernel_tuning_tsc_mode: unstable
+# Clocksource is deliberately not forced here; see the role defaults for the
+# measurement. Forcing HPET cost 76x the per-read latency of TSC on this
+# estate's own hardware, and the Zen1 TSC concern it guarded against comes from
+# C6 entry, which disable_deep_cstates and disable_zen_c6 already address. The
+# kernel picks TSC where it is sound and demotes it itself if it ever drifts.
 kernel_tuning_disable_smt: false
 kernel_tuning_disable_deep_cstates: true
 
