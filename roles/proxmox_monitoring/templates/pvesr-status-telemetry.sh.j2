@@ -21,9 +21,17 @@ emit() { logger -t "$TAG" -p "${FACILITY}.info" -- "$1"; }
 now=$(date +%s)
 host=$(hostname)
 
+# A failing pvesr command must never read as "no jobs configured" — that is
+# exactly the reads-green-while-broken ambiguity this script exists to kill.
+if ! out=$(pvesr status 2>&1); then
+  detail=$(printf '%s' "$out" | tr -d '"' | tr '\n' ' ' | cut -c1-300)
+  emit "host=${host} error=\"pvesr status failed\" detail=\"${detail}\""
+  exit 0
+fi
+
 # No jobs on this node is a legitimate state, not an error — say so explicitly
 # so a silent node is distinguishable from a node that never reported.
-if ! out=$(pvesr status 2>/dev/null) || [ "$(printf '%s\n' "$out" | tail -n +2 | grep -c .)" -eq 0 ]; then
+if [ "$(printf '%s\n' "$out" | tail -n +2 | grep -c .)" -eq 0 ]; then
   emit "host=${host} job_count=0 msg=\"no replication jobs configured\""
   exit 0
 fi

@@ -88,6 +88,7 @@ Suggested Hermes conditions:
 | `fail_count > 0` | job erroring |
 | `age_seconds = -1` | **never synced** — the failure mode below |
 | `age_seconds > 3 × schedule` | falling behind |
+| `error=*` | `pvesr status` itself failing |
 | host stops reporting | telemetry or node down |
 
 **Why this exists.** A `pvesr` job that has never run still appears in
