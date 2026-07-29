@@ -156,6 +156,24 @@ crash_diagnostics_grub_params:
   - hung_task_panic=1
   - mce=3 # Maximum MCE verbosity (0=off, 1=default, 2=CMCI, 3=all)
   - edac_report=1 # Enable EDAC reporting at boot
+  # An NVMe device may advertise a deep non-operational power state that it does
+  # not reliably wake from. When that happens every read against the root pool
+  # blocks for well over a minute: services stall, sshd stops answering, and the
+  # host reads as dead while the kernel is still alive and the drive reports
+  # perfect health. Capping the tolerated transition latency at 0 keeps the
+  # device in an operational state. Harmless on hosts with no NVMe, and the few
+  # idle watts it costs are not worth a hypervisor that power-naps its root disk.
+  - nvme_core.default_ps_max_latency_us=0
+
+# Where the sysctl settings above are persisted. This MUST be a file systemd
+# actually reads. The module default is /etc/sysctl.conf, which systemd only
+# honours through a distro-shipped symlink in /etc/sysctl.d/ — absent that
+# symlink the file is ignored in full, and because sysctl_set also applies each
+# value live, a converge still reports success while nothing survives the next
+# reboot. That is how hosts ended up armed to panic (from the GRUB params above,
+# which do persist) but not to reboot, turning every recoverable panic into a
+# dark host waiting on a human.
+crash_diagnostics_sysctl_file: /etc/sysctl.d/60-crash-diagnostics.conf
 
 # =============================================================================
 # CLEANUP
@@ -165,6 +183,9 @@ crash_diagnostics_grub_params:
 crash_diagnostics_sysctl_cleanup:
   - /etc/sysctl.d/99-debug.conf
   - /etc/sysctl.d/99-crash-diagnostics.conf
+  # Hand-applied stopgap written during the incident that exposed the above.
+  # Same settings, superseded by crash_diagnostics_sysctl_file.
+  - /etc/sysctl.d/60-crash-reboot.conf
 
 # =============================================================================
 # BOOT-TIME MEMORY LOGGING
