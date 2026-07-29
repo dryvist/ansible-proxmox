@@ -149,9 +149,16 @@
 
     # Cross-node ZFS replication (syncoid, layer 2). Pull model — runs on the
     # backup node; inert until syncoid_jobs is set.
+    # The healthcheck is not optional decoration: syncoid_healthcheck_url was
+    # empty, so a job that failed on one dataset was visible only as a non-zero
+    # exit code inside a cron run nobody reads. Wiring it makes a failed
+    # replication page, and — because healthchecks expects a ping every cycle —
+    # makes a run that never happens page too.
     - role: syncoid
       tags:
         - syncoid
+      vars:
+        syncoid_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/syncoid"
 
     # Insert-only SQLite warm standby — one consumer of the generic
     # <pool>/databases storage namespace. Daily appends new rows from a source
