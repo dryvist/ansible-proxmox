@@ -54,6 +54,24 @@
   tags:
     - syncoid
 
+# Removing the reason to schedule cron does not unschedule it: ansible.builtin.cron
+# only writes when its `when` passes, so flipping syncoid_trigger to boot (or
+# emptying syncoid_jobs) leaves the previously-written entry behind and the node
+# keeps a wall-clock run nothing declares. Observed live on the DR node, which
+# carried both a stale daily entry and the on-boot unit. Declared state has to
+# include the absence.
+- name: Remove the syncoid cron entry when cron is not the trigger
+  ansible.builtin.cron:
+    name: "syncoid-replicate"
+    user: "{{ syncoid_user }}"
+    state: absent
+  when:
+    - syncoid_enabled
+    - syncoid_trigger != 'cron' or syncoid_jobs | length == 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
 # Trigger == boot: a oneshot that runs the wrapper once each boot, for a
 # normally-off DR node woken (node_scheduled_wake) for short windows where the
 # wall-clock cron would never fire. With syncoid_boot_poweroff_on_complete it
