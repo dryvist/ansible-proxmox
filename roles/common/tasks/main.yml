@@ -87,3 +87,22 @@
   tags:
     - common
     - services
+
+# Host DNS: every node resolves via its OWN subnet's gateway (the UniFi
+# VLAN gateway relays DNS), derived from live facts — never a hard-coded
+# cross-VLAN literal. Hand-set 10.0.1.1 entries left pve1/pve3/pve4
+# resolving across VLANs, which flapped every FQDN-dependent host service
+# (rsyslog forwarding, CRM loops) whenever inter-VLAN policy or the
+# default-VLAN gateway hiccuped.
+- name: Resolve host DNS via the node's own gateway
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    mode: "0644"
+    content: |
+      # Managed by Ansible (common role) — do not edit manually.
+      search {{ common_dns_search_domain }}
+      nameserver {{ ansible_default_ipv4.gateway }}
+  when: ansible_default_ipv4.gateway is defined
+  tags:
+    - common
+    - dns
