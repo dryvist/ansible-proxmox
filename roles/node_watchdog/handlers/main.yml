@@ -1,0 +1,20 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart watchdog
+  ansible.builtin.systemd_service:
+    name: watchdog
+    state: restarted
+  when: node_watchdog_arm | default(true)
+
+# watchdog-mux is restarted rather than reloaded because it reads
+# WATCHDOG_MODULE only at start. On a node with active HA services this briefly
+# drops the armed watchdog, which is safe: nothing is being petted during the
+# gap, and the LRM re-arms on reconnect.
+- name: Restart watchdog-mux
+  ansible.builtin.systemd_service:
+    name: watchdog-mux
+    state: restarted
+  failed_when: false

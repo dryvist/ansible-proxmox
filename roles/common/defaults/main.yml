@@ -6,3 +6,41 @@ common_packages:
   - iotop
   - lm-sensors
   - rasdaemon
+
+# Search domain for host resolv.conf: the tofu-published domain when the
+# inventory is loaded (site.yml), else the node's own domain fact.
+common_dns_search_domain: >-
+  {{ hostvars['localhost'].tofu_data.domain
+     if hostvars['localhost'].tofu_data is defined
+     else ansible_domain }}
+
+# Outbound system mail (Proxmox notifications, cron mail, apt/unattended-upgrades
+# output) relays through the existing Mailpit LXC instead of postfix's out-of-the-box
+# empty relayhost, which tries direct-to-MX delivery on port 25 — permanently
+# blocked outbound on this network. Left unfixed, mail queues forever (observed:
+# 700+ KB / 32 messages stuck on pve2 alone) and nobody is warned, because the
+# bounce goes back into the same broken pipe.
+#
+# Same internal-relay pattern already used by Zammad (see ansible-proxmox-apps
+# inventory/group_vars/zammad_group.yml: zammad_smtp_host) — no auth, no TLS,
+# LAN-only. Mail lands in Mailpit's web UI (http://mailpit.<domain>:8025) instead
+# of a real inbox; it does NOT reach a human by itself. Proxmox's own critical
+# notifications already reach a human today via the `proxman` webhook target in
+# notifications.cfg (confirmed firing in the journal on every event), so this
+# does not regress alerting — it only stops the pointless SMTP retries and the
+# unbounded mailq growth for general system mail.
+#
+# To make Mailpit forward to a REAL inbox (not just its web UI), a human must:
+#   1. Create an SMTP relay credential (e.g. a Gmail App Password, or another
+#      SMTP relay provider) — never invent/commit one here.
+#   2. Set MAILPIT_RELAY_HOST / MAILPIT_RELAY_PORT / MAILPIT_RELAY_USERNAME /
+#      MAILPIT_RELAY_PASSWORD (SOPS-backed env vars consumed by
+#      ansible-proxmox-apps' mailpit_docker role) and mailpit_docker_relay_all: true.
+#   That is a change in ansible-proxmox-apps, out of scope here.
+common_postfix_relay_enabled: true
+common_postfix_relay_host: "mailpit.{{ domain_from_tofu }}"
+# Pinned to 1025 (terraform-proxmox notification_ports.mailpit_smtp) since this
+# repo does not inject tofu_data.constants (same reasoning as
+# pve_syslog_forwarder_target_port) — keep in sync with
+# tofu-proxmox/modules/proxmox-stack/constants.tf.
+common_postfix_relay_port: 1025

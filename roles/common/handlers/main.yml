@@ -14,3 +14,8 @@
     name: rsyslog
     state: restarted
   failed_when: false
+
+- name: Restart postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: restarted

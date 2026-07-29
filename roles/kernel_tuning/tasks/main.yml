@@ -86,9 +86,11 @@
     - name: Build stability parameters string
       ansible.builtin.set_fact:
         kernel_tuning_stability_params: >-
-          {{ ((['clocksource=' ~ kernel_tuning_clocksource,
-               'tsc=' ~ kernel_tuning_tsc_mode,
-               'nmi_watchdog=' ~ kernel_tuning_nmi_watchdog | string,
+          {{ (((['clocksource=' ~ kernel_tuning_clocksource]
+                if kernel_tuning_clocksource | default('') | length > 0 else [])
+              + (['tsc=' ~ kernel_tuning_tsc_mode]
+                if kernel_tuning_tsc_mode | default('') | length > 0 else [])
+              + ['nmi_watchdog=' ~ kernel_tuning_nmi_watchdog | string,
                'softlockup_panic=' ~ kernel_tuning_softlockup_panic | string,
                'hung_task_panic=' ~ kernel_tuning_hung_task_panic | string,
                'mce=' ~ kernel_tuning_mce_level | string,

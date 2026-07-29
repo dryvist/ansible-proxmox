@@ -13,6 +13,19 @@ pve_upgrade_reboot_timeout: 600
 # pin an exact build: the no-subscription channel always serves the latest 9.x
 # point release, so the node lands on current 9.2.x.
 pve_upgrade_expected_version: "9.2"
+
+# Put the node into PVE HA maintenance mode before rebooting, so the CRM migrates
+# HA-managed guests to peers instead of letting them be hard-stopped by the
+# reboot. A no-op on a node that hosts no HA services or is not in a cluster.
+# Set false only when deliberately upgrading a node whose guests must not move.
+pve_upgrade_ha_drain: true
+
+# How long to wait for the CRM to finish moving guests off the node. The CRM
+# acts on its own cycle, so this is a poll, not a fixed sleep: 30 x 10s = 5
+# minutes, comfortably longer than a live migration of the guests here.
+pve_upgrade_ha_drain_retries: 30
+pve_upgrade_ha_drain_delay: 10
+
 # This role runs the upgrade only. Repository normalization (keeping the node on
 # the no-subscription channel) is handled by the pve_repositories role, which
 # playbooks/upgrade.yml applies first.

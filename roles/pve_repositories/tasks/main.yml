@@ -83,7 +83,11 @@
 # manual `pveam download`. Gated on the same master switch as the repos above.
 - name: Ensure the configured CT templates are present
   ansible.builtin.include_tasks: ct_templates.yml
-  when: pve_repositories_manage | bool
+  when:
+    - pve_repositories_manage | bool
+    # Nothing to ensure when the tofu inventory was not loaded (see the default).
+    # Skipping here avoids a pointless `pveam list` on every such run.
+    - pve_repositories_ct_templates | length > 0
   tags:
     - pve_repositories
     - ct_templates

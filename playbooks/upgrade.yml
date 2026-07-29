@@ -8,6 +8,11 @@
 # load_tofu.yml (NAS-focused; irrelevant to an OS upgrade), matching
 # commission_rack_server.yml.
 #
+# Snapshots are taken for every targeted node up front, before any node is
+# changed, so a restore point exists cluster-wide before the first reboot.
+# The upgrade itself then rolls one node at a time (see serial below), draining
+# HA guests off each node before its reboot (see the pve_upgrade role).
+#
 # Usage (test — snapshot and reboot are skipped in check mode):
 #   ./scripts/run-ansible.sh playbooks/upgrade.yml -l pve --check --diff
 # Usage (apply — run with console access available; the node reboots):
@@ -20,6 +25,17 @@
   hosts: proxmox
   become: true
   gather_facts: true
+
+  # One node at a time. Without this, `-l proxmox` apt-upgrades and reboots every
+  # node in the cluster simultaneously: corosync loses quorum, HA guests have
+  # nowhere to migrate to, and the estate goes down all at once. Serial rolling
+  # is the only safe shape for an operation that reboots.
+  serial: 1
+
+  # Stop the rollout at the first node that fails rather than carrying on into
+  # the next one. A node that failed to upgrade or failed to come back is a
+  # reason to look, not a reason to do it again elsewhere.
+  max_fail_percentage: 0
 
   roles:
     - role: pve_repositories

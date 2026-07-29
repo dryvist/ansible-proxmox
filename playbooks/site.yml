@@ -45,6 +45,15 @@
       tags:
         - common
 
+    # Host network contract. Detection is read-only and always runs; it catches
+    # a management address that has drifted off the untagged bridge, which
+    # makes a node unreachable while it is still running. Enforcement is
+    # opt-in via pve_host_network_enforce.
+    - role: pve_host_network
+      tags:
+        - pve_host_network
+        - network
+
     # Inter-node root SSH trust (known_hosts) — must precede anything that SSHes
     # between nodes (syncoid replication, pvecm). Idempotent; survives renames.
     - role: cluster_ssh_trust
@@ -72,6 +81,14 @@
     - role: crash_diagnostics
       tags:
         - crash_diagnostics
+
+    # Reset a wedged node instead of leaving it dark. Runs after
+    # crash_diagnostics so a panic is still captured before the reset, and
+    # before the syslog forwarder so the arming itself is logged off-box.
+    - role: node_watchdog
+      tags:
+        - node_watchdog
+        - watchdog
 
     # Ship every node's journal/syslog to the central pipeline (HAProxy syslog
     # VIP -> Cribl Edge -> Splunk os index). Target CNAME comes from
@@ -149,9 +166,16 @@
 
     # Cross-node ZFS replication (syncoid, layer 2). Pull model — runs on the
     # backup node; inert until syncoid_jobs is set.
+    # The healthcheck is not optional decoration: syncoid_healthcheck_url was
+    # empty, so a job that failed on one dataset was visible only as a non-zero
+    # exit code inside a cron run nobody reads. Wiring it makes a failed
+    # replication page, and — because healthchecks expects a ping every cycle —
+    # makes a run that never happens page too.
     - role: syncoid
       tags:
         - syncoid
+      vars:
+        syncoid_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/syncoid"
 
     # Insert-only SQLite warm standby — one consumer of the generic
     # <pool>/databases storage namespace. Daily appends new rows from a source

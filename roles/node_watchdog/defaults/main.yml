@@ -1,0 +1,93 @@
+---
+# Node watchdog — hardware watchdog plus liveness checks, so a wedged node
+# resets itself instead of sitting dark until someone notices.
+#
+# WHAT THIS COVERS, AND WHAT IT DOES NOT
+#   Covers: a hung kernel, a stalled scheduler, loss of the cluster filesystem,
+#   a node that is up but no longer doing work.
+#   Does NOT cover: instantaneous loss of power. If the machine stops receiving
+#   power there is nothing left running to time out and the watchdog is already
+#   gone. That case needs the firmware setting that restores power state after
+#   an AC loss, which is out of scope for a role.
+#
+# Arming it is still worthwhile on a node suspected of power faults, because it
+# acts as a DISCRIMINATOR: if the watchdog is armed and the node dies without it
+# firing, that is positive evidence the kernel was alive until the instant the
+# power went away.
+
+node_watchdog_enabled: true
+
+# --- Hardware watchdog device -------------------------------------------------
+# A real chipset or BMC watchdog. The software watchdog (softdog) is a timer
+# inside the kernel, so it cannot fire when the kernel itself is what stopped.
+#
+# Keyed by hardware class taken from inventory, never by host name, so adding a
+# machine of a known class needs no change here.
+node_watchdog_module_map:
+  amd-desktop: sp5100_tco
+  intel-desktop: iTCO_wdt
+  dell-poweredge: ipmi_watchdog
+  hpe-proliant: hpwdt
+
+# Hardware class for this host, resolved from the published inventory. Left
+# empty when the inventory carries no hardware fact.
+node_watchdog_hardware: "{{ tofu_node_hardware | default('') }}"
+
+# Falls back to softdog when the class is unknown, so a host still gets SOME
+# watchdog rather than silently none. softdog is weaker but not useless: it
+# still catches a stalled userspace.
+node_watchdog_module: >-
+  {{ node_watchdog_module_map.get(node_watchdog_hardware, 'softdog') }}
+
+# --- Timing -------------------------------------------------------------------
+# Requirement: restart within roughly one minute of a failure that does not
+# resolve itself. The daemon checks every interval and must pet the device
+# before the timeout expires.
+#
+# Keep the timeout comfortably above interval x retries. A spurious reset of a
+# healthy node is worse than a slightly slower one.
+node_watchdog_timeout: 60 # seconds before the hardware resets the machine
+node_watchdog_interval: 10 # seconds between liveness checks
+node_watchdog_retries: 3 # consecutive failures tolerated before giving up
+
+# --- Liveness checks ----------------------------------------------------------
+# "No work being done" is not directly observable, so it is approximated with
+# checks a healthy hypervisor always passes. Each is deliberately generous: the
+# goal is to catch a wedge, not to police performance.
+
+# Load-average ceilings. A wedged node with blocked I/O shows a runaway load
+# average while doing no useful work. Set well above normal peak.
+node_watchdog_max_load_1: 48
+node_watchdog_max_load_5: 36
+node_watchdog_max_load_15: 24
+
+# Minimum free virtual memory, in pages. Exhaustion the OOM killer cannot
+# resolve leaves a node alive but useless.
+node_watchdog_min_memory: 8192
+
+# Files a healthy node keeps fresh. If one stops being written, something that
+# should be running has stopped.
+node_watchdog_file_checks:
+  - path: /var/log/syslog
+    max_age: 300
+
+# Hosts proving networking still works. Prefer the default gateway over a
+# cluster peer, so a peer being down cannot reset a healthy node. Empty
+# disables ping checks.
+node_watchdog_ping_targets: []
+
+# --- Custom liveness test -----------------------------------------------------
+# Runs every interval; a non-zero exit counts as a failure. This is where
+# hypervisor-specific liveness lives. The cluster filesystem being mounted and
+# writable is the single best "this node can still do its job" signal, because
+# when it wedges every guest-management call hangs with it — which is precisely
+# the failure this role exists to break.
+node_watchdog_test_enabled: true
+node_watchdog_test_binary: /usr/local/sbin/pve-watchdog-test
+node_watchdog_test_timeout: 30
+node_watchdog_test_check_pmxcfs: true
+
+# --- Safety -------------------------------------------------------------------
+# Never arm the watchdog while a node is being commissioned or is deliberately
+# held down for maintenance. Set false in host_vars for that window.
+node_watchdog_arm: true

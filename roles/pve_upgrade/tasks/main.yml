@@ -2,55 +2,128 @@
 # pve_upgrade role tasks — bring a Proxmox VE node to the latest point release on
 # its channel (apt full-upgrade), reboot for the new kernel, and verify the
 # version. Assumes working apt repos for the channel (see defaults).
+#
+# The reboot is the dangerous part. A node holding HA-managed guests that simply
+# reboots does not migrate them — the CRM sees the node vanish and recovers them
+# only after its fence timeout, so the guests are hard-stopped rather than moved.
+# PVE's native answer is maintenance mode, which asks the CRM to move every HA
+# service off the node first and remembers where they came from:
+#
+#   ha-manager crm-command node-maintenance enable  <node>
+#   ha-manager crm-command node-maintenance disable <node>
+#
+# The drain is wrapped so the `disable` runs even when the upgrade fails. Leaving
+# a node in maintenance mode is worse than not draining it at all: it stays
+# ineligible for HA placement indefinitely, silently shrinking the cluster.
 
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: true
-  tags:
-    - pve_upgrade
-
-- name: Perform full distribution upgrade (apt full-upgrade)
-  ansible.builtin.apt:
-    upgrade: dist
-  register: pve_upgrade_result
-  tags:
-    - pve_upgrade
-
-- name: Remove now-unused packages (apt autoremove)
-  ansible.builtin.apt:
-    autoremove: true
-  tags:
-    - pve_upgrade
-
-- name: Reboot when packages changed (new kernel takes effect on reboot)
-  ansible.builtin.reboot:
-    reboot_timeout: "{{ pve_upgrade_reboot_timeout | int }}"
-    msg: Reboot triggered by ansible pve_upgrade role
-  when:
-    - pve_upgrade_reboot | bool
-    - pve_upgrade_result is changed
-  tags:
-    - pve_upgrade
-
-# pveversion is read-only, but skip the verify in check mode: a dry run has not
-# actually upgraded anything, so asserting the new version would falsely fail.
-- name: Query Proxmox VE version
+# The PVE node name is not always the inventory name or the FQDN, and the HA
+# status output is keyed by the PVE name. Read it from the symlink PVE itself
+# maintains rather than inferring it — an inferred name that does not match
+# makes every guard below silently false, which looks exactly like "this node
+# has no HA guests".
+- name: Resolve this node's PVE node name
   ansible.builtin.command:
-    cmd: pveversion
-  register: pve_upgrade_pveversion
+    cmd: readlink -f /etc/pve/local
+  register: pve_upgrade_local_link
   changed_when: false
-  when: not ansible_check_mode
+  check_mode: false
   tags:
     - pve_upgrade
 
-- name: Assert the node is on the expected PVE version
-  ansible.builtin.assert:
-    that:
-      - pve_upgrade_expected_version in pve_upgrade_pveversion.stdout
-    success_msg: "pveversion reports {{ pve_upgrade_pveversion.stdout }}"
-    fail_msg: >-
-      Expected '{{ pve_upgrade_expected_version }}' in pveversion output but got:
-      {{ pve_upgrade_pveversion.stdout | default('(pveversion not run)') }}
-  when: not ansible_check_mode
+- name: Read HA status
+  ansible.builtin.command:
+    cmd: ha-manager status
+  register: pve_upgrade_ha_status
+  changed_when: false
+  check_mode: false
+  # A standalone node has no CRM and this exits non-zero. That is not an error
+  # here: it means there is nothing to drain.
+  failed_when: false
   tags:
     - pve_upgrade
+
+- name: Determine whether this node currently hosts HA-managed guests
+  ansible.builtin.set_fact:
+    pve_upgrade_node_name: "{{ pve_upgrade_local_link.stdout | basename }}"
+    pve_upgrade_ha_hosted: >-
+      {{ pve_upgrade_ha_drain | bool
+         and pve_upgrade_ha_status.rc == 0
+         and pve_upgrade_ha_status.stdout is search('\(' ~ (pve_upgrade_local_link.stdout | basename) ~ ',') }}
+  tags:
+    - pve_upgrade
+
+- name: Drain HA guests to peer nodes before rebooting
+  ansible.builtin.command:
+    cmd: "ha-manager crm-command node-maintenance enable {{ pve_upgrade_node_name }}"
+  when: pve_upgrade_ha_hosted | bool
+  changed_when: true
+  tags:
+    - pve_upgrade
+
+# The enable above only requests the drain; the CRM moves services on its own
+# schedule. Rebooting before it finishes defeats the entire point, so wait until
+# no service line names this node.
+- name: Wait for the last HA guest to leave this node
+  ansible.builtin.command:
+    cmd: ha-manager status
+  register: pve_upgrade_ha_drained
+  until: pve_upgrade_ha_drained.stdout is not search('\(' ~ pve_upgrade_node_name ~ ',')
+  retries: "{{ pve_upgrade_ha_drain_retries | int }}"
+  delay: "{{ pve_upgrade_ha_drain_delay | int }}"
+  changed_when: false
+  check_mode: false
+  when: pve_upgrade_ha_hosted | bool
+  tags:
+    - pve_upgrade
+
+- name: Upgrade the node, always returning it to normal HA scheduling
+  tags:
+    - pve_upgrade
+  block:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Perform full distribution upgrade (apt full-upgrade)
+      ansible.builtin.apt:
+        upgrade: dist
+      register: pve_upgrade_result
+
+    - name: Remove now-unused packages (apt autoremove)
+      ansible.builtin.apt:
+        autoremove: true
+
+    - name: Reboot when packages changed (new kernel takes effect on reboot)
+      ansible.builtin.reboot:
+        reboot_timeout: "{{ pve_upgrade_reboot_timeout | int }}"
+        msg: Reboot triggered by ansible pve_upgrade role
+      when:
+        - pve_upgrade_reboot | bool
+        - pve_upgrade_result is changed
+
+    # pveversion is read-only, but skip the verify in check mode: a dry run has
+    # not actually upgraded anything, so asserting the new version would falsely
+    # fail.
+    - name: Query Proxmox VE version
+      ansible.builtin.command:
+        cmd: pveversion
+      register: pve_upgrade_pveversion
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Assert the node is on the expected PVE version
+      ansible.builtin.assert:
+        that:
+          - pve_upgrade_expected_version in pve_upgrade_pveversion.stdout
+        success_msg: "pveversion reports {{ pve_upgrade_pveversion.stdout }}"
+        fail_msg: >-
+          Expected '{{ pve_upgrade_expected_version }}' in pveversion output but got:
+          {{ pve_upgrade_pveversion.stdout | default('(pveversion not run)') }}
+      when: not ansible_check_mode
+
+  always:
+    - name: Return the node to normal HA scheduling
+      ansible.builtin.command:
+        cmd: "ha-manager crm-command node-maintenance disable {{ pve_upgrade_node_name }}"
+      when: pve_upgrade_ha_hosted | bool
+      changed_when: true

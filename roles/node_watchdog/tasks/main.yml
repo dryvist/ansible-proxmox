@@ -1,0 +1,158 @@
+---
+# Two independent layers, deliberately kept separate because they fail
+# differently and contend for the same device if you are careless:
+#
+#   1. HARDWARE WATCHDOG via pve-ha-manager. Proxmox's watchdog-mux owns
+#      /dev/watchdog. Pointing it at the real chipset/BMC device instead of
+#      softdog is the whole change - the hardware then resets a hung kernel
+#      without needing the kernel's cooperation.
+#
+#   2. LIVENESS DAEMON with NO device of its own. It cannot open /dev/watchdog
+#      (watchdog-mux already has it) so it is configured device-less and issues
+#      the reboot itself when a check fails repeatedly. That covers "node is up
+#      but no longer doing work", which no hardware watchdog can see.
+#
+# Giving the daemon a device would fight watchdog-mux for it and is the obvious
+# way to make this role cause the outage it exists to prevent.
+
+- name: Assert a watchdog module was resolved
+  ansible.builtin.assert:
+    that:
+      - node_watchdog_module | length > 0
+    fail_msg: >-
+      node_watchdog_module resolved empty. Set node_watchdog_hardware, or add
+      this host's hardware class to node_watchdog_module_map.
+    quiet: true
+
+- name: Warn when falling back to the software watchdog
+  ansible.builtin.debug:
+    msg: >-
+      Hardware class '{{ node_watchdog_hardware | default('') }}' is not in
+      node_watchdog_module_map, so this host falls back to softdog. softdog is a
+      kernel timer and cannot fire when the kernel itself has stopped - the case
+      a watchdog is most wanted for. Add the class to the map to fix this.
+  when: node_watchdog_module == 'softdog'
+
+# --- Layer 1: hardware watchdog ----------------------------------------------
+
+- name: Load the watchdog module now
+  community.general.modprobe:
+    name: "{{ node_watchdog_module }}"
+    state: present
+  register: node_watchdog_modprobe
+  failed_when: false
+
+- name: Report an unavailable watchdog module
+  ansible.builtin.debug:
+    msg: >-
+      Module '{{ node_watchdog_module }}' would not load on this host
+      ({{ node_watchdog_modprobe.msg | default('no detail') }}). The device is absent or
+      disabled in firmware; no hardware watchdog is available here.
+  when: node_watchdog_modprobe.failed | default(false) or node_watchdog_modprobe.rc | default(0) != 0
+
+- name: Persist the watchdog module across reboots
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/node-watchdog.conf
+    content: |
+      # Ansible managed - node_watchdog role
+      {{ node_watchdog_module }}
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Point pve-ha-manager's watchdog-mux at the hardware device
+  ansible.builtin.lineinfile:
+    path: /etc/default/pve-ha-manager
+    regexp: '^\s*#?\s*WATCHDOG_MODULE='
+    line: "WATCHDOG_MODULE={{ node_watchdog_module }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart watchdog-mux
+
+# --- Layer 2: liveness daemon -------------------------------------------------
+
+- name: Install the watchdog daemon
+  ansible.builtin.apt:
+    name: watchdog
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install the hypervisor liveness test
+  ansible.builtin.template:
+    src: pve-watchdog-test.j2
+    dest: "{{ node_watchdog_test_binary }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: node_watchdog_test_enabled
+
+- name: Configure the watchdog daemon
+  ansible.builtin.template:
+    src: watchdog.conf.j2
+    dest: /etc/watchdog.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "test -r %s"
+  notify: Restart watchdog
+
+# The packaged unit assumes it owns a device. It does not here, so the
+# drop-in removes the device assumption and keeps the daemon from exiting when
+# /dev/watchdog is already claimed by watchdog-mux.
+- name: Ensure the drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/watchdog.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Keep the daemon off the watchdog device
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/watchdog.service.d/10-no-device.conf
+    content: |
+      # Ansible managed - node_watchdog role
+      #
+      # watchdog-mux (pve-ha-manager) owns /dev/watchdog. This daemon runs
+      # device-less and reboots the node itself when a check fails, so it must
+      # not be considered failed merely because the device is unavailable.
+      [Service]
+      ExecStartPre=
+      Restart=always
+      RestartSec=30
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart watchdog
+
+- name: Arm or disarm the liveness daemon
+  ansible.builtin.systemd_service:
+    name: watchdog
+    enabled: "{{ node_watchdog_arm }}"
+    state: "{{ 'started' if node_watchdog_arm else 'stopped' }}"
+    daemon_reload: true
+  when: node_watchdog_enabled
+
+- name: Collect service facts for verification
+  ansible.builtin.service_facts:
+  when:
+    - node_watchdog_enabled
+    - node_watchdog_arm
+
+- name: Verify the daemon is actually running when armed
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services['watchdog.service'].state | default('') == 'running'
+    fail_msg: >-
+      The watchdog daemon is not running after being armed. A watchdog that is
+      configured but not running is worse than none, because it reads as
+      protection that does not exist.
+    quiet: true
+  when:
+    - node_watchdog_enabled
+    - node_watchdog_arm

@@ -87,3 +87,51 @@
   tags:
     - common
     - services
+
+# Host DNS: every node resolves via its OWN subnet's gateway (the UniFi
+# VLAN gateway relays DNS), derived from live facts — never a hard-coded
+# cross-VLAN literal. Hand-set 10.0.1.1 entries left pve1/pve3/pve4
+# resolving across VLANs, which flapped every FQDN-dependent host service
+# (rsyslog forwarding, CRM loops) whenever inter-VLAN policy or the
+# default-VLAN gateway hiccuped.
+- name: Resolve host DNS via the node's own gateway
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    mode: "0644"
+    content: |
+      # Managed by Ansible (common role) — do not edit manually.
+      search {{ common_dns_search_domain }}
+      nameserver {{ ansible_default_ipv4.gateway }}
+  when: ansible_default_ipv4.gateway is defined
+  tags:
+    - common
+    - dns
+
+# Postfix ships with an empty relayhost, so it tries direct-to-MX delivery on
+# port 25 — blocked outbound on this network — and mail queues forever with no
+# one warned (the bounce goes back into the same broken pipe). Relay through the
+# Mailpit LXC instead, same pattern as Zammad's outbound mail (see
+# common_postfix_relay_host in defaults/main.yml for the full rationale).
+- name: Relay outbound mail through Mailpit instead of direct-to-MX
+  when: common_postfix_relay_enabled | bool
+  tags:
+    - common
+    - postfix
+  block:
+    - name: Assert the OpenTofu domain resolved for the Mailpit relay target
+      ansible.builtin.assert:
+        that:
+          - domain_from_tofu | default('') | length > 0
+        fail_msg: >-
+          common_postfix_relay_host needs domain_from_tofu, which
+          playbooks/load_tofu.yml injects onto every proxmox host. Run this
+          role via site.yml (or another play that imports load_tofu.yml first),
+          not standalone.
+        quiet: true
+
+    - name: Set postfix relayhost to the Mailpit LXC
+      ansible.builtin.lineinfile:
+        path: /etc/postfix/main.cf
+        regexp: "^relayhost\\s*="
+        line: "relayhost = [{{ common_postfix_relay_host }}]:{{ common_postfix_relay_port }}"
+      notify: Restart postfix

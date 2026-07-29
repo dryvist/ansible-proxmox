@@ -1,0 +1,37 @@
+---
+# Host network contract for hypervisor nodes.
+#
+# The host management address must live on the untagged bridge, not on a
+# tagged VLAN sub-interface, so that it matches the switch port's native VLAN.
+# A host whose address sits on a tagged sub-interface while the port delivers
+# untagged frames can transmit but never receive: inbound traffic lands on a
+# bridge with no address and is dropped. Every unicast probe then fails and the
+# node is indistinguishable from one that is powered off.
+#
+# Detection is read-only and always runs. Enforcement is opt-in.
+
+# Detect drift only. The role never rewrites host networking unless this is
+# explicitly enabled: a bad render disconnects the node with no remote way back.
+pve_host_network_enforce: false
+
+# Apply a written change live via ifupdown2. Requires the enforce flag. Kept
+# separate so writing the file and applying it stay two deliberate decisions.
+pve_host_network_apply: false
+
+# Bridge that must carry the host management address, untagged. Guests still
+# tag freely: the bridge stays VLAN-aware.
+pve_host_network_bridge: vmbr0
+
+# Physical uplink enslaved to the bridge. Resolved from facts when empty.
+pve_host_network_uplink: ""
+
+pve_host_network_vlan_aware: true
+pve_host_network_vids: "2-4094"
+
+# Management address (CIDR) and gateway. Both required when enforcing.
+# Supplied from inventory or the environment; never committed here.
+pve_host_network_address: ""
+pve_host_network_gateway: ""
+
+# Fail the play when drift is detected. Set false to warn instead.
+pve_host_network_fail_on_drift: true

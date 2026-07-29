@@ -21,8 +21,8 @@ Manages kernel boot parameters via `/etc/kernel/cmdline` (UEFI) or GRUB configur
 
 Available boot parameters:
 
-- **clocksource**: Force HPET (recommended for stability)
-- **tsc**: Mark TSC as unstable (for systems with unreliable TSC)
+- **clocksource**: Force a clocksource (empty by default — the kernel picks TSC where sound)
+- **tsc**: TSC mode override, e.g. `nowatchdog` (empty by default)
 - **nosmt**: Disable simultaneous multithreading
 - **Crash diagnostics**: nmi_watchdog, softlockup_panic, hung_task_panic, mce, edac_report
 - **crashkernel**: kdump reservation (only if `kernel_tuning_manage_crashkernel: true`)
@@ -36,7 +36,7 @@ See `defaults/main.yml` for complete list. Key variables:
 | Variable                            | Default | Purpose                                                    |
 | ----------------------------------- | ------- | ---------------------------------------------------------- |
 | `kernel_tuning_boot_params_enabled` | `false` | Enable boot parameter management                           |
-| `kernel_tuning_clocksource`         | `hpet`  | Preferred clocksource                                      |
+| `kernel_tuning_clocksource`         | `""`    | Forced clocksource; empty lets the kernel choose           |
 | `kernel_tuning_disable_smt`         | `false` | Add `nosmt` parameter                                      |
 | `kernel_tuning_manage_crashkernel`  | `false` | Manage crashkernel (conflicts with crash_diagnostics role) |
 
@@ -44,7 +44,7 @@ See `defaults/main.yml` for complete list. Key variables:
 
 Boot parameters are **hardware-specific** and should not be enabled by default for all systems:
 
-- **AMD Zen1 systems**: May benefit from `clocksource=hpet`, `tsc=unstable`, `nosmt=true`
+- **AMD Zen1 systems**: address the C6-entry TSC trigger via `kernel_tuning_disable_zen_c6` / deep-C-state disabling rather than forcing HPET — forcing HPET measured 76x the per-read cost of TSC (see `defaults/main.yml`)
 - **AMD Zen2+ systems**: Generally stable with defaults
 - **Intel systems**: May not need special parameters
 
@@ -55,8 +55,8 @@ Use host_vars or group_vars to enable for specific systems:
 ```yaml
 # host_vars/problematic-proxmox-host.yml
 kernel_tuning_boot_params_enabled: true
-kernel_tuning_clocksource: hpet
-kernel_tuning_tsc_mode: unstable
+# Keep TSC and skip the watchdog demotion (see host comments for the tradeoff)
+kernel_tuning_tsc_mode: nowatchdog
 kernel_tuning_disable_smt: true
 ```
 
@@ -115,8 +115,6 @@ With boot parameters enabled for AMD Zen1:
     - role: kernel_tuning
       vars:
         kernel_tuning_boot_params_enabled: true
-        kernel_tuning_clocksource: hpet
-        kernel_tuning_tsc_mode: unstable
         kernel_tuning_disable_smt: true
 ```
 

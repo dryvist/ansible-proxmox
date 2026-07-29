@@ -125,6 +125,7 @@
   ansible.posix.sysctl:
     name: "{{ item.name }}"
     value: "{{ item.value }}"
+    sysctl_file: "{{ crash_diagnostics_sysctl_file }}"
     state: present
     sysctl_set: true
     reload: false
@@ -138,6 +139,52 @@
   failed_when:
     - crash_diagnostics_sysctl_result.failed
     - ansible_virtualization_type != 'docker'
+  tags:
+    - crash_diagnostics
+    - sysctl
+
+# sysctl_set applies every value to the running kernel, so the task above reports
+# success whether or not the file it wrote will ever be read again — which is
+# how this role previously persisted nothing while converging green for months.
+# Checking the running kernel here would repeat that mistake, because the
+# running kernel is what sysctl_set just wrote to by hand. The only thing worth
+# asserting is that the settings will survive a reboot: the file has to live
+# where systemd-sysctl looks, and it has to actually contain them.
+- name: Assert the sysctl settings are persisted where systemd reads them
+  ansible.builtin.assert:
+    that:
+      - crash_diagnostics_sysctl_file is match('^/etc/sysctl\.d/.+\.conf$')
+    fail_msg: >-
+      crash_diagnostics_sysctl_file must be a .conf under /etc/sysctl.d/.
+      systemd-sysctl reads that directory directly; /etc/sysctl.conf is honoured
+      only through a distro-shipped symlink, and when that symlink is absent the
+      file is ignored in full with no error.
+    quiet: true
+  tags:
+    - crash_diagnostics
+    - sysctl
+
+- name: Read back the persisted sysctl file
+  ansible.builtin.slurp:
+    src: "{{ crash_diagnostics_sysctl_file }}"
+  register: crash_diagnostics_sysctl_persisted
+  when: ansible_virtualization_type != 'docker'
+  tags:
+    - crash_diagnostics
+    - sysctl
+
+- name: Assert every crash setting survived to disk
+  ansible.builtin.assert:
+    that:
+      - crash_diagnostics_sysctl_persisted.content | b64decode is search('^\s*' ~ (item.name | regex_escape) ~ '\s*=', multiline=True)
+    fail_msg: >-
+      {{ item.name }} is not present in {{ crash_diagnostics_sysctl_file }}, so
+      it will be lost at the next reboot even though it is set right now.
+    quiet: true
+  loop: "{{ crash_diagnostics_sysctl_settings }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: ansible_virtualization_type != 'docker'
   tags:
     - crash_diagnostics
     - sysctl

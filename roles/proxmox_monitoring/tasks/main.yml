@@ -128,3 +128,21 @@
         job: "/usr/local/bin/zfs-capacity-monitor.sh"
         minute: "*/{{ proxmox_monitoring_zfs_capacity_interval }}"
         user: root
+
+- name: Configure pvesr replication status telemetry
+  when: proxmox_monitoring_enable_pvesr_telemetry
+  block:
+    - name: Deploy pvesr status telemetry script
+      ansible.builtin.template:
+        src: pvesr-status-telemetry.sh.j2
+        dest: /usr/local/bin/pvesr-status-telemetry.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure pvesr status telemetry cron job
+      ansible.builtin.cron:
+        name: "pvesr-status-telemetry"
+        job: "/usr/local/bin/pvesr-status-telemetry.sh"
+        minute: "*/{{ proxmox_monitoring_pvesr_telemetry_interval }}"
+        user: root

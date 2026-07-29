@@ -1,29 +1,18 @@
 # Database DR Standard
 
-The single, repeatable backup + restore workflow for **every** database in the
-homelab — Postgres, SQLite, and any engine added later. New databases conform to
-this document; they do not invent their own backup scheme.
+Postgres and SQLite backup/restore mechanics — the concrete "how" for the
+database stores that [`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md)
+classifies as **P0**. That document is the governing standard: it sets the
+RPO/RTO/recovery-window targets and the telemetry contract. This document is
+the workflow that meets them, and it applies to every database in the
+homelab, Postgres, SQLite, or any engine added later — new databases conform
+to it; they do not invent their own backup scheme.
 
-## Principles
-
-1. **App-consistent logical dumps, not just block snapshots.** Each engine
-   produces a consistent logical backup (`pg_dump`, SQLite online backup) so the
-   artifact is portable and restorable into a freshly rebuilt guest — matching the
-   ChaosMonkey "rebuild from source, restore data" model.
-2. **One archive namespace.** Every database's dump lands under
-   `<pool>/databases/<instance>/` on the always-on standby node. That namespace is
-   already sanoid-snapshotted (the `database` template) and DR-replicated to the
-   offline-DR node — so a conforming database inherits snapshots + cross-node DR
-   for free. `sqlite_standby` is the existing consumer; new engines follow it.
-3. **Two tiers, both required.**
-   - **Tier 1 — on-prem replicated:** the archive dataset (`bulk/databases/*`),
-     snapshotted by `sanoid` and pulled to the offline-DR node by `syncoid`.
-   - **Tier 2 — cloud / off-site:** the latest dump is uploaded off-box to object
-     storage (on-prem RustFS `s3` and/or AWS S3), so a whole-estate loss is survivable.
-4. **Restore is proven, not assumed.** Every engine ships a restore path, and DR is
-   not "done" until a restore drill reproduces the database (row-count diff = 0).
-5. **Everything via Ansible/IaC.** No hand-run dumps or restores on a live guest;
-   the roles own it, idempotent and re-runnable.
+Every dump is an **app-consistent logical backup** (`pg_dump`, SQLite online
+backup), not a block snapshot — portable, and restorable into a freshly
+rebuilt guest, matching the ChaosMonkey "rebuild from source, restore data"
+model. Everything below runs via Ansible/IaC; there are no hand-run dumps or
+restores on a live guest.
 
 ## Topology (why the archive lives where it does)
 
@@ -77,6 +66,10 @@ archive (Tier-1) or cloud (Tier-2):
 - **Postgres**: `pg_restore --clean --if-exists --dbname=<db> <latest>.dump`.
 - **SQLite**: copy/`.restore` the archive into place.
 
+Each pull and upload step reports its result per the telemetry contract in
+`DATA_PROTECTION_STANDARD.md` — `age_seconds=-1` for never-run, a `job_count=0`
+line for a host with nothing to do, and a non-empty `reason=` on any `skip`.
+
 ## Adding a new database
 
 1. Add the DB to its engine role's managed list so it gets a scheduled consistent dump.
@@ -88,6 +81,8 @@ archive (Tier-1) or cloud (Tier-2):
    edit is needed.
 4. Wire the Tier-2 upload for the new archive.
 5. Add a restore entry + run the restore drill (below).
+6. Add the job to `data_protection_expected.csv` per
+   `DATA_PROTECTION_STANDARD.md` — a job that never reports is a missing row.
 
 ## Restore drill (the DR gate — mandatory)
 
@@ -103,6 +98,9 @@ DR is only "done" once demonstrated:
 
 ## Related
 
+- [`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md) — the governing
+  standard: protection classes, RPO/RTO/recovery-window targets, the
+  telemetry contract, and the checklist for adding any new data store.
 - `roles/sanoid`, `roles/syncoid` — the snapshot + cross-node replication layer.
 - `roles/sqlite_standby`, `roles/postgres_standby` — the per-engine pull consumers.
 - `docs/DR_RUNBOOK.md` — node/guest rebuild procedures (this doc is the DB-data half).

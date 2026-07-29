@@ -2,7 +2,14 @@
 # Ensure the configured LXC (CT) templates are present on `local` storage so
 # OpenTofu container creation never fails with
 #   volume 'local:vztmpl/<template>' does not exist
-# on a freshly commissioned node. Idempotent: each template is checked with
+# on a freshly commissioned node.
+#
+# The template list comes from the published tofu inventory, not from a filename
+# restated here — bumping the base image is one edit in deployment.json and both
+# container creation and this download follow it. main.yml skips this file
+# entirely when the list is empty.
+#
+# Idempotent: each template is checked with
 # `pveam list local` first and only downloaded when missing (no re-download,
 # no apt-style churn). Included from main.yml so it runs at node setup under
 # `hosts: proxmox` alongside the apt-repository management.
