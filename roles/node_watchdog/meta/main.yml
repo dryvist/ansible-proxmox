@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  role_name: node_watchdog
+  author: ansible-proxmox
+  description: Hardware watchdog plus liveness checks so a wedged node resets itself
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - proxmox
+    - watchdog
+    - availability
+    - resilience
+
+dependencies: []

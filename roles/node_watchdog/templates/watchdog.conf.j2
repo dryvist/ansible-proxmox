@@ -1,0 +1,30 @@
+# Ansible managed - node_watchdog role
+#
+# DEVICE-LESS ON PURPOSE. Proxmox's watchdog-mux owns /dev/watchdog; this daemon
+# must not contend for it. With no watchdog-device set, a sustained check
+# failure makes the daemon reboot the node itself, which is the behaviour we
+# want for "up but not doing work".
+#
+# The hardware watchdog is configured separately via WATCHDOG_MODULE in
+# /etc/default/pve-ha-manager and covers the case this daemon cannot: a kernel
+# that has stopped executing.
+
+interval        = {{ node_watchdog_interval }}
+realtime        = yes
+priority        = 1
+retry-timeout   = {{ node_watchdog_timeout }}
+max-load-1      = {{ node_watchdog_max_load_1 }}
+max-load-5      = {{ node_watchdog_max_load_5 }}
+max-load-15     = {{ node_watchdog_max_load_15 }}
+min-memory      = {{ node_watchdog_min_memory }}
+{% for f in node_watchdog_file_checks | default([]) %}
+file            = {{ f.path }}
+change          = {{ f.max_age | default(node_watchdog_file_max_age | default(300)) }}
+{% endfor %}
+{% for t in node_watchdog_ping_targets | default([]) %}
+ping            = {{ t }}
+{% endfor %}
+{% if node_watchdog_test_enabled %}
+test-binary     = {{ node_watchdog_test_binary }}
+test-timeout    = {{ node_watchdog_test_timeout }}
+{% endif %}
