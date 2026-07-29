@@ -24,10 +24,25 @@ kernel_tuning_sysctl_file: /etc/sysctl.d/10-proxmox-tuning.conf
 # Enable boot parameter management
 kernel_tuning_boot_params_enabled: false
 
-# Stability parameters for AMD Zen1 systems
-# Forces HPET clocksource to avoid TSC instability issues
-kernel_tuning_clocksource: hpet
-kernel_tuning_tsc_mode: unstable
+# Clocksource selection. Empty means "let the kernel choose", which is what you
+# almost always want: the kernel prefers TSC where it is usable and demotes it
+# automatically via the clocksource watchdog if it ever drifts, logging the
+# reason. Forcing a clocksource replaces that judgement with a permanent guess.
+#
+# Do not set these to hpet/unstable as a blanket stability measure. HPET is read
+# over MMIO from a single shared counter, so it cannot be served from the vDSO
+# and concurrent reads across cores serialize. Measured on two hosts of the same
+# class and memory size in this estate: 2816 ns per clock_gettime on the host
+# forced to HPET versus 37 ns on the host left on TSC — 76x. A hypervisor reads
+# the clock on every scheduler tick, I/O completion and packet timestamp, so at
+# that multiple the clocksource becomes a system-wide serialization point.
+#
+# The Zen1 TSC concern this once guarded against is triggered by C6 entry, which
+# is already addressed directly by kernel_tuning_disable_zen_c6 and
+# kernel_tuning_disable_deep_cstates. Prefer fixing the trigger over forcing a
+# slow clock on top of it.
+kernel_tuning_clocksource: ""
+kernel_tuning_tsc_mode: ""
 
 # Disable SMT (Simultaneous Multithreading) for improved stability on some Zen1 systems
 # Set to true to add 'nosmt' parameter (workaround for rare arithmetic/lockup issues)
