@@ -51,6 +51,29 @@ node_scheduled_wake_targets: []
 # the cmdline max_cstate limit alone does not cover this idle state.
 kernel_tuning_disable_zen_c6: true
 
+# Keep TSC as the clocksource and skip the timekeeping watchdog, rather than
+# letting the watchdog demote TSC and fall back to HPET.
+#
+# Left to itself the kernel picks TSC here, then its watchdog demotes it and
+# prints "TSC found unstable... Use 'tsc=unstable'". Taking that advice is what
+# this host used to do, and it lands on HPET — measured at 2816 ns per
+# clock_gettime versus 37 ns for TSC on the same-class host, 76x. HPET is an
+# MMIO read of a single shared counter, so it cannot come from the vDSO and
+# concurrent reads across cores serialize.
+#
+# nowatchdog rather than unstable is defensible on this specific CPU because:
+#   - it advertises constant_tsc and nonstop_tsc (invariant TSC);
+#   - the cross-CPU synchronization check reports no TSC warp, which is the
+#     failure mode that would genuinely make TSC unsafe;
+#   - the demotion is driven by 0.85 ms of skew over a 497 ms interval (0.17%)
+#     measured *against HPET* — and a reference clock that slow distorts the
+#     comparison it is being used for.
+#
+# The tradeoff is real: with the watchdog off, genuine TSC drift would go
+# undetected rather than being demoted automatically. Chrony corrects wall
+# clock, but guest timekeeping is worth watching after this change.
+kernel_tuning_tsc_mode: nowatchdog
+
 # --- STAGED-ONLY: Plex relocation prereqs (issue #395, terraform-proxmox#615) ---
 # Uncomment BOTH blocks only after the staged node_storage entries are applied
 # upstream (fast/appdata parent dataset exists here + the library dataset on the
