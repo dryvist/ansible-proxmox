@@ -82,6 +82,14 @@
       tags:
         - crash_diagnostics
 
+    # Reset a wedged node instead of leaving it dark. Runs after
+    # crash_diagnostics so a panic is still captured before the reset, and
+    # before the syslog forwarder so the arming itself is logged off-box.
+    - role: node_watchdog
+      tags:
+        - node_watchdog
+        - watchdog
+
     # Ship every node's journal/syslog to the central pipeline (HAProxy syslog
     # VIP -> Cribl Edge -> Splunk os index). Target CNAME comes from
     # PROXMOX_SUBDOMAIN (Doppler); the port default mirrors terraform-proxmox

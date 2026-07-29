@@ -1,0 +1,40 @@
+#!/bin/bash
+# Ansible managed - node_watchdog role
+#
+# Liveness test for the watchdog daemon. Exit 0 = healthy, non-zero = failure.
+# The daemon tolerates node_watchdog_retries consecutive failures before acting,
+# so a single blip does not reboot the node.
+#
+# Every check here MUST have its own timeout. A check that hangs is
+# indistinguishable from a healthy slow one, and a hung test binary would
+# silently disable the watchdog it exists to drive.
+set -u
+
+fail() { echo "node_watchdog: $1" >&2; exit 1; }
+
+{% if node_watchdog_test_check_pmxcfs %}
+# The cluster filesystem is the best single "can this node still do its job"
+# signal: when it wedges, every guest-management call blocks behind it and the
+# node looks alive while being entirely useless. Read AND write are both
+# checked because it can go read-only independently.
+timeout 10 test -d /etc/pve/nodes || fail "pmxcfs unreadable or hung"
+
+probe="/etc/pve/.node_watchdog_probe"
+if ! timeout 10 sh -c ": > '$probe' && rm -f '$probe'"; then
+  fail "pmxcfs not writable or hung"
+fi
+{% endif %}
+
+# A node whose storage layer has gone away cannot run guests. DEGRADED is
+# deliberately accepted: a degraded pool still serves, and rebooting mid-resilver
+# would make things materially worse.
+if command -v zpool >/dev/null 2>&1; then
+  bad=$(timeout 15 zpool list -H -o name,health 2>/dev/null | grep -vE '[[:space:]](ONLINE|DEGRADED)$')
+  if [ -n "$bad" ]; then
+    echo "node_watchdog: unhealthy pools:" >&2
+    echo "$bad" >&2
+    fail "a zpool is neither ONLINE nor DEGRADED"
+  fi
+fi
+
+exit 0
