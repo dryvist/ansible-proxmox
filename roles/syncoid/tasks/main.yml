@@ -108,6 +108,36 @@
   tags:
     - syncoid
 
+# Mirror of the cron removal above, and the reason both matter: flipping a node
+# from boot to cron without this leaves the on-boot unit enabled alongside the
+# new cron entry, so replication fires twice — once at boot, once on schedule.
+- name: Check whether the on-boot syncoid service is present
+  ansible.builtin.stat:
+    path: /etc/systemd/system/syncoid-replicate-on-boot.service
+  register: syncoid_boot_unit
+  when:
+    - syncoid_enabled
+    - syncoid_trigger != 'boot' or syncoid_jobs | length == 0
+  tags:
+    - syncoid
+
+# Stop as well as disable, so a flip mid-uptime does not leave the unit loaded
+# and ready to fire again before the next reboot. Gated on the stat above rather
+# than blanket error suppression — a systemd failure on a unit that IS there
+# still needs to fail the run.
+- name: Remove the on-boot syncoid service when boot is not the trigger
+  ansible.builtin.systemd:
+    name: syncoid-replicate-on-boot.service
+    enabled: false
+    state: stopped
+  when:
+    - syncoid_enabled
+    - syncoid_trigger != 'boot' or syncoid_jobs | length == 0
+    - syncoid_boot_unit.stat.exists | default(false)
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
 # Opt-in immediate replication: run the wrapper now instead of waiting for cron.
 # Needed to seed (or refresh) a normally-off DR node during the maintenance
 # window it is powered on for — its cron would otherwise never fire while the

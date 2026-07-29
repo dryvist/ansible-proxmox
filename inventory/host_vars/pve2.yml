@@ -59,6 +59,14 @@ sanoid_datasets:
   "bulk/databases":
     use_template: database
     recursive: "yes"
+    # Per-dataset override of the template's `hourly: 0`. The template is right
+    # for a warm standby that is continuously current, but this dataset is a
+    # DUMP ARCHIVE: the dump lands at 02:32 and daily-only snapshots run at
+    # 00:00, so a dump written today is first captured at tomorrow's 00:00 and
+    # only then replicated — roughly two days from write to off-node copy.
+    # Hourly closes that to same-day. Overriding here rather than in the shared
+    # template keeps `database` meaning what it says for warm standbys.
+    hourly: 24
   # Persistent app config/state (e.g. bulk/appdata/plex = Plex identity + watch
   # history). HOT data that changes constantly (watch progress) and wants
   # point-in-time recovery, so the `critical` template (hourly) — not the

@@ -3,15 +3,25 @@
 #
 # This node is always-on:
 #   - node_auto_poweroff_enabled is false: no scheduled poweroff timer.
-#   - syncoid still runs its on-boot replication trigger (syncoid_trigger:
-#     boot), but syncoid_boot_poweroff_on_complete is false, so it no longer
-#     chains to a poweroff on completion.
+#   - syncoid runs on the wall-clock cron trigger, because a boot trigger on an
+#     always-on node only fires when the node happens to reboot. It was left on
+#     `boot` after the always-on change and that turned out to BE the replication
+#     RPO: measured 2026-07-29, this node's copy of the node-2 appdata namespace
+#     was ~9.6 h behind the source (source snapshot 11:05, replica 02:00), with
+#     ~24 h the normal case. Every hour the node stays up past its last boot is
+#     RPO. The cron trigger decouples replication from reboots entirely.
 # pve_power_managed still lets a manual site.yml run power-cycle this node for
 # maintenance (the idrac_power auto-cycle bookends).
 pve_power_managed: true
 idrac_power_bmc_host: "{{ lookup('env', 'PVE3_BMC_HOSTNAME') | default('', true) }}"
 node_auto_poweroff_enabled: false
-syncoid_trigger: boot
+syncoid_trigger: cron
+# Every 4 h on the hour. Passed straight through to ansible.builtin.cron, so
+# crontab step syntax works here. 4 h is a deliberate compromise: the pulls are
+# incremental over sanoid snapshots and cheap, but the sources include a pool
+# that has been degraded, so this is not the place to be aggressive. Tighten
+# once the node-2 pool rebuild lands and its redundancy is back.
+syncoid_cron_hour: "*/4"
 syncoid_boot_poweroff_on_complete: false
 
 # Per-minute healthchecks liveness ping stays off pending its own follow-up
