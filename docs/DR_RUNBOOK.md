@@ -1,124 +1,113 @@
-# Disaster-Recovery Runbook — cold standby on an intermittent node
+# Disaster-Recovery Runbook — guest failover across always-on nodes
 
-Operator runbook for the homelab resiliency program's standby model: a third
-node (`<target-node>`) kept as a periodically-synced **cold** standby that holds
-independent ZFS replicas of the critical datasets, so it can take over service if
-a primary node is lost.
+Operator runbook for promoting a guest onto a second node that already holds
+an independent ZFS replica of the critical datasets, when a primary node is
+lost. **All nodes in the cluster are always-on** — there is no power-cycle,
+wake, or sleep step anywhere in this procedure.
 
 > Placeholders only — no real IPs, domain, or node names. Substitute:
-> `proxmox-1` (always-on, infra + SIEM VM), `proxmox-2` (always-on, media + the
-> warm-standby `bulk/databases` + `bulk/appdata` namespaces on a `bulk` ZFS pool),
-> `<target-node>` (the normally-off offline-DR standby).
+> `proxmox-1` (always-on, infra + SIEM VM), `proxmox-2` (always-on, media +
+> the warm-standby `bulk/databases` + `bulk/appdata` namespaces on a `bulk`
+> ZFS pool), `proxmox-3` (always-on, second independent replica target).
 > `${PROXMOX_SUBDOMAIN}` is the internal subdomain (from Doppler).
 
 ## 1. How replication works
 
-- Storage is **node-local ZFS** — no shared storage, no Ceph. Each node has its
-  own `bulk` pool; the standby holds replica datasets
+- Storage is **node-local ZFS** — no shared storage, no Ceph. Each node has
+  its own `bulk` pool; `proxmox-3` holds replica datasets
   (`bulk/replica/proxmox-1/...`, `bulk/replica/proxmox-2/...`) declared in
   tofu-proxmox `node_storage`.
-- Replication uses **syncoid** (from the `sanoid` package) in **PULL** mode: it
-  runs **on the standby** and SSHes out to each source to pull that source's
-  sanoid snapshots. Pull-from-backup is safer than push (a compromised source
-  cannot reach the backup) and tolerates the source being briefly unreachable.
-- The standby is **normally powered off** to save electricity, and runs an
-  **autonomous wake → replicate → sleep** cycle:
-  - **Wake** — the always-on controller (`proxmox-1`) runs the
-    `node_scheduled_wake` systemd timers, which issue an IPMI `chassis power on`
-    to the standby's BMC on a schedule (twice a day by default).
-  - **Replicate** — the standby replicates **on boot** (`syncoid` role with
-    `syncoid_trigger: boot` installs a `syncoid-replicate-on-boot.service`
-    oneshot). The wall-clock syncoid cron is deliberately NOT used on the
-    standby: it would never fire inside a short power-on window.
-  - **Sleep** — the on-boot service chains to the `node_auto_poweroff` oneshot
-    via systemd `OnSuccess=`/`OnFailure=`, so the standby powers itself off the
-    moment replication finishes (success or failure). A fixed-time
-    `node_auto_poweroff` timer (22:00) remains as a guaranteed-off backstop if a
-    run ever hangs.
-- **Freshness == the last window the standby was online.** Because the standby is
-  off most of the day, its replicas are at most as fresh as its most recent wake.
-  A gap beyond the expected cadence means the standby failed to wake or syncoid
-  failed while it was up (investigate — see §3).
+- Replication uses **syncoid** (from the `sanoid` package) in **PULL** mode:
+  it runs **on `proxmox-3`** and SSHes out to each source to pull that
+  source's sanoid snapshots. Pull-from-backup is safer than push (a
+  compromised source cannot reach the backup) and tolerates the source being
+  briefly unreachable.
+- Syncoid runs on a **wall-clock timer**, same as every other node — there is
+  no boot-triggered or power-window-gated replication anymore. See
+  [`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md) for the
+  telemetry each run reports.
+- **Freshness == the last successful timer run.** A gap beyond the expected
+  interval means syncoid failed on that run (investigate — see §3), not that
+  the node was offline. There is no "expected to be behind" state.
 
-## 2. What is on the standby (and what is not)
+## 2. What is on `proxmox-3` (and what is not)
 
-| Dataset (on the standby) | Source | Class | Notes |
+| Dataset (on `proxmox-3`) | Source | Class | Notes |
 | --- | --- | --- | --- |
-| `bulk/replica/proxmox-1/vm-<id>-disk-0` | SIEM VM OS disk | Warm | Whole-disk zvol |
-| `bulk/replica/proxmox-1/vm-<id>-disk-2` | SIEM VM `/opt/splunk` | Warm | Config **and** indexes share this disk — see note |
-| `bulk/replica/proxmox-1/subvol-<id>-disk-1` | object-storage (RustFS) | Warm | The app-tarball store |
-| `bulk/replica/proxmox-2/databases` (recursive) | `bulk/databases` | Warm | Warm-standby DB namespace |
-| `bulk/replica/proxmox-2/appdata` (recursive) | `bulk/appdata` | Warm | App config/state (incl. media app identity) |
+| `bulk/replica/proxmox-1/vm-<id>-disk-0` | SIEM VM OS disk | P0 | Whole-disk zvol |
+| `bulk/replica/proxmox-1/vm-<id>-disk-2` | SIEM VM `/opt/splunk` | P0 config / P3 index | Config **and** indexes share this disk — see note |
+| `bulk/replica/proxmox-1/subvol-<id>-disk-1` | object-storage (RustFS) | P0 | The app-tarball store |
+| `bulk/replica/proxmox-2/databases` (recursive) | `bulk/databases` | P0 | Postgres/SQLite archive namespace |
+| `bulk/replica/proxmox-2/appdata` (recursive) | `bulk/appdata` | P1 | App config/state (incl. media app identity) |
 
-**Not replicated to the standby** (by design):
+**Not replicated to `proxmox-3`** (by design — see
+[`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md) for the full
+class-assignment table):
 
-- **The media library** (`bulk/data`) — large and re-acquirable; declared with
-  `com.sun:auto-snapshot=false` in tofu-proxmox. Not a DR target.
+- **The media library** (`bulk/data`) — P3, large and re-acquirable;
+  declared with `com.sun:auto-snapshot=false` in tofu-proxmox.
 - **Guest definitions** (`/etc/pve/qemu-server/*.conf`, `/etc/pve/lxc/*.conf`).
   syncoid ships **data only**, never the VM/CT config. A failover therefore
-  **recreates the guest definition** (tofu-proxmox apply targeting the
-  standby, or a manual `qm`/`pct create`) and attaches the cloned data — see §4.
-- **SIEM indexed data is acceptable-loss.** The SIEM `/opt/splunk` config is what
-  must survive; the indexes ride along on the same disk-2 replica but are volatile
-  and re-acquirable. Expect index recovery / fsck on first boot after a restore;
-  do not block a cutover on index integrity.
+  **recreates the guest definition** (tofu-proxmox apply targeting
+  `proxmox-3`, or a manual `qm`/`pct create`) and attaches the cloned data —
+  see §4.
+- **SIEM indexed data is P3 (acceptable-loss).** The SIEM `/opt/splunk`
+  config is what must survive; the indexes ride along on the same disk-2
+  replica but are volatile and re-acquirable. Expect index recovery/fsck on
+  first boot after a restore; do not block a cutover on index integrity.
 
 ## 3. Checking replication freshness
 
-The standby must be **powered on** to inspect (wait for a wake window, or power it
-on out of band via IPMI). All of these run **on the standby** — that is where
-syncoid runs in the PULL model.
+All of these run **on `proxmox-3`** — that is where syncoid runs in the PULL
+model.
 
 ```bash
-# Most recent replication log + the on-boot service result from this boot
+# Most recent replication log
 ls -t /var/log/syncoid/ | head -1
 tail -n 40 /var/log/syncoid/"$(date +%Y-%m-%d)".log     # look for any "FAILED (rc=...)"
-systemctl status syncoid-replicate-on-boot.service
+systemctl status syncoid-replicate.timer
 
 # Newest snapshot per replicated dataset — the replication high-water mark
 zfs list -t snapshot -o name,creation -s creation -r bulk/replica/proxmox-1 | tail
 zfs list -t snapshot -o name,creation -s creation -r bulk/replica/proxmox-2 | tail
 ```
 
-Freshness = age of the newest snapshot per dataset. Expect it no older than the
-last window the standby was online (≈ the wake cadence). A larger gap means the
-standby has been down longer than expected (it failed to wake) or SSH trust / a
-source snapshot is missing (investigate). A dataset that is **absent** entirely
-means that job has never succeeded and needs an initial full send (§4.3).
+Freshness = age of the newest snapshot per dataset, checked against the
+mechanism's `.status` line per `DATA_PROTECTION_STANDARD.md`. Any gap beyond
+the timer interval means the run failed (SSH trust or a source snapshot is
+missing — investigate). A dataset that is **absent** entirely means that job
+has never succeeded and needs an initial full send (§4.3).
 
-Integrity (optional, stronger): the standby's newest snapshot for a dataset
+Integrity (optional, stronger): `proxmox-3`'s newest snapshot for a dataset
 should have the **same `zfs get guid`** as the source's snapshot of the same
 name, and the two should share at least one common snapshot (an unbroken
 incremental chain). Zero common snapshots ⇒ the next pull needs a full reseed.
 
 ## 4. Failover cutover (a primary is lost)
 
-No load balancer — cutover is "recreate + start the guest on the standby from its
-replica + repoint DNS." Do this only after confirming the primary is genuinely
-down (avoid split-brain — one writer, always).
+No load balancer — cutover is "recreate + start the guest on `proxmox-3` from
+its replica + repoint DNS." Do this only after confirming the primary is
+genuinely down (avoid split-brain — one writer, always).
 
-1. **Confirm the primary is down.** Check power state via IPMI; do not proceed if
-   it is merely unreachable on the network but still running.
-2. **Power on the standby** (IPMI / `idrac_power`) if it is off, and stop it from
-   auto-sleeping mid-restore: `systemctl stop node-auto-poweroff.timer` and
-   `systemctl mask node-auto-poweroff.service` (the on-boot replicate chains to
-   that oneshot on completion). Unmask when the restore is done.
-3. **Final replica sync if the primary is briefly reachable** — otherwise the
-   standby serves from its last replicated snapshot. Force a pull **on the
-   standby**:
+1. **Confirm the primary is down.** Check power state via IPMI; do not
+   proceed if it is merely unreachable on the network but still running.
+2. **Final replica sync if the primary is briefly reachable** — otherwise
+   `proxmox-3` serves from its last replicated snapshot. Force a pull **on
+   `proxmox-3`**:
 
    ```bash
    /usr/local/bin/syncoid-replicate.sh          # or, via Ansible:
-   # ansible-playbook playbooks/site.yml -l <target-node> -e syncoid_run_now=true
+   # ansible-playbook playbooks/site.yml -l proxmox-3 -e syncoid_run_now=true
    ```
 
-4. **Promote the guest on the standby.** Because guest **configs are not
-   replicated**, recreate the definition, then attach the cloned replica data:
+3. **Promote the guest on `proxmox-3`.** Because guest **configs are not
+   replicated**, recreate the definition, then attach the cloned replica
+   data:
 
-   - **VM (zvol-backed, e.g. the SIEM VM):** clone the latest replica snapshot of
-     each disk into a runnable, storage-registered dataset under the standby's
-     pool using the expected `vm-<id>-disk-<n>` name, then recreate/rescan the VM
-     and start it:
+   - **VM (zvol-backed, e.g. the SIEM VM):** clone the latest replica
+     snapshot of each disk into a runnable, storage-registered dataset under
+     `proxmox-3`'s pool using the expected `vm-<id>-disk-<n>` name, then
+     recreate/rescan the VM and start it:
 
      ```bash
      for n in 0 2; do
@@ -126,7 +115,7 @@ down (avoid split-brain — one writer, always).
                 bulk/replica/proxmox-1/vm-<id>-disk-$n | tail -1)
        zfs clone "$snap" bulk/vm-<id>-disk-$n     # into a pool Proxmox storage maps
      done
-     # recreate the guest config (tofu-proxmox apply -l <target-node>, or
+     # recreate the guest config (tofu-proxmox apply -l proxmox-3, or
      # `qm create <id> ...`), then:
      qm rescan --vmid <id>
      qm start <id>
@@ -134,46 +123,48 @@ down (avoid split-brain — one writer, always).
      # first start; config is intact.
      ```
 
-   - **Container (subvol/bind-mount-backed, e.g. databases / appdata consumers):**
-     clone the replica subvol (or a child of `bulk/replica/.../appdata`) into the
-     path the container bind-mounts, recreate the CT definition, repoint its bind
-     mount at the cloned dataset, then `pct start <ctid>`.
+   - **Container (subvol/bind-mount-backed, e.g. databases / appdata
+     consumers):** clone the replica subvol (or a child of
+     `bulk/replica/.../appdata`) into the path the container bind-mounts,
+     recreate the CT definition, repoint its bind mount at the cloned
+     dataset, then `pct start <ctid>`.
 
    - **Database data (any engine):** rebuild the guest via its role, then
      restore the newest logical dump from `bulk/databases/<instance>` (or the
      Tier-2 cloud copy) per [`DATABASE_DR_STANDARD.md`](./DATABASE_DR_STANDARD.md) —
      do not clone the live DB volume; the dumps are the app-consistent artifact.
 
-5. **Repoint DNS.** Update the A record(s) for the affected service(s) to the
-   standby's address. Internal traffic resolves by name
+4. **Repoint DNS.** Update the A record(s) for the affected service(s) to
+   `proxmox-3`'s address. Internal traffic resolves by name
    (`<service>.${PROXMOX_SUBDOMAIN}`), so only the DNS A record changes — no
    client reconfiguration. Keep TTLs low for fast cutover.
-6. **Verify** the service answers on its name, then announce the cutover.
+5. **Verify** the service answers on its name, then announce the cutover.
 
 ## 5. Fail-back (primary restored)
 
-1. **Bring the primary back** and let it boot, but keep its guests **stopped** —
-   the standby is currently the single writer.
-2. **Reverse-replicate** the now-current data from the standby back to the
-   primary (a one-off syncoid run with source/target swapped), so the primary's
-   datasets catch up to the writes taken during the outage.
-3. **Quiesce on the standby**: stop the promoted guest so there is again exactly
-   one writer.
+1. **Bring the primary back** and let it boot, but keep its guests
+   **stopped** — `proxmox-3` is currently the single writer.
+2. **Reverse-replicate** the now-current data from `proxmox-3` back to the
+   primary (a one-off syncoid run with source/target swapped), so the
+   primary's datasets catch up to the writes taken during the outage.
+3. **Quiesce on `proxmox-3`**: stop the promoted guest so there is again
+   exactly one writer.
 4. **Start the guest on the primary**, verify it is healthy and current.
 5. **Repoint DNS** A records back to the primary.
-6. **Resume normal operation on the standby**: unmask `node-auto-poweroff.service`,
-   re-enable `node-auto-poweroff.timer`, and let the wake → replicate → sleep
-   cycle resume. Confirm the next scheduled wake produces a fresh pull.
+6. **Resume normal operation on `proxmox-3`**: confirm its regular syncoid
+   timer produces a fresh pull on its next scheduled run.
 
 ## 6. Guardrails
 
 - **Never run a guest on both nodes at once.** One writer, always.
-- **A normally-off standby is a clean skip, not an alert.** In the PULL model
-  syncoid runs *on the standby*; while it is off there is no run, no log, and no
-  failure. Do not alert on "no replication while down" — alert on the standby
-  being *up* and replication still failing, or on replicas growing **stale beyond
-  the wake cadence** (a freshness deadman tied to a successful on-boot pull is a
-  tracked follow-up).
+- **Every node is always-on; silence from any of them is a failure, not an
+  expected state.** Unlike a node that is deliberately offline on a
+  schedule, there is no "clean skip" case here — a missing or stale
+  `.status` line for a syncoid job means the job failed, full stop. Alerting
+  follows the telemetry contract in
+  [`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md): absence is
+  caught by the Splunk left-join against `data_protection_expected.csv`, not
+  by a per-node "is it supposed to be down" exception.
 - **The replica is not a backup of last resort** — it tracks the source,
-  including accidental deletes. Point-in-time recovery comes from sanoid snapshot
-  retention (and, when added, a `vzdump`/PBS leg), not from replication.
+  including accidental deletes. Point-in-time recovery comes from sanoid
+  snapshot retention, not from replication.
