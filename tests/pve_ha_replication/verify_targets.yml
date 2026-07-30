@@ -272,3 +272,70 @@
           target-storage validation detects vikunja's broken pve2 target
           (missing local-zfs) and passes nautobot (bulk present) + shared-app
           (no nodes restriction = available everywhere).
+
+# ---------------------------------------------------------------------------
+# Broken-job self-heal selection. tasks/main.yml creates a pvesr job only when
+# its id is absent, so a job that exists but has permanently broken replication
+# is skipped on every converge forever. The role now deletes exactly the jobs
+# whose replication can never recover ("No common base snapshot") so the create
+# step re-makes them in the same run. This pins the selection: narrow enough
+# that a transient failure keeps its replica, wide enough to catch the real one.
+# ---------------------------------------------------------------------------
+- name: Verify pve_ha broken-replication-job selection
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    proxmox_node_prefix: pve
+    # Stands in for inventory_hostname — the role runs this per node and each
+    # node may only delete jobs it is the SOURCE of (pvesr jobs are node-local).
+    pve_ha_test_node: "{{ proxmox_node_prefix }}1"
+
+    # Synthetic `pvesh get /nodes/<node>/replication` output, shaped from a live
+    # cluster read. Healthy jobs carry no `error` key at all, which is why the
+    # role's chain needs the 'defined' filter before the search.
+    pve_ha_replication_status_fixture:
+      # Permanently broken AND sourced here -> must be selected.
+      - id: "605000-0"
+        source: "{{ proxmox_node_prefix }}1"
+        fail_count: 32
+        error: >-
+          No common base snapshot on volume(s) local-zfs:subvol-605000-disk-0
+          Please remove the problematic volume(s) from the replication target
+          or delete and re-create the whole job 605000-0
+      # Healthy -> no error key -> must be left alone.
+      - id: "605010-0"
+        source: "{{ proxmox_node_prefix }}1"
+        fail_count: 0
+      # Broken the same way but sourced from ANOTHER node: that node deletes it
+      # on its own converge. Acting on it here would be a cross-node write.
+      - id: "602000-0"
+        source: "{{ proxmox_node_prefix }}4"
+        fail_count: 9
+        error: "No common base snapshot on volume(s) local-zfs:subvol-602000-disk-0"
+      # Transient failure (target unreachable). Clears itself once the cause is
+      # fixed; deleting it would discard a good replica and force a full resync.
+      - id: "601000-0"
+        source: "{{ proxmox_node_prefix }}1"
+        fail_count: 3
+        error: "command 'ssh' failed: connection timed out"
+
+  tasks:
+    - name: Resolve permanently-broken jobs sourced from this node
+      ansible.builtin.set_fact:
+        pve_ha_broken_replication_ids: >-
+          {{ pve_ha_replication_status_fixture
+             | selectattr('source', 'equalto', pve_ha_test_node)
+             | selectattr('error', 'defined')
+             | selectattr('error', 'search', 'No common base snapshot')
+             | map(attribute='id') | list }}
+
+    - name: Assert only this node's unrecoverable job is selected for deletion
+      ansible.builtin.assert:
+        that:
+          - pve_ha_broken_replication_ids == ['605000-0']
+        fail_msg: >-
+          broken-job selection is wrong: {{ pve_ha_broken_replication_ids }}
+        success_msg: >-
+          selects only 605000-0 — leaves the healthy job, the other node's job,
+          and the transiently-failing job untouched.
