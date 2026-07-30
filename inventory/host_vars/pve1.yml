@@ -2,24 +2,26 @@
 # Host vars for pve1 (primary, always-on — currently the Splunk node).
 #
 # Layer-1 protection (local ZFS snapshots via sanoid) for the Splunk all-in-one
-# VM disks + the object-storage data volume, so the snapshots exist for syncoid
-# to pull (and as a rollback point). VMIDs are NEVER hard-coded: they resolve at
-# runtime from the S3 tofu inventory injected by load_tofu.yml
-# (splunk_vm_from_tofu / containers_from_tofu), so a renumber flows through with
-# no edit here. vm-<id>-disk-<n> / subvol-<id>-disk-<n> is Proxmox's default zvol
-# naming; the disk index is policy (which volume to protect).
+# VM's OS and configuration disks, so the snapshots exist for syncoid to pull
+# (and as a rollback point). VMIDs are NEVER hard-coded: they resolve at runtime
+# from the S3 tofu inventory injected by load_tofu.yml (splunk_vm_from_tofu /
+# containers_from_tofu), so a renumber flows through with no edit here.
+# vm-<id>-disk-<n> / subvol-<id>-disk-<n> is Proxmox's default zvol naming; the
+# disk index is policy (which volume to protect).
 #
-# Splunk: snapshot the OS disk (0) and /opt/splunk config+indexes (2) with the
-# `critical` template. The empty leftover disk-1 is skipped. Whole-disk for now;
-# the critical/volatile SSD split is a tracked follow-up.
+# Splunk: snapshot the OS disk (0) and the configuration disk (2) with the
+# `critical` template. The empty leftover disk-1 is skipped.
 #
-# Object-storage (RustFS): the `splunk-addons` bucket data volume
-# (subvol-<id>-disk-1 = the 100G mp0 /srv/object-storage); disk-0 is the 8G
-# rootfs, Ansible-reproducible, so not snapshotted. The bucket has
-# object-versioning on, so this layer is volume-level DR (corruption / ransomware
-# / fat-finger rm), not app-version history. The `database` template = daily
-# cadence + long tail (monthly12 / yearly3); the store changes ~weekly, so hourly
-# snapshots would be pure churn.
+# The critical/volatile split that used to be a follow-up here is DONE: the hot,
+# warm and cold index tiers now live on their own pool, which carries no sanoid
+# entry anywhere in this file. That is deliberate and load-bearing — Splunk owns
+# index durability through its own bucket archival, so snapshotting a constantly
+# rewritten index tier only pins dead blocks. Disk 2 is now configuration and
+# logs only, which is why an hourly cadence is cheap here.
+#
+# Object storage is NOT protected from this layer. It is erasure-coded across
+# nodes and owns its own redundancy; a storage-layer snapshot underneath it would
+# reintroduce exactly the duplication that erasure coding replaces.
 #
 # NOTE (generalization, follow-up): this assumes Splunk runs on pve1. When the
 # layout is generalized (data-driven from splunk_vm_from_tofu across nodes),
@@ -33,8 +35,7 @@
 sanoid_datasets: >-
   {{ {
        'rpool/data/vm-' ~ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') ~ '-disk-0': {'use_template': 'critical'},
-       'rpool/data/vm-' ~ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') ~ '-disk-2': {'use_template': 'critical'},
-       'rpool/data/subvol-' ~ ((containers_from_tofu | default({}))['object-storage'] | default({})).vmid | default('902000') ~ '-disk-1': {'use_template': 'database'}
+       'rpool/data/vm-' ~ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') ~ '-disk-2': {'use_template': 'critical'}
      } }}
 
 # Offline-DR wake controller. This node is always-on and can reach the BMC
