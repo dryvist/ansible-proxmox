@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.66.0](https://github.com/dryvist/ansible-proxmox/compare/v1.65.0...v1.66.0) (2026-07-30)
+
+
+### Features
+
+* **monitoring:** collect chassis power, fans and temperature ([#490](https://github.com/dryvist/ansible-proxmox/issues/490)) ([b6690aa](https://github.com/dryvist/ansible-proxmox/commit/b6690aa5f98cfb2c8bc4f87df413b824f851ab9e))
+* **monitoring:** emit the health signals nothing native reports ([#487](https://github.com/dryvist/ansible-proxmox/issues/487)) ([cadf741](https://github.com/dryvist/ansible-proxmox/commit/cadf741e4d147fa1ad89816fe732f273899c9817))
+
+
+### Bug Fixes
+
+* **pve_ha:** re-create replication jobs whose sync can never recover ([#491](https://github.com/dryvist/ansible-proxmox/issues/491)) ([58a1543](https://github.com/dryvist/ansible-proxmox/commit/58a154386c7b5a0aa7da7b3b1e74e47bc30f65d2))
+
 ## [1.65.0](https://github.com/dryvist/ansible-proxmox/compare/v1.64.1...v1.65.0) (2026-07-29)
 
 
