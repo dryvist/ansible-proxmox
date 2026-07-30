@@ -1,0 +1,22 @@
+---
+# PVE health telemetry role metadata
+
+galaxy_info:
+  role_name: pve_health_telemetry
+  author: ansible-proxmox
+  description: Emit structured hypervisor health telemetry to the journal for the syslog pipeline
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - monitoring
+    - telemetry
+
+dependencies: []

@@ -1,0 +1,196 @@
+#!/bin/bash
+# {{ ansible_managed }}
+#
+# Emit ONE key=value line covering the health signals that have NO native
+# source. Everything PVE, systemd, corosync or ZFS already reports is
+# deliberately absent from this script:
+#
+#   node/guest CPU, RAM, disk, net, uptime -> PVE's native external metric
+#                                             server (configured by this role)
+#   zpool degradation                      -> ZED, already journal -> syslog
+#   HA state transitions                   -> pve-ha-lrm/crm, already in journal
+#   quorum loss                            -> corosync, already in journal
+#   failed units                           -> systemd, already in journal
+#   MCE / SMART / IPMI SEL                 -> rasdaemon, smartd, ipmievd
+#
+# Duplicating any of those here would mean two sources of truth for one fact and
+# a second thing to maintain. What remains is only what nothing else reports.
+#
+# Never exits non-zero on a probe failure: a node mid-incident is exactly when
+# this must still report, so each probe degrades to a sentinel rather than
+# aborting the line.
+set -uo pipefail
+
+UNKNOWN=-1
+
+# --- stall detection (no native equivalent) --------------------------------
+#
+# Tasks in uninterruptible sleep (D state) are the signature preceding a
+# hypervisor freeze. Nothing in PVE surfaces it. Two things make a naive count
+# useless, both measured on a live node:
+#
+#   1. A headless GPU's display kworkers sit in D inside drm_* waits constantly.
+#   2. ZFS background TRIM parks z_trim_int / vdev_autotrim in D on an idle pool.
+#
+# Both are benign and both trip a "2 or more in D" threshold — they produced two
+# false alarms before this filter existed. So exclude those wait channels AND
+# require persistence: sample twice, count only PIDs in BOTH samples. A blip is
+# housekeeping; the same task still blocked seconds later is the real signal.
+sample_dstate() {
+  ps -eo pid=,state=,wchan:40= 2>/dev/null \
+    | awk '$2 ~ /D/ && $3 !~ /drm|vblank|flip|trim|autotrim/ {print $1}' \
+    | sort -u
+}
+
+first="$(sample_dstate)"
+sleep "{{ pve_health_telemetry_dstate_settle_seconds }}"
+second="$(sample_dstate)"
+dstate_persist="$(comm -12 <(printf '%s\n' "$first") <(printf '%s\n' "$second") | grep -c . || true)"
+dstate_transient="$(printf '%s\n' "$second" | grep -c . || true)"
+
+# --- clocksource (no native equivalent) ------------------------------------
+#
+# A node silently reverting to a slower clocksource degrades every scheduler
+# tick and I/O completion on the box. Measured 76x on one host. Nothing reports
+# it: the kernel logs the demotion once at boot and never again.
+clocksource="$(cat /sys/devices/system/clocksource/clocksource0/current_clocksource 2>/dev/null || echo unknown)"
+
+# --- memory/IO pressure (not in PVE metrics) -------------------------------
+#
+# PSI is time-actually-stalled, which is what correlates with a wedge. PVE's
+# metric server reports memory *used*, which does not: a node can sit at 80%
+# used and be fine, or at 60% and be thrashing.
+psi_field() {
+  awk -v k="$2" '$1 == k {for (i = 2; i <= NF; i++) if ($i ~ /^avg60=/) {sub(/avg60=/, "", $i); print $i; exit}}' \
+    "/proc/pressure/$1" 2>/dev/null || true
+}
+psi_mem="$(psi_field memory some)"; psi_mem="${psi_mem:-$UNKNOWN}"
+psi_io="$(psi_field io some)"; psi_io="${psi_io:-$UNKNOWN}"
+psi_cpu="$(psi_field cpu some)"; psi_cpu="${psi_cpu:-$UNKNOWN}"
+
+# --- onboot guest drift (not derivable from native metrics) ----------------
+#
+# Guests configured onboot=1 but not running. The metric server reports the
+# status of guests that EXIST, but carries no notion of which were meant to
+# start, so this gap is not closable downstream. A bridge-level fault once made
+# every container's veth fail to attach at boot: the node looked healthy and
+# `pct list` was simply short.
+onboot=0
+running=0
+if [ -d /etc/pve/lxc ]; then
+  for cfg in /etc/pve/lxc/*.conf; do
+    [ -e "$cfg" ] || continue
+    grep -qE '^onboot:[[:space:]]*1' "$cfg" || continue
+    onboot=$((onboot + 1))
+    vmid="$(basename "$cfg" .conf)"
+    # The cgroup dir exists for exactly the running containers, so this needs no
+    # pct call — pct serialises on the cluster filesystem and can block for
+    # minutes on an unwell node, which is when this must not hang.
+    [ -d "/sys/fs/cgroup/lxc/$vmid" ] && running=$((running + 1))
+  done
+fi
+guest_drift=$((onboot - running))
+
+# --- replication health (the one PVE subsystem that reports nothing) -------
+#
+# Silently failing replication is what turned a storage misconfiguration into
+# repeated self-fences: HA kept relocating guests that had no usable replica,
+# and `pvesr` logs nothing on a failed job. Exits non-zero with no jobs, which
+# is not an error.
+pvesr_fail="$UNKNOWN"
+if command -v pvesr >/dev/null 2>&1; then
+  pvesr_fail="$(pvesr status 2>/dev/null | awk 'NR > 1 && $NF !~ /^(OK|-)$/ {n++} END {print n + 0}')"
+fi
+
+# --- hardware: power, fans, temperature -------------------------------------
+#
+# Nothing collected any of this before, on any node, which is why a UPS running
+# past its rating and a chassis missing a fan were both found by ear at the rack
+# rather than by an alert.
+#
+# Two sources, because the estate is mixed:
+#
+#   BMC hosts   -> `ipmitool sdr`, which reports a whole-chassis wattage
+#                  ("System Level") that no OS-level counter can produce.
+#   BMC-less    -> lm-sensors, which gives temperatures but no chassis power.
+#
+# `ipmitool sdr` prints `name | value | status`; take the first numeric token of
+# the value column. Sensors reading `disabled`/`ns` yield no number and are
+# skipped rather than counted as zero — a zero would look like a stopped fan.
+psu_watts="$UNKNOWN"
+fan_count=0
+fan_rpm_min="$UNKNOWN"
+temp_max_c="$UNKNOWN"
+sensor_fail=0
+bmc=0
+
+if [ -e /dev/ipmi0 ] && command -v ipmitool >/dev/null 2>&1; then
+  bmc=1
+  # One call, cached: the BMC is slow and hitting it repeatedly during an
+  # incident is how a monitor becomes part of the problem.
+  sdr="$(timeout 20 ipmitool sdr 2>/dev/null || true)"
+  if [ -n "$sdr" ]; then
+    psu_watts="$(printf '%s\n' "$sdr" | awk -F'|' '/System Level/ {gsub(/[^0-9]/, "", $2); if ($2 != "") {print $2 + 0; exit}}')"
+    psu_watts="${psu_watts:-$UNKNOWN}"
+    fan_count="$(printf '%s\n' "$sdr" | awk -F'|' 'tolower($1) ~ /fan/ && $2 ~ /RPM/ {n++} END {print n + 0}')"
+    fan_rpm_min="$(printf '%s\n' "$sdr" | awk -F'|' 'tolower($1) ~ /fan/ && $2 ~ /RPM/ {v = $2 + 0; if (m == "" || v < m) m = v} END {print (m == "") ? -1 : m}')"
+    temp_max_c="$(printf '%s\n' "$sdr" | awk -F'|' 'tolower($1) ~ /temp/ && $2 ~ /degrees/ {v = $2 + 0; if (v > m) m = v} END {print (m == "") ? -1 : m + 0}')"
+    # Any sensor the BMC itself flags. `ns` means "no reading", which is normal
+    # for depopulated sensors, so only a real non-ok state counts.
+    sensor_fail="$(printf '%s\n' "$sdr" | awk -F'|' '{gsub(/ /, "", $3); if ($3 != "ok" && $3 != "ns" && $3 != "") n++} END {print n + 0}')"
+  fi
+elif command -v sensors >/dev/null 2>&1; then
+  temp_max_c="$(sensors -u 2>/dev/null | awk -F': ' '/_input:/ && $1 ~ /temp/ {v = $2 + 0; if (v > m) m = v} END {print (m == "") ? -1 : int(m)}')"
+  temp_max_c="${temp_max_c:-$UNKNOWN}"
+fi
+
+# Severity carries the alerting decision as a field rather than leaving every
+# consumer to re-derive thresholds.
+# The temperature threshold depends on what was actually measured: a BMC reports
+# chassis ambient, lm-sensors reports die temperature, and they differ by ~30C on
+# healthy hardware. Picking the wrong one marks every BMC-less host critical.
+if [ "$bmc" = "1" ]; then
+  temp_limit={{ pve_health_telemetry_temp_critical_ambient_c }}
+else
+  temp_limit={{ pve_health_telemetry_temp_critical_die_c }}
+fi
+
+severity=info
+if [ "$dstate_persist" -ge "{{ pve_health_telemetry_dstate_alert_threshold }}" ] ||
+  { [ "$fan_rpm_min" != "$UNKNOWN" ] && [ "$fan_rpm_min" -eq 0 ]; } ||
+  { [ "$temp_max_c" != "$UNKNOWN" ] && [ "$temp_max_c" -ge "$temp_limit" ]; }; then
+  # A fan reading exactly 0 RPM is a stopped fan, not a depopulated slot — an
+  # absent sensor produces no row and is never counted here. Either that or a
+  # temperature past the chassis limit is a "look now", same tier as a stall.
+  severity=critical
+elif [ "$guest_drift" -gt 0 ] ||
+  { [ "$pvesr_fail" != "$UNKNOWN" ] && [ "$pvesr_fail" -gt 0 ]; } ||
+  { [ "$sensor_fail" -gt 0 ]; } ||
+  { [ "$fan_count" -gt 0 ] && [ "$fan_count" -lt "{{ pve_health_telemetry_fan_count_expected }}" ]; } ||
+  [ "$clocksource" != "{{ pve_health_telemetry_expected_clocksource }}" ]; then
+  # fan_count below the expected population catches a physically missing fan,
+  # which reports no sensor row at all rather than 0 RPM.
+  severity=warning
+fi
+
+priority=daemon.info
+[ "$severity" = info ] || priority=daemon.warning
+
+logger -t "{{ pve_health_telemetry_tag }}" -p "$priority" \
+  "severity=$severity" \
+  "dstate_persist=$dstate_persist" \
+  "dstate_transient=$dstate_transient" \
+  "clocksource=$clocksource" \
+  "psi_mem_avg60=$psi_mem" \
+  "psi_io_avg60=$psi_io" \
+  "psi_cpu_avg60=$psi_cpu" \
+  "guests_onboot=$onboot" \
+  "guests_running=$running" \
+  "guest_drift=$guest_drift" \
+  "pvesr_fail=$pvesr_fail" \
+  "bmc=$bmc" \
+  "psu_watts=$psu_watts" \
+  "fan_count=$fan_count" \
+  "fan_rpm_min=$fan_rpm_min" \
+  "temp_max_c=$temp_max_c" \
+  "sensor_fail=$sensor_fail"

@@ -1,0 +1,100 @@
+---
+# Hypervisor health telemetry. See defaults/main.yml for the signal rationale.
+
+- name: Assert the telemetry tag matches the syslog forwarder's routing tag
+  # The forwarder routes this tag to the hypervisor-health syslog family. If the
+  # two drift, nothing errors: the lines silently fall through to the host-syslog
+  # rule and land in the shared OS index instead. Fail loudly at converge rather
+  # than discover it as missing data in a dashboard weeks later.
+  ansible.builtin.assert:
+    that:
+      - pve_health_telemetry_tag == pve_syslog_forwarder_health_tag
+    fail_msg: >-
+      pve_health_telemetry_tag ({{ pve_health_telemetry_tag }}) !=
+      pve_syslog_forwarder_health_tag ({{ pve_syslog_forwarder_health_tag | default('undefined') }}).
+      These must match or health telemetry routes to the shared OS index.
+    quiet: true
+  when: pve_syslog_forwarder_health_tag is defined
+  tags:
+    - pve_health_telemetry
+
+- name: Deploy the health telemetry script
+  ansible.builtin.template:
+    src: pve-health.sh.j2
+    dest: "{{ pve_health_telemetry_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+    # bash -n catches a template that rendered into broken shell. Without it a
+    # syntax error only surfaces as a silently failing timer.
+    validate: bash -n %s
+  tags:
+    - pve_health_telemetry
+
+- name: Deploy the health telemetry systemd units
+  ansible.builtin.template:
+    src: "pve-health.{{ item }}.j2"
+    dest: "/etc/systemd/system/pve-health.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - service
+    - timer
+  notify: Reload systemd for pve_health_telemetry
+  tags:
+    - pve_health_telemetry
+
+- name: Flush handlers so the units are reloaded before the timer is enabled
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - pve_health_telemetry
+
+- name: Enable and start the health telemetry timer
+  ansible.builtin.systemd:
+    name: pve-health.timer
+    state: started
+    enabled: true
+  tags:
+    - pve_health_telemetry
+
+- name: Run one sample immediately to prove the unit works
+  # Enabling a timer proves nothing about whether the script runs. For a oneshot
+  # unit systemd propagates the exit status, so a broken script fails the
+  # converge here — which is the point: a telemetry unit that is enabled but
+  # silently broken is worse than an absent one, because the dashboard looks
+  # wired up while reporting nothing.
+  #
+  # `restarted` rather than `started`: a oneshot is `inactive` once it finishes,
+  # so `started` would be a no-op on every run after the first and stop
+  # verifying anything.
+  ansible.builtin.systemd:
+    name: pve-health.service
+    state: restarted
+  tags:
+    - pve_health_telemetry
+
+- name: Read back the emitted telemetry line
+  ansible.builtin.command: journalctl -t {{ pve_health_telemetry_tag }} -n 1 --no-pager -o cat
+  register: pve_health_telemetry_sample
+  changed_when: false
+  tags:
+    - pve_health_telemetry
+
+- name: Assert the telemetry line reached the journal with the expected fields
+  # This is the end-to-end proof for the half of the path this repo owns: the
+  # script ran, wrote to the journal under the routing tag, and the payload
+  # carries the fields downstream alerting keys off. Forwarding beyond the
+  # journal is the syslog role's contract, verified there.
+  ansible.builtin.assert:
+    that:
+      - "'severity=' in pve_health_telemetry_sample.stdout"
+      - "'dstate_persist=' in pve_health_telemetry_sample.stdout"
+      - "'clocksource=' in pve_health_telemetry_sample.stdout"
+      - "'guest_drift=' in pve_health_telemetry_sample.stdout"
+    fail_msg: >-
+      No usable health telemetry line found in the journal under tag
+      '{{ pve_health_telemetry_tag }}'. Got: {{ pve_health_telemetry_sample.stdout | default('') | truncate(200) }}
+    quiet: true
+  tags:
+    - pve_health_telemetry

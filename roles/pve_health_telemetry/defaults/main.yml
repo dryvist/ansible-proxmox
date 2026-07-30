@@ -1,0 +1,57 @@
+---
+# Hypervisor health telemetry: one structured key=value line per node per
+# interval, emitted to the journal and forwarded by the existing syslog trail.
+#
+# Deliberately agentless. Everything sampled here is readable from /proc, /sys
+# and the PVE CLI, so the role installs no collector, opens no port and holds no
+# credential — the line rides the journal that rsyslog already forwards.
+
+pve_health_telemetry_manage: true
+
+# Journal tag. The syslog forwarder matches on this to route the family, so
+# changing it here without changing pve_syslog_forwarder_health_tag sends the
+# data into the host-syslog stream instead. They are asserted equal at converge.
+pve_health_telemetry_tag: pve-health
+
+pve_health_telemetry_script_path: /usr/local/bin/pve-health.sh
+
+# Sample interval. 60s gives a usable series for charting a slow wedge without
+# meaningful volume: one ~300-byte line per node per minute is well under
+# 2 MB/day for the whole cluster.
+pve_health_telemetry_interval: 60s
+
+# Gap between the two D-state samples. The point is to separate a transient
+# housekeeping blip from a task that is genuinely stuck, so this wants to be long
+# enough that normal waits clear. Measured: benign drm/ZFS-trim waits never
+# survived 5s, while a real stall persisted across minutes.
+pve_health_telemetry_dstate_settle_seconds: 5
+
+# Persistent D-state tasks before the line is stamped critical. 2 rather than 1:
+# a single persistent task is occasionally legitimate under heavy ZFS write load,
+# whereas every observed pre-freeze state had multiple.
+pve_health_telemetry_dstate_alert_threshold: 2
+
+# Expected clocksource. A node that silently reverts to a slower source degrades
+# every scheduler tick and I/O completion on the box; a mismatch is stamped
+# warning. Override per host if a node legitimately runs something else.
+pve_health_telemetry_expected_clocksource: tsc
+
+# Temperature thresholds. There are TWO because the two sources measure
+# different things, and conflating them produces a permanent false critical:
+#
+#   BMC hosts  -> chassis INLET/AMBIENT air. Runs ~27C here; 40C means the
+#                 room or the airflow is in trouble.
+#   BMC-less   -> lm-sensors DIE temperature (Tctl/package). A Ryzen at 59C is
+#                 perfectly healthy, so judging it against an ambient threshold
+#                 flags a fine host as critical forever.
+#
+# Measured 2026-07-30: ambient 27C on a BMC host vs die 59C on a BMC-less one,
+# the same minute. One threshold cannot serve both.
+pve_health_telemetry_temp_critical_ambient_c: 40
+pve_health_telemetry_temp_critical_die_c: 90
+
+# Expected number of chassis fans reporting RPM. A physically absent fan reports
+# NO sensor row at all rather than 0 RPM, so a count below this is the only way
+# to notice one is missing — which is exactly how a missing fan went unseen.
+# 0 disables the check; set it per host, since population differs by chassis.
+pve_health_telemetry_fan_count_expected: 0
