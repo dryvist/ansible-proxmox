@@ -40,35 +40,46 @@
 # cron time never fires it — which is why a normally-off DR node uses trigger ==
 # boot below instead.
 - name: Schedule syncoid replication (cron trigger)
-  ansible.builtin.cron:
-    name: "syncoid-replicate"
-    job: "/usr/local/bin/syncoid-replicate.sh"
-    hour: "{{ syncoid_cron_hour }}"
-    minute: "{{ syncoid_cron_minute }}"
-    user: "{{ syncoid_user }}"
+  ansible.builtin.template:
+    src: syncoid.cron.j2
+    dest: /etc/cron.d/syncoid
+    owner: root
+    group: root
+    mode: "0644"
   when:
     - syncoid_enabled
     - syncoid_trigger == 'cron'
     - syncoid_jobs | length > 0
-    - ansible_virtualization_type != 'docker'
   tags:
     - syncoid
 
-# Removing the reason to schedule cron does not unschedule it: ansible.builtin.cron
-# only writes when its `when` passes, so flipping syncoid_trigger to boot (or
-# emptying syncoid_jobs) leaves the previously-written entry behind and the node
-# keeps a wall-clock run nothing declares. Observed live on the DR node, which
-# carried both a stale daily entry and the on-boot unit. Declared state has to
-# include the absence.
-- name: Remove the syncoid cron entry when cron is not the trigger
+# The schedule used to live in root's user crontab. Leaving that entry behind
+# after the move to /etc/cron.d would double every run, so remove it explicitly
+# regardless of trigger — this is migration cleanup, not trigger handling.
+- name: Remove the legacy syncoid user-crontab entry
   ansible.builtin.cron:
     name: "syncoid-replicate"
     user: "{{ syncoid_user }}"
     state: absent
   when:
     - syncoid_enabled
-    - syncoid_trigger != 'cron' or syncoid_jobs | length == 0
     - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
+# Rendering the file only when cron is the trigger does not unschedule it:
+# template writes when its `when` passes, so flipping syncoid_trigger to boot
+# (or emptying syncoid_jobs) leaves the previously-written file behind and the
+# node keeps a wall-clock run nothing declares. Observed live on the DR node,
+# which carried both a stale daily entry and the on-boot unit. Declared state
+# has to include the absence.
+- name: Remove the syncoid cron file when cron is not the trigger
+  ansible.builtin.file:
+    path: /etc/cron.d/syncoid
+    state: absent
+  when:
+    - syncoid_enabled
+    - syncoid_trigger != 'cron' or syncoid_jobs | length == 0
   tags:
     - syncoid
 

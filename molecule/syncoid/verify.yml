@@ -17,7 +17,13 @@
     - name: Assert wrapper renders the pull invocations from the job contract
       ansible.builtin.assert:
         that:
-          - "'replicate --recursive --no-sync-snap --quiet root@pve1:rpool/data/nas tank/replica/pve1/nas' in syncoid_wrapper_text"
+          # The job name is passed as the first argument so a failure can be
+          # attributed to a dataset. Asserting the whole line (name included)
+          # is deliberate: a looser substring silently passed for a template
+          # that had stopped emitting the name at all.
+          - >-
+            'replicate "pve1-nas" --recursive --no-sync-snap --quiet
+            root@pve1:rpool/data/nas tank/replica/pve1/nas' in syncoid_wrapper_text
           - "'root@pve1:nvme1/siem/splunk-hot tank/replica/pve1/splunk-hot' in syncoid_wrapper_text"
           # failure isolation present so an offline source does not abort the run
           - "'FAILED (rc=' in syncoid_wrapper_text"
@@ -27,6 +33,20 @@
           - "'failed=\"$failed' in syncoid_wrapper_text"
           - "'exit 1' in syncoid_wrapper_text"
         fail_msg: "syncoid wrapper did not render the expected jobs"
+
+    - name: Assert wrapper gates each job on its schedule group
+      ansible.builtin.assert:
+        that:
+          # Jobs that name no schedule must land in `default`, so a node that
+          # never sets syncoid_extra_schedules keeps its existing single cadence.
+          - "'group=\"${1:-default}\"' in syncoid_wrapper_text"
+          - "'if [ \"$group\" = \"default\" ]; then' in syncoid_wrapper_text"
+          # A cron line whose group has no jobs must fail loudly rather than
+          # ping success for having done nothing.
+          - "'no jobs in group' in syncoid_wrapper_text"
+          # Concurrent groups must not run the same group twice at once.
+          - "'flock -n' in syncoid_wrapper_text"
+        fail_msg: "syncoid wrapper did not render the schedule-group contract"
 
     - name: Read the rendered on-boot replication service (boot trigger)
       ansible.builtin.slurp:

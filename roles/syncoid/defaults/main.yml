@@ -13,6 +13,19 @@ syncoid_log_dir: /var/log/syncoid
 syncoid_cron_hour: 2
 syncoid_cron_minute: 17
 
+# Additional schedule groups beyond `default`, as {name: {hour, minute}}.
+#
+# One replication cadence per node is not enough once a node pulls datasets with
+# genuinely different RPOs: a 3 GB configuration volume wants hourly, while a
+# multi-hundred-GB appdata namespace does not. Without groups the only way to
+# tighten one is to tighten all of them, which is why this exists.
+#
+# A job opts in with `schedule: <name>`; jobs that name nothing stay in
+# `default` (syncoid_cron_hour/minute), so adding this changes no existing node.
+# Each group with at least one job emits one cron line; a group with no jobs
+# emits nothing.
+syncoid_extra_schedules: {}
+
 # Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" if any
 # job failed. Wire from the play (env-sourced), like postgres_standby/
 # sqlite_standby — without this, a failed dataset is exit-code-only (see the
@@ -52,4 +65,5 @@ syncoid_default_options: "--recursive --no-sync-snap --quiet"
 #     - name: pve1-splunk-hot
 #       source: "root@pve1:nvme1/siem/splunk-hot"
 #       target: "tank/replica/pve1/splunk-hot"
+#       schedule: hourly   # optional; must name a key in syncoid_extra_schedules
 syncoid_jobs: []
