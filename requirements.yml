@@ -15,7 +15,8 @@ collections:
   - name: community.proxmox
     version: ">=2.0.0,<2.1.0"
 
-  # Shared homelab roles (cribl_edge, cribl_packs). A collection, not `roles:`
+  # Shared homelab roles (cribl_edge, cribl_packs, inventory_resolve). A
+  # collection, not `roles:`
   # git entries: `ansible-galaxy role install` resolves a git source at the
   # repository ROOT only, so a role kept in a subdirectory is unreachable that
   # way. A collection installs from the subdirectory that holds galaxy.yml.
@@ -30,15 +31,14 @@ collections:
   # (splitting hypervisor syslog out of the os catch-all by host).
   # An immutable SHA, not a branch — a moving ref would let an unreviewed
   # contracts change reach a converge here without a PR in this repo.
+  # Now at homelab-contracts#57, which also makes inventory_resolve report the
+  # module's own error when the credential read returns nothing, instead of
+  # naming OpenBao permissions as the thing to fix regardless of the cause.
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: 3356d6095040f59887e553948e6cd0a84cb85bc5
+    version: d7007718f1532fb29dc920e7e53664676fe31734
 
-roles:
-  # Shared inventory resolver consumed by playbooks/load_tofu.yml — replaces the
-  # per-repo resolution-tier copy-paste. Pinned to the release that first ships
-  # the role.
-  - name: inventory_resolve
-    src: https://github.com/dryvist/homelab-contracts.git
-    scm: git
-    version: 9aba451e9de0956f9c308d72a65e86924e243f23
+# No `roles:` section — inventory_resolve comes from the collection above, by
+# FQCN, for the reason stated there. Its old git-scm `roles:` entry installed
+# another role's tasks under the name roles/inventory_resolve, and the pin still
+# read correct, so nothing surfaced it.
