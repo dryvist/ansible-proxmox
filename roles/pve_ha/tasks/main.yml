@@ -361,6 +361,46 @@
         and (item.0.target not in pve_ha_storage_nodes[item.1])
       run_once: true
 
+    # A job that EXISTS is not a job that WORKS. The create step below is
+    # create-if-absent, so a job whose replication has permanently broken is
+    # skipped on every converge while the guest sits under HA with a replica
+    # that is months stale — the same silent-no-replica condition the storage
+    # preflight above exists to prevent, arrived at from the other direction.
+    #
+    # "No common base snapshot" is the one failure that never self-recovers:
+    # the source and target no longer share a @__replicate_ snapshot to send an
+    # incremental from, so every scheduled run fails identically forever.
+    # Proxmox states the remedy in the error itself — delete and re-create the
+    # job. Deleting without --force removes the stale volumes on the target, so
+    # the re-created job starts from a full sync. Doing it here, before the
+    # existing-id read, means the create step below re-creates it in the SAME
+    # converge with no second pass and no extra logic.
+    #
+    # Deliberately narrow: only this error string. A transient failure (target
+    # down, disk full, network) clears on its own once the cause is fixed, and
+    # deleting a job for one of those would throw away a good replica and force
+    # a needless full resync. Everything else stays visible through the
+    # pvesr_fail counter the health telemetry emits.
+    - name: Read this node's replication job status
+      ansible.builtin.command: >-
+        pvesh get /nodes/{{ inventory_hostname }}/replication --output-format json
+      register: pve_ha_replication_status_raw
+      changed_when: false
+
+    - name: Resolve permanently-broken jobs sourced from this node
+      ansible.builtin.set_fact:
+        pve_ha_broken_replication_ids: >-
+          {{ (pve_ha_replication_status_raw.stdout | from_json)
+             | selectattr('source', 'equalto', inventory_hostname)
+             | selectattr('error', 'defined')
+             | selectattr('error', 'search', 'No common base snapshot')
+             | map(attribute='id') | list }}
+
+    - name: Delete permanently-broken replication jobs so they are re-created
+      ansible.builtin.command: pvesr delete {{ item }}
+      loop: "{{ pve_ha_broken_replication_ids }}"
+      changed_when: true
+
     - name: Read current replication jobs (cluster-wide)
       ansible.builtin.command: pvesh get /cluster/replication --output-format json
       register: pve_ha_replication_raw
@@ -377,7 +417,10 @@
         pvesr create-local-job {{ item.id }} {{ item.target }}
         --schedule '{{ pve_ha_replication_schedule }}'
         {% if pve_ha_replication_rate | string | length > 0 %}--rate {{ pve_ha_replication_rate }}{% endif %}
-        --comment 'pve_ha: relocation replica for {{ item.hostname }} -> {{ item.target }}'
+        {# No colon: Proxmox percent-encodes it in replication.cfg and re-encodes
+           the encoding on each rewrite, so 'pve_ha:' degrades to 'pve_ha%2525253A'
+           and keeps growing. Plain words survive round-trips unchanged. #}
+        --comment 'pve_ha relocation replica for {{ item.hostname }} -> {{ item.target }}'
       loop: "{{ pve_ha_replication_jobs | default([]) }}"
       loop_control:
         label: "{{ item.id }} ({{ item.source }} -> {{ item.target }})"
