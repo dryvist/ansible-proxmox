@@ -20,7 +20,7 @@ Ships in the `ansible-proxmox` repository; applied via `playbooks/site.yml`
 ```bash
 git clone https://github.com/dryvist/ansible-proxmox.git
 cd ansible-proxmox
-ansible-galaxy collection install -r requirements.yml
+ansible-galaxy install -r requirements.yml
 ```
 
 `ipmitool` is installed by the role on the controller node.
