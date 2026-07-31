@@ -33,10 +33,17 @@ jobs:
     with:
       emit_gate: false
 
+  # Deliberately unconditional. Gating this on the shared change filter, and
+  # then telling the gate a skip is acceptable, means a green required check
+  # whenever the filter fails to classify a PR as ansible-relevant — the check
+  # reports success without having run. That is the same failure mode this job
+  # was added to catch: a dependency resolving to the wrong artifact while
+  # everything reported success. The job is short, so always paying for it is
+  # cheaper than reasoning about whether the classifier covers every path that
+  # can break inventory resolution.
   data-contract:
     name: Data Contract
     needs: ci
-    if: ${{ needs.ci.outputs.ansible == 'true' }}
     uses: ./.github/workflows/_data-contract.yml
 
   gate:
@@ -48,5 +55,5 @@ jobs:
       - name: Check all results
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # release/v1
         with:
-          allowed-skips: data-contract
+          # No allowed-skips: every job here must actually run and pass.
           jobs: ${{ toJSON(needs) }}
