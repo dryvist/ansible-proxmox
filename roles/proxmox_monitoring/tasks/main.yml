@@ -101,15 +101,13 @@
         minute: "*/{{ proxmox_monitoring_healthchecks_interval }}"
         user: root
 
-# Installs when EITHER transport is configured. Requiring ntfy specifically is
-# what kept this off every host: that variable is set nowhere, so the block
-# never fired and the capacity sensor was simply absent — silently, because a
-# skipped task looks the same as a healthy one.
+# Gated on the deadman URL. The previous gate named a push service that was set
+# nowhere, so the block never fired and the capacity sensor was simply absent —
+# silently, because a skipped task looks the same as a converged one.
 - name: Configure ZFS capacity monitor
   when:
     - proxmox_monitoring_enable_zfs_capacity
-    - (proxmox_monitoring_ntfy_url | length > 0)
-      or (proxmox_monitoring_zfs_capacity_deadman_url | length > 0)
+    - proxmox_monitoring_zfs_capacity_deadman_url | length > 0
   block:
     - name: Create ZFS capacity monitor state directory
       ansible.builtin.file:
