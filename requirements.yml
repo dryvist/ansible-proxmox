@@ -22,17 +22,19 @@ collections:
   # Cribl Edge must run on every Proxmox host — without a local agent, host
   # signals have no approved route into Splunk. Shared with
   # ansible-proxmox-apps (Edge containers) rather than copied.
-  # PIN: the merge commit of homelab-contracts#56, which declares Edge's own
-  # system_metrics source. The role templates the whole of inputs.yml, so every
-  # source Edge ships enabled by default was being dropped on the first
-  # converge — these hosts have run node_exporter with nothing consuming it and
-  # no host CPU/memory/disk/network series reaching Splunk. Also picks up #54
-  # (splitting hypervisor syslog out of the os catch-all by host).
+  # PIN: c5e139c, the current homelab-contracts main commit. Carries #56,
+  # which declares Edge's own system_metrics source. The role templates the
+  # whole of inputs.yml, so every source Edge ships enabled by default was
+  # being dropped on the first converge — these hosts have run node_exporter
+  # with nothing consuming it and no host CPU/memory/disk/network series
+  # reaching Splunk. Also carries #54 (splitting hypervisor syslog out of the
+  # os catch-all by host) and #58 (inventory_resolve reports the real failure
+  # reason on every path).
   # An immutable SHA, not a branch — a moving ref would let an unreviewed
   # contracts change reach a converge here without a PR in this repo.
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: 3356d6095040f59887e553948e6cd0a84cb85bc5
+    version: c5e139cb7ccb286016020dd85c2f1d9c3b5a376f
 
 roles:
   # Shared inventory resolver consumed by playbooks/load_tofu.yml — replaces the
@@ -41,4 +43,4 @@ roles:
   - name: inventory_resolve
     src: https://github.com/dryvist/homelab-contracts.git
     scm: git
-    version: 9aba451e9de0956f9c308d72a65e86924e243f23
+    version: c5e139cb7ccb286016020dd85c2f1d9c3b5a376f
