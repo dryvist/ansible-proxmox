@@ -76,7 +76,12 @@ common_packages:
   - lm-sensors
   - rasdaemon
 
-# apt caching proxy (apt-cacher-ng) for Proxmox nodes. The real URL is injected
+# apt caching proxies (apt-cacher-ng) for Proxmox nodes. Real URLs are injected
 # via the APT_PROXY_URL env var (e.g. from Doppler), like http://<acng>:3142, so
-# no environment-specific address is committed. Empty disables the proxy.
-pve_repositories_apt_proxy: "{{ lookup('env', 'APT_PROXY_URL') | default('', true) }}"
+# no environment-specific address is committed. Empty disables proxying.
+#
+# The cache is an HA pair, so APT_PROXY_URL accepts several URLs separated by
+# commas and/or whitespace; one URL is still a valid value. Order is the
+# preference order — the node uses the first that answers.
+pve_repositories_apt_proxies: >-
+  {{ lookup('env', 'APT_PROXY_URL') | default('', true) | regex_findall('[^,\s]+') }}
