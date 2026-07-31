@@ -15,10 +15,15 @@ collections:
   - name: community.proxmox
     version: ">=2.0.0,<2.1.0"
 
-  # Shared homelab roles (cribl_edge, cribl_packs). A collection, not `roles:`
-  # git entries: `ansible-galaxy role install` resolves a git source at the
-  # repository ROOT only, so a role kept in a subdirectory is unreachable that
-  # way. A collection installs from the subdirectory that holds galaxy.yml.
+  # Shared homelab roles (cribl_edge, cribl_packs, inventory_resolve). A
+  # collection, not `roles:`
+  # git entries: `ansible-galaxy role install` archives the whole repo, then
+  # picks what to install by taking the SHORTEST path above any meta/main.yml
+  # it finds. The name in the entry selects nothing. A repo holding one role
+  # resolves to that role and looks correct; add a second role that sorts
+  # shorter and the same pin silently installs that one instead, still under
+  # the requested name. A collection installs from the subdirectory holding
+  # galaxy.yml, so every role in it is addressed unambiguously by FQCN.
   # Cribl Edge must run on every Proxmox host — without a local agent, host
   # signals have no approved route into Splunk. Shared with
   # ansible-proxmox-apps (Edge containers) rather than copied.
@@ -30,15 +35,14 @@ collections:
   # (splitting hypervisor syslog out of the os catch-all by host).
   # An immutable SHA, not a branch — a moving ref would let an unreviewed
   # contracts change reach a converge here without a PR in this repo.
+  # Now at homelab-contracts#58, which makes inventory_resolve report the
+  # underlying error on every failure path, instead of naming one presumed
+  # cause regardless of what actually failed.
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: 3356d6095040f59887e553948e6cd0a84cb85bc5
+    version: c5e139cb7ccb286016020dd85c2f1d9c3b5a376f
 
-roles:
-  # Shared inventory resolver consumed by playbooks/load_tofu.yml — replaces the
-  # per-repo resolution-tier copy-paste. Pinned to the release that first ships
-  # the role.
-  - name: inventory_resolve
-    src: https://github.com/dryvist/homelab-contracts.git
-    scm: git
-    version: 9aba451e9de0956f9c308d72a65e86924e243f23
+# No `roles:` section — inventory_resolve comes from the collection above, by
+# FQCN, for the reason stated there. Its old git-scm `roles:` entry installed
+# another role's tasks under the name roles/inventory_resolve, and the pin still
+# read correct, so nothing surfaced it.
