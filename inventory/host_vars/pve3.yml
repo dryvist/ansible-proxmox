@@ -55,23 +55,38 @@ proxmox_monitoring_enable_healthchecks: false
 # --no-sync-snap. Replicate the OS disk (0) and /opt/splunk config+indexes (2);
 # disk-1 was an empty leftover. Whole-disk for now; excluding the volatile index
 # tier is the tracked critical/volatile follow-up.
-# Nested `| default` guards: these vars are only rendered when the syncoid role
-# runs, which can happen without load_tofu.yml if an operator scopes a run with
-# --limit excluding localhost (--limit filters hosts, not tags, so tags: always
-# on the localhost play does not save it). Falling back to the test-fixture
-# vmid/node here means a scoped run still replicates the right disks by
-# default; a genuine renumber always flows through load_tofu.yml on a full run.
+# These vars are only rendered when the syncoid role runs, which can happen
+# without load_tofu.yml if an operator scopes a run with --limit excluding
+# localhost (--limit filters hosts, not tags, so `tags: always` on the localhost
+# play does not save it).
+#
+# They used to fall back to a test-fixture vmid/node. They must not. A guessed
+# VMID produces replication jobs whose source dataset does not exist, so the
+# replica the whole protection scheme depends on is never created — while the
+# run itself reports success. Guessing the node is the same class of error.
+# Resolve each once, and fail loudly with the remedy when unresolved.
+splunk_vmid: >-
+  {{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid
+     | mandatory('splunk_vm_from_tofu is unset, so the Splunk VMID cannot be
+       resolved. Run playbooks/load_tofu.yml — it targets localhost, so any
+       --limit must include localhost. Refusing to guess a VMID.') }}
+splunk_node: >-
+  {{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node
+     | mandatory('splunk_vm_from_tofu is unset, so the Splunk node cannot be
+       resolved. Run playbooks/load_tofu.yml (see splunk_vmid above).
+       Refusing to guess a node.') }}
+
 syncoid_jobs:
-  - name: "splunk-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk0"
-    source: "root@{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node | default(proxmox_node_prefix ~ '1') }}:rpool/data/vm-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk-0"
-    target: "bulk/replica/{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node | default(proxmox_node_prefix ~ '1') }}/vm-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk-0"
+  - name: "splunk-{{ splunk_vmid }}-disk0"
+    source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-0"
+    target: "bulk/replica/{{ splunk_node }}/vm-{{ splunk_vmid }}-disk-0"
   # disk-2 is the Splunk configuration + log volume (NOT indexes — those are on
   # their own pool and are never replicated). Small, text, frequently edited:
   # hourly, per syncoid_extra_schedules above.
-  - name: "splunk-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk2"
+  - name: "splunk-{{ splunk_vmid }}-disk2"
     schedule: hourly
-    source: "root@{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node | default(proxmox_node_prefix ~ '1') }}:rpool/data/vm-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk-2"
-    target: "bulk/replica/{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node | default(proxmox_node_prefix ~ '1') }}/vm-{{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') }}-disk-2"
+    source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-2"
+    target: "bulk/replica/{{ splunk_node }}/vm-{{ splunk_vmid }}-disk-2"
   # Object storage is deliberately NOT replicated here. It is erasure-coded
   # across nodes and owns its own redundancy, so a ZFS replica underneath it
   # would duplicate what erasure coding already provides.

@@ -26,16 +26,30 @@
 # NOTE (generalization, follow-up): this assumes Splunk runs on pve1. When the
 # layout is generalized (data-driven from splunk_vm_from_tofu across nodes),
 # this moves out of a per-host file. See docs design + follow-up issue.
-# Nested `| default` guards below: sanoid_datasets is only rendered when the
-# sanoid role runs, which can happen without load_tofu.yml if an operator scopes
-# a run with --limit excluding localhost (--limit filters hosts, not tags, so
-# tags: always on the localhost play does not save it). Falling back to the
-# test-fixture vmids here means a scoped run still protects the right disks by
-# default; a genuine renumber always flows through load_tofu.yml on a full run.
+# sanoid_datasets is only rendered when the sanoid role runs, which can happen
+# without load_tofu.yml if an operator scopes a run with --limit excluding
+# localhost (--limit filters hosts, not tags, so `tags: always` on the localhost
+# play does not save it).
+#
+# This used to fall back to a test-fixture VMID. It must not. A guessed VMID
+# renders a syntactically valid sanoid.conf for a guest that does not exist,
+# which silently drops the real Splunk disks from every snapshot policy — and
+# the run reports success. That is strictly worse than failing: a scoped run
+# once proposed replacing vm-200-disk-0/-disk-2 with vm-90200-*, a VMID that has
+# never existed on this estate, immediately before the hand-built recovery
+# copies were due to be deleted.
+#
+# So: resolve once, and fail loudly with the actual remedy when unresolved.
+splunk_vmid: >-
+  {{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid
+     | mandatory('splunk_vm_from_tofu is unset, so the Splunk VMID cannot be
+       resolved. Run playbooks/load_tofu.yml — it targets localhost, so any
+       --limit must include localhost. Refusing to guess a VMID.') }}
+
 sanoid_datasets: >-
   {{ {
-       'rpool/data/vm-' ~ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') ~ '-disk-0': {'use_template': 'critical'},
-       'rpool/data/vm-' ~ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid | default('90200') ~ '-disk-2': {'use_template': 'critical'}
+       'rpool/data/vm-' ~ splunk_vmid ~ '-disk-0': {'use_template': 'critical'},
+       'rpool/data/vm-' ~ splunk_vmid ~ '-disk-2': {'use_template': 'critical'}
      } }}
 
 # Offline-DR wake controller. This node is always-on and can reach the BMC
