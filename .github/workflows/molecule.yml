@@ -57,6 +57,12 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_ha_replication/verify_targets.yml -i localhost, -c local
 
+      # The apt caching-proxy hook exists for the UNREACHABLE case, which a
+      # molecule container cannot present. The test extracts the script from the
+      # role rather than copying it, so role drift fails here.
+      - name: Verify the apt caching-proxy auto-detect hook
+        run: python3 tests/apt_proxy_detect/test_detect.py
+
       # molecule/default/verify.yml imports tests/container_start_contract.yml.
       - name: Run default molecule test and container start contract
         run: molecule test

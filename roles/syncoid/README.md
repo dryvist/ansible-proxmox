@@ -39,9 +39,10 @@ set up out of band. The role schedules replication; it does not distribute keys.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `syncoid_enabled` | `true` | Master enable |
-| `syncoid_jobs` | `[]` | List of `{ name, source, target, options? }` — inert until set |
+| `syncoid_jobs` | `[]` | List of `{ name, source, target, options?, schedule? }` — inert until set |
 | `syncoid_default_options` | `--recursive --no-sync-snap --quiet` | Applied when a job omits `options` |
-| `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17` | Replication schedule |
+| `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17` | Schedule for the `default` group |
+| `syncoid_extra_schedules` | `{}` | Extra cadence groups (see below) |
 | `syncoid_user` | `root` | User that runs syncoid (needs SSH to sources) |
 | `syncoid_healthcheck_url` | `""` | healthchecks.io URL; pinged on success, `/fail` pinged if any job failed |
 
@@ -53,6 +54,31 @@ syncoid_jobs:
     source: "root@pve1:rpool/data/nas"
     target: "tank/replica/pve1/nas"
 ```
+
+### Schedule groups
+
+One cadence per node stops working once a node pulls datasets with different
+RPOs — a few GB of configuration wants hourly, a multi-hundred-GB namespace does
+not, and without groups the only way to tighten one is to tighten both. Declare
+extra groups and let a job opt in:
+
+```yaml
+syncoid_extra_schedules:
+  hourly:
+    hour: "*"
+    minute: "37"
+
+syncoid_jobs:
+  - name: app-config
+    schedule: hourly          # omit to stay in `default`
+    source: "root@pve1:rpool/data/vm-200-disk-2"
+    target: "bulk/replica/pve1/vm-200-disk-2"
+```
+
+The schedule renders as a whole `/etc/cron.d/syncoid` file rather than as
+individual crontab entries, so a group that stops having jobs disappears instead
+of leaving a line behind that nothing declares. Each group takes its own lock,
+so two groups run concurrently but a group never overlaps itself.
 
 Per-host identity (VMIDs, the source node) is derived at runtime from the S3
 tofu inventory injected by `playbooks/load_tofu.yml` — `splunk_vm_from_tofu` and

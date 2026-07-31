@@ -1,0 +1,20 @@
+{{ ansible_managed | comment }}
+# syncoid replication schedule — one line per group that actually has jobs.
+#
+# This is a whole FILE rather than individual crontab entries on purpose. The
+# cron module only writes the entries it is told about, so a group that stops
+# having jobs leaves its line behind and the node keeps running a schedule
+# nothing declares. Rendering the file makes absence declarative: a group with
+# no jobs simply is not here.
+PATH=/usr/sbin:/sbin:/usr/bin:/bin
+{% set groups = {'default': {'hour': syncoid_cron_hour, 'minute': syncoid_cron_minute}} | combine(syncoid_extra_schedules) %}
+{% for gname, g in groups | dictsort %}
+{%- set members = syncoid_jobs | selectattr('schedule', 'defined') | selectattr('schedule', 'equalto', gname) | list %}
+{%- if gname == 'default' %}
+{%- set members = members + (syncoid_jobs | rejectattr('schedule', 'defined') | list) %}
+{%- endif %}
+{%- if members | length > 0 %}
+# {{ gname }}: {{ members | map(attribute='name') | join(', ') }}
+{{ g.minute }} {{ g.hour }} * * * {{ syncoid_user }} /usr/local/bin/syncoid-replicate.sh {{ gname }}
+{% endif %}
+{%- endfor %}

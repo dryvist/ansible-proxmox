@@ -47,3 +47,27 @@
     - ansible_virtualization_type != 'docker'
   tags:
     - sanoid
+
+# The timer is the ONLY thing that takes snapshots on a systemd host. The sanoid
+# package also ships /etc/cron.d/sanoid, but that entry is guarded by
+# `[ ! -d /run/systemd/system ]` — always false here — so it fires every 15
+# minutes and deliberately does nothing. That guard is correct (it is the
+# package's fallback for non-systemd systems) and the file is a dpkg conffile,
+# so it is left alone rather than deleted.
+#
+# The consequence is a diagnostic trap worth naming: `journalctl` shows a sanoid
+# CRON line every 15 minutes whether or not snapshots are actually being taken,
+# so cron activity is NOT evidence that sanoid is running. Found live on the
+# primary node with the timer disabled and the last snapshot a day old. Check
+# `systemctl is-enabled sanoid.timer`, never the cron log.
+- name: Disable the sanoid timer when snapshots are not wanted
+  ansible.builtin.systemd:
+    name: sanoid.timer
+    enabled: false
+    state: stopped
+  when:
+    - sanoid_enabled
+    - not sanoid_timer_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - sanoid
