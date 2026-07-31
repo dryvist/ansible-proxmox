@@ -29,33 +29,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
 
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
+      # `install` covers both sections of requirements.yml. Do not narrow this to
+      # `collection install` or `role install` — each silently ignores the other
+      # section, so a dependency can go missing with a zero exit status.
+      - name: Install Ansible dependencies
+        run: ansible-galaxy install -r requirements.yml
 
-      # load_tofu.yml (imported by verify_inventory.yml) include_role's the
-      # shared inventory_resolve role, so it must be installed before the run.
-      - name: Install Ansible roles
-        run: ansible-galaxy role install -r requirements.yml
-
-      - name: Verify OpenTofu inventory loading
-        run: |
-          cp tests/inventory_load/tofu_inventory.json inventory/tofu_inventory.json
-          mkdir -p /tmp/ansible-tmp
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          TOFU_INVENTORY_PATH=$PWD/inventory/tofu_inventory.json \
-          PROXMOX_VE_HOSTNAME=localhost \
-          PROXMOX_VM_SSH_USERNAME=root \
-          ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
-
-      # pve_ha's replication logic cannot be exercised by molecule (it needs a
-      # real cluster), so it is pinned by fixture-driven assertions instead.
-      # The file predates this step and was never wired into CI, so every
-      # assertion in it has been advisory until now.
-      - name: Verify pve_ha replication derivation and self-heal selection
-        run: |
-          mkdir -p /tmp/ansible-tmp
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_ha_replication/verify_targets.yml -i localhost, -c local
+      # The inventory-load and pve_ha fixture checks moved to _data-contract.yml
+      # so they run on pull requests. This workflow triggers only on
+      # push-to-main, which meant those checks could not fail a PR.
 
       # molecule/default/verify.yml imports tests/container_start_contract.yml.
       - name: Run default molecule test and container start contract
