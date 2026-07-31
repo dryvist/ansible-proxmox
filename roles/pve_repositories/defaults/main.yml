@@ -10,11 +10,26 @@ pve_repositories_ceph_release: squid
 # Keyring that signs the Proxmox repositories (PVE 9 / Debian 13 default).
 pve_repositories_keyring: /usr/share/keyrings/proxmox-archive-keyring.gpg
 
-# Optional apt caching proxy (e.g. apt-cacher-ng) for HTTP repositories. Empty
-# disables it. When set, apt routes http:// fetches through this proxy, which
-# caches packages and can reach upstream mirrors more reliably than each node.
-# Real value is injected per environment (see group_vars), never hardcoded here.
-pve_repositories_apt_proxy: ""
+# Optional apt caching proxies (e.g. apt-cacher-ng) for HTTP repositories. Empty
+# disables proxying. When set, apt routes http:// fetches through the first
+# reachable entry, which caches packages and reaches upstream mirrors more
+# reliably than each node does. Real values are injected per environment (see
+# group_vars), never hardcoded here.
+#
+# A LIST, because the cache is an HA pair: apt accepts exactly one
+# `Acquire::http::Proxy` value, so expressing a pair needs the
+# `Acquire::http::Proxy-Auto-Detect` hook (tasks/main.yml) rather than more
+# config lines. A single-entry list still works and gains a real benefit over
+# the old scalar: an unreachable sole cache now falls back to DIRECT instead of
+# failing every apt call on the node.
+pve_repositories_apt_proxies: []
+
+# Port assumed when an entry above carries no explicit `:port`. Sourced from the
+# published tofu constants when this play loaded them, with a literal fallback
+# for the plays that do not (same pattern as pve_syslog_forwarder).
+pve_repositories_apt_proxy_default_port: >-
+  {{ (hostvars['localhost']['tofu_data']['constants']['service_ports']['apt_cacher_ng'] | default(3142))
+     if (hostvars['localhost']['tofu_data'] is defined) else 3142 }}
 
 # LXC (CT) appliance templates to ensure on `local` storage. OpenTofu creates
 # containers from `local:vztmpl/<template>`, so every node must have these

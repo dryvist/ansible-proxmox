@@ -50,30 +50,66 @@
     - pve_repositories
     - repositories
 
+# apt accepts exactly ONE Acquire::http::Proxy value, so a caching pair cannot be
+# expressed as config at all — a second line replaces the first rather than
+# adding a fallback. Proxy-Auto-Detect is apt's own hook for this: it runs a
+# script per fetch and uses whatever the script prints, or no proxy at all when
+# the script prints DIRECT. So a dead cache degrades to a direct fetch instead of
+# failing every apt call on the node, which the old single hardcoded URL did.
+- name: Install the apt caching-proxy auto-detect hook
+  ansible.builtin.copy:
+    dest: /usr/local/bin/apt-proxy-detect
+    content: |
+      #!/bin/bash
+      # Ansible managed - pve_repositories role
+      # Print the first reachable caching proxy, else DIRECT (no proxy).
+      for url in {{ pve_repositories_apt_proxies | map('quote') | join(' ') }}; do
+        hostport=${url#*://}; hostport=${hostport%%/*}
+        host=${hostport%%:*}; port=${hostport##*:}
+        [ "$port" = "$host" ] && port={{ pve_repositories_apt_proxy_default_port }}
+        if timeout 2 bash -c "exec 3<>/dev/tcp/${host}/${port}" 2>/dev/null; then
+          echo "$url"
+          exit 0
+        fi
+      done
+      echo DIRECT
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - pve_repositories_manage | bool
+    - pve_repositories_apt_proxies | length > 0
+  tags:
+    - pve_repositories
+    - repositories
+
 - name: Configure apt to use the caching proxy
   ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/00acng-proxy
     content: |
       // Ansible managed - pve_repositories role
       // Route apt http:// fetches through the caching proxy (apt-cacher-ng).
-      Acquire::http::Proxy "{{ pve_repositories_apt_proxy }}";
+      Acquire::http::Proxy-Auto-Detect "/usr/local/bin/apt-proxy-detect";
     owner: root
     group: root
     mode: "0644"
   when:
     - pve_repositories_manage | bool
-    - pve_repositories_apt_proxy | length > 0
+    - pve_repositories_apt_proxies | length > 0
   tags:
     - pve_repositories
     - repositories
 
-- name: Remove the apt caching proxy config when unset
+- name: Remove the apt caching proxy config and hook when unset
   ansible.builtin.file:
-    path: /etc/apt/apt.conf.d/00acng-proxy
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/apt/apt.conf.d/00acng-proxy
+    - /usr/local/bin/apt-proxy-detect
   when:
     - pve_repositories_manage | bool
-    - pve_repositories_apt_proxy | length == 0
+    - pve_repositories_apt_proxies | length == 0
   tags:
     - pve_repositories
     - repositories
