@@ -6,14 +6,13 @@ set -euo pipefail
 # the pool bands already cover them (per-dataset bands would just duplicate the
 # pool alert). Managed by Ansible — do not edit manually.
 #
-# Two transports, either or both. They do not overlap by accident: this runs on
-# the host whose pool is filling, so one delivery path shares a failure domain
-# with the subject of the report. The deadman also covers what band alerts
-# structurally cannot — a monitor that stops running is silent in exactly the
-# same way as one watching an idle pool, so every run pings it and a breach
-# pings its /fail endpoint.
+# Delivery is a deadman, deliberately. This runs on the host whose pool is
+# filling, so a self-hosted push target would share a failure domain with the
+# subject of the report and would report nothing while looking calm. A deadman
+# also covers what band alerts structurally cannot: alerts fire on a band
+# CHANGE, so a monitor that stops running is silent in exactly the same way as
+# one watching an idle pool. Every clean run pings it; a breach pings /fail.
 
-NTFY_URL="{{ proxmox_monitoring_ntfy_url }}"
 DEADMAN_URL="{{ proxmox_monitoring_zfs_capacity_deadman_url }}"
 STATE_DIR="/var/lib/zfs-capacity-monitor"
 POOL_THRESHOLDS=({{ proxmox_monitoring_zfs_capacity_thresholds | join(' ') }})
@@ -30,21 +29,10 @@ deadman() {
 }
 
 notify() {
-  # $1=title  $2=priority  $3=tags  $4=message  $5=deadman suffix
-  # Delivers to every configured transport and succeeds if AT LEAST ONE lands,
-  # so losing one endpoint degrades reach without losing the alert. Returns
-  # non-zero only when nothing got through; callers must not advance band state
-  # on that — see the state write in check_capacity.
-  local ok=1
-  if [ -n "$NTFY_URL" ]; then
-    curl -fsS -m 10 --retry 3 -o /dev/null \
-      -H "Title: $1" -H "Priority: $2" -H "Tags: $3" \
-      --data-binary "$4" "$NTFY_URL" && ok=0
-  fi
-  if [ -n "$DEADMAN_URL" ]; then
-    deadman "$5" "$1: $4" && ok=0
-  fi
-  return "$ok"
+  # $1=title  $2=message  $3=deadman suffix
+  # Returns non-zero when nothing got through; callers must not advance band
+  # state on that — see the state write in check_capacity.
+  deadman "$3" "$1: $2"
 }
 
 # $1=kind (Pool|Dataset)  $2=name  $3=cap%  $4..=thresholds
@@ -58,24 +46,25 @@ check_capacity() {
     if [ "$cap" -ge "$t" ]; then band="$t"; fi
   done
 
+  # Anything at or above the lowest threshold holds the deadman red for this
+  # run, whether or not the band changed. Tracking only CROSSINGS meant a pool
+  # that crossed once and then sat there got an OK heartbeat on every later run
+  # — the monitor would clear its own alert while the pool stayed full. Set the
+  # lowest threshold at the level you would actually want to be told about.
+  if [ "$band" -gt 0 ]; then breach=1; fi
+
   local state_file="$STATE_DIR/${kind,,}_${name//\//_}.band"
   local last=0
   if [ -f "$state_file" ]; then last="$(cat "$state_file")"; fi
   if [ "$band" = "$last" ]; then return 0; fi
 
-  local prio tags sent=0
+  local sent=0
   if [ "$band" -gt "$last" ]; then
-    breach=1
-    case "$band" in
-      90 | 94) prio="urgent"; tags="rotating_light" ;;
-      75 | 85) prio="high"; tags="warning" ;;
-      *) prio="default"; tags="floppy_disk" ;;
-    esac
-    notify "ZFS ${name} at ${cap}%" "$prio" "$tags" \
+    notify "ZFS ${name} at ${cap}%" \
       "${kind} '${name}' crossed ${band}% capacity (now ${cap}%) on $(hostname)." \
       "/fail" && sent=1
   else
-    notify "ZFS ${name} recovered" "default" "white_check_mark" \
+    notify "ZFS ${name} recovered" \
       "${kind} '${name}' dropped to ${cap}% (below ${last}%) on $(hostname)." \
       "" && sent=1
   fi

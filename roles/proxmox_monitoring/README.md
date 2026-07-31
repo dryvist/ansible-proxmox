@@ -12,7 +12,7 @@ repo and installing collection dependencies:
 ```bash
 git clone https://github.com/dryvist/ansible-proxmox.git
 cd ansible-proxmox
-ansible-galaxy collection install -r requirements.yml
+ansible-galaxy install -r requirements.yml
 ```
 
 ## Components
@@ -47,15 +47,27 @@ External uptime monitoring ping (optional).
 
 ### zfs-capacity
 
-Pushes an [ntfy](https://ntfy.sh) alert when a ZFS **pool** crosses a usage
-band (default 50/75/85/90%) or a **quota'd dataset** crosses a dataset band
-(default 85/90%, computed as `used/quota`). Quota-less datasets share their
-pool's free space, so the pool bands already cover them — per-dataset bands
-would only duplicate the pool alert. State is tracked per pool/dataset under
-`/var/lib/zfs-capacity-monitor/`, so a notification fires only on a band
-**change** (rising or recovering) — not every run. Priority scales with the
-band (50 → default, 75/85 → high, 90 → urgent). Disabled until
-`proxmox_monitoring_ntfy_url` is set.
+Trips a deadman endpoint when a ZFS **pool** crosses a usage band (default
+50/75/85/90/94%) or a **quota'd dataset** crosses a dataset band (default
+85/90%, computed as `used/quota`). Quota-less datasets share their pool's free
+space, so the pool bands already cover them — per-dataset bands would only
+duplicate the pool alert. State is tracked per pool/dataset under
+`/var/lib/zfs-capacity-monitor/`, so an alert fires only on a band **change**
+(rising or recovering), not every run. Disabled until
+`proxmox_monitoring_zfs_capacity_deadman_url` is set.
+
+Delivery is a deadman rather than a push endpoint on purpose: this runs on the
+host whose pool is filling, so a self-hosted push target would share a failure
+domain with the subject of the report and would go quiet exactly when it
+mattered. The deadman also covers what band alerts structurally cannot — a
+monitor that stops running is silent in the same way as one watching an idle
+pool. Every run where **all** pools are under their lowest threshold pings the
+OK endpoint; a breach pings `/fail`, and no OK is sent while any pool remains
+above threshold, so the monitor cannot clear its own alert.
+
+The top pool band is 94, not 97+: `zpool list -o capacity` is ALLOC/SIZE while
+ZFS withholds slop (`spa_slop_shift`, 1/32), so capacity tops out near 96.8% and
+a higher band would never fire — reassuring silence at the worst moment.
 
 ### pvesr-telemetry
 
@@ -65,8 +77,7 @@ Cribl and on into Splunk, so no extra collection is needed.
 
 **It does not alert.** It states facts only; Hermes evaluates them out of
 Splunk. Alerting here would duplicate that and bypass the pipeline of record —
-which is also why this is not modelled on the ntfy-based `zfs-capacity` check
-above.
+which is also why this is not modelled on the `zfs-capacity` check above.
 
 ```text
 host=pve2 job_id=602000-0 enabled=Yes target=local/pve3 state="OK" \
@@ -111,9 +122,9 @@ exist is worse than no HA, because it reads green.
 | `proxmox_monitoring_healthchecks_interval` | `1` | Healthchecks.io ping interval (minutes) |
 | `proxmox_monitoring_log_retention_days` | `90` | Days to retain |
 | `proxmox_monitoring_enable_zfs_capacity` | `true` | Enable ZFS capacity alerts |
-| `proxmox_monitoring_ntfy_url` | `""` | ntfy topic URL (secret); empty disables |
+| `proxmox_monitoring_zfs_capacity_deadman_url` | `""` | Deadman URL (secret); empty disables the capacity monitor |
 | `proxmox_monitoring_zfs_capacity_interval` | `15` | Capacity check cron interval (minutes) |
-| `proxmox_monitoring_zfs_capacity_thresholds` | `[50, 75, 85, 90]` | Pool usage bands (%) that trigger alerts |
+| `proxmox_monitoring_zfs_capacity_thresholds` | `[50, 75, 85, 90, 94]` | Pool usage bands (%) that trigger alerts |
 | `proxmox_monitoring_zfs_dataset_capacity_thresholds` | `[85, 90]` | Quota'd-dataset usage bands (%; `used/quota`) |
 
 ## Usage

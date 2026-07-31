@@ -29,6 +29,9 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TEMPLATE = os.path.join(REPO, "roles", "proxmox_monitoring", "templates",
                         "zfs-capacity-monitor.sh.j2")
 
+# Unroutable: these tests stub curl, so nothing is ever sent anywhere.
+DEADMAN_DEFAULT = "http://deadman.invalid/zfs"
+
 
 def extract_script():
     with open(TEMPLATE) as fh:
@@ -41,10 +44,9 @@ def extract_script():
     return body
 
 
-def render(thresholds, ntfy_url="http://notify.invalid/topic", deadman_url=""):
+def render(thresholds, deadman_url=DEADMAN_DEFAULT):
     """Substitute the template's Jinja expressions with literal test values."""
     body = extract_script()
-    body = body.replace("{{ proxmox_monitoring_ntfy_url }}", ntfy_url)
     body = body.replace("{{ proxmox_monitoring_zfs_capacity_deadman_url }}",
                         deadman_url)
     joined = " ".join(str(t) for t in thresholds)
@@ -164,11 +166,16 @@ def main():
         # 3. Still at 90%, endpoint healthy: no repeat. The alert fires on a
         #    band CHANGE, and a monitor that re-pushes every interval gets muted
         #    by whoever receives it.
+        # An unchanged band must send NOTHING: no repeat alert (which trains the
+        # recipient to ignore it) and no OK heartbeat either, because a pool
+        # still sitting above its threshold must not clear its own alert.
         before = curl_calls(tmp)
         run(tmp, 90, curl_exit=0)
         if curl_calls(tmp) != before:
-            failures.append("an unchanged band notified again — repeat alerts "
-                            "on every interval train the recipient to ignore it")
+            failures.append("an unchanged band above threshold sent %d more "
+                            "call(s); a repeat alert is noise and an OK "
+                            "heartbeat would clear a live breach"
+                            % (curl_calls(tmp) - before))
 
     failures += check_transports()
 
@@ -177,40 +184,38 @@ def main():
         for f in failures:
             print("  - %s" % f)
         return 1
-    print("PASS: band state survives a dropped alert, either transport alone "
-          "carries it, the deadman beats only on a clean pass, and an "
+    print("PASS: band state survives a dropped alert, the deadman beats only "
+          "when every pool is under threshold, recovery clears cleanly, and an "
           "unreadable sensor trips it instead of reporting silence")
     return 0
 
 
-DEADMAN = "http://deadman.invalid/zfs"
+DEADMAN = DEADMAN_DEFAULT
 
 
 def check_transports():
-    """The transport contract: two paths, and neither may fail silently."""
+    """The delivery contract for the single deadman path."""
     failures = []
 
-    # 4. Deadman alone, no ntfy. The monitor must still install and alert —
-    #    requiring ntfy specifically is what left every host with no sensor.
+    # 4. A breach reaches the /fail endpoint and is recorded as reported.
     with tempfile.TemporaryDirectory() as tmp:
-        body = render([50, 75, 85, 90, 94], ntfy_url="", deadman_url=DEADMAN)
+        body = render([50, 75, 85, 90, 94], deadman_url=DEADMAN)
         body = body.replace('STATE_DIR="/var/lib/zfs-capacity-monitor"',
                             'STATE_DIR="%s/state"' % tmp)
         write_exec(os.path.join(tmp, "monitor.sh"), body)
 
         run(tmp, 94, curl_exit=0)
         if curl_calls(tmp, containing=DEADMAN + "/fail") == 0:
-            failures.append("with only the deadman configured, a breach sent "
-                            "nothing to its /fail endpoint")
+            failures.append("a breach sent nothing to the /fail endpoint")
         if band_state(tmp) != "94":
-            failures.append("deadman-only breach did not record band 94 (got "
+            failures.append("a delivered breach did not record band 94 (got "
                             "%r), so it will not be treated as reported"
                             % band_state(tmp))
 
     # 5. A breach must NOT also send the OK heartbeat in the same run — that
     #    would clear the very alert it just raised.
     with tempfile.TemporaryDirectory() as tmp:
-        body = render([50, 75, 85, 90, 94], ntfy_url="", deadman_url=DEADMAN)
+        body = render([50, 75, 85, 90, 94], deadman_url=DEADMAN)
         body = body.replace('STATE_DIR="/var/lib/zfs-capacity-monitor"',
                             'STATE_DIR="%s/state"' % tmp)
         write_exec(os.path.join(tmp, "monitor.sh"), body)
@@ -232,26 +237,32 @@ def check_transports():
             failures.append("a clean pass sent no heartbeat, so a stopped "
                             "monitor is indistinguishable from a healthy pool")
 
-    # 6. One transport down must not lose the alert when the other is up.
+    # 6. Recovery must clear the alert, and must go to the OK endpoint rather
+    #    than /fail — otherwise a pool that drained still reads as breached and
+    #    the next real crossing has nothing to escalate from.
     with tempfile.TemporaryDirectory() as tmp:
-        body = render([50, 75, 85, 90, 94],
-                      ntfy_url="http://notify.invalid/topic",
-                      deadman_url=DEADMAN)
+        body = render([50, 75, 85, 90, 94], deadman_url=DEADMAN)
         body = body.replace('STATE_DIR="/var/lib/zfs-capacity-monitor"',
                             'STATE_DIR="%s/state"' % tmp)
         write_exec(os.path.join(tmp, "monitor.sh"), body)
 
-        # ntfy fails, deadman succeeds.
-        run(tmp, 94, curl_exit=0, curl_match="notify.invalid", curl_match_exit=7)
-        if band_state(tmp) != "94":
-            failures.append("one transport failing lost the alert (band %r); "
-                            "it must succeed when any path lands"
+        run(tmp, 94, curl_exit=0)          # breach
+        os.remove(os.path.join(tmp, "curl.log"))
+        run(tmp, 10, curl_exit=0)          # drained
+
+        if band_state(tmp) != "0":
+            failures.append("after recovery the band is %r, expected '0' — the "
+                            "pool would stay latched as breached"
                             % band_state(tmp))
+        if curl_calls(tmp, containing=DEADMAN + "/fail") != 0:
+            failures.append("recovery hit the /fail endpoint; it must report OK")
+        if curl_calls(tmp) == 0:
+            failures.append("recovery sent nothing at all")
 
     # 7. An unreadable sensor must trip the deadman and fail loudly. "zpool
     #    list did not answer" is not "the pool is fine".
     with tempfile.TemporaryDirectory() as tmp:
-        body = render([50, 75, 85, 90, 94], ntfy_url="", deadman_url=DEADMAN)
+        body = render([50, 75, 85, 90, 94], deadman_url=DEADMAN)
         body = body.replace('STATE_DIR="/var/lib/zfs-capacity-monitor"',
                             'STATE_DIR="%s/state"' % tmp)
         write_exec(os.path.join(tmp, "monitor.sh"), body)
