@@ -28,11 +28,22 @@ proxmox_monitoring_enable_zfs_capacity: true
 proxmox_monitoring_enable_pvesr_telemetry: true
 proxmox_monitoring_pvesr_telemetry_interval: 5
 
-# ZFS pool capacity alerts: push via ntfy when a pool crosses a usage band.
+# ZFS pool capacity alerts: notify when a pool crosses a usage band.
 # 85 sits between the old 75 warning and the 90 urgent band so every pool —
 # and with it every quota-less dataset it backs — alerts above 85% capacity.
+#
+# The top band is 94, not 97+, because `zpool list -o capacity` is ALLOC/SIZE
+# while ZFS withholds slop space (spa_slop_shift default 1/32 = 3.125%) that no
+# write can reach. Capacity therefore tops out near 96.8% and a band above that
+# never fires — it reads as reassuring silence at the exact moment the pool is
+# full. Measured on a 952G pool: 914G USED + 8.30G AVAIL = 922.3G usable, i.e.
+# 96.9% of SIZE, matching the 1/32 reserve. At 94% that pool still has ~27G.
+#
+# Thin volumes are the reason the top band is tight at all: a thin zvol lets a
+# guest write until the POOL fills rather than the volume, so the last band has
+# to leave enough room for a converge, a rollover, or a restore to finish.
 proxmox_monitoring_zfs_capacity_interval: 15
-proxmox_monitoring_zfs_capacity_thresholds: [50, 75, 85, 90]
+proxmox_monitoring_zfs_capacity_thresholds: [50, 75, 85, 90, 94]
 
 # ZFS DATASET capacity alerts (same script, same ntfy band mechanics): every
 # filesystem dataset with a quota is checked as used/quota. Quota-less
@@ -45,3 +56,19 @@ proxmox_monitoring_zfs_dataset_capacity_thresholds: [85, 90]
 # ntfy topic URL, e.g. https://ntfy.example.com/proxmox-storage
 # Set via vault/external variable — DO NOT commit a real URL. Empty disables it.
 proxmox_monitoring_ntfy_url: ""
+
+# Deadman URL for the capacity monitor itself, e.g.
+# https://hc-ping.com/<key>/zfs-capacity. Set via vault/external variable — DO
+# NOT commit a real URL. Empty disables it.
+#
+# This is a SECOND, independent transport, not a replacement: the monitor runs
+# on the host whose pool is filling, so a single delivery path shares a failure
+# domain with the thing it reports on. Configure either or both; the monitor
+# refuses to install with neither, because a sensor that cannot reach anyone is
+# indistinguishable from a healthy pool.
+#
+# It also supplies the heartbeat the band alerts cannot. Band alerts fire on a
+# CHANGE, so a monitor that dies between crossings is silent in exactly the same
+# way a monitor watching an idle pool is. Every run pings this URL; a breach
+# pings <url>/fail. Miss the pings and the deadman fires on its own.
+proxmox_monitoring_zfs_capacity_deadman_url: ""
