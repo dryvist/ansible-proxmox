@@ -135,8 +135,10 @@
       ansible.builtin.assert:
         that:
           # Jinja must be fully substituted — an unrendered variable would make
-          # the script a syntax error only discovered when cron ran it.
-          - "'{{ '{{' }}' not in (zfs_capacity_body.content | b64decode)"
+          # the script a syntax error only discovered when cron ran it. The
+          # delimiter is built by concatenation because Ansible rejects literal
+          # template delimiters inside an expression.
+          - "('{' ~ '{') not in (zfs_capacity_body.content | b64decode)"
           - "'deadman.invalid/zfs-capacity' in (zfs_capacity_body.content | b64decode)"
           # The top band cannot exceed what `zpool list -o capacity` can report:
           # ZFS slop keeps it near 96.8%, so a higher band never fires.
