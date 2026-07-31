@@ -77,6 +77,11 @@
         - monitoring
       vars:
         proxmox_monitoring_healthchecks_ping_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/proxmox"
+        # The capacity monitor installs only when it has somewhere to report.
+        # Left unset the role skips it silently, so the alarm reads as deployed
+        # and fires never. Its own check, separate from the node liveness ping
+        # above, so a filling pool and a dead node stay distinguishable.
+        proxmox_monitoring_zfs_capacity_deadman_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/zfs-capacity"
 
     - role: crash_diagnostics
       tags:

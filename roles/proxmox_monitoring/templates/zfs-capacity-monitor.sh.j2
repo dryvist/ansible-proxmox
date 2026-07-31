@@ -23,9 +23,15 @@ mkdir -p "$STATE_DIR"
 breach=0
 
 # $1=deadman path suffix ("" for OK, "/fail" to trip it)  $2=message
+#
+# Self-provisioning. Addressed by slug, and a slug with no registered check
+# answers 404 — so the monitor would run, exit 0, and report to nothing, which
+# is the exact failure this deadman exists to catch. Asking for creation on
+# every ping makes the destination reconstructible instead of a piece of
+# hand-made state living only in the provider.
 deadman() {
   [ -n "$DEADMAN_URL" ] || return 0
-  curl -fsS -m 10 --retry 3 -o /dev/null --data-binary "$2" "${DEADMAN_URL}$1"
+  curl -fsS -m 10 --retry 3 -o /dev/null --data-binary "$2" "${DEADMAN_URL}$1?create=1"
 }
 
 notify() {
