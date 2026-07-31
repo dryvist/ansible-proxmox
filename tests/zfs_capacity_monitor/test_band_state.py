@@ -193,6 +193,31 @@ def main():
 DEADMAN = DEADMAN_DEFAULT
 
 
+def read_calls(tmp):
+    """Every curl invocation logged so far, or [] if none were made.
+
+    Absent is a legitimate outcome — a monitor that notifies nothing writes no
+    log — and it is exactly the outcome under test, so it must read as an
+    assertion failure rather than a traceback.
+    """
+    path = os.path.join(tmp, "curl.log")
+    if not os.path.exists(path):
+        return []
+    with open(path) as fh:
+        return [ln.strip() for ln in fh if ln.strip()]
+
+
+def ok_heartbeats(calls):
+    """Calls to the OK endpoint: the deadman base, not its /fail sibling.
+
+    Identified by the absence of the /fail suffix rather than by matching the
+    end of the string. The ping carries a query string, so an end-anchored
+    match silently finds nothing and every assertion built on it passes
+    vacuously — which is the failure mode this file exists to prevent.
+    """
+    return [c for c in calls if DEADMAN in c and "/fail" not in c]
+
+
 def check_transports():
     """The delivery contract for the single deadman path."""
     failures = []
@@ -221,21 +246,54 @@ def check_transports():
         write_exec(os.path.join(tmp, "monitor.sh"), body)
 
         run(tmp, 94, curl_exit=0)
-        with open(os.path.join(tmp, "curl.log")) as fh:
-            calls = [ln.strip() for ln in fh if ln.strip()]
-        ok_pings = [c for c in calls if c.endswith(DEADMAN)]
+        calls = read_calls(tmp)
+        ok_pings = ok_heartbeats(calls)
         if ok_pings:
             failures.append("a breaching run also sent an OK heartbeat (%d), "
                             "which clears the alert it just raised" % len(ok_pings))
 
-        # A clean pass, by contrast, must beat — otherwise a dead monitor and a
-        # healthy pool look identical.
+    # A clean pass, by contrast, must beat — otherwise a dead monitor and a
+    # healthy pool look identical.
+    #
+    # Run from FRESH state, not after the breach above. Dropping from a breach
+    # also emits a recovery notification, and that lands on the same OK
+    # endpoint as the heartbeat — so a run with prior state cannot tell the two
+    # apart, and the assertion passes whether the heartbeat exists or not.
+    # Verified by deleting the heartbeat from the template: with prior state
+    # the test still passed; from fresh state it fails as it must.
+    with tempfile.TemporaryDirectory() as tmp:
+        body = render([50, 75, 85, 90, 94], deadman_url=DEADMAN)
+        body = body.replace('STATE_DIR="/var/lib/zfs-capacity-monitor"',
+                            'STATE_DIR="%s/state"' % tmp)
+        write_exec(os.path.join(tmp, "monitor.sh"), body)
+
         run(tmp, 10, curl_exit=0)
-        with open(os.path.join(tmp, "curl.log")) as fh:
-            calls = [ln.strip() for ln in fh if ln.strip()]
-        if not [c for c in calls if c.endswith(DEADMAN)]:
+        calls = read_calls(tmp)
+        if not ok_heartbeats(calls):
             failures.append("a clean pass sent no heartbeat, so a stopped "
                             "monitor is indistinguishable from a healthy pool")
+
+    # 5b. Every ping must ask the destination to create itself. The deadman is
+    #     addressed by slug, and an unregistered slug answers 404 — so without
+    #     this the monitor runs, exits 0, and reports to nothing, which is the
+    #     precise condition it exists to detect. Observed live before this
+    #     guard existed.
+    with tempfile.TemporaryDirectory() as tmp:
+        body = render([50, 75, 85, 90, 94], deadman_url=DEADMAN)
+        body = body.replace('STATE_DIR="/var/lib/zfs-capacity-monitor"',
+                            'STATE_DIR="%s/state"' % tmp)
+        write_exec(os.path.join(tmp, "monitor.sh"), body)
+
+        run(tmp, 94, curl_exit=0)   # breach -> /fail
+        run(tmp, 10, curl_exit=0)   # recovery + heartbeat
+        unprovisioned = [c for c in read_calls(tmp)
+                         if DEADMAN in c and "create=1" not in c]
+        if unprovisioned:
+            failures.append(
+                "%d ping(s) did not request creation of the destination; an "
+                "unregistered endpoint answers 404 and the monitor then "
+                "reports to nothing while exiting 0"
+                % len(unprovisioned))
 
     # 6. Recovery must clear the alert, and must go to the OK endpoint rather
     #    than /fail — otherwise a pool that drained still reads as breached and
