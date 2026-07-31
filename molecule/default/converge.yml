@@ -32,6 +32,27 @@
       tags:
         - crash_diagnostics
 
+    # The capacity monitor installs only when a transport is configured. That
+    # gate is the reason it was absent from every host for so long — with no
+    # transport set anywhere, the block was skipped, and a skipped task is
+    # indistinguishable from a converged one. Converging it here with a
+    # transport set is what makes verify.yml able to assert it actually lands.
+    - name: Include proxmox_monitoring role
+      ansible.builtin.include_role:
+        name: proxmox_monitoring
+      vars:
+        # Unroutable on purpose: this proves DEPLOYMENT, never delivery. The
+        # script is not executed here, so nothing is ever sent.
+        proxmox_monitoring_zfs_capacity_deadman_url: "http://deadman.invalid/zfs-capacity"
+        # Everything else off, so a failure here can only be the capacity
+        # monitor. sysstat/atop want systemd units a container has no init for.
+        proxmox_monitoring_enable_sysstat: false
+        proxmox_monitoring_enable_atop: false
+        proxmox_monitoring_enable_healthchecks: false
+        proxmox_monitoring_enable_pvesr_telemetry: false
+      tags:
+        - proxmox_monitoring
+
     # Note: common role requires specific packages (lm-sensors, rasdaemon)
     # Note: zfs_swap role requires ZFS which is not available in containers
     # Note: nas_storage role requires ZFS which is not available in containers
