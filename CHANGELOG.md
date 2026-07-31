@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.67.0](https://github.com/dryvist/ansible-proxmox/compare/v1.66.0...v1.67.0) (2026-07-31)
+
+
+### Features
+
+* **syncoid:** per-job schedule groups; stop protecting object storage ([#498](https://github.com/dryvist/ansible-proxmox/issues/498)) ([3da1f1d](https://github.com/dryvist/ansible-proxmox/commit/3da1f1d76536b96b30e0797eb30442c2930ee4c9))
+
+
+### Bug Fixes
+
+* **inventory:** refuse to guess the Splunk VMID instead of falling back ([#501](https://github.com/dryvist/ansible-proxmox/issues/501)) ([5ddde26](https://github.com/dryvist/ansible-proxmox/commit/5ddde265fc73f3419610c7661e83e873d09e9d60))
+* **pve_repositories:** let nodes follow the apt-cacher pair, not one instance ([#503](https://github.com/dryvist/ansible-proxmox/issues/503)) ([e9e204b](https://github.com/dryvist/ansible-proxmox/commit/e9e204b023988d43f2a2f52f1e6e3858ae2b13cb))
+
 ## [1.66.0](https://github.com/dryvist/ansible-proxmox/compare/v1.65.0...v1.66.0) (2026-07-30)
 
 
