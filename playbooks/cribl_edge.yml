@@ -13,7 +13,7 @@
 # dryvist.homelab collection from homelab-contracts, hence the FQCN.
 #
 # Usage:
-#   ansible-galaxy collection install -r requirements.yml
+#   ansible-galaxy install -r requirements.yml
 #   ansible-playbook playbooks/cribl_edge.yml
 
 - name: Resolve the OpenTofu inventory (tofu_data) for standalone runs

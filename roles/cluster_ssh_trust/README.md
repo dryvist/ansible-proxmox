@@ -16,7 +16,7 @@ repo and installing collection dependencies:
 ```bash
 git clone https://github.com/dryvist/ansible-proxmox.git
 cd ansible-proxmox
-ansible-galaxy collection install -r requirements.yml
+ansible-galaxy install -r requirements.yml
 ```
 
 ## What it does
