@@ -76,6 +76,42 @@ splunk_node: >-
        resolved. Run playbooks/load_tofu.yml (see splunk_vmid above).
        Refusing to guess a node.') }}
 
+# Layer-1 protection (local ZFS snapshots via sanoid) for postgres-ai-1's live
+# PGDATA mount (mp0, the ai-VLAN Hindsight memory cluster's primary — see
+# ansible-proxmox-apps inventory/group_vars/postgres_ai_group.yml). `critical`
+# (hourly cadence), not `database`: per the sanoid role's own doc comment,
+# `database` is for warm/standby/backup copies and `critical` is for the
+# hot/primary that needs point-in-time recovery, which this is — it is the
+# live cluster, not a replicated archive.
+#
+# Deliberately NOT also given a new syncoid pull job off this node. The
+# genuine off-node copy for this cluster already exists in code as the
+# postgres_standby "postgres-ai" job (host_vars/pve2.yml) — it pulls the
+# guest's own pg_dump archive (a consistent logical backup, the correct
+# restore granularity for a database) into pve2's bulk/databases, which
+# pve2's existing sanoid + pve3's existing "databases" syncoid job already
+# cover recursively with zero further edits. That job is merged but has not
+# yet run against a converged pve2 (verified live 2026-08-01: the deployed
+# /usr/local/bin/postgres-standby-sync.sh on pve2 still only contains the
+# pre-#419 single "postgres" job — pve2 needs reconverging with the
+# postgres_standby tag to pick it up). Inventing a second, ZFS-level
+# off-node replica of the live disk here would duplicate that at a worse
+# granularity (a snapshot mid-write vs. a consistent dump) and there is no
+# existing "pull off pve3" pattern anywhere in this repo to extend safely —
+# every current syncoid job pulls INTO pve3, none pull FROM it. Snapshots
+# alone still convert "one bad delete and it is gone" into "recoverable",
+# which is the real gap this closes.
+postgres_ai_vmid: >-
+  {{ ((containers_from_tofu | default({}))['postgres-ai-1'] | default({})).vmid
+     | mandatory('containers_from_tofu is unset, so the postgres-ai-1 VMID
+       cannot be resolved. Run playbooks/load_tofu.yml — it targets
+       localhost, so any --limit must include localhost. Refusing to guess
+       a VMID.') }}
+sanoid_datasets: >-
+  {{ {
+       'rpool/data/subvol-' ~ postgres_ai_vmid ~ '-disk-0': {'use_template': 'critical'}
+     } }}
+
 syncoid_jobs:
   - name: "splunk-{{ splunk_vmid }}-disk0"
     source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-0"
