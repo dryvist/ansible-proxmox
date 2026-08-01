@@ -1,0 +1,6 @@
+---
+# Migration window (tofu-proxmox#816): pve540 is the replacement node and has
+# no snapshot or replication service to reconcile.  Keep both host-level roles
+# disabled until the workload evacuation is complete.
+sanoid_enabled: false
+syncoid_enabled: false
