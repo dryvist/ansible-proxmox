@@ -79,6 +79,13 @@ jobs:
           PY_COLORS: "1"
           ANSIBLE_FORCE_COLOR: "1"
 
+      - name: Run frozen host-bind copy molecule test
+        run: molecule test -s pve_frozen_host_bind_copy
+        env:
+          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
+          PY_COLORS: "1"
+          ANSIBLE_FORCE_COLOR: "1"
+
       - name: Run nas_storage molecule test
         run: molecule test -s nas_storage
         env:

@@ -1,0 +1,60 @@
+---
+# Frozen Issue #816 contract. Role vars protect the six approved containers,
+# host binds, and source/target dataset layout from ordinary inventory or
+# playbook overrides. Extra vars still have Ansible's normal highest
+# precedence, so the runtime assertions below validate the complete contract
+# before a transfer is considered.
+pve_frozen_host_bind_copy_allowed_mounts:
+  "703040":
+    - source: /bulk/data
+      target: /data
+    - source: /bulk/appdata/plex
+      target: /var/lib/plexmediaserver
+  "715240":
+    - source: /bulk/data
+      target: /data
+    - source: /bulk/appdata/sonarr
+      target: /var/lib/sonarr
+  "715340":
+    - source: /bulk/data
+      target: /data
+    - source: /bulk/appdata/radarr
+      target: /var/lib/radarr
+  "725140":
+    - source: /bulk/data
+      target: /data
+    - source: /bulk/appdata/prowlarr
+      target: /var/lib/prowlarr
+  "736030":
+    - source: /bulk/appdata/seerr
+      target: /opt/seerr/config
+  "736040":
+    - source: /bulk/appdata/sortarr
+      target: /opt/sortarr/data
+
+pve_frozen_host_bind_copy_dataset_mappings:
+  - source_dataset: bulk/data
+    source_mountpoint: /bulk/data
+    target_dataset: bulk/data
+    target_mountpoint: /bulk/data
+  - source_dataset: bulk/appdata
+    source_mountpoint: /bulk/appdata
+    target_dataset: bulk/appdata
+    target_mountpoint: /bulk/appdata
+
+pve_frozen_host_bind_copy_dataset_checks:
+  - side: source
+    dataset: bulk/data
+    mountpoint: /bulk/data
+  - side: source
+    dataset: bulk/appdata
+    mountpoint: /bulk/appdata
+  - side: target
+    dataset: bulk/data
+    mountpoint: /bulk/data
+  - side: target
+    dataset: bulk/appdata
+    mountpoint: /bulk/appdata
+
+pve_frozen_host_bind_copy_tun_cgroup_line: "lxc.cgroup2.devices.allow: c 10:200 rwm"
+pve_frozen_host_bind_copy_tun_mount_line: "lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"

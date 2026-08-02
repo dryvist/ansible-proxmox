@@ -88,3 +88,6 @@ jobs:
 
       - name: Verify pve guest evacuation restore safety contract
         run: python3 tests/pve_guest_evacuation_restore/test_restore_contract.py
+
+      - name: Verify frozen host-bind copy safety contract
+        run: python3 tests/pve_frozen_host_bind_copy/test_copy_contract.py
