@@ -1,0 +1,664 @@
+---
+- name: Run the frozen host-bind copy only when explicitly enabled
+  when: pve_frozen_host_bind_copy_enabled | bool
+  block:
+    - name: Require the fixed Issue 816 host identities and evidence run identifier
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'pve2'
+          - pve_frozen_host_bind_copy_source_inventory_host == 'pve2'
+          - pve_frozen_host_bind_copy_target_inventory_host == 'pve540'
+          - pve_frozen_host_bind_copy_evidence_inventory_host == 'pve3'
+          - pve_frozen_host_bind_copy_target_inventory_host in hostvars
+          - pve_frozen_host_bind_copy_evidence_inventory_host in hostvars
+          - pve_frozen_host_bind_copy_evidence_dir is match('^/root/[A-Za-z0-9._/-]+$')
+          - pve_frozen_host_bind_copy_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
+          - pve_frozen_host_bind_copy_capacity_margin_bytes | int >= 0
+        fail_msg: >-
+          This frozen copy runs only from pve2 to standalone pve540 and writes
+          a new root-only evidence directory on pve3. Its identifiers, run id,
+          and capacity margin must be explicit and valid.
+
+    - name: Require the frozen six-container and dataset contract
+      ansible.builtin.assert:
+        that:
+          - pve_frozen_host_bind_copy_source_pool == 'bulk'
+          - pve_frozen_host_bind_copy_target_pool == 'bulk'
+          - >-
+            pve_frozen_host_bind_copy_allowed_mounts == {
+              '703040': [
+                {'source': '/bulk/data', 'target': '/data'},
+                {'source': '/bulk/appdata/plex', 'target': '/var/lib/plexmediaserver'}
+              ],
+              '715240': [
+                {'source': '/bulk/data', 'target': '/data'},
+                {'source': '/bulk/appdata/sonarr', 'target': '/var/lib/sonarr'}
+              ],
+              '715340': [
+                {'source': '/bulk/data', 'target': '/data'},
+                {'source': '/bulk/appdata/radarr', 'target': '/var/lib/radarr'}
+              ],
+              '725140': [
+                {'source': '/bulk/data', 'target': '/data'},
+                {'source': '/bulk/appdata/prowlarr', 'target': '/var/lib/prowlarr'}
+              ],
+              '736030': [
+                {'source': '/bulk/appdata/seerr', 'target': '/opt/seerr/config'}
+              ],
+              '736040': [
+                {'source': '/bulk/appdata/sortarr', 'target': '/opt/sortarr/data'}
+              ]
+            }
+          - >-
+            pve_frozen_host_bind_copy_dataset_mappings == [
+              {
+                'source_dataset': 'bulk/data',
+                'source_mountpoint': '/bulk/data',
+                'target_dataset': 'bulk/data',
+                'target_mountpoint': '/bulk/data'
+              },
+              {
+                'source_dataset': 'bulk/appdata',
+                'source_mountpoint': '/bulk/appdata',
+                'target_dataset': 'bulk/appdata',
+                'target_mountpoint': '/bulk/appdata'
+              }
+            ]
+          - >-
+            pve_frozen_host_bind_copy_tun_cgroup_line
+            == 'lxc.cgroup2.devices.allow: c 10:200 rwm'
+          - >-
+            pve_frozen_host_bind_copy_tun_mount_line
+            == 'lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file'
+        fail_msg: >-
+          The frozen copy contract differs from the six approved pve2 media
+          containers, their exact pve540 paths, or the approved bulk datasets.
+
+    - name: Require a bounded pve540 rsync destination and dedicated transport files
+      ansible.builtin.assert:
+        that:
+          - pve_frozen_host_bind_copy_target_rsync_host is match('^[A-Za-z0-9][A-Za-z0-9.-]*$')
+          - pve_frozen_host_bind_copy_target_rsync_host == hostvars[pve_frozen_host_bind_copy_target_inventory_host].ansible_host
+          - pve_frozen_host_bind_copy_rsync_identity_file is match('^/root/[A-Za-z0-9._/-]+$')
+          - pve_frozen_host_bind_copy_rsync_known_hosts_file is match('^/root/[A-Za-z0-9._/-]+$')
+        fail_msg: >-
+          The source-host rsync endpoint must be the pve540 inventory endpoint
+          and use dedicated root-owned identity and known-hosts files. No
+          arbitrary remote shell command or SSH fallback is accepted.
+
+    - name: Read the source-host rsync transport files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ pve_frozen_host_bind_copy_rsync_identity_file }}"
+        - "{{ pve_frozen_host_bind_copy_rsync_known_hosts_file }}"
+      register: pve_frozen_host_bind_copy_transport_files
+      changed_when: false
+
+    - name: Require root-owned protected source-host rsync transport files
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - item.stat.pw_name == 'root'
+          - item.stat.gr_name == 'root'
+          - item.stat.mode in ['0400', '0600']
+        fail_msg: >-
+          {{ item.item }} must be a root-owned regular transport file with
+          mode 0400 or 0600 before a source-host rsync can run.
+      loop: "{{ pve_frozen_host_bind_copy_transport_files.results }}"
+
+    - name: Read the pve540 host key from the dedicated source-host known-hosts file
+      ansible.builtin.command:
+        argv:
+          - ssh-keygen
+          - -F
+          - "{{ pve_frozen_host_bind_copy_target_rsync_host }}"
+          - -f
+          - "{{ pve_frozen_host_bind_copy_rsync_known_hosts_file }}"
+      register: pve_frozen_host_bind_copy_known_host
+      changed_when: false
+      failed_when: false
+
+    - name: Require one reviewed ED25519 pve540 host key
+      ansible.builtin.assert:
+        that:
+          - pve_frozen_host_bind_copy_known_host.rc == 0
+          - >-
+            pve_frozen_host_bind_copy_known_host.stdout_lines
+            | reject('match', '^# ')
+            | list | length == 1
+          - >-
+            pve_frozen_host_bind_copy_known_host.stdout_lines
+            | reject('match', '^# ')
+            | first
+            is match('^' ~ (pve_frozen_host_bind_copy_target_rsync_host | regex_escape)
+              ~ ' ssh-ed25519 [A-Za-z0-9+/=]+( .*)?$')
+        fail_msg: >-
+          The dedicated source-host known-hosts file must contain exactly one
+          reviewed ED25519 key for the pve540 rsync destination.
+
+    - name: Verify strict source-host SSH transport to pve540
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ pve_frozen_host_bind_copy_rsync_identity_file }}"
+          - -o
+          - IdentitiesOnly=yes
+          - -o
+          - BatchMode=yes
+          - -o
+          - StrictHostKeyChecking=yes
+          - -o
+          - "UserKnownHostsFile={{ pve_frozen_host_bind_copy_rsync_known_hosts_file }}"
+          - -o
+          - GlobalKnownHostsFile=/dev/null
+          - -o
+          - PasswordAuthentication=no
+          - -o
+          - KbdInteractiveAuthentication=no
+          - -T
+          - "root@{{ pve_frozen_host_bind_copy_target_rsync_host }}"
+          - "true"
+      changed_when: false
+
+    - name: Build the fixed strict SSH command for rsync
+      ansible.builtin.set_fact:
+        pve_frozen_host_bind_copy_rsync_rsh: >-
+          ssh -i {{ pve_frozen_host_bind_copy_rsync_identity_file }}
+          -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+          -o UserKnownHostsFile={{ pve_frozen_host_bind_copy_rsync_known_hosts_file }}
+          -o GlobalKnownHostsFile=/dev/null -o PasswordAuthentication=no
+          -o KbdInteractiveAuthentication=no -T
+
+    - name: Derive the unique approved host paths
+      ansible.builtin.set_fact:
+        pve_frozen_host_bind_copy_paths: >-
+          {{ pve_frozen_host_bind_copy_allowed_mounts | dict2items
+             | map(attribute='value') | flatten | map(attribute='source')
+             | unique | list }}
+
+    - name: Read the exact approved containers from Proxmox
+      ansible.builtin.command:
+        argv:
+          - pct
+          - config
+          - "{{ item.key }}"
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items }}"
+      register: pve_frozen_host_bind_copy_pct_configs
+
+    - name: Require every approved container to be stopped
+      ansible.builtin.command:
+        argv:
+          - pct
+          - status
+          - "{{ item.key }}"
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items }}"
+      register: pve_frozen_host_bind_copy_pct_statuses
+
+    - name: Assert all six approved containers are stopped
+      ansible.builtin.assert:
+        that:
+          - item.stdout == 'status: stopped'
+        fail_msg: "{{ item.item.key }} is not stopped; refusing an unfrozen host-bind copy."
+      loop: "{{ pve_frozen_host_bind_copy_pct_statuses.results }}"
+
+    - name: Require each exact approved host bind line
+      ansible.builtin.assert:
+        that:
+          - >-
+            ((pve_frozen_host_bind_copy_pct_configs.results
+            | selectattr('item.key', 'equalto', item.0)
+            | map(attribute='stdout_lines') | first
+            | select('match', '^mp[0-9]+: ' ~ (item.1.source | regex_escape)
+              ~ ',mp=' ~ (item.1.target | regex_escape) ~ '$')
+            | list | length) == 1)
+        fail_msg: >-
+          {{ item.0 }} does not have exactly one approved live bind line for
+          {{ item.1.source }} -> {{ item.1.target }}.
+      loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items | subelements('value') }}"
+
+    - name: Reject extra bind mounts on an approved container
+      ansible.builtin.assert:
+        that:
+          - >-
+            ((pve_frozen_host_bind_copy_pct_configs.results | selectattr('item.key', 'equalto', item.key)
+            | map(attribute='stdout_lines') | first
+            | select('match', '^mp[0-9]+:') | list | length) == (item.value | length))
+        fail_msg: "{{ item.key }} has an unapproved host bind mount."
+      loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items }}"
+
+    - name: Reject unapproved container device or raw mount mappings
+      ansible.builtin.assert:
+        that:
+          - >-
+            ((pve_frozen_host_bind_copy_pct_configs.results | selectattr('item.key', 'equalto', item.key)
+            | map(attribute='stdout_lines') | first
+            | select('match', '^dev[0-9]+:') | list | length) == 0)
+          - >-
+            item.key == '725140' or
+            ((pve_frozen_host_bind_copy_pct_configs.results
+            | selectattr('item.key', 'equalto', item.key)
+            | map(attribute='stdout_lines') | first
+            | select('match', '^lxc\\.(mount\\.entry|cgroup2\\.devices\\.allow|hook\\.mount):')
+            | list | length) == 0)
+        fail_msg: "{{ item.key }} has an unapproved external device or mount entry."
+      loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items }}"
+
+    - name: Require the exact approved download-vpn TUN entries
+      ansible.builtin.assert:
+        that:
+          - >-
+            (pve_frozen_host_bind_copy_pct_configs.results
+            | selectattr('item.key', 'equalto', '725140')
+            | map(attribute='stdout_lines') | first
+            | select('match', '^lxc\\.mount\\.entry:') | list)
+            == [pve_frozen_host_bind_copy_tun_mount_line]
+          - >-
+            (pve_frozen_host_bind_copy_pct_configs.results
+            | selectattr('item.key', 'equalto', '725140')
+            | map(attribute='stdout_lines') | first
+            | select('match', '^lxc\\.cgroup2\\.devices\\.allow:') | list)
+            == [pve_frozen_host_bind_copy_tun_cgroup_line]
+        fail_msg: "725140 no longer has exactly its approved TUN-only device entries."
+
+    - name: Read source and target snapshot inventories
+      ansible.builtin.command:
+        argv: [zfs, list, -H, -t, snapshot, -o, name]
+      changed_when: false
+      register: pve_frozen_host_bind_copy_source_snapshots
+
+    - name: Read target snapshot inventory
+      ansible.builtin.command:
+        argv: [zfs, list, -H, -t, snapshot, -o, name]
+      delegate_to: "{{ pve_frozen_host_bind_copy_target_inventory_host }}"
+      changed_when: false
+      register: pve_frozen_host_bind_copy_target_snapshots
+
+    - name: Read source and target pool freeing state
+      ansible.builtin.command:
+        argv: [zpool, get, -H, -p, -o, value, freeing, "{{ item.pool }}"]
+      changed_when: false
+      loop:
+        - { side: source, pool: "{{ pve_frozen_host_bind_copy_source_pool }}" }
+        - { side: target, pool: "{{ pve_frozen_host_bind_copy_target_pool }}" }
+      delegate_to: "{{ pve_frozen_host_bind_copy_target_inventory_host if item.side == 'target' else inventory_hostname }}"
+      register: pve_frozen_host_bind_copy_freeing
+
+    - name: Require zero snapshots and no pending ZFS frees
+      ansible.builtin.assert:
+        that:
+          - pve_frozen_host_bind_copy_source_snapshots.stdout | trim | length == 0
+          - pve_frozen_host_bind_copy_target_snapshots.stdout | trim | length == 0
+          - (pve_frozen_host_bind_copy_freeing.results | map(attribute='stdout') | map('trim') | map('int') | sum) == 0
+        fail_msg: "Snapshots or pending ZFS frees exist; frozen copy is forbidden."
+
+    - name: Read source and target dataset mounted state
+      ansible.builtin.command:
+        argv: [zfs, get, -H, -o, value, mounted, "{{ item.dataset }}"]
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_dataset_checks }}"
+      delegate_to: >-
+        {{ pve_frozen_host_bind_copy_target_inventory_host
+           if item.side == 'target' else inventory_hostname }}
+      register: pve_frozen_host_bind_copy_dataset_mounted
+
+    - name: Read source and target dataset mountpoints
+      ansible.builtin.command:
+        argv: [zfs, get, -H, -o, value, mountpoint, "{{ item.dataset }}"]
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_dataset_checks }}"
+      delegate_to: >-
+        {{ pve_frozen_host_bind_copy_target_inventory_host
+           if item.side == 'target' else inventory_hostname }}
+      register: pve_frozen_host_bind_copy_dataset_mountpoints
+
+    - name: Assert all required datasets are mounted
+      ansible.builtin.assert:
+        that:
+          - item.stdout | trim == 'yes'
+          - >-
+            (pve_frozen_host_bind_copy_dataset_mountpoints.results
+            | selectattr('item.side', 'equalto', item.item.side)
+            | selectattr('item.dataset', 'equalto', item.item.dataset)
+            | map(attribute='stdout') | map('trim') | first)
+            == item.item.mountpoint
+        fail_msg: >-
+          Required {{ item.item.side }} dataset {{ item.item.dataset }} is not
+          active at its approved host path.
+      loop: "{{ pve_frozen_host_bind_copy_dataset_mounted.results }}"
+
+    - name: Read source dataset usage
+      ansible.builtin.command:
+        argv: [zfs, get, -H, -p, -o, value, used, "{{ item.source_dataset }}"]
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_dataset_mappings }}"
+      register: pve_frozen_host_bind_copy_source_used
+
+    - name: Read target dataset available capacity
+      ansible.builtin.command:
+        argv: [zfs, get, -H, -p, -o, value, available, "{{ item.target_dataset }}"]
+      delegate_to: "{{ pve_frozen_host_bind_copy_target_inventory_host }}"
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_dataset_mappings }}"
+      register: pve_frozen_host_bind_copy_target_available
+
+    - name: Require enough already-active target dataset capacity
+      ansible.builtin.assert:
+        that:
+          - >-
+            ((pve_frozen_host_bind_copy_target_available.results
+            | selectattr('item.target_dataset', 'equalto', item.target_dataset)
+            | map(attribute='stdout') | map('trim') | map('int') | first)
+            >=
+            ((pve_frozen_host_bind_copy_source_used.results
+            | selectattr('item.source_dataset', 'equalto', item.source_dataset)
+            | map(attribute='stdout') | map('trim') | map('int') | first)
+            + (pve_frozen_host_bind_copy_capacity_margin_bytes | int)))
+        fail_msg: >-
+          Target dataset {{ item.target_dataset }} has insufficient free
+          capacity for {{ item.source_dataset }} plus the required margin.
+      loop: "{{ pve_frozen_host_bind_copy_dataset_mappings }}"
+
+    - name: Require source rsync paths and target directories to exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_paths }}"
+      register: pve_frozen_host_bind_copy_source_paths
+
+    - name: Assert each source path exists and is a directory
+      ansible.builtin.assert:
+        that: [item.stat.exists, item.stat.isdir]
+        fail_msg: "Approved source path {{ item.item }} is not an active directory."
+      loop: "{{ pve_frozen_host_bind_copy_source_paths.results }}"
+
+    - name: Check matching target directories without creating them
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      delegate_to: "{{ pve_frozen_host_bind_copy_target_inventory_host }}"
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_paths }}"
+      register: pve_frozen_host_bind_copy_target_paths
+
+    - name: Assert each target directory already exists
+      ansible.builtin.assert:
+        that: [item.stat.exists, item.stat.isdir]
+        fail_msg: "Target path {{ item.item }} is absent; this role never creates migration paths."
+      loop: "{{ pve_frozen_host_bind_copy_target_paths.results }}"
+
+    - name: Require every approved target directory to be empty
+      ansible.builtin.command:
+        argv:
+          - find
+          - "{{ item }}"
+          - -xdev
+          - -mindepth
+          - '1'
+          - -print
+          - -quit
+      delegate_to: "{{ pve_frozen_host_bind_copy_target_inventory_host }}"
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_paths }}"
+      register: pve_frozen_host_bind_copy_target_path_contents
+
+    - name: Refuse a copy into any nonempty target directory
+      ansible.builtin.assert:
+        that:
+          - item.stdout | trim | length == 0
+        fail_msg: >-
+          Target path {{ item.item }} is nonempty. This frozen copy requires an
+          empty destination so its content and hard-link topology can be proven
+          without modifying or deleting preexisting pve540 data.
+      loop: "{{ pve_frozen_host_bind_copy_target_path_contents.results }}"
+
+    - name: Require rsync support for metadata-preserving transfer
+      ansible.builtin.command:
+        argv: [rsync, --version]
+      changed_when: false
+      register: pve_frozen_host_bind_copy_rsync_version
+
+    - name: Read the pve3 frozen-copy evidence root metadata
+      ansible.builtin.stat:
+        path: "{{ pve_frozen_host_bind_copy_evidence_dir }}"
+      delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+      changed_when: false
+      register: pve_frozen_host_bind_copy_evidence_root
+
+    - name: Require an absent or root-only pve3 frozen-copy evidence root
+      ansible.builtin.assert:
+        that:
+          - >-
+            not pve_frozen_host_bind_copy_evidence_root.stat.exists
+            or
+            (pve_frozen_host_bind_copy_evidence_root.stat.isdir
+             and not pve_frozen_host_bind_copy_evidence_root.stat.islnk
+             and pve_frozen_host_bind_copy_evidence_root.stat.pw_name == 'root'
+             and pve_frozen_host_bind_copy_evidence_root.stat.gr_name == 'root'
+             and pve_frozen_host_bind_copy_evidence_root.stat.mode == '0700')
+        fail_msg: >-
+          pve3 frozen-copy evidence root must be absent or an existing,
+          root-owned, non-symlink directory with mode 0700.
+
+    - name: Create the root-only pve3 frozen-copy evidence root
+      ansible.builtin.file:
+        path: "{{ pve_frozen_host_bind_copy_evidence_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+
+    - name: Select the immutable pve3 evidence run directory
+      ansible.builtin.set_fact:
+        pve_frozen_host_bind_copy_evidence_run_dir: >-
+          {{ pve_frozen_host_bind_copy_evidence_dir }}/{{ pve_frozen_host_bind_copy_run_id }}
+
+    - name: Require a previously unused pve3 evidence run identifier
+      ansible.builtin.stat:
+        path: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}"
+      delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+      changed_when: false
+      register: pve_frozen_host_bind_copy_evidence_run_dir_stat
+
+    - name: Refuse to overwrite existing pve3 frozen-copy evidence
+      ansible.builtin.assert:
+        that:
+          - not pve_frozen_host_bind_copy_evidence_run_dir_stat.stat.exists
+        fail_msg: >-
+          Evidence run {{ pve_frozen_host_bind_copy_run_id }} already exists on
+          pve3. Preserve it and choose a new run identifier.
+
+    - name: Create the immutable root-only pve3 evidence run directory
+      ansible.builtin.file:
+        path: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+
+    - name: Record the pre-copy gate and reconstruction contract on pve3
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'schema_version': 1,
+            'checkpoint': 'copy_gated',
+            'run_id': pve_frozen_host_bind_copy_run_id,
+            'source_node': pve_frozen_host_bind_copy_source_inventory_host,
+            'target_node': pve_frozen_host_bind_copy_target_inventory_host,
+            'target_rsync_host': pve_frozen_host_bind_copy_target_rsync_host,
+            'allowed_mounts': pve_frozen_host_bind_copy_allowed_mounts,
+            'dataset_mappings': pve_frozen_host_bind_copy_dataset_mappings,
+            'pct_configs': pve_frozen_host_bind_copy_pct_configs.results
+              | map(attribute='stdout_lines') | list,
+            'pct_statuses': pve_frozen_host_bind_copy_pct_statuses.results
+              | map(attribute='stdout') | map('trim') | list,
+            'source_snapshots': pve_frozen_host_bind_copy_source_snapshots.stdout_lines,
+            'target_snapshots': pve_frozen_host_bind_copy_target_snapshots.stdout_lines,
+            'pool_freeing_bytes': pve_frozen_host_bind_copy_freeing.results
+              | map(attribute='stdout') | map('trim') | map('int') | list,
+            'source_dataset_used_bytes': pve_frozen_host_bind_copy_source_used.results
+              | map(attribute='stdout') | map('trim') | map('int') | list,
+            'target_dataset_available_bytes': pve_frozen_host_bind_copy_target_available.results
+              | map(attribute='stdout') | map('trim') | map('int') | list,
+            'capacity_margin_bytes': pve_frozen_host_bind_copy_capacity_margin_bytes | int,
+            'rsync_version': pve_frozen_host_bind_copy_rsync_version.stdout_lines
+          } | to_nice_json }}
+        dest: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}/copy-gated.json"
+        force: false
+        owner: root
+        group: root
+        mode: '0600'
+      delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+
+    - name: Copy each approved source path once without snapshots or deletion
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - --archive
+          - --hard-links
+          - --acls
+          - --xattrs
+          - --numeric-ids
+          - --sparse
+          - --one-file-system
+          - --protect-args
+          - --itemize-changes
+          - --human-readable
+          - --stats
+          - -e
+          - "{{ pve_frozen_host_bind_copy_rsync_rsh }}"
+          - "{{ item }}/"
+          - "root@{{ pve_frozen_host_bind_copy_target_rsync_host }}:{{ item }}/"
+      loop: "{{ pve_frozen_host_bind_copy_paths }}"
+      register: pve_frozen_host_bind_copy_rsync_copy
+      changed_when: >-
+        pve_frozen_host_bind_copy_rsync_copy.stdout is search('^>f', multiline=True)
+
+    - name: Verify final rsync dry run has no remaining changes
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - --archive
+          - --hard-links
+          - --acls
+          - --xattrs
+          - --numeric-ids
+          - --sparse
+          - --one-file-system
+          - --protect-args
+          - --checksum
+          - --dry-run
+          - --itemize-changes
+          - -e
+          - "{{ pve_frozen_host_bind_copy_rsync_rsh }}"
+          - "{{ item }}/"
+          - "root@{{ pve_frozen_host_bind_copy_target_rsync_host }}:{{ item }}/"
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_paths }}"
+      register: pve_frozen_host_bind_copy_rsync_verify
+
+    - name: Assert final rsync dry runs report no changes
+      ansible.builtin.assert:
+        that: [item.stdout | trim | length == 0]
+        fail_msg: "Final rsync dry run for {{ item.item }} reports remaining changes."
+      loop: "{{ pve_frozen_host_bind_copy_rsync_verify.results }}"
+
+    - name: Build deterministic source manifests and content hashes
+      ansible.builtin.shell: |
+        set -o pipefail
+        cd -- {{ item | quote }}
+        printf 'metadata '
+        find . -xdev -printf '%y\t%m\t%u\t%g\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+        printf 'content '
+        find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
+        printf 'hardlinks '
+        find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
+      args:
+        executable: /bin/bash
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_paths }}"
+      register: pve_frozen_host_bind_copy_source_manifests
+
+    - name: Build deterministic target manifests and content hashes
+      ansible.builtin.shell: |
+        set -o pipefail
+        cd -- {{ item | quote }}
+        printf 'metadata '
+        find . -xdev -printf '%y\t%m\t%u\t%g\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+        printf 'content '
+        find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
+        printf 'hardlinks '
+        find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ pve_frozen_host_bind_copy_target_inventory_host }}"
+      changed_when: false
+      loop: "{{ pve_frozen_host_bind_copy_paths }}"
+      register: pve_frozen_host_bind_copy_target_manifests
+
+    - name: Require source and target manifests to match exactly
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.stdout ==
+            (pve_frozen_host_bind_copy_target_manifests.results
+            | selectattr('item', 'equalto', item.item)
+            | map(attribute='stdout') | first)
+        fail_msg: "Manifest/hash comparison failed for {{ item.item }}."
+      loop: "{{ pve_frozen_host_bind_copy_source_manifests.results }}"
+
+    - name: Write immutable reconstruction mapping root-only on pve3
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'schema_version': 1,
+            'run_id': pve_frozen_host_bind_copy_run_id,
+            'source_node': pve_frozen_host_bind_copy_source_inventory_host,
+            'target_node': pve_frozen_host_bind_copy_target_inventory_host,
+            'allowed_mounts': pve_frozen_host_bind_copy_allowed_mounts,
+            'dataset_mappings': pve_frozen_host_bind_copy_dataset_mappings
+          } | to_nice_json }}
+        dest: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}/reconstruction-mapping.json"
+        force: false
+        owner: root
+        group: root
+        mode: '0600'
+      delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+
+    - name: Write immutable verified copy and manifest evidence root-only on pve3
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'schema_version': 1,
+            'checkpoint': 'copy_verified',
+            'run_id': pve_frozen_host_bind_copy_run_id,
+            'source_node': pve_frozen_host_bind_copy_source_inventory_host,
+            'target_node': pve_frozen_host_bind_copy_target_inventory_host,
+            'target_rsync_host': pve_frozen_host_bind_copy_target_rsync_host,
+            'source_pool': pve_frozen_host_bind_copy_source_pool,
+            'target_pool': pve_frozen_host_bind_copy_target_pool,
+            'copied_paths': pve_frozen_host_bind_copy_paths,
+            'source_dataset_used_bytes': pve_frozen_host_bind_copy_source_used.results
+              | map(attribute='stdout') | map('trim') | map('int') | list,
+            'target_dataset_available_bytes': pve_frozen_host_bind_copy_target_available.results
+              | map(attribute='stdout') | map('trim') | map('int') | list,
+            'capacity_margin_bytes': pve_frozen_host_bind_copy_capacity_margin_bytes | int,
+            'rsync_version': pve_frozen_host_bind_copy_rsync_version.stdout_lines,
+            'rsync_copy': pve_frozen_host_bind_copy_rsync_copy.results | map(attribute='stdout_lines') | list,
+            'rsync_checksum_dry_run': pve_frozen_host_bind_copy_rsync_verify.results
+              | map(attribute='stdout_lines') | list,
+            'source_manifests': pve_frozen_host_bind_copy_source_manifests.results
+              | map(attribute='stdout_lines') | list,
+            'target_manifests': pve_frozen_host_bind_copy_target_manifests.results
+              | map(attribute='stdout_lines') | list
+          } | to_nice_json }}
+        dest: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}/copy-verified.json"
+        force: false
+        owner: root
+        group: root
+        mode: '0600'
+      delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"

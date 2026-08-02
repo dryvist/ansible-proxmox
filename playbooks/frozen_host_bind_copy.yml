@@ -1,0 +1,10 @@
+---
+# Issue #816: pve2 -> pve540 frozen host-bind media data copy.
+# This playbook is inert until pve_frozen_host_bind_copy_enabled=true is passed.
+- name: Copy frozen pve2 media host binds to pve540
+  hosts: "{{ pve_frozen_host_bind_copy_source_inventory_host | default('pve2') }}"
+  become: true
+  gather_facts: false
+
+  roles:
+    - role: pve_frozen_host_bind_copy
