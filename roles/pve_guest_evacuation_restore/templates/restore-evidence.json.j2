@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "restore_run_id": {{ pve_guest_evacuation_restore_run_id | to_json }},
+  "checkpoint": {{ pve_guest_evacuation_restore_checkpoint | to_json }},
+  "input_archive_evidence": {
+    "path": {{ pve_guest_evacuation_restore_archive_evidence_path | to_json }},
+    "archive_run_id": {{ pve_guest_evacuation_restore_archive_run_id | to_json }},
+    "vmid": {{ pve_guest_evacuation_restore_expected_vmid | int }},
+    "type": {{ pve_guest_evacuation_restore_expected_guest_type | to_json }},
+    "source_config_digest": {{ pve_guest_evacuation_restore_expected_config_digest | to_json }},
+    "archive_sha256": {{ pve_guest_evacuation_restore_expected_archive_sha256 | to_json }},
+    "volid": {{ pve_guest_evacuation_restore_archive.volid | default('') | to_json }}
+  },
+  "target": {
+    "node": {{ pve_guest_evacuation_restore_target_node | to_json }},
+    "storage": {{ pve_guest_evacuation_restore_target_storage | to_json }},
+    "config_digest": {{ pve_guest_evacuation_restore_target_config.digest | default('') | to_json }},
+    "status": {{ pve_guest_evacuation_restore_target_status | default({}) | to_json }},
+    "volume_ids": {{ pve_guest_evacuation_restore_target_volume_ids | default([]) | to_json }}
+  },
+  "failure": {{ pve_guest_evacuation_restore_failure | default({}) | to_json }},
+  "written_at_utc": {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') | to_json }}
+}

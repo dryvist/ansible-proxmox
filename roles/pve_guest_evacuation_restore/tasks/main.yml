@@ -1,0 +1,37 @@
+---
+- name: Validate the enabled restore-only contract
+  ansible.builtin.include_tasks: preflight_contract.yml
+  when: pve_guest_evacuation_restore_enabled | bool
+  tags:
+    - pve_guest_evacuation_restore
+    - migration
+
+- name: Restore one verified archive onto standalone pve540
+  when: pve_guest_evacuation_restore_enabled | bool
+  tags:
+    - pve_guest_evacuation_restore
+    - migration
+  block:
+    - name: Run restore-only verification and restoration
+      ansible.builtin.include_tasks: restore.yml
+  rescue:
+    - name: Record the failed restore checkpoint
+      ansible.builtin.set_fact:
+        pve_guest_evacuation_restore_failure:
+          task: "{{ ansible_failed_task.name | default('unknown') }}"
+          message: >-
+            {{ ansible_failed_result.msg
+               | default(ansible_failed_result.stderr | default('no failure detail returned')) }}
+
+    - name: Preserve a failure evidence record when publication was not attempted
+      ansible.builtin.include_tasks: write_evidence.yml
+      vars:
+        pve_guest_evacuation_restore_checkpoint: restore_failed
+      when: pve_guest_evacuation_restore_evidence_paths is not defined
+
+    - name: Stop after preserving the failed target for investigation
+      ansible.builtin.fail:
+        msg: >-
+          Restore stopped at {{ pve_guest_evacuation_restore_failure.task }}.
+          Any pve540 target state is intentionally preserved for investigation;
+          this role performs no automatic rollback or deletion.
