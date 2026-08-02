@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.71.0](https://github.com/dryvist/ansible-proxmox/compare/v1.70.1...v1.71.0) (2026-08-02)
+
+
+### Features
+
+* **evacuation:** add pve540 restore gate ([#549](https://github.com/dryvist/ansible-proxmox/issues/549)) ([3f03fd5](https://github.com/dryvist/ansible-proxmox/commit/3f03fd5f846f2034580f255f3533c365df4da709))
+
+
+### Bug Fixes
+
+* **evacuation:** use node storage status API ([#552](https://github.com/dryvist/ansible-proxmox/issues/552)) ([b2d4f81](https://github.com/dryvist/ansible-proxmox/commit/b2d4f8147d1b09207f2e8faa15f3b0ac74fdb44b))
+
 ## [1.70.1](https://github.com/dryvist/ansible-proxmox/compare/v1.70.0...v1.70.1) (2026-08-02)
 
 
