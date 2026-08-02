@@ -1,0 +1,12 @@
+---
+- name: Validate the enabled archive contract
+  ansible.builtin.include_tasks: preflight_contract.yml
+  when: pve_guest_evacuation_enabled | bool
+  tags:
+    - pve_guest_evacuation
+
+- name: Validate and archive one guest
+  ansible.builtin.include_tasks: archive.yml
+  when: pve_guest_evacuation_enabled | bool
+  tags:
+    - pve_guest_evacuation

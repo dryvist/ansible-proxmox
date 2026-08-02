@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "run_id": {{ pve_guest_evacuation_run_id | to_json }},
+  "checkpoint": {{ pve_guest_evacuation_checkpoint | to_json }},
+  "guest": {
+    "vmid": {{ pve_guest_evacuation_guest_vmid | int }},
+    "type": {{ pve_guest_evacuation_guest_type | to_json }},
+    "source_node": {{ pve_guest_evacuation_source_node | to_json }},
+    "target_node": {{ pve_guest_evacuation_target_node | to_json }},
+    "config_digest": {{ pve_guest_evacuation_config.digest | default('') | to_json }},
+    "config": {{ pve_guest_evacuation_config | to_json }},
+    "status_before": {{ pve_guest_evacuation_status | to_json }}
+  },
+  "staging": {
+    "host": {{ pve_guest_evacuation_staging_host | to_json }},
+    "storage": {{ pve_guest_evacuation_staging_storage | to_json }},
+    "server": {{ pve_guest_evacuation_staging_server | to_json }},
+    "export": {{ pve_guest_evacuation_staging_export | to_json }},
+    "config": {{ pve_guest_evacuation_staging_config | to_json }},
+    "source_status": {{ pve_guest_evacuation_source_storage_status | to_json }},
+    "archives_before": {{ pve_guest_evacuation_archives_before | to_json }}
+  },
+  "archive": {{ pve_guest_evacuation_archive | default({}) | to_json }},
+  "written_at_utc": {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') | to_json }}
+}

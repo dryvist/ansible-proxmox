@@ -1,0 +1,11 @@
+---
+# Archive exactly one pve2 guest to pve3-hosted shared staging storage.
+# There is deliberately no restore, probe, cutover, source deletion, storage
+# creation, or cluster membership work in this standalone playbook.
+- name: Archive one guest for pve2 evacuation
+  hosts: "{{ pve_guest_evacuation_source_node | default('pve2') }}"
+  become: true
+  gather_facts: false
+  serial: 1
+  roles:
+    - role: pve_guest_evacuation

@@ -1,0 +1,496 @@
+---
+# This is intentionally the first, self-contained slice of the evacuation.
+# It writes one verified VZDump archive and never restores, migrates, joins a
+# cluster, changes storage, or removes the source guest.
+
+- name: Assert pve3 evidence directory is ready
+  ansible.builtin.command:
+    argv:
+      - test
+      - -d
+      - "{{ pve_guest_evacuation_evidence_dir }}"
+  delegate_to: "{{ pve_guest_evacuation_staging_host }}"
+  changed_when: false
+
+- name: Assert pve3 evidence directory is writable
+  ansible.builtin.command:
+    argv:
+      - test
+      - -w
+      - "{{ pve_guest_evacuation_evidence_dir }}"
+  delegate_to: "{{ pve_guest_evacuation_staging_host }}"
+  changed_when: false
+
+- name: Assert no ZFS snapshots exist on either evacuation node
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -t
+      - snapshot
+      - -o
+      - name
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_source_node }}"
+    - "{{ pve_guest_evacuation_target_node }}"
+  register: pve_guest_evacuation_snapshots
+  changed_when: false
+
+- name: Fail when an evacuation node has ZFS snapshots
+  ansible.builtin.assert:
+    that:
+      - item.stdout | trim | length == 0
+    fail_msg: >-
+      {{ item.item }} has ZFS snapshots. This evacuation never creates or
+      carries snapshots; remove them before rerunning this archive phase.
+  loop: "{{ pve_guest_evacuation_snapshots.results }}"
+
+- name: Read pool freeing counters on both evacuation nodes
+  ansible.builtin.command:
+    argv:
+      - zpool
+      - get
+      - -H
+      - -p
+      - -o
+      - value
+      - freeing
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_source_node }}"
+    - "{{ pve_guest_evacuation_target_node }}"
+  register: pve_guest_evacuation_freeing
+  changed_when: false
+
+- name: Fail when an evacuation node is still freeing storage
+  ansible.builtin.assert:
+    that:
+      - item.stdout_lines | map('int') | max == 0
+    fail_msg: >-
+      {{ item.item }} still has freeing work; wait for zero before archiving.
+  loop: "{{ pve_guest_evacuation_freeing.results }}"
+
+- name: Read Proxmox guest inventory
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - /cluster/resources
+      - --type
+      - vm
+      - --output-format
+      - json
+  register: pve_guest_evacuation_resources_raw
+  changed_when: false
+
+- name: Select the exact guest to archive
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_resources: "{{ pve_guest_evacuation_resources_raw.stdout | from_json }}"
+    pve_guest_evacuation_matching_resources: >-
+      {{ (pve_guest_evacuation_resources_raw.stdout | from_json)
+         | selectattr('vmid', 'equalto', pve_guest_evacuation_guest_vmid | int)
+         | list }}
+
+- name: Assert the VMID resolves exactly once on the source node
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_matching_resources | length == 1
+      - pve_guest_evacuation_matching_resources[0].node == pve_guest_evacuation_source_node
+      - pve_guest_evacuation_matching_resources[0].type in ['qemu', 'lxc']
+    fail_msg: >-
+      VMID {{ pve_guest_evacuation_guest_vmid }} must resolve exactly once as a
+      QEMU VM or LXC container on {{ pve_guest_evacuation_source_node }}.
+
+- name: Record guest type
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_guest_type: "{{ pve_guest_evacuation_matching_resources[0].type }}"
+    pve_guest_evacuation_guest_api_path: >-
+      /nodes/{{ pve_guest_evacuation_source_node }}/{{ pve_guest_evacuation_matching_resources[0].type }}/{{ pve_guest_evacuation_guest_vmid }}
+    pve_guest_evacuation_evidence_path: >-
+      {{ pve_guest_evacuation_evidence_dir }}/{{ pve_guest_evacuation_run_id }}-{{ pve_guest_evacuation_guest_vmid }}.json
+
+- name: Capture source guest configuration and digest
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "{{ pve_guest_evacuation_guest_api_path }}/config"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_config_raw
+  changed_when: false
+
+- name: Capture source guest status
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "{{ pve_guest_evacuation_guest_api_path }}/status/current"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_status_raw
+  changed_when: false
+
+- name: Decode source guest evidence
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_config: "{{ pve_guest_evacuation_config_raw.stdout | from_json }}"
+    pve_guest_evacuation_status: "{{ pve_guest_evacuation_status_raw.stdout | from_json }}"
+
+- name: Reject a locked source guest
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_config.lock | default('') | length == 0
+    fail_msg: >-
+      VMID {{ pve_guest_evacuation_guest_vmid }} is locked with
+      {{ pve_guest_evacuation_config.lock | default('unknown') }}; resolve the
+      lock before archiving.
+
+- name: Validate guest external-resource gates
+  ansible.builtin.include_tasks: resource_gates.yml
+
+- name: Capture HA status
+  ansible.builtin.command:
+    argv:
+      - ha-manager
+      - status
+  register: pve_guest_evacuation_ha_status
+  changed_when: false
+
+- name: Reject HA-managed guests
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pve_guest_evacuation_ha_status.stdout
+        | regex_search('(?m)(ct|vm):' ~ (pve_guest_evacuation_guest_vmid | string) ~ '([ ]|$)')) is none
+    fail_msg: >-
+      VMID {{ pve_guest_evacuation_guest_vmid }} is HA-managed. Remove its HA
+      ownership through the approved runbook before archiving it.
+
+- name: Capture Proxmox replication configuration
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - /cluster/replication
+      - --output-format
+      - json
+  register: pve_guest_evacuation_replication_raw
+  changed_when: false
+
+- name: Reject guests with active Proxmox replication
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((pve_guest_evacuation_replication_raw.stdout | from_json)
+        | selectattr('guest', 'equalto', pve_guest_evacuation_guest_vmid | int)
+        | rejectattr('disable', 'equalto', 1) | list
+        | length) == 0
+    fail_msg: >-
+      VMID {{ pve_guest_evacuation_guest_vmid }} has active Proxmox replication;
+      clear that relationship before an archive-only evacuation.
+
+- name: Read each node's independent staging storage view
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - /storage
+      - --output-format
+      - json
+  register: pve_guest_evacuation_storage_raw
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_source_node }}"
+    - "{{ pve_guest_evacuation_target_node }}"
+  changed_when: false
+
+- name: Assert the storage ID resolves exactly once on each node
+  ansible.builtin.assert:
+    that:
+      - node_staging_config | length == 1
+    fail_msg: >-
+      {{ item.item }} must independently configure exactly one
+      {{ pve_guest_evacuation_staging_storage }} storage record.
+  vars:
+    node_staging_config: >-
+      {{ (item.stdout | from_json)
+         | selectattr('storage', 'equalto', pve_guest_evacuation_staging_storage)
+         | list }}
+  loop: "{{ pve_guest_evacuation_storage_raw.results }}"
+
+- name: Assert each node uses the exact pve3 NFS staging endpoint
+  ansible.builtin.assert:
+    that:
+      - node_staging_config.type == 'nfs'
+      - node_staging_config.server == pve_guest_evacuation_staging_server
+      - node_staging_config.export == pve_guest_evacuation_staging_export
+      - "'backup' in node_staging_config.content"
+      - node_staging_config.nodes is not defined or item.item in node_staging_config.nodes.split(',')
+      - not (node_staging_config.disable | default(0) | bool)
+    fail_msg: >-
+      {{ item.item }} must independently use the exact enabled, backup-only
+      pve3 NFS endpoint. pve540 is standalone and is not inferred from pve2's
+      cluster-scoped storage record.
+  vars:
+    node_staging_config: >-
+      {{ ((item.stdout | from_json)
+         | selectattr('storage', 'equalto', pve_guest_evacuation_staging_storage)
+         | list)[0] }}
+  loop: "{{ pve_guest_evacuation_storage_raw.results }}"
+
+- name: Read staging storage status on pve2 and pve540
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ item }}/storage/{{ pve_guest_evacuation_staging_storage }}/status"
+      - --output-format
+      - json
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_source_node }}"
+    - "{{ pve_guest_evacuation_target_node }}"
+  register: pve_guest_evacuation_storage_status_raw
+  changed_when: false
+
+- name: Assert staging storage is active on both independent nodes
+  ansible.builtin.assert:
+    that:
+      - (item.stdout | from_json).active | int == 1
+    fail_msg: >-
+      {{ item.item }} cannot actively access
+      {{ pve_guest_evacuation_staging_storage }}.
+  loop: "{{ pve_guest_evacuation_storage_status_raw.results }}"
+
+- name: Record source staging configuration and status
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_staging_config: >-
+      {{ (((pve_guest_evacuation_storage_raw.results
+         | selectattr('item', 'equalto', pve_guest_evacuation_source_node)
+         | first).stdout | from_json)
+         | selectattr('storage', 'equalto', pve_guest_evacuation_staging_storage)
+         | list)[0] }}
+    pve_guest_evacuation_source_storage_status: >-
+      {{ (pve_guest_evacuation_storage_status_raw.results
+         | selectattr('item', 'equalto', pve_guest_evacuation_source_node)
+         | first).stdout | from_json }}
+
+- name: Assert guest size plus headroom fits staging
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_matching_resources[0].maxdisk | default(0) | int > 0
+      - >-
+        pve_guest_evacuation_source_storage_status.avail | int >=
+        ((pve_guest_evacuation_matching_resources[0].maxdisk | default(0) | int)
+        * (100 + pve_guest_evacuation_staging_headroom_percent | int) / 100) | round(0, 'ceil') | int
+    fail_msg: >-
+      Staging does not have the guest's declared disk size plus
+      {{ pve_guest_evacuation_staging_headroom_percent }} percent headroom.
+
+- name: Capture archive volume identifiers before backup
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ pve_guest_evacuation_source_node }}/storage/{{ pve_guest_evacuation_staging_storage }}/content"
+      - --content
+      - backup
+      - --output-format
+      - json
+  register: pve_guest_evacuation_archives_before_raw
+  changed_when: false
+
+- name: Record archive identifiers before backup
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archives_before: >-
+      {{ (pve_guest_evacuation_archives_before_raw.stdout | from_json)
+         | map(attribute='volid') | list }}
+
+- name: Write preflight evidence atomically
+  ansible.builtin.include_tasks: write_evidence.yml
+  vars:
+    pve_guest_evacuation_checkpoint: preflight_complete
+
+- name: Gracefully stop a running source guest
+  ansible.builtin.command: >-
+    {{ (pve_guest_evacuation_guest_type == 'qemu') | ternary('qm', 'pct') }}
+    shutdown {{ pve_guest_evacuation_guest_vmid }}
+    --timeout {{ pve_guest_evacuation_shutdown_timeout }}
+  when: pve_guest_evacuation_status.status != 'stopped'
+  changed_when: true
+  failed_when: false
+  register: pve_guest_evacuation_graceful_stop
+
+- name: Refresh source guest status after graceful stop
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "{{ pve_guest_evacuation_guest_api_path }}/status/current"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_stopped_status_raw
+  changed_when: false
+
+- name: Decode source guest post-stop status
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_stopped_status: "{{ pve_guest_evacuation_stopped_status_raw.stdout | from_json }}"
+
+- name: Force stop a guest that did not stop gracefully
+  ansible.builtin.command: >-
+    {{ (pve_guest_evacuation_guest_type == 'qemu') | ternary('qm', 'pct') }}
+    stop {{ pve_guest_evacuation_guest_vmid }}
+  when: pve_guest_evacuation_stopped_status.status != 'stopped'
+  changed_when: true
+
+- name: Confirm the source guest is stopped
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "{{ pve_guest_evacuation_guest_api_path }}/status/current"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_final_status_raw
+  changed_when: false
+
+- name: Assert the source guest is stopped
+  ansible.builtin.assert:
+    that:
+      - (pve_guest_evacuation_final_status_raw.stdout | from_json).status == 'stopped'
+    fail_msg: "VMID {{ pve_guest_evacuation_guest_vmid }} did not stop; no archive was started."
+
+- name: Write stopped-source evidence atomically
+  ansible.builtin.include_tasks: write_evidence.yml
+  vars:
+    pve_guest_evacuation_checkpoint: source_stopped
+
+- name: Create a stop-mode VZDump archive
+  ansible.builtin.command:
+    argv:
+      - vzdump
+      - "{{ pve_guest_evacuation_guest_vmid | string }}"
+      - --mode
+      - stop
+      - --storage
+      - "{{ pve_guest_evacuation_staging_storage }}"
+      - --compress
+      - zstd
+  register: pve_guest_evacuation_vzdump
+  changed_when: true
+
+- name: Capture archive volume identifiers after backup
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ pve_guest_evacuation_source_node }}/storage/{{ pve_guest_evacuation_staging_storage }}/content"
+      - --content
+      - backup
+      - --output-format
+      - json
+  register: pve_guest_evacuation_archives_after_raw
+  changed_when: false
+
+- name: Resolve the exact newly-created archive volume
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archives_after: >-
+      {{ (pve_guest_evacuation_archives_after_raw.stdout | from_json)
+         | map(attribute='volid') | list }}
+    pve_guest_evacuation_new_archives: >-
+      {{ ((pve_guest_evacuation_archives_after_raw.stdout | from_json)
+         | map(attribute='volid') | list)
+         | difference(pve_guest_evacuation_archives_before) }}
+
+- name: Assert exactly one archive was added without pruning an existing archive
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_new_archives | length == 1
+      - pve_guest_evacuation_archives_before | difference(pve_guest_evacuation_archives_after) | length == 0
+    fail_msg: >-
+      VZDump did not produce exactly one new archive without removing an
+      existing archive; preserve the source guest and inspect staging storage.
+
+- name: Record the exact archive volume identifier
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archive_volid: "{{ pve_guest_evacuation_new_archives[0] }}"
+
+- name: Resolve the archive path from Proxmox storage
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - path
+      - "{{ pve_guest_evacuation_archive_volid }}"
+  register: pve_guest_evacuation_archive_path_raw
+  changed_when: false
+
+- name: Record the exact archive path
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archive_path: "{{ pve_guest_evacuation_archive_path_raw.stdout | trim }}"
+
+- name: Calculate archive byte size
+  ansible.builtin.command:
+    argv:
+      - stat
+      - -c
+      - '%s'
+      - "{{ pve_guest_evacuation_archive_path }}"
+  register: pve_guest_evacuation_archive_size_raw
+  changed_when: false
+
+- name: Calculate archive SHA-256
+  ansible.builtin.command:
+    argv:
+      - sha256sum
+      - "{{ pve_guest_evacuation_archive_path }}"
+  register: pve_guest_evacuation_archive_sha256_raw
+  changed_when: false
+
+- name: Verify the compressed archive stream
+  ansible.builtin.command:
+    argv:
+      - zstd
+      - -t
+      - "{{ pve_guest_evacuation_archive_path }}"
+  changed_when: false
+
+- name: Verify the decompressed QEMU archive with vma
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      zstd --quiet --decompress --stdout -- {{ pve_guest_evacuation_archive_path | quote }} | vma verify -
+    executable: /bin/bash
+  when: pve_guest_evacuation_guest_type == 'qemu'
+  changed_when: false
+
+- name: Extract archived Proxmox guest configuration
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - extractconfig
+      - "{{ pve_guest_evacuation_archive_volid }}"
+  register: pve_guest_evacuation_archive_config
+  changed_when: false
+
+- name: Assert archive configuration was extracted
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_archive_config.stdout | trim | length > 0
+    fail_msg: "Proxmox could not extract configuration from {{ pve_guest_evacuation_archive_volid }}."
+
+- name: Record verified archive evidence
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archive:
+      status: verified
+      volid: "{{ pve_guest_evacuation_archive_volid }}"
+      path: "{{ pve_guest_evacuation_archive_path }}"
+      size_bytes: "{{ pve_guest_evacuation_archive_size_raw.stdout | trim | int }}"
+      sha256: "{{ pve_guest_evacuation_archive_sha256_raw.stdout.split()[0] }}"
+      extracted_config: "{{ pve_guest_evacuation_archive_config.stdout }}"
+
+- name: Write verified archive evidence atomically
+  ansible.builtin.include_tasks: write_evidence.yml
+  vars:
+    pve_guest_evacuation_checkpoint: archive_verified

@@ -1,0 +1,44 @@
+---
+- name: Derive guest resource gates
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_qemu_external_keys: >-
+      {{ (pve_guest_evacuation_config | dict2items)
+         | selectattr('key', 'match', '^(hostpci|usb|virtiofs|ivshmem|args|hookscript|serial|parallel|rng|audio)')
+         | map(attribute='key') | list }}
+    pve_guest_evacuation_qemu_host_disk_keys: >-
+      {{ (pve_guest_evacuation_config | dict2items)
+         | selectattr('key', 'match', '^(ide|sata|scsi|virtio)[0-9]+$')
+         | selectattr('value', 'match', '^/')
+         | map(attribute='key') | list }}
+    pve_guest_evacuation_lxc_external_keys: >-
+      {{ (pve_guest_evacuation_config | dict2items)
+         | selectattr('key', 'match', '^(dev[0-9]+|hookscript|lxc(?:[.].*)?)$')
+         | map(attribute='key') | list }}
+    pve_guest_evacuation_lxc_bind_mount_keys: >-
+      {{ (pve_guest_evacuation_config | dict2items)
+         | selectattr('key', 'match', '^mp[0-9]+$')
+         | selectattr('value', 'match', '^/')
+         | map(attribute='key') | list }}
+    pve_guest_evacuation_lxc_unbacked_mount_keys: >-
+      {{ (pve_guest_evacuation_config | dict2items)
+         | selectattr('key', 'match', '^mp[0-9]+$')
+         | selectattr('value', 'search', '(^|,)backup=0(,|$)')
+         | map(attribute='key') | list }}
+    pve_guest_evacuation_lxc_invalid_mount_keys: >-
+      {{ (pve_guest_evacuation_config | dict2items)
+         | selectattr('key', 'match', '^mp[0-9]+$')
+         | rejectattr('value', 'match', '^[A-Za-z0-9][A-Za-z0-9._-]*:')
+         | map(attribute='key') | list }}
+
+- name: Reject unsupported external guest resources
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_guest_type != 'qemu' or pve_guest_evacuation_qemu_external_keys | length == 0
+      - pve_guest_evacuation_guest_type != 'qemu' or pve_guest_evacuation_qemu_host_disk_keys | length == 0
+      - pve_guest_evacuation_guest_type != 'lxc' or pve_guest_evacuation_lxc_external_keys | length == 0
+      - pve_guest_evacuation_guest_type != 'lxc' or pve_guest_evacuation_lxc_bind_mount_keys | length == 0
+      - pve_guest_evacuation_guest_type != 'lxc' or pve_guest_evacuation_lxc_unbacked_mount_keys | length == 0
+      - pve_guest_evacuation_guest_type != 'lxc' or pve_guest_evacuation_lxc_invalid_mount_keys | length == 0
+    fail_msg: >-
+      External passthrough, hooks, raw LXC configuration, devices, host-path
+      bind mounts, and non-backed mountpoints are outside this archive-only slice.

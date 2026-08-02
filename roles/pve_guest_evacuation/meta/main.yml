@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: pve_guest_evacuation
+  author: dryvist
+  description: Fail-closed, archive-only Proxmox guest evacuation
+  license: MIT
+  min_ansible_version: '2.19'
+dependencies: []
