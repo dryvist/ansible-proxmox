@@ -1,0 +1,44 @@
+---
+# Temporary issue-816 staging is outside site.yml.  The role stays inert unless
+# the run supplies pve_evacuation_staging_enabled=true and a reviewed capacity
+# budget. pve2 and pve540 are deliberately separate plays: their /etc/pve
+# storage views are independent while pve540 remains outside the cluster.
+
+- name: Prepare the pve3 evacuation staging server
+  hosts: pve3
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: pve_evacuation_staging
+      vars:
+        pve_evacuation_staging_mode: server
+      tags:
+        - pve_evacuation_staging
+        - migration
+
+- name: Prepare pve2's evacuation staging storage view
+  hosts: pve2
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: pve_evacuation_staging
+      vars:
+        pve_evacuation_staging_mode: client
+      tags:
+        - pve_evacuation_staging
+        - migration
+
+- name: Prepare standalone pve540's evacuation staging storage view
+  hosts: pve540
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: pve_evacuation_staging
+      vars:
+        pve_evacuation_staging_mode: client
+      tags:
+        - pve_evacuation_staging
+        - migration
