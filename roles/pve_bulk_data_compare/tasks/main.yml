@@ -1,0 +1,10 @@
+---
+- name: Validate the enabled bulk/data comparison contract
+  ansible.builtin.include_tasks: preflight.yml
+  when: pve_bulk_data_compare_enabled | bool
+  tags: [pve_bulk_data_compare]
+
+- name: Freeze, manifest, compare, and restore bulk/data
+  ansible.builtin.include_tasks: compare.yml
+  when: pve_bulk_data_compare_enabled | bool
+  tags: [pve_bulk_data_compare]

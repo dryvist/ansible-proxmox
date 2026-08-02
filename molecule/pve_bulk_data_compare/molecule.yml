@@ -1,0 +1,9 @@
+---
+platforms:
+  - name: pve-bulk-data-compare-test
+    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    pre_build_image: true
+provisioner:
+  config_options:
+    defaults:
+      roles_path: ${MOLECULE_SCENARIO_DIRECTORY}/../../roles

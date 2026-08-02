@@ -48,6 +48,8 @@ jobs:
       - name: Verify pve guest evacuation static safety contract
         run: python3 tests/pve_guest_evacuation/test_archive_contract.py
 
+      - name: Verify bulk data comparison static safety contract
+        run: python3 tests/pve_bulk_data_compare/test_contract.py
       # molecule/default/verify.yml imports tests/container_start_contract.yml.
       - name: Run default molecule test and container start contract
         run: molecule test
@@ -65,6 +67,13 @@ jobs:
 
       - name: Run pve evacuation staging molecule test
         run: molecule test -s pve_evacuation_staging
+        env:
+          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
+          PY_COLORS: "1"
+          ANSIBLE_FORCE_COLOR: "1"
+
+      - name: Run pve bulk data comparison molecule test
+        run: molecule test -s pve_bulk_data_compare
         env:
           ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
           PY_COLORS: "1"
