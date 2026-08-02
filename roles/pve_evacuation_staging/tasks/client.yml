@@ -24,7 +24,13 @@
     - name: Require the exact pve3 staging export from this client
       ansible.builtin.assert:
         that:
-          - pve_evacuation_staging_mountpoint in pve_evacuation_staging_nfs_scan.stdout_lines
+          - >-
+            pve_evacuation_staging_nfs_scan.stdout_lines
+            | select(
+                'match',
+                '^' ~ (pve_evacuation_staging_mountpoint | regex_escape) ~ '(\s|$)'
+              )
+            | list | length == 1
         fail_msg: >-
           {{ pve_evacuation_staging_server_endpoint }} does not expose
           {{ pve_evacuation_staging_mountpoint }} to {{ inventory_hostname }}.
