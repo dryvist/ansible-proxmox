@@ -69,7 +69,8 @@ def write_exec(path, body):
 
 
 def run(tmp, capacity, curl_exit, zpool_exit=0, curl_match_exit=None,
-        curl_match=None, script="monitor.sh"):
+        curl_match=None, script="monitor.sh", zpool_warning="",
+        zfs_warning=""):
     """Run the monitor once against a stubbed pool at `capacity`%.
 
     `curl_exit` is the status the stub `curl` returns, i.e. whether the
@@ -82,14 +83,20 @@ def run(tmp, capacity, curl_exit, zpool_exit=0, curl_match_exit=None,
     # Built by concatenation, not %-formatting: the literal `%%` this printf
     # needs collides with Python's own format operator.
     if zpool_exit == 0:
-        zpool_stub = ("#!/bin/bash\nprintf 'tank\\t%s%%\\n' "
-                      + str(capacity) + "\n")
+        zpool_stub = "#!/bin/bash\n"
+        if zpool_warning:
+            zpool_stub += "echo %r >&2\n" % zpool_warning
+        zpool_stub += ("printf 'tank\\t%s%%\\n' " + str(capacity) + "\n")
     else:
         zpool_stub = ("#!/bin/bash\necho 'cannot open pool' >&2\nexit "
                       + str(zpool_exit) + "\n")
     write_exec(os.path.join(binq, "zpool"), zpool_stub)
     # No quota'd filesystems: the dataset loop must be a no-op, not an error.
-    write_exec(os.path.join(binq, "zfs"), "#!/bin/bash\nexit 0\n")
+    zfs_stub = "#!/bin/bash\n"
+    if zfs_warning:
+        zfs_stub += "echo %r >&2\n" % zfs_warning
+    zfs_stub += "exit 0\n"
+    write_exec(os.path.join(binq, "zfs"), zfs_stub)
 
     curl_stub = "#!/bin/bash\necho \"$@\" >>%s/curl.log\n" % tmp
     if curl_match is not None:
@@ -335,6 +342,29 @@ def check_transports():
         if "zpool list" not in err:
             failures.append("a failing `zpool list` produced no diagnostic on "
                             "stderr (got %r)" % err.strip())
+
+    # 8. Benign sensor warnings belong on stderr, never in the tab-delimited
+    #    data consumed by the capacity loops. Merging both streams makes the
+    #    warning a fake pool/dataset row and produces integer-expression errors.
+    with tempfile.TemporaryDirectory() as tmp:
+        body = render([50, 75, 85, 90, 94], deadman_url=DEADMAN)
+        body = body.replace('STATE_DIR="/var/lib/zfs-capacity-monitor"',
+                            'STATE_DIR="%s/state"' % tmp)
+        write_exec(os.path.join(tmp, "monitor.sh"), body)
+
+        rc, err = run(tmp, 10, curl_exit=0,
+                      zpool_warning="zpool benign warning",
+                      zfs_warning="zfs benign warning")
+        if rc != 0:
+            failures.append("benign sensor warnings aborted the monitor "
+                            "(rc=%d, stderr=%r)" % (rc, err.strip()))
+        if "integer expression expected" in err:
+            failures.append("sensor stderr was parsed as capacity data "
+                            "(stderr=%r)" % err.strip())
+        for warning in ("zpool benign warning", "zfs benign warning"):
+            if warning not in err:
+                failures.append("sensor warning %r was hidden instead of "
+                                "remaining diagnostic" % warning)
 
     return failures
 
