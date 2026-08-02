@@ -1,0 +1,43 @@
+---
+- name: Verify the restore-only role remains inert and fail-closed
+  hosts: all
+  become: false
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Assert the inert role created no pve3 evidence directory
+      ansible.builtin.stat:
+        path: /bulk/evacuation-816/evidence
+      register: pve_guest_evacuation_restore_evidence_dir
+
+    - name: Assert the inert contract
+      ansible.builtin.assert:
+        that:
+          - not pve_guest_evacuation_restore_evidence_dir.stat.exists
+        fail_msg: "The inert restore-only role created state."
+
+    - name: Exercise the incomplete enabled-input gate
+      block:
+        - name: Run the incomplete restore-only contract
+          ansible.builtin.include_role:
+            name: pve_guest_evacuation_restore
+            tasks_from: preflight_contract.yml
+          vars:
+            pve_guest_evacuation_restore_enabled: true
+            pve_guest_evacuation_restore_source_node: pve2
+            pve_guest_evacuation_restore_target_node: pve540
+            pve_guest_evacuation_restore_staging_host: pve3
+            pve_guest_evacuation_restore_archive_run_id: archive-1
+            pve_guest_evacuation_restore_run_id: restore-1
+            pve_guest_evacuation_restore_expected_vmid: '101'
+            pve_guest_evacuation_restore_expected_guest_type: qemu
+      rescue:
+        - name: Record that incomplete restore input failed
+          ansible.builtin.set_fact:
+            pve_guest_evacuation_restore_input_failed: true
+
+    - name: Assert incomplete restore inputs fail closed
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_restore_input_failed | default(false)

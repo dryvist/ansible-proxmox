@@ -85,3 +85,6 @@ jobs:
 
       - name: Verify snapshot-free guest archive safety contract
         run: python3 tests/pve_guest_evacuation/test_archive_contract.py
+
+      - name: Verify pve guest evacuation restore safety contract
+        run: python3 tests/pve_guest_evacuation_restore/test_restore_contract.py

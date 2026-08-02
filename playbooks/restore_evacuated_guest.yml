@@ -1,0 +1,11 @@
+---
+# Restore exactly one verified pve2 evacuation archive to standalone pve540.
+# This playbook is separate from archive and staging setup. It neither touches
+# pve2 nor starts, overwrites, or removes a target guest.
+- name: Restore one verified pve2 archive onto standalone pve540
+  hosts: "{{ pve_guest_evacuation_restore_target_node | default('pve540') }}"
+  become: true
+  gather_facts: false
+  serial: 1
+  roles:
+    - role: pve_guest_evacuation_restore
