@@ -1,0 +1,118 @@
+---
+- name: Validate the enabled evacuation-gate contract
+  ansible.builtin.assert:
+    that:
+      - pve_evacuation_gate_pool | length > 0
+      - pve_evacuation_gate_phase in ['initial', 'zero_error_reverification']
+      - pve_evacuation_gate_smart_devices | length > 0
+      - pve_evacuation_gate_prohibited_replication_ids | length > 0
+      - >-
+        pve_evacuation_gate_smart_devices
+        | map(attribute='device') | select('string') | list | length
+        == pve_evacuation_gate_smart_devices | length
+      - >-
+        pve_evacuation_gate_smart_devices
+        | map(attribute='serial') | select('string') | list | length
+        == pve_evacuation_gate_smart_devices | length
+    fail_msg: >-
+      An enabled pve_evacuation_gate requires a pool, an approved phase, and
+      SMART device entries with device and serial values.
+    quiet: true
+  when: pve_evacuation_gate_enabled | bool
+  tags:
+    - pve_evacuation_gate
+
+- name: Deploy the evacuation-gate script
+  ansible.builtin.template:
+    src: pve2-evacuation-gate-816.sh.j2
+    dest: "{{ pve_evacuation_gate_script_path }}"
+    owner: root
+    group: root
+    mode: "0750"
+    validate: bash -n %s
+  register: pve_evacuation_gate_script_result
+  when: pve_evacuation_gate_enabled | bool
+  tags:
+    - pve_evacuation_gate
+
+- name: Deploy the evacuation-gate systemd units
+  ansible.builtin.template:
+    src: "{{ pve_evacuation_gate_unit_name }}.{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ pve_evacuation_gate_unit_name }}.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - service
+    - timer
+  register: pve_evacuation_gate_units_result
+  when: pve_evacuation_gate_enabled | bool
+  notify: Reload systemd for pve_evacuation_gate
+  tags:
+    - pve_evacuation_gate
+
+- name: Reload systemd before enabling the evacuation gate
+  ansible.builtin.meta: flush_handlers
+  when: pve_evacuation_gate_enabled | bool
+  tags:
+    - pve_evacuation_gate
+
+- name: Enable and start the evacuation-gate timer
+  ansible.builtin.systemd:
+    name: "{{ pve_evacuation_gate_unit_name }}.timer"
+    enabled: true
+    state: started
+  register: pve_evacuation_gate_timer_result
+  when:
+    - pve_evacuation_gate_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_evacuation_gate
+
+- name: Run the evacuation gate immediately
+  # The timer being enabled proves only that it will run later.  Start the
+  # bounded unit once so a bad serial map or producer invariant fails converge
+  # now, before a reboot makes the missing evidence look configured.
+  ansible.builtin.systemd:
+    name: "{{ pve_evacuation_gate_unit_name }}.service"
+    state: started
+  when:
+    - pve_evacuation_gate_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - >-
+      pve_evacuation_gate_script_result.changed
+      or pve_evacuation_gate_units_result.changed
+      or pve_evacuation_gate_timer_result.changed
+  tags:
+    - pve_evacuation_gate
+
+- name: Stop and disable the evacuation gate when it is no longer needed
+  ansible.builtin.systemd:
+    name: "{{ pve_evacuation_gate_unit_name }}.{{ item }}"
+    enabled: false
+    state: stopped
+  loop:
+    - timer
+    - service
+  when:
+    - not pve_evacuation_gate_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  failed_when: false
+  tags:
+    - pve_evacuation_gate
+
+- name: Remove evacuation-gate units and script when disabled
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ pve_evacuation_gate_script_path }}"
+    - "/etc/systemd/system/{{ pve_evacuation_gate_unit_name }}.service"
+    - "/etc/systemd/system/{{ pve_evacuation_gate_unit_name }}.timer"
+  when: not pve_evacuation_gate_enabled | bool
+  notify: Reload systemd for pve_evacuation_gate
+  tags:
+    - pve_evacuation_gate
+
+# Do not delete pve_evacuation_gate_state_dir here.  It is the migration's
+# captured SMART/ZFS evidence and must survive decommissioning of this guard.
