@@ -91,6 +91,60 @@
       ansible.builtin.command: which strace
       changed_when: false
 
+    # The ZFS capacity monitor. Until now nothing asserted this role DEPLOYS
+    # anything: its install block is gated on a transport being configured, no
+    # transport was set anywhere, and so it silently no-opped on every host
+    # while the converge reported success.
+    - name: Stat the deployed capacity monitor script
+      ansible.builtin.stat:
+        path: /usr/local/bin/zfs-capacity-monitor.sh
+      register: zfs_capacity_script
+
+    - name: Read the deployed capacity monitor script
+      ansible.builtin.slurp:
+        src: /usr/local/bin/zfs-capacity-monitor.sh
+      register: zfs_capacity_body
+      when: zfs_capacity_script.stat.exists
+
+    - name: Stat the capacity monitor state directory
+      ansible.builtin.stat:
+        path: /var/lib/zfs-capacity-monitor
+      register: zfs_capacity_state
+
+    - name: Read root's crontab
+      ansible.builtin.command: crontab -l -u root
+      register: zfs_capacity_cron
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the capacity monitor actually deployed
+      ansible.builtin.assert:
+        that:
+          - zfs_capacity_script.stat.exists
+          - zfs_capacity_script.stat.executable
+          - zfs_capacity_state.stat.exists
+          - zfs_capacity_state.stat.isdir
+          - "'zfs-capacity-monitor.sh' in zfs_capacity_cron.stdout"
+        fail_msg: >-
+          The capacity monitor did not deploy. A transport is configured in
+          converge.yml, so the install block must run — if this fails, the gate
+          in tasks/main.yml is skipping it again and every host silently loses
+          its pool free-space alarm.
+
+    - name: Assert the rendered script carries the transport and band contract
+      ansible.builtin.assert:
+        that:
+          # Jinja must be fully substituted — an unrendered variable would make
+          # the script a syntax error only discovered when cron ran it. The
+          # delimiter is built by concatenation because Ansible rejects literal
+          # template delimiters inside an expression.
+          - "('{' ~ '{') not in (zfs_capacity_body.content | b64decode)"
+          - "'deadman.invalid/zfs-capacity' in (zfs_capacity_body.content | b64decode)"
+          # The top band cannot exceed what `zpool list -o capacity` can report:
+          # ZFS slop keeps it near 96.8%, so a higher band never fires.
+          - "'POOL_THRESHOLDS=(50 75 85 90 94)' in (zfs_capacity_body.content | b64decode)"
+        fail_msg: "The rendered capacity monitor lost its transport or band contract"
+
 # The shared PR CI runs the default Molecule scenario, so importing the native
 # contract here makes the start-only gates mandatory before merge as well as in
 # the repository's post-merge Molecule workflow.

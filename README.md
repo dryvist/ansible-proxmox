@@ -65,7 +65,7 @@ Requires [Ansible][ansible-install] (Mac, Linux, WSL), SSH access to Proxmox ser
 ```bash
 git clone https://github.com/JacobPEvans/ansible-proxmox.git
 cd ansible-proxmox
-ansible-galaxy collection install -r requirements.yml
+ansible-galaxy install -r requirements.yml
 cp inventory/hosts.yml.example inventory/hosts.yml
 # Edit inventory/hosts.yml with your server details
 ```

@@ -1,0 +1,78 @@
+---
+# Repo-specific data-contract checks for ansible-proxmox.
+#
+# ansible-lint is centralized in dryvist/.github/_ansible-ci.yml and molecule
+# lives in molecule.yml. The jobs here assert THIS repo's data contract: that
+# the published OpenTofu inventory resolves and loads, and that pve_ha derives
+# its replication targets correctly. Both are fixture-driven and cheap, so they
+# run on every PR and are aggregated by the wrapper's "Merge Gate".
+#
+# Why this workflow exists: these steps used to hang off molecule.yml, which
+# triggers only on push-to-main. A change that broke inventory resolution
+# therefore passed its own pull request and failed only after merge — the check
+# that would have caught it never ran on the PR.
+
+name: Data Contract
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-inventory:
+    name: Verify Inventory Load
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+
+      # `install` resolves BOTH sections of requirements.yml. `collection
+      # install` alone silently skips a `roles:` block and `role install` alone
+      # silently skips `collections:`, so either half on its own can leave the
+      # play to fail later on a missing dependency. Passing `-p` also makes
+      # `install` drop collections — so no install path here, deliberately.
+      - name: Install Ansible dependencies
+        run: ansible-galaxy install -r requirements.yml
+
+      # load_tofu.yml (imported by verify_inventory.yml) include_role's the
+      # shared inventory_resolve role by FQCN, so this run is what proves the
+      # collection actually resolves it.
+      - name: Verify OpenTofu inventory loading
+        run: |
+          cp tests/inventory_load/tofu_inventory.json inventory/tofu_inventory.json
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          TOFU_INVENTORY_PATH=$PWD/inventory/tofu_inventory.json \
+          PROXMOX_VE_HOSTNAME=localhost \
+          PROXMOX_VM_SSH_USERNAME=root \
+          ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
+
+      # pve_ha's replication logic cannot be exercised by molecule (it needs a
+      # real cluster), so it is pinned by fixture-driven assertions instead.
+      - name: Verify pve_ha replication derivation and self-heal selection
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_ha_replication/verify_targets.yml -i localhost, -c local
+
+      # The capacity monitor alerts on a band CHANGE, so the band state write is
+      # what decides whether a filling pool keeps reporting. Molecule cannot
+      # cover it: the case under test is a DOWN notification endpoint, which a
+      # container scenario cannot present. The test extracts the template from
+      # the role rather than copying it, so role drift fails here.
+      - name: Verify the ZFS capacity monitor band-state contract
+        run: python3 tests/zfs_capacity_monitor/test_band_state.py

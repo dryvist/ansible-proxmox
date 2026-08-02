@@ -1,24 +1,44 @@
 #!/bin/bash
 set -euo pipefail
-# ZFS capacity monitor — pushes an ntfy alert when a POOL or a quota'd DATASET
-# crosses a usage band. State is tracked per pool/dataset so a notification
-# fires only on a band CHANGE, not every run. Quota-less datasets share their
-# pool's free space, so the pool bands already cover them (per-dataset bands
-# would just duplicate the pool alert). Managed by Ansible — do not edit
-# manually.
+# ZFS capacity monitor — alerts when a POOL or a quota'd DATASET crosses a usage
+# band. State is tracked per pool/dataset so a notification fires only on a band
+# CHANGE, not every run. Quota-less datasets share their pool's free space, so
+# the pool bands already cover them (per-dataset bands would just duplicate the
+# pool alert). Managed by Ansible — do not edit manually.
+#
+# Delivery is a deadman, deliberately. This runs on the host whose pool is
+# filling, so a self-hosted push target would share a failure domain with the
+# subject of the report and would report nothing while looking calm. A deadman
+# also covers what band alerts structurally cannot: alerts fire on a band
+# CHANGE, so a monitor that stops running is silent in exactly the same way as
+# one watching an idle pool. Every clean run pings it; a breach pings /fail.
 
-NTFY_URL="{{ proxmox_monitoring_ntfy_url }}"
+DEADMAN_URL="{{ proxmox_monitoring_zfs_capacity_deadman_url }}"
 STATE_DIR="/var/lib/zfs-capacity-monitor"
 POOL_THRESHOLDS=({{ proxmox_monitoring_zfs_capacity_thresholds | join(' ') }})
 DATASET_THRESHOLDS=({{ proxmox_monitoring_zfs_dataset_capacity_thresholds | join(' ') }})
 
 mkdir -p "$STATE_DIR"
 
+breach=0
+
+# $1=deadman path suffix ("" for OK, "/fail" to trip it)  $2=message
+#
+# Self-provisioning. Addressed by slug, and a slug with no registered check
+# answers 404 — so the monitor would run, exit 0, and report to nothing, which
+# is the exact failure this deadman exists to catch. Asking for creation on
+# every ping makes the destination reconstructible instead of a piece of
+# hand-made state living only in the provider.
+deadman() {
+  [ -n "$DEADMAN_URL" ] || return 0
+  curl -fsS -m 10 --retry 3 -o /dev/null --data-binary "$2" "${DEADMAN_URL}$1?create=1"
+}
+
 notify() {
-  # $1=title  $2=priority  $3=tags  $4=message
-  curl -fsS -m 10 --retry 3 -o /dev/null \
-    -H "Title: $1" -H "Priority: $2" -H "Tags: $3" \
-    -d "$4" "$NTFY_URL" || true
+  # $1=title  $2=message  $3=deadman suffix
+  # Returns non-zero when nothing got through; callers must not advance band
+  # state on that — see the state write in check_capacity.
+  deadman "$3" "$1: $2"
 }
 
 # $1=kind (Pool|Dataset)  $2=name  $3=cap%  $4..=thresholds
@@ -32,33 +52,76 @@ check_capacity() {
     if [ "$cap" -ge "$t" ]; then band="$t"; fi
   done
 
+  # Anything at or above the lowest threshold holds the deadman red for this
+  # run, whether or not the band changed. Tracking only CROSSINGS meant a pool
+  # that crossed once and then sat there got an OK heartbeat on every later run
+  # — the monitor would clear its own alert while the pool stayed full. Set the
+  # lowest threshold at the level you would actually want to be told about.
+  if [ "$band" -gt 0 ]; then breach=1; fi
+
   local state_file="$STATE_DIR/${kind,,}_${name//\//_}.band"
   local last=0
   if [ -f "$state_file" ]; then last="$(cat "$state_file")"; fi
-  if [ "$band" = "$last" ]; then return; fi
+  if [ "$band" = "$last" ]; then return 0; fi
 
-  local prio tags
+  local sent=0
   if [ "$band" -gt "$last" ]; then
-    case "$band" in
-      90) prio="urgent"; tags="rotating_light" ;;
-      75 | 85) prio="high"; tags="warning" ;;
-      *) prio="default"; tags="floppy_disk" ;;
-    esac
-    notify "ZFS ${name} at ${cap}%" "$prio" "$tags" \
-      "${kind} '${name}' crossed ${band}% capacity (now ${cap}%) on $(hostname)."
+    notify "ZFS ${name} at ${cap}%" \
+      "${kind} '${name}' crossed ${band}% capacity (now ${cap}%) on $(hostname)." \
+      "/fail" && sent=1
   else
-    notify "ZFS ${name} recovered" "default" "white_check_mark" \
-      "${kind} '${name}' dropped to ${cap}% (below ${last}%) on $(hostname)."
+    notify "ZFS ${name} recovered" \
+      "${kind} '${name}' dropped to ${cap}% (below ${last}%) on $(hostname)." \
+      "" && sent=1
   fi
-  echo "$band" >"$state_file"
+
+  # Advance the band ONLY once the alert actually landed. Writing it
+  # unconditionally means a single dropped notification retires the band
+  # forever: `last` moves up, the comparison above matches on every later run,
+  # and the pool goes silent through the exact escalation it was meant to
+  # report. Leaving state untouched costs one retry per interval instead.
+  if [ "$sent" = 1 ]; then
+    echo "$band" >"$state_file"
+  else
+    echo "zfs-capacity-monitor: ${kind} ${name} at ${cap}% — no transport" \
+      "accepted the alert, band ${last}->${band} not recorded, will retry" >&2
+  fi
+  return 0
 }
 
-zpool list -H -o name,capacity | while IFS=$'\t' read -r pool cap_raw; do
+# Read the sensor before looping. A pipeline would run the loop in a subshell
+# (losing `breach`) and would mask a failing `zpool` as an empty result — a
+# sensor that cannot read is not a pool that is healthy, so it trips the deadman
+# and exits non-zero rather than reporting nothing.
+if ! pool_list=$(zpool list -H -o name,capacity); then
+  echo "zfs-capacity-monitor: 'zpool list' failed" >&2
+  deadman "/fail" "zfs-capacity-monitor on $(hostname): zpool list failed, capacity is UNKNOWN" || true
+  exit 1
+fi
+
+while IFS=$'\t' read -r pool cap_raw; do
+  [ -n "$pool" ] || continue
   check_capacity "Pool" "$pool" "${cap_raw%\%}" "${POOL_THRESHOLDS[@]}"
-done
+done <<<"$pool_list"
 
 # Quota'd datasets: capacity = used/quota (raw bytes via -p; quota 0 = none).
-zfs list -Hp -t filesystem -o name,used,quota | while IFS=$'\t' read -r ds used quota; do
+# Note this cannot see zvols: -t filesystem excludes volumes, and a zvol carries
+# refreservation rather than a quota. Thin zvols are covered by the pool bands
+# above, which is the only coverage they get.
+if ! ds_list=$(zfs list -Hp -t filesystem -o name,used,quota); then
+  echo "zfs-capacity-monitor: 'zfs list' failed" >&2
+  deadman "/fail" "zfs-capacity-monitor on $(hostname): zfs list failed, dataset capacity is UNKNOWN" || true
+  exit 1
+fi
+
+while IFS=$'\t' read -r ds used quota; do
+  [ -n "$ds" ] || continue
   [ "$quota" -gt 0 ] || continue
   check_capacity "Dataset" "$ds" "$((used * 100 / quota))" "${DATASET_THRESHOLDS[@]}"
-done
+done <<<"$ds_list"
+
+# Heartbeat. Only on a clean pass: pinging OK right after a breach tripped
+# /fail would clear the alert in the same run that raised it.
+if [ "$breach" = 0 ]; then
+  deadman "" "zfs-capacity-monitor on $(hostname): all pools and quota'd datasets within bands" || true
+fi

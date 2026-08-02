@@ -4,7 +4,10 @@
   gather_facts: false
 
   tasks:
+    # cron is needed so ansible.builtin.cron has a crontab to write to —
+    # without it the capacity-monitor schedule cannot be asserted, and the
+    # deployment would look fine while scheduling nothing.
     - name: Install Python and system utilities (required for Ansible)
       ansible.builtin.raw: |
-        apt-get update && apt-get install -y python3 procps
+        apt-get update && apt-get install -y python3 procps cron
       changed_when: true

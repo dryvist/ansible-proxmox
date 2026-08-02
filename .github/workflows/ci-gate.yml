@@ -1,11 +1,14 @@
 ---
 # CI Gate — thin wrapper around the shared ansible CI gate.
 #
-# All of the lint + molecule + Merge Gate logic lives in
-# dryvist/.github/.github/workflows/_ansible-ci.yml. This repo uses the defaults:
-# ansible-lint over the whole project, the `default` molecule scenario, and
-# molecule deps from requirements-ci.txt. Branch protection requires only the
-# "Merge Gate" check the shared workflow emits.
+# Lint and molecule live in dryvist/.github/.github/workflows/_ansible-ci.yml.
+# This repo uses its defaults: ansible-lint over the whole project, the
+# `default` molecule scenario, and molecule deps from requirements-ci.txt.
+#
+# The shared workflow runs with emit_gate:false and this wrapper aggregates its
+# own "Merge Gate" instead, so the repo-local data-contract job sits INSIDE the
+# required check rather than beside it. The check name is unchanged, so branch
+# protection needs no edit — it still requires only "Merge Gate".
 
 name: CI Gate
 
@@ -27,3 +30,30 @@ jobs:
       contents: read
       pull-requests: read
     uses: dryvist/.github/.github/workflows/_ansible-ci.yml@main
+    with:
+      emit_gate: false
+
+  # Deliberately unconditional. Gating this on the shared change filter, and
+  # then telling the gate a skip is acceptable, means a green required check
+  # whenever the filter fails to classify a PR as ansible-relevant — the check
+  # reports success without having run. That is the same failure mode this job
+  # was added to catch: a dependency resolving to the wrong artifact while
+  # everything reported success. The job is short, so always paying for it is
+  # cheaper than reasoning about whether the classifier covers every path that
+  # can break inventory resolution.
+  data-contract:
+    name: Data Contract
+    needs: ci
+    uses: ./.github/workflows/_data-contract.yml
+
+  gate:
+    name: Merge Gate
+    needs: [ci, data-contract]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all results
+        uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # release/v1
+        with:
+          # No allowed-skips: every job here must actually run and pass.
+          jobs: ${{ toJSON(needs) }}
