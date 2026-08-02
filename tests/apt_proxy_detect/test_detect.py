@@ -94,7 +94,8 @@ class Listener:
         self.port = self.sock.getsockname()[1]
         self.sock.listen(8)
         self.stopped = False
-        threading.Thread(target=self._serve, daemon=True).start()
+        self.thread = threading.Thread(target=self._serve, daemon=True)
+        self.thread.start()
 
     def _serve(self):
         while not self.stopped:
@@ -105,7 +106,20 @@ class Listener:
 
     def close(self):
         self.stopped = True
+        # Wake the thread blocked in accept() and wait for it to exit before
+        # closing the socket. Closing a listening socket from another thread
+        # does not reliably interrupt accept() on Linux, leaving a window in
+        # which the negative control can still connect.
+        try:
+            socket.create_connection(("127.0.0.1", self.port), 2).close()
+        except OSError:
+            pass
+        self.thread.join(2)
         self.sock.close()
+        if self.thread.is_alive():
+            self.thread.join(2)
+        if self.thread.is_alive():
+            raise RuntimeError("listener thread did not stop")
 
 
 def reachable(port):
