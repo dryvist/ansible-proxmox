@@ -1,6 +1,8 @@
 ---
-# Migration window (tofu-proxmox#816): pve540 is the replacement node and has
-# no snapshot or replication service to reconcile.  Keep both host-level roles
-# disabled until the workload evacuation is complete.
-sanoid_enabled: false
-syncoid_enabled: false
+# Migration window (tofu-proxmox#816): keep the roles active solely to
+# reconcile any scheduler drift to absent.  The timer is stopped and disabled;
+# the empty job list removes both Syncoid scheduling paths.
+sanoid_enabled: true
+sanoid_timer_enabled: false
+syncoid_enabled: true
+syncoid_jobs: []
