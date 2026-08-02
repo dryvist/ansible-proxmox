@@ -10,7 +10,8 @@
 
 - name: Converge
   hosts: all
-  become: true
+  # The Docker test container runs as root and does not install sudo.
+  become: false
   gather_facts: true
 
   vars:
