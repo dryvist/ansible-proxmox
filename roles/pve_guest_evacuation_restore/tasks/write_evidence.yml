@@ -1,0 +1,43 @@
+---
+- name: Check that the immutable restore evidence paths are unused
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  delegate_to: "{{ pve_guest_evacuation_restore_staging_host }}"
+  loop:
+    - "{{ pve_guest_evacuation_restore_result_evidence_path }}"
+    - "{{ pve_guest_evacuation_restore_result_evidence_path }}.tmp"
+  register: pve_guest_evacuation_restore_evidence_paths
+
+- name: Refuse to overwrite restore evidence
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: >-
+      Restore evidence path {{ item.item }} already exists. Preserve it and
+      choose a new restore run id rather than overwriting recovery evidence.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_restore_evidence_paths.results }}"
+
+- name: Render restore evidence into an unpublished temporary file
+  ansible.builtin.template:
+    src: restore-evidence.json.j2
+    dest: "{{ pve_guest_evacuation_restore_result_evidence_path }}.tmp"
+    owner: root
+    group: root
+    mode: '0600'
+  delegate_to: "{{ pve_guest_evacuation_restore_staging_host }}"
+
+- name: Atomically link immutable restore evidence into place
+  ansible.builtin.command:
+    argv:
+      - ln
+      - "{{ pve_guest_evacuation_restore_result_evidence_path }}.tmp"
+      - "{{ pve_guest_evacuation_restore_result_evidence_path }}"
+  delegate_to: "{{ pve_guest_evacuation_restore_staging_host }}"
+  changed_when: true
+
+- name: Remove the published restore evidence temporary link
+  ansible.builtin.file:
+    path: "{{ pve_guest_evacuation_restore_result_evidence_path }}.tmp"
+    state: absent
+  delegate_to: "{{ pve_guest_evacuation_restore_staging_host }}"

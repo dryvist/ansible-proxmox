@@ -1,0 +1,26 @@
+---
+# Restore-only, one verified issue-816 archive onto standalone pve540. This
+# role is deliberately inert unless all archive identity inputs are supplied.
+pve_guest_evacuation_restore_enabled: false
+pve_guest_evacuation_restore_source_node: pve2
+pve_guest_evacuation_restore_target_node: pve540
+pve_guest_evacuation_restore_staging_host: pve3
+pve_guest_evacuation_restore_evidence_dir: /bulk/evacuation-816/evidence
+
+# Both evidence records live only on pve3's root-only staging evidence path.
+# The archive path is derived from the original archive run id and VMID so a
+# restore cannot silently select an arbitrary archive record.
+pve_guest_evacuation_restore_archive_run_id: ""
+pve_guest_evacuation_restore_run_id: ""
+pve_guest_evacuation_restore_expected_vmid: null
+pve_guest_evacuation_restore_expected_guest_type: ""
+pve_guest_evacuation_restore_expected_config_digest: ""
+pve_guest_evacuation_restore_expected_archive_sha256: ""
+pve_guest_evacuation_restore_archive_evidence_path: >-
+  {{ pve_guest_evacuation_restore_evidence_dir }}/{{ pve_guest_evacuation_restore_archive_run_id }}-{{ pve_guest_evacuation_restore_expected_vmid }}.json
+pve_guest_evacuation_restore_result_evidence_path: >-
+  {{ pve_guest_evacuation_restore_evidence_dir }}/restore-{{ pve_guest_evacuation_restore_run_id }}-{{ pve_guest_evacuation_restore_expected_vmid }}.json
+
+# Restoration never uses the backup-only staging storage as its destination.
+# This identifier must already exist and be active on standalone pve540.
+pve_guest_evacuation_restore_target_storage: ""

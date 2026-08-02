@@ -1,0 +1,9 @@
+---
+- name: Converge the inert restore-only role
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    pve_guest_evacuation_restore_enabled: false
+  roles:
+    - role: pve_guest_evacuation_restore

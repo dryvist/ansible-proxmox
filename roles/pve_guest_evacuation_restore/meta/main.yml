@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: pve_guest_evacuation_restore
+  author: dryvist
+  description: Fail-closed restore of one verified pve2 evacuation archive
+  license: MIT
+  min_ansible_version: '2.19'
+dependencies: []
