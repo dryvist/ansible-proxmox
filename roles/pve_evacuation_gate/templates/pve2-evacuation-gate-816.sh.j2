@@ -354,6 +354,7 @@ case "$phase" in
     ;;
   zero_error_reverification)
     assert_zero_vdev_errors "$report"
+    printf '%s\n' "$phase" >"$state_dir/PASSED.phase"
     touch "$state_dir/PASSED"
     log daemon.notice "zero-error scrub and fresh SMART tests passed; pve2 source integrity is migration-trusted"
     ;;

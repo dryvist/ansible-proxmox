@@ -1,0 +1,24 @@
+---
+pve_bulk_data_compare_enabled: false
+pve_bulk_data_compare_issue_816_enabled: false
+pve_bulk_data_compare_run_id: ""
+pve_bulk_data_compare_source_node: pve2
+pve_bulk_data_compare_target_node: pve540
+pve_bulk_data_compare_evidence_host: pve3
+pve_bulk_data_compare_evidence_dir: ""
+pve_bulk_data_compare_source_manifest_dir: /mnt/pve/evacuation-816/manifests
+pve_bulk_data_compare_target_manifest_dir: /mnt/pve/evacuation-816/manifests
+pve_bulk_data_compare_pve3_manifest_dir: /bulk/evacuation-816/manifests
+pve_bulk_data_compare_manifest_export: ""
+pve_bulk_data_compare_source_dataset: bulk/data
+pve_bulk_data_compare_target_dataset: bulk/data
+pve_bulk_data_compare_source_path: /bulk/data
+pve_bulk_data_compare_target_path: /bulk/data
+pve_bulk_data_compare_guard_state_dir: /var/lib/pve2-evacuation-gate-816
+pve_bulk_data_compare_media_writer_cts:
+  - 703040
+  - 715240
+  - 715340
+  - 725140
+  - 736030
+  - 736040
