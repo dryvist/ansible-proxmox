@@ -93,8 +93,8 @@ check_capacity() {
 # (losing `breach`) and would mask a failing `zpool` as an empty result — a
 # sensor that cannot read is not a pool that is healthy, so it trips the deadman
 # and exits non-zero rather than reporting nothing.
-if ! pool_list=$(zpool list -H -o name,capacity 2>&1); then
-  echo "zfs-capacity-monitor: 'zpool list' failed: ${pool_list}" >&2
+if ! pool_list=$(zpool list -H -o name,capacity); then
+  echo "zfs-capacity-monitor: 'zpool list' failed" >&2
   deadman "/fail" "zfs-capacity-monitor on $(hostname): zpool list failed, capacity is UNKNOWN" || true
   exit 1
 fi
@@ -108,8 +108,8 @@ done <<<"$pool_list"
 # Note this cannot see zvols: -t filesystem excludes volumes, and a zvol carries
 # refreservation rather than a quota. Thin zvols are covered by the pool bands
 # above, which is the only coverage they get.
-if ! ds_list=$(zfs list -Hp -t filesystem -o name,used,quota 2>&1); then
-  echo "zfs-capacity-monitor: 'zfs list' failed: ${ds_list}" >&2
+if ! ds_list=$(zfs list -Hp -t filesystem -o name,used,quota); then
+  echo "zfs-capacity-monitor: 'zfs list' failed" >&2
   deadman "/fail" "zfs-capacity-monitor on $(hostname): zfs list failed, dataset capacity is UNKNOWN" || true
   exit 1
 fi
