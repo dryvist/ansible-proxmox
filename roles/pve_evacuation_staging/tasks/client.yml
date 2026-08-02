@@ -137,10 +137,9 @@
     - name: Read this node's active evacuation storage status
       ansible.builtin.command:
         argv:
-          - pvesm
-          - status
-          - --storage
-          - "{{ pve_evacuation_staging_storage_id }}"
+          - pvesh
+          - get
+          - "/nodes/{{ pve_evacuation_staging_client_node }}/storage/{{ pve_evacuation_staging_storage_id }}/status"
           - --output-format
           - json
       register: pve_evacuation_staging_storage_status
@@ -149,12 +148,8 @@
     - name: Verify this node can activate the evacuation storage view
       ansible.builtin.assert:
         that:
-          - (pve_evacuation_staging_storage_status.stdout | from_json) | length == 1
           - >-
-            (pve_evacuation_staging_storage_status.stdout | from_json)[0].storage
-            == pve_evacuation_staging_storage_id
-          - >-
-            ((pve_evacuation_staging_storage_status.stdout | from_json)[0].active
+            ((pve_evacuation_staging_storage_status.stdout | from_json).active
              | default(0) | int) == 1
         fail_msg: >-
           {{ inventory_hostname }} has the storage configuration but cannot
