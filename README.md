@@ -85,9 +85,8 @@ order (first that resolves wins):
    `secret/platform/object-storage`; only `BAO_ADDR` and `BAO_TOKEN` are needed.
    Override the object with `TOFU_INVENTORY_S3_URI` when required.
 
-There is no third source — see the
-[role README](https://github.com/dryvist/homelab-contracts/tree/main/ansible/roles/inventory_resolve),
-which is canonical for the order.
+For the canonical resolution order, see the
+[role README](https://github.com/dryvist/homelab-contracts/tree/main/ansible/roles/inventory_resolve).
 
 The artifact is expected to already exist in RustFS; provisioning and
 publishing it is outside this repo's scope.
