@@ -20,7 +20,7 @@ No separate installation is required.
 
 ## Inputs
 
-- `inventory/tofu_inventory.json` must exist and contain `host_services.nas`
+- The resolved OpenTofu inventory must contain `host_services.nas`
 - `NAS_HOMEASSISTANT_SMB_PASSWORD` must be exported for the managed Home Assistant user
 
 ## Usage

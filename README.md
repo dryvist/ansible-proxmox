@@ -84,8 +84,10 @@ order (first that resolves wins):
    homelab network with credentials read directly from OpenBao
    `secret/platform/object-storage`; only `BAO_ADDR` and `BAO_TOKEN` are needed.
    Override the object with `TOFU_INVENTORY_S3_URI` when required.
-3. `inventory/tofu_inventory.json` — a local cache for development, only when
-   `TOFU_INVENTORY_ALLOW_STALE=1` is explicitly set.
+
+There is no third source — see the
+[role README](https://github.com/dryvist/homelab-contracts/tree/main/ansible/roles/inventory_resolve),
+which is canonical for the order.
 
 The artifact is expected to already exist in RustFS; provisioning and
 publishing it is outside this repo's scope.
@@ -210,8 +212,7 @@ ANSIBLE_ALLOW_BROKEN_CONDITIONALS=1 molecule test
 ANSIBLE_ALLOW_BROKEN_CONDITIONALS=1 molecule test -s nas_storage
 
 # Verify OpenTofu inventory loading locally
-cp tests/inventory_load/tofu_inventory.json inventory/tofu_inventory.json
-TOFU_INVENTORY_PATH=$PWD/inventory/tofu_inventory.json \
+TOFU_INVENTORY_PATH=$PWD/tests/inventory_load/tofu_inventory.json \
 PROXMOX_VE_HOSTNAME=localhost PROXMOX_VM_SSH_USERNAME=root \
   ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
 ```
