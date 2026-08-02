@@ -1,0 +1,15 @@
+---
+# Temporary, migration-scoped ZFS/SMART evidence gate for pve2.  It remains
+# inert until explicitly enabled in pve2 host_vars and is deliberately kept out
+# of the normal fleet site play.
+
+pve_evacuation_gate_enabled: false
+pve_evacuation_gate_pool: bulk
+pve_evacuation_gate_phase: initial
+pve_evacuation_gate_interval: 5min
+pve_evacuation_gate_unit_name: pve2-evacuation-gate-816
+pve_evacuation_gate_script_path: /usr/local/sbin/pve2-evacuation-gate-816
+pve_evacuation_gate_state_dir: /var/lib/pve2-evacuation-gate-816
+pve_evacuation_gate_protected_node: pve2
+pve_evacuation_gate_prohibited_replication_ids: []
+pve_evacuation_gate_smart_devices: []

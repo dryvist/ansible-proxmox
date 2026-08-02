@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: pve_evacuation_gate
+  author: ansible-proxmox
+  description: Persist the pve2 evacuation ZFS scrub and SMART integrity gate
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - zfs
+    - migration
+
+dependencies: []

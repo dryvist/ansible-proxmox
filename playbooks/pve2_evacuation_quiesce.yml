@@ -1,0 +1,65 @@
+---
+- name: Quiesce pve2 evacuation I/O
+  hosts: pve2
+  become: true
+  gather_facts: false
+
+  vars:
+    pve2_evacuation_quiesce_guests:
+      - 725140
+
+  tasks:
+    - name: Read evacuation guest status
+      ansible.builtin.command:
+        argv:
+          - pct
+          - status
+          - "{{ item | string }}"
+      loop: "{{ pve2_evacuation_quiesce_guests }}"
+      register: pve2_evacuation_guest_status
+      changed_when: false
+
+    - name: Shut down evacuation guests that are running
+      ansible.builtin.command:
+        argv:
+          - pct
+          - shutdown
+          - "{{ item.item | string }}"
+          - --timeout
+          - "120"
+      loop: "{{ pve2_evacuation_guest_status.results }}"
+      when: "item.stdout == 'status: running'"
+      register: pve2_evacuation_guest_shutdown
+      changed_when: pve2_evacuation_guest_shutdown.rc == 0
+      failed_when: false
+
+    - name: Read evacuation guest status after shutdown
+      ansible.builtin.command:
+        argv:
+          - pct
+          - status
+          - "{{ item | string }}"
+      loop: "{{ pve2_evacuation_quiesce_guests }}"
+      register: pve2_evacuation_guest_after_shutdown
+      changed_when: false
+
+    - name: Force stop evacuation guests that remain running
+      ansible.builtin.command:
+        argv:
+          - pct
+          - stop
+          - "{{ item.item | string }}"
+      loop: "{{ pve2_evacuation_guest_after_shutdown.results }}"
+      when: "item.stdout == 'status: running'"
+      changed_when: true
+
+    - name: Verify evacuation guests are stopped
+      ansible.builtin.command:
+        argv:
+          - pct
+          - status
+          - "{{ item | string }}"
+      loop: "{{ pve2_evacuation_quiesce_guests }}"
+      register: pve2_evacuation_guest_verify
+      changed_when: false
+      failed_when: "pve2_evacuation_guest_verify.stdout != 'status: stopped'"

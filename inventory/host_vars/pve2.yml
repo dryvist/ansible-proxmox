@@ -7,6 +7,32 @@
 sanoid_timer_enabled: false
 syncoid_jobs: []
 
+# Reboot-persistent source-integrity gate for the pve2 -> pve540 evacuation.
+# The explicit serials prevent a stale MegaRAID index from starting a long SMART
+# test against the wrong disk.  `initial` records the current scrub and fresh
+# extended SMART results; after the historical checksum evidence is preserved
+# and deliberately cleared, `zero_error_reverification` requires a second scrub
+# with no device error counters before the source becomes migration-trusted.
+pve_evacuation_gate_enabled: true
+pve_evacuation_gate_pool: bulk
+pve_evacuation_gate_phase: initial
+pve_evacuation_gate_protected_node: pve2
+pve_evacuation_gate_prohibited_replication_ids:
+  - 602000-0
+pve_evacuation_gate_smart_devices:
+  - device: /dev/bus/4
+    type: sat+megaraid
+    index: 0
+    serial: K1H644UD
+  - device: /dev/bus/4
+    type: sat+megaraid
+    index: 1
+    serial: K1GUZHYD
+  - device: /dev/bus/4
+    type: sat+megaraid
+    index: 2
+    serial: 372IK3DGFE1C
+
 # Host vars for pve2 (secondary, always-on — the backup/replica target).
 #
 # The dataset policy remains declared below, but its scheduler is disabled for
