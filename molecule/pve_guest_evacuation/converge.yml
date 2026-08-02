@@ -1,0 +1,9 @@
+---
+- name: Converge the inert evacuation role
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    pve_guest_evacuation_enabled: false
+  roles:
+    - role: pve_guest_evacuation

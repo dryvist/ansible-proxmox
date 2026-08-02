@@ -1,0 +1,88 @@
+---
+- name: Verify the evacuation role remains inert by default
+  hosts: all
+  become: false
+  # This scenario has no container-side behaviour: every check is an Ansible
+  # controller assertion, so avoid a dependency on a running Docker platform.
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert no evidence directory was created by the inert role
+      ansible.builtin.stat:
+        path: /var/lib/pve-guest-evacuation
+      register: pve_guest_evacuation_evidence_dir
+
+    - name: Assert the inert contract
+      ansible.builtin.assert:
+        that:
+          - not pve_guest_evacuation_evidence_dir.stat.exists
+        fail_msg: "The inert pve_guest_evacuation role created state."
+
+    - name: Exercise the fail-closed phase contract
+      block:
+        - name: Run the unsupported phase gate
+          ansible.builtin.include_role:
+            name: pve_guest_evacuation
+            tasks_from: preflight_contract.yml
+          vars:
+            pve_guest_evacuation_phase: cutover
+      rescue:
+        - name: Record that the unsupported phase failed
+          ansible.builtin.set_fact:
+            pve_guest_evacuation_cutover_failed: true
+
+    - name: Assert cutover is explicitly unsupported
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_cutover_failed | default(false)
+
+    - name: Exercise the enabled-input contract
+      block:
+        - name: Run the incomplete enabled-input gate
+          ansible.builtin.include_role:
+            name: pve_guest_evacuation
+            tasks_from: preflight_contract.yml
+          vars:
+            pve_guest_evacuation_source_node: pve-guest-evacuation-test
+            pve_guest_evacuation_target_node: pve540
+            pve_guest_evacuation_staging_host: pve3
+            pve_guest_evacuation_guest_vmid: '101'
+            pve_guest_evacuation_run_id: molecule
+      rescue:
+        - name: Record that incomplete enabled inputs failed
+          ansible.builtin.set_fact:
+            pve_guest_evacuation_input_failed: true
+
+    - name: Assert incomplete enabled inputs fail closed
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_input_failed | default(false)
+
+    - name: Permit a managed Proxmox LXC volume
+      ansible.builtin.include_role:
+        name: pve_guest_evacuation
+        tasks_from: resource_gates.yml
+      vars:
+        pve_guest_evacuation_guest_type: lxc
+        pve_guest_evacuation_config:
+          mp0: bulk:vm-101-disk-0,mp=/srv/data
+
+    - name: Reject a host-path LXC bind mount
+      block:
+        - name: Run the host-path bind gate
+          ansible.builtin.include_role:
+            name: pve_guest_evacuation
+            tasks_from: resource_gates.yml
+          vars:
+            pve_guest_evacuation_guest_type: lxc
+            pve_guest_evacuation_config:
+              mp0: /mnt/media,mp=/media
+      rescue:
+        - name: Record that host-path bind mount failed
+          ansible.builtin.set_fact:
+            pve_guest_evacuation_bind_failed: true
+
+    - name: Assert a host-path LXC bind mount failed closed
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_bind_failed | default(false)

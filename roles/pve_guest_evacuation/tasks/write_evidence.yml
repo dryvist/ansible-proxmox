@@ -1,0 +1,17 @@
+---
+- name: Render atomic evidence temporary file
+  ansible.builtin.template:
+    src: evidence.json.j2
+    dest: "{{ pve_guest_evacuation_evidence_path }}.tmp"
+    mode: '0600'
+  delegate_to: "{{ pve_guest_evacuation_staging_host }}"
+
+- name: Atomically publish evacuation evidence
+  ansible.builtin.command:
+    argv:
+      - mv
+      - -f
+      - "{{ pve_guest_evacuation_evidence_path }}.tmp"
+      - "{{ pve_guest_evacuation_evidence_path }}"
+  delegate_to: "{{ pve_guest_evacuation_staging_host }}"
+  changed_when: true

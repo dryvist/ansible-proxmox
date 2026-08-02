@@ -76,3 +76,6 @@ jobs:
       # the role rather than copying it, so role drift fails here.
       - name: Verify the ZFS capacity monitor band-state contract
         run: python3 tests/zfs_capacity_monitor/test_band_state.py
+
+      - name: Verify snapshot-free guest archive safety contract
+        run: python3 tests/pve_guest_evacuation/test_archive_contract.py

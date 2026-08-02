@@ -1,0 +1,16 @@
+---
+platforms:
+  - name: pve-guest-evacuation-test
+    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    pre_build_image: true
+    privileged: true
+    tmpfs:
+      - /run
+      - /tmp
+
+# This scenario exercises a standalone role rather than Molecule's implicit
+# role-under-test. Point Ansible at the repository role directory explicitly.
+provisioner:
+  config_options:
+    defaults:
+      roles_path: ${MOLECULE_SCENARIO_DIRECTORY}/../../roles
