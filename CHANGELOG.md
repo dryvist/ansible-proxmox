@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.70.0](https://github.com/dryvist/ansible-proxmox/compare/v1.69.0...v1.70.0) (2026-08-02)
+
+
+### Features
+
+* add snapshot-free guest archive gate ([#541](https://github.com/dryvist/ansible-proxmox/issues/541)) ([653a505](https://github.com/dryvist/ansible-proxmox/commit/653a5058573ff725d197eab7c1b369538fac23ab))
+* **evacuation:** add pve2 staging prerequisite ([#542](https://github.com/dryvist/ansible-proxmox/issues/542)) ([adba262](https://github.com/dryvist/ansible-proxmox/commit/adba26250630a10f51f43ca91af90108f331b0cc))
+* **evacuation:** gate bulk data comparison ([#543](https://github.com/dryvist/ansible-proxmox/issues/543)) ([533052e](https://github.com/dryvist/ansible-proxmox/commit/533052e975317234b12d2fc9af310eb32b3c2d3e))
+
 ## [1.69.0](https://github.com/dryvist/ansible-proxmox/compare/v1.68.1...v1.69.0) (2026-08-02)
 
 
