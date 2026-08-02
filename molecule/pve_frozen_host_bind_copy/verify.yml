@@ -1,0 +1,33 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Assert the inert role created no evidence directory
+      ansible.builtin.stat:
+        path: /root/pve2-to-pve540-frozen-copy
+      register: frozen_copy_evidence
+
+    - name: Require the default role path to be a no-op
+      ansible.builtin.assert:
+        that: [not frozen_copy_evidence.stat.exists]
+        fail_msg: "The disabled frozen host-bind copy role changed the test host."
+
+    - name: Exercise the enabled frozen-copy identity gate
+      block:
+        - name: Run the incomplete enabled frozen-copy role
+          ansible.builtin.include_role:
+            name: pve_frozen_host_bind_copy
+          vars:
+            pve_frozen_host_bind_copy_enabled: true
+            pve_frozen_host_bind_copy_run_id: molecule-gate
+      rescue:
+        - name: Record that incomplete enabled frozen-copy input failed
+          ansible.builtin.set_fact:
+            pve_frozen_host_bind_copy_input_failed: true
+
+    - name: Require incomplete enabled frozen-copy input to fail closed
+      ansible.builtin.assert:
+        that: [pve_frozen_host_bind_copy_input_failed | default(false)]

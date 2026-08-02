@@ -1,0 +1,38 @@
+---
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/requirements.yml
+
+driver:
+  name: docker
+
+platforms:
+  - name: pve-frozen-host-bind-copy-test
+    image: geerlingguy/docker-debian12-ansible:latest
+    command: ""
+    pre_build_image: true
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      interpreter_python: auto_silent
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+
+verifier:
+  name: ansible
+
+scenario:
+  name: pve_frozen_host_bind_copy
+  test_sequence:
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - converge
+    - idempotence
+    - verify
+    - cleanup
+    - destroy
