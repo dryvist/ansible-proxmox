@@ -53,10 +53,9 @@ jobs:
       # collection actually resolves it.
       - name: Verify OpenTofu inventory loading
         run: |
-          cp tests/inventory_load/tofu_inventory.json inventory/tofu_inventory.json
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          TOFU_INVENTORY_PATH=$PWD/inventory/tofu_inventory.json \
+          TOFU_INVENTORY_PATH=$PWD/tests/inventory_load/tofu_inventory.json \
           PROXMOX_VE_HOSTNAME=localhost \
           PROXMOX_VM_SSH_USERNAME=root \
           ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
