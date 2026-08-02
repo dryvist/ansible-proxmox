@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.68.0](https://github.com/dryvist/ansible-proxmox/compare/v1.67.0...v1.68.0) (2026-08-02)
+
+
+### Features
+
+* **proxmox_monitoring:** give the capacity monitor a second transport and a heartbeat ([#510](https://github.com/dryvist/ansible-proxmox/issues/510)) ([4c5d665](https://github.com/dryvist/ansible-proxmox/commit/4c5d665068749598d95b07d6043a117a6436a965))
+
+
+### Bug Fixes
+
+* **ci:** make the data contract run on every pull request ([#507](https://github.com/dryvist/ansible-proxmox/issues/507)) ([88c794b](https://github.com/dryvist/ansible-proxmox/commit/88c794b71af856617ecde23a401775b4aadbeaa3))
+* **inventory:** take inventory_resolve from the collection, not a roles: pin ([#499](https://github.com/dryvist/ansible-proxmox/issues/499)) ([c895d37](https://github.com/dryvist/ansible-proxmox/commit/c895d37f3d5a9a10db8900ad099e59d5f5cdefce))
+* **proxmox_monitoring:** give the capacity alarm somewhere to report ([#514](https://github.com/dryvist/ansible-proxmox/issues/514)) ([1a25388](https://github.com/dryvist/ansible-proxmox/commit/1a2538871fe4396268e91b67759494b1adbed8d9))
+* **proxmox_monitoring:** keep sensor stderr out of parser ([23d8103](https://github.com/dryvist/ansible-proxmox/commit/23d8103a8abb8ba7ee32367de03c59164e19286b))
+* **proxmox_monitoring:** stop a dropped alert from retiring its capacity band ([#509](https://github.com/dryvist/ansible-proxmox/issues/509)) ([a4b5845](https://github.com/dryvist/ansible-proxmox/commit/a4b5845cb7ab94c2872a58f7652c33a07a7381f2))
+* **sanoid:** snapshot postgres-ai-1's live PGDATA on pve3 ([#515](https://github.com/dryvist/ansible-proxmox/issues/515)) ([b9158a8](https://github.com/dryvist/ansible-proxmox/commit/b9158a8c82cefacc2630682df5521b47e5489d79))
+* **storage:** disable snapshots during migration ([05c62c1](https://github.com/dryvist/ansible-proxmox/commit/05c62c1287adf7cbbf94e9802e09c9112d950522))
+
 ## [1.67.0](https://github.com/dryvist/ansible-proxmox/compare/v1.66.0...v1.67.0) (2026-07-31)
 
 
