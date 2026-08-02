@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.69.0](https://github.com/dryvist/ansible-proxmox/compare/v1.68.1...v1.69.0) (2026-08-02)
+
+
+### Features
+
+* guard pve2 evacuation and preserve pve540 data ([#537](https://github.com/dryvist/ansible-proxmox/issues/537)) ([721377c](https://github.com/dryvist/ansible-proxmox/commit/721377c4dcb2a7ed2898cfce6902a072a4c81567))
+
 ## [1.68.1](https://github.com/dryvist/ansible-proxmox/compare/v1.68.0...v1.68.1) (2026-08-02)
 
 
