@@ -1,0 +1,34 @@
+---
+- name: Verify the Docker-safe evacuation staging contract
+  hosts: all
+  become: false
+  gather_facts: true
+
+  tasks:
+    - name: Read the evacuation staging role defaults
+      ansible.builtin.slurp:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/pve_evacuation_staging/defaults/main.yml"
+      delegate_to: localhost
+      register: pve_evacuation_staging_defaults
+      run_once: true
+
+    - name: Assert the role stays disabled by default
+      ansible.builtin.assert:
+        that:
+          - "'pve_evacuation_staging_enabled: false' in (pve_evacuation_staging_defaults.content | b64decode)"
+        fail_msg: "pve_evacuation_staging must remain inert by default"
+      run_once: true
+
+    - name: Probe for the Proxmox cluster filesystem
+      ansible.builtin.stat:
+        path: /etc/pve/storage.cfg
+      register: pve_evacuation_staging_storage_cfg
+
+    - name: Assert Docker convergence made no live ZFS or Proxmox changes
+      ansible.builtin.assert:
+        that:
+          - ansible_virtualization_type == 'docker'
+          - not pve_evacuation_staging_storage_cfg.stat.exists
+        fail_msg: >-
+          Molecule must only exercise the enabled contract; ZFS, NFS, and
+          Proxmox storage operations require the real hosts.

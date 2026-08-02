@@ -69,6 +69,12 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_ha_replication/verify_targets.yml -i localhost, -c local
 
+      - name: Verify pve evacuation staging static contract
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_evacuation_staging/verify_contract.yml -i localhost, -c local
+
       # The capacity monitor alerts on a band CHANGE, so the band state write is
       # what decides whether a filling pool keeps reporting. Molecule cannot
       # cover it: the case under test is a DOWN notification endpoint, which a
