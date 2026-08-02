@@ -1,0 +1,65 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered evacuation-gate script
+      ansible.builtin.slurp:
+        src: /usr/local/sbin/pve2-evacuation-gate-816
+      register: evacuation_gate_script
+
+    - name: Read the rendered evacuation-gate service
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/pve2-evacuation-gate-816.service
+      register: evacuation_gate_service
+
+    - name: Read the rendered evacuation-gate timer
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/pve2-evacuation-gate-816.timer
+      register: evacuation_gate_timer
+
+    - name: Decode the evacuation-gate script
+      ansible.builtin.set_fact:
+        evacuation_gate_script_text: "{{ evacuation_gate_script.content | b64decode }}"
+
+    - name: Assert the script renders the source-integrity contract
+      ansible.builtin.assert:
+        that:
+          - "'zfs list -H -t snapshot -o name' in evacuation_gate_script_text"
+          - "'zpool list -H -o name,freeing' in evacuation_gate_script_text"
+          - "'sanoid.timer is enabled' in evacuation_gate_script_text"
+          - "'pvesh get /cluster/replication --output-format json' in evacuation_gate_script_text"
+          - "'pvesh get /cluster/backup --output-format json' in evacuation_gate_script_text"
+          - "'pvesh get /cluster/resources --type vm --output-format json' in evacuation_gate_script_text"
+          - '''item.get("source") == protected_node'' in evacuation_gate_script_text'
+          - "'smartctl -t long' in evacuation_gate_script_text"
+          - "'current_status' in evacuation_gate_script_text"
+          - "'test_hours >= started_hours' in evacuation_gate_script_text"
+          - "'table_hash != baseline_hash' in evacuation_gate_script_text"
+          - "'observed-in-progress' in evacuation_gate_script_text"
+          - "'qualification.boot-id' in evacuation_gate_script_text"
+          - "'host rebooted during source qualification' in evacuation_gate_script_text"
+          - "'suspend_smartd' in evacuation_gate_script_text"
+          - "'restore_smartd' in evacuation_gate_script_text"
+          - "'test-serial-a' in evacuation_gate_script_text"
+          - "'smartctl -j -i -d' in evacuation_gate_script_text"
+          - "'NEEDS_ZERO_ERROR_REVERIFICATION' in evacuation_gate_script_text"
+          - '''if [ ! -e "$state_dir/FAILED" ]'' in evacuation_gate_script_text'
+          - "'assert_zero_vdev_errors' in evacuation_gate_script_text"
+          - "'zpool clear' not in evacuation_gate_script_text"
+        fail_msg: "evacuation gate did not render the expected safety contract"
+
+    - name: Assert the timer and service render reboot-safe execution
+      ansible.builtin.assert:
+        that:
+          - "'After=zfs-import.target zfs-mount.service pve-cluster.service' in (evacuation_gate_service.content | b64decode)"
+          - "'Requires=zfs-mount.service pve-cluster.service' in (evacuation_gate_service.content | b64decode)"
+          - "'Restart=no' in (evacuation_gate_service.content | b64decode)"
+          - "'StateDirectory=pve2-evacuation-gate-816' in (evacuation_gate_service.content | b64decode)"
+          - "'OnBootSec=3min' in (evacuation_gate_timer.content | b64decode)"
+          - "'OnUnitActiveSec=5min' in (evacuation_gate_timer.content | b64decode)"
+          - "'Persistent=true' in (evacuation_gate_timer.content | b64decode)"
+          - "'WantedBy=timers.target' in (evacuation_gate_timer.content | b64decode)"
+        fail_msg: "evacuation-gate systemd units did not render the expected contract"

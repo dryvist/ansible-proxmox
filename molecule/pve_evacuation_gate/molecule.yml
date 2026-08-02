@@ -1,0 +1,9 @@
+---
+platforms:
+  - name: proxmox-evacuation-gate-test
+    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    pre_build_image: true
+    privileged: true
+    tmpfs:
+      - /run
+      - /tmp
