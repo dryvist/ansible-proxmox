@@ -1,0 +1,9 @@
+---
+- name: Verify inert bulk data comparison contract
+  hosts: all
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert role defaults remain inert
+      ansible.builtin.assert:
+        that: [not (pve_bulk_data_compare_enabled | default(false))]

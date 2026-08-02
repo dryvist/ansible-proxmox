@@ -1,0 +1,28 @@
+---
+- name: Reject unimplemented evacuation phases
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_phase == 'archive'
+    fail_msg: >-
+      Only phase=archive is implemented. Probe and cutover are intentionally
+      unsupported and fail closed.
+
+- name: Validate archive invocation
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == pve_guest_evacuation_source_node
+      - pve_guest_evacuation_source_node in hostvars
+      - pve_guest_evacuation_target_node in hostvars
+      - pve_guest_evacuation_staging_host in hostvars
+      - pve_guest_evacuation_staging_host == 'pve3'
+      - pve_guest_evacuation_guest_vmid | string is match('^[1-9][0-9]*$')
+      - pve_guest_evacuation_staging_storage | length > 0
+      - pve_guest_evacuation_staging_server | length > 0
+      - pve_guest_evacuation_staging_export is match('^/[^ ]+$')
+      - pve_guest_evacuation_evidence_dir | length > 0
+      - pve_guest_evacuation_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
+      - pve_guest_evacuation_shutdown_timeout | int > 0
+      - pve_guest_evacuation_staging_headroom_percent | int >= 0
+    fail_msg: >-
+      Archive runs only on its declared source with one positive numeric VMID,
+      an explicit pve3 NFS staging endpoint, and a safe run identifier.

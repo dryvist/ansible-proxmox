@@ -1,0 +1,45 @@
+---
+- name: Converge the pve3 staging contract
+  hosts: pve3
+  become: false
+  gather_facts: true
+
+  vars: &pve_evacuation_staging_contract
+    pve_evacuation_staging_enabled: true
+    pve_evacuation_staging_server_inventory_host: pve3
+    pve_evacuation_staging_server_endpoint: pve3.mgmt.test
+    pve_evacuation_staging_export_clients:
+      - pve2.mgmt.test
+      - pve540.mgmt.test
+    pve_evacuation_staging_quota: 4T
+    pve_evacuation_staging_reservation: 2T
+    pve_evacuation_staging_pool_headroom: 1T
+
+  roles:
+    - role: pve_evacuation_staging
+      vars:
+        pve_evacuation_staging_mode: server
+
+- name: Converge pve2's independent storage-view contract
+  hosts: pve2
+  become: false
+  gather_facts: true
+
+  vars:
+    <<: *pve_evacuation_staging_contract
+    pve_evacuation_staging_mode: client
+
+  roles:
+    - role: pve_evacuation_staging
+
+- name: Converge pve540's independent storage-view contract
+  hosts: pve540
+  become: false
+  gather_facts: true
+
+  vars:
+    <<: *pve_evacuation_staging_contract
+    pve_evacuation_staging_mode: client
+
+  roles:
+    - role: pve_evacuation_staging

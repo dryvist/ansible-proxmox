@@ -1,0 +1,6 @@
+---
+- name: Converge inert bulk data comparison role
+  hosts: all
+  gather_facts: false
+  vars: {pve_bulk_data_compare_enabled: false}
+  roles: [pve_bulk_data_compare]

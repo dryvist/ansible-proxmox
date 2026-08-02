@@ -1,0 +1,7 @@
+---
+- name: Freeze and compare exact pve2 and pve540 bulk/data datasets
+  hosts: "{{ pve_bulk_data_compare_source_node | default('pve2') }}"
+  become: true
+  gather_facts: false
+  serial: 1
+  roles: [pve_bulk_data_compare]

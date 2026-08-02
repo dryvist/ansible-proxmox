@@ -1,0 +1,52 @@
+---
+# Temporary, issue-816 evacuation staging.  This role is intentionally outside
+# site.yml and has no effect until the dedicated playbook enables it.
+
+pve_evacuation_staging_enabled: false
+pve_evacuation_staging_mode: ""
+pve_evacuation_staging_issue: "816"
+
+# Endpoint and client identities are injected by the same controller
+# environment that inventory/hosts.yml uses.  FQDNs keep the NFS export bound
+# to the management identities rather than a broad subnet.
+pve_evacuation_staging_server_inventory_host: pve3
+pve_evacuation_staging_server_endpoint: >-
+  {{ lookup('env', 'PVE3_VE_HOSTNAME') | default('', true) }}
+pve_evacuation_staging_export_clients:
+  - "{{ lookup('env', 'PVE2_VE_HOSTNAME') | default('', true) }}"
+  - "{{ lookup('env', 'PVE5_VE_HOSTNAME') | default('', true) }}"
+
+# The staging dataset is separate from bulk/scratch.  Capacity values have no
+# default: enabling the role requires the reviewed migration budget.
+pve_evacuation_staging_pool: bulk
+pve_evacuation_staging_dataset_name: evacuation-816
+pve_evacuation_staging_dataset: >-
+  {{ pve_evacuation_staging_pool }}/{{ pve_evacuation_staging_dataset_name }}
+pve_evacuation_staging_mountpoint: >-
+  /{{ pve_evacuation_staging_pool }}/{{ pve_evacuation_staging_dataset_name }}
+pve_evacuation_staging_quota: ""
+pve_evacuation_staging_reservation: ""
+pve_evacuation_staging_pool_headroom: ""
+pve_evacuation_staging_dataset_marker: pve2-evacuation-816
+
+# Root on either NFS client is mapped to Debian's anonymous NFS identity by
+# root_squash.  That identity owns the backup surface; pve3-only archival
+# evidence is kept in a separate root-only directory below it.
+pve_evacuation_staging_nfs_anonymous_user: nobody
+pve_evacuation_staging_nfs_anonymous_group: nogroup
+pve_evacuation_staging_backup_directory_mode: "0700"
+pve_evacuation_staging_manifest_directory: >-
+  {{ pve_evacuation_staging_mountpoint }}/manifests
+pve_evacuation_staging_manifest_directory_mode: "0700"
+pve_evacuation_staging_evidence_directory: >-
+  {{ pve_evacuation_staging_mountpoint }}/evidence
+pve_evacuation_staging_evidence_directory_mode: "0700"
+
+# The same storage identity is installed independently on the clustered source
+# and the standalone replacement.  A node-scoped view keeps the pve2 cluster
+# configuration from assuming that pve540 has joined it.
+pve_evacuation_staging_storage_id: evacuation-816
+pve_evacuation_staging_client_node: >-
+  {{ proxmox_node_name | default(inventory_hostname) }}
+pve_evacuation_staging_sharenfs: >-
+  rw={{ pve_evacuation_staging_export_clients | join(':') }},root_squash,sync

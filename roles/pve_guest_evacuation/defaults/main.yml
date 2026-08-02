@@ -1,0 +1,16 @@
+---
+# Archive-only, single-guest evacuation from pve2 to a pve3-hosted shared
+# staging storage. This role is deliberately inert unless explicitly enabled.
+pve_guest_evacuation_enabled: false
+pve_guest_evacuation_phase: archive
+pve_guest_evacuation_source_node: pve2
+pve_guest_evacuation_target_node: pve540
+pve_guest_evacuation_staging_host: pve3
+pve_guest_evacuation_staging_storage: ""
+pve_guest_evacuation_staging_server: ""
+pve_guest_evacuation_staging_export: ""
+pve_guest_evacuation_evidence_dir: ""
+pve_guest_evacuation_guest_vmid: null
+pve_guest_evacuation_run_id: ""
+pve_guest_evacuation_shutdown_timeout: 180
+pve_guest_evacuation_staging_headroom_percent: 20
