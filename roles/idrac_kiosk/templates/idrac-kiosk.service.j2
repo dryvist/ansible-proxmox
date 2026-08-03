@@ -4,6 +4,9 @@ Description=iDRAC kiosk (cage + chromium) showing both iDRAC6 consoles
 Documentation=https://github.com/dryvist/ansible-proxmox
 After=seatd.service systemd-user-sessions.service
 Wants=seatd.service
+# Give up rather than loop; see the Restart= note below.
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -16,8 +19,11 @@ Environment=XDG_RUNTIME_DIR=/run/idrac-kiosk
 Environment=WLR_RENDERER=gles2
 # cage hosts a single Wayland app fullscreen; chromium runs as the kiosk app.
 ExecStart=/usr/bin/cage -- /usr/bin/chromium --kiosk --ozone-platform=wayland --noerrdialogs --disable-infobars --incognito --no-first-run --app=file://{{ idrac_kiosk_data_dir }}/index.html
-Restart=always
-RestartSec=5
+# A kiosk that cannot start must FAIL, never loop. cage holds the console input
+# devices including the power button, so an endless restart cycle is a way to
+# power the node off by accident. Give up after a few tries and stay down.
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
