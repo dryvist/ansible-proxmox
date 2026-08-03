@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.73.1](https://github.com/dryvist/ansible-proxmox/compare/v1.73.0...v1.73.1) (2026-08-03)
+
+
+### Bug Fixes
+
+* **nas_storage:** compare the ZFS quota in bytes so the guard can hold ([#590](https://github.com/dryvist/ansible-proxmox/issues/590)) ([ec5adf2](https://github.com/dryvist/ansible-proxmox/commit/ec5adf2fe5770a39da46a384b522420a1fb3fe7d))
+* **ssh_ca_trust:** report changed only when the trust files changed ([#592](https://github.com/dryvist/ansible-proxmox/issues/592)) ([3fbfedd](https://github.com/dryvist/ansible-proxmox/commit/3fbfedd897e664e80ada56aed808825b644e03d5))
+
 ## [1.73.0](https://github.com/dryvist/ansible-proxmox/compare/v1.72.2...v1.73.0) (2026-08-03)
 
 
