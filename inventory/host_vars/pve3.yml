@@ -10,9 +10,19 @@
 #     was ~9.6 h behind the source (source snapshot 11:05, replica 02:00), with
 #     ~24 h the normal case. Every hour the node stays up past its last boot is
 #     RPO. The cron trigger decouples replication from reboots entirely.
-# pve_power_managed still lets a manual site.yml run power-cycle this node for
-# maintenance (the idrac_power auto-cycle bookends).
+# pve_power_managed keeps the iDRAC power capability available for a deliberate
+# maintenance power-cycle, invoked with -e idrac_power_autocycle=true.
+#
+# The auto-cycle is OFF here because this node is always-on and the bookends do
+# not respect that: site.yml powers every pve_power_managed host on at the start
+# of a run and off at the end, and idrac_power_autocycle defaults to true, so an
+# ordinary converge ended by powering this node down. That is not a maintenance
+# window — this node carries the ingress every other service is reached through,
+# and OpenBao with it, so the converge that switched it off also removed the
+# credential path the NEXT converge needs. The run then fails before Ansible
+# starts, reporting zero failed tasks because zero tasks ran.
 pve_power_managed: true
+idrac_power_autocycle: false
 idrac_power_bmc_host: "{{ lookup('env', 'PVE3_BMC_HOSTNAME') | default('', true) }}"
 node_auto_poweroff_enabled: false
 syncoid_trigger: cron
