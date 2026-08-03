@@ -163,3 +163,20 @@
     - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
   tags:
     - idrac_kiosk
+
+# Disabling the role must actually take the service down. Without this, a node
+# that once ran the kiosk keeps a unit that is still enabled and still able to
+# restart-loop itself into powering the machine off; a converge that "skips the
+# role" would leave that in place indefinitely.
+- name: Ensure the kiosk service is stopped and disabled where the role is off
+  ansible.builtin.systemd:
+    name: idrac-kiosk
+    enabled: false
+    state: stopped
+  failed_when: false
+  when:
+    - not (idrac_kiosk_enabled | bool)
+    - ansible_service_mgr == 'systemd'
+    - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - idrac_kiosk

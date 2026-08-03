@@ -6,7 +6,17 @@
 
 # Master switch for the role. When false, no packages, users, or services
 # are touched.
-idrac_kiosk_enabled: true
+#
+# OFF by default, and opted into per host. This role drives a physical monitor
+# and is wanted on exactly one node; every other node has a Matrox G200 with no
+# usable GL, where cage cannot create a renderer and exits immediately. Left
+# enabled estate-wide it is a node-killer, not merely useless: cage opens the
+# console input devices, the power button among them, and a service that keeps
+# dying and restarting eventually delivers a power-key event to logind, whose
+# default action is to power the machine off. That is an orderly shutdown with
+# no panic and no fault logged anywhere, which is precisely why it reads as an
+# unexplained reboot.
+idrac_kiosk_enabled: false
 
 # The LXC serving the two iDRAC6 noVNC viewers (Dell R410 + R710). FQDN, never
 # a literal IP — a hostname insulates this from the guest re-addressing (the

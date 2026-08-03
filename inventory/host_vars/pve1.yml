@@ -110,3 +110,9 @@ kernel_tuning_tsc_mode: nowatchdog
 #   - name: "plex-appdata-relocation"
 #     source: "root@{{ proxmox_node_prefix }}2:bulk/appdata/plex"
 #     target: "fast/appdata/plex"
+
+# The iDRAC kiosk drives a physical monitor and belongs to this node alone. It
+# is off everywhere else: the other nodes have no usable GL, where the kiosk
+# cannot start and a restart loop can power the node off through the console
+# power button.
+idrac_kiosk_enabled: true
