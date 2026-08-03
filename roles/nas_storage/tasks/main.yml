@@ -92,7 +92,13 @@
   when:
     - ansible_virtualization_type != 'docker'
     - nas_storage_zpool_check.rc | default(1) == 0
-    - nas_storage_zfs_current_quota.stdout | default('') != nas_storage_zfs_quota
+    # Compare BYTES on both sides. `zfs get -Hp` is the parsable form, so it
+    # answers 1099511627776, while the configured value is written the way a
+    # human sets a quota ("1T"). Comparing those two strings is never equal, so
+    # the guard never held and every converge re-set a quota that was already
+    # correct — the single largest source of false "changed" in this role.
+    - nas_storage_zfs_current_quota.stdout | default('0') | int
+      != (nas_storage_zfs_quota | human_to_bytes)
   changed_when: true
   tags:
     - nas_storage
