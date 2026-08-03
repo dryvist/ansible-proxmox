@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.72.2](https://github.com/dryvist/ansible-proxmox/compare/v1.72.1...v1.72.2) (2026-08-03)
+
+
+### Bug Fixes
+
+* **crash_diagnostics:** reload sysctl with --system ([#572](https://github.com/dryvist/ansible-proxmox/issues/572)) ([9f446a7](https://github.com/dryvist/ansible-proxmox/commit/9f446a7e21fe190eaf82e304af198029103abecc))
+* **evacuation:** validate managed transfer endpoints ([f65d396](https://github.com/dryvist/ansible-proxmox/commit/f65d396562304ca599ba4050ec7d667510c83612))
+* **nas_storage:** guard the ZFS quota tasks on the pool too ([#573](https://github.com/dryvist/ansible-proxmox/issues/573)) ([ab2ab31](https://github.com/dryvist/ansible-proxmox/commit/ab2ab3135958462fabde75f3d27c3d7b2b1402b5))
+* **nas_storage:** skip ZFS work on nodes without the pool ([#571](https://github.com/dryvist/ansible-proxmox/issues/571)) ([1370834](https://github.com/dryvist/ansible-proxmox/commit/13708347380172cbd656e8391588c20fab9801fd))
+
 ## [1.72.1](https://github.com/dryvist/ansible-proxmox/compare/v1.72.0...v1.72.1) (2026-08-03)
 
 
