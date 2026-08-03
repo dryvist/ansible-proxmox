@@ -12,6 +12,15 @@
       - pve_guest_evacuation_lxc_managed_volumes_archive_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
       - pve_guest_evacuation_lxc_managed_volumes_restore_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
       - pve_guest_evacuation_lxc_managed_volumes_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | length == 0
+        or pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
+      - >-
+        (pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | length == 0
+         and pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256 | length == 0)
+        or (pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | length > 0
+            and pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256 is match('^[A-Fa-f0-9]{64}$'))
+      - pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id != pve_guest_evacuation_lxc_managed_volumes_run_id
       - pve_guest_evacuation_lxc_managed_volumes_restore_run_id != pve_guest_evacuation_lxc_managed_volumes_run_id
       - pve_guest_evacuation_lxc_managed_volumes_expected_vmid | string is match('^[1-9][0-9]*$')
       - pve_guest_evacuation_lxc_managed_volumes_expected_config_digest is match('^[A-Fa-f0-9]{40,64}$')

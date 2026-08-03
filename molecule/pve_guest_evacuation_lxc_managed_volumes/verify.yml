@@ -37,3 +37,69 @@
     - name: Assert incomplete managed-volume inputs fail closed
       ansible.builtin.assert:
         that: [pve_guest_evacuation_lxc_managed_volumes_input_failed | default(false)]
+
+    - name: Create isolated absolute-symlink ACL regression directories
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: managed-volume-acl-
+      register: pve_guest_evacuation_lxc_managed_volumes_acl_tmp
+
+    - name: Prove physical ACL manifests accept identical broken absolute symlinks
+      ansible.builtin.shell: |
+        set -euo pipefail
+        mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin"
+        printf '%s\n' '#!/bin/bash' 'test "$1" = --physical' 'shift' 'printf "%s\\n" "$@"' >"{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
+        chmod 0700 "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
+        export PATH="{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin:$PATH"
+        mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target"
+        ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source/absolute-link"
+        ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target/absolute-link"
+        source_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        target_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        test "$source_acl" = "$target_acl"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Remove isolated ACL regression directories
+      ansible.builtin.file:
+        path: "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}"
+        state: absent
+
+    - name: Create isolated checksum dry-run regression directories
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: managed-volume-rsync-
+      register: pve_guest_evacuation_lxc_managed_volumes_rsync_tmp
+
+    - name: Prove delete dry run reports arbitrary extra target content
+      ansible.builtin.shell: |
+        set -euo pipefail
+        mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target"
+        printf source >"{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload"
+        cp "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload" "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/payload"
+        printf arbitrary >"{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/extra"
+        output=$(nix shell nixpkgs#rsync -c rsync --archive --checksum --dry-run --delete --itemize-changes \
+          "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/" \
+          "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/")
+        test -n "$output"
+        printf '%s\n' "$output" | grep -F '*deleting   extra'
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Prove a populated target is accepted only by explicit resume
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_lxc_managed_volumes_synthetic_target_content | length > 0
+          - pve_guest_evacuation_lxc_managed_volumes_synthetic_resume_run_id | length > 0
+          - pve_guest_evacuation_lxc_managed_volumes_synthetic_empty_run_id | length == 0
+      vars:
+        pve_guest_evacuation_lxc_managed_volumes_synthetic_target_content: payload
+        pve_guest_evacuation_lxc_managed_volumes_synthetic_resume_run_id: failed-transfer-1
+        pve_guest_evacuation_lxc_managed_volumes_synthetic_empty_run_id: ""
+
+    - name: Remove isolated checksum dry-run regression directories
+      ansible.builtin.file:
+        path: "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}"
+        state: absent
