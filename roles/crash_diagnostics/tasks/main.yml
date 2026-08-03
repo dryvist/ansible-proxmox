@@ -323,7 +323,7 @@
 - name: Set boot partition UUID fact
   ansible.builtin.set_fact:
     crash_diagnostics_boot_partition_uuid: >-
-      {{ (crash_diagnostics_boot_uuids_content.content | b64decode).split('\n') | select | first }}
+      {{ (crash_diagnostics_boot_uuids_content.content | b64decode).splitlines() | select | first }}
   when:
     - crash_diagnostics_proxmox_boot_uuids.stat.exists
     - crash_diagnostics_boot_uuids_content.content is defined
@@ -388,6 +388,20 @@
     group: root
     mode: "0644"
   when:
+    - crash_diagnostics_memtest_source.stat is defined
+    - crash_diagnostics_memtest_source.stat.exists
+  tags:
+    - crash_diagnostics
+    - memtest
+
+- name: Ensure the GRUB directory exists on the boot partition
+  ansible.builtin.file:
+    path: /tmp/ansible-boot-partition/grub
+    state: directory
+    # Matches the ESP's vfat dmask, so this is a no-op rather than a change.
+    mode: "0700"
+  when:
+    - crash_diagnostics_boot_partition_uuid is defined
     - crash_diagnostics_memtest_source.stat is defined
     - crash_diagnostics_memtest_source.stat.exists
   tags:
