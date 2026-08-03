@@ -374,6 +374,11 @@ def test_evidence_is_immutable_and_failure_preserves_the_target() -> None:
     assert "target_dataset_identity" in transfer
     assert "source_manifests" in evidence
     assert "target_manifests" in evidence
+    assert "evidence_outputs.copy" in evidence
+    assert "resume_evidence.rsync['copy']" in evidence
+    assert evidence.count("result.stdout_lines | default([], true)") == 4
+    assert evidence.count("default({}, true)") == 4
+    assert "map(attribute='stdout_lines')" not in evidence
 
 
 def test_resume_is_bound_to_exact_post_copy_failure_and_never_recopies() -> None:

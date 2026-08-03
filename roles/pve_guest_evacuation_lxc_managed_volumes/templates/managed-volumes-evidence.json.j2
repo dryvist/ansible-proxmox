@@ -1,3 +1,20 @@
+{% set evidence_outputs = namespace(copy=[], verify=[], source=[], target=[]) %}
+{% if pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | length > 0 and pve_guest_evacuation_lxc_managed_volumes_resume_evidence is defined %}
+{% set evidence_outputs.copy = pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync['copy'] | default([], true) %}
+{% else %}
+{% for result in (pve_guest_evacuation_lxc_managed_volumes_rsync_copy | default({}, true)).results | default([], true) %}
+{% set evidence_outputs.copy = evidence_outputs.copy + [result.stdout_lines | default([], true)] %}
+{% endfor %}
+{% endif %}
+{% for result in (pve_guest_evacuation_lxc_managed_volumes_rsync_verify | default({}, true)).results | default([], true) %}
+{% set evidence_outputs.verify = evidence_outputs.verify + [result.stdout_lines | default([], true)] %}
+{% endfor %}
+{% for result in (pve_guest_evacuation_lxc_managed_volumes_source_manifests | default({}, true)).results | default([], true) %}
+{% set evidence_outputs.source = evidence_outputs.source + [result.stdout_lines | default([], true)] %}
+{% endfor %}
+{% for result in (pve_guest_evacuation_lxc_managed_volumes_target_manifests | default({}, true)).results | default([], true) %}
+{% set evidence_outputs.target = evidence_outputs.target + [result.stdout_lines | default([], true)] %}
+{% endfor %}
 {
   "schema_version": 1,
   "run_id": {{ pve_guest_evacuation_lxc_managed_volumes_run_id | to_json }},
@@ -31,11 +48,11 @@
   },
   "volumes": {{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings | default([]) | to_json }},
   "rsync": {
-    "copy": {{ pve_guest_evacuation_lxc_managed_volumes_rsync_copy.results | default([]) | map(attribute='stdout_lines') | list | to_json }},
-    "checksum_dry_run": {{ pve_guest_evacuation_lxc_managed_volumes_rsync_verify.results | default([]) | map(attribute='stdout_lines') | list | to_json }}
+    "copy": {{ evidence_outputs.copy | to_json }},
+    "checksum_dry_run": {{ evidence_outputs.verify | to_json }}
   },
-  "source_manifests": {{ pve_guest_evacuation_lxc_managed_volumes_source_manifests.results | default([]) | map(attribute='stdout_lines') | list | to_json }},
-  "target_manifests": {{ pve_guest_evacuation_lxc_managed_volumes_target_manifests.results | default([]) | map(attribute='stdout_lines') | list | to_json }},
+  "source_manifests": {{ evidence_outputs.source | to_json }},
+  "target_manifests": {{ evidence_outputs.target | to_json }},
   "failure": {{ pve_guest_evacuation_lxc_managed_volumes_failure | default({}) | to_json }},
   "written_at_utc": {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') | to_json }}
 }
