@@ -407,6 +407,21 @@ def test_checksum_verification_rejects_extra_target_content_and_acl_is_physical(
     assert transfer.count("getfacl --physical --absolute-names --numeric") == 2
 
 
+def test_missing_resume_evidence_metadata_fails_cleanly() -> None:
+    transfer = (ROLE / "tasks" / "transfer.yml").read_text()
+    evidence_gate = transfer[transfer.index("- name: Require protected immutable failed-transfer evidence"):]
+    evidence_gate = evidence_gate[:evidence_gate.index("- name: Read exact immutable failed-transfer evidence")]
+
+    assert "stat.exists | default(false)" in evidence_gate
+    assert "stat.isreg | default(false)" in evidence_gate
+    assert "stat.islnk | default(false)" in evidence_gate
+    for field in ("pw_name", "gr_name", "mode", "checksum"):
+        assert f"stat.{field} | default('')" in evidence_gate
+    resume_conditions = [line for line in transfer.splitlines() if line.lstrip().startswith("when:") and "resume_from_run_id" in line]
+    assert resume_conditions
+    assert all("| default('') | length" in line for line in resume_conditions)
+
+
 if __name__ == "__main__":
     test_role_is_inert_and_requires_exact_three_record_identity()
     test_rsync_endpoint_keeps_the_literal_inventory_fast_path()
@@ -419,3 +434,4 @@ if __name__ == "__main__":
     test_evidence_is_immutable_and_failure_preserves_the_target()
     test_resume_is_bound_to_exact_post_copy_failure_and_never_recopies()
     test_checksum_verification_rejects_extra_target_content_and_acl_is_physical()
+    test_missing_resume_evidence_metadata_fails_cleanly()
