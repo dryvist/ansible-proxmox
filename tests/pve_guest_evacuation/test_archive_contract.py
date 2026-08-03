@@ -20,6 +20,8 @@ def test_archive_uses_stop_mode_and_has_snapshot_gate() -> None:
     contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
     assert "pve_guest_evacuation_tmpdir: /var/tmp" in defaults
     assert "pve_guest_evacuation_tmpdir is match" in contract
+    assert "pve_guest_evacuation_zstd_threads: 0" in defaults
+    assert "pve_guest_evacuation_zstd_threads | int >= 0" in contract
 
 
 def test_unsupported_phases_and_external_resources_are_fail_closed() -> None:

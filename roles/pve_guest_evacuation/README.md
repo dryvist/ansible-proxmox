@@ -15,6 +15,8 @@ VZDump uses the configurable local workspace
 `pve_guest_evacuation_tmpdir` (default `/var/tmp`). Archive output still goes
 to pve3, while the local workspace remains compatible with unprivileged LXC
 UID mappings and the staging export's required `root_squash` policy.
+Compression uses Proxmox's native `--zstd 0` auto mode by default, allowing
+half of the source host's CPU cores to compress each subsequent archive.
 
 `probe` and `cutover` deliberately fail closed. The role never restores,
 migrates, deletes a source guest, changes cluster membership, or changes any
