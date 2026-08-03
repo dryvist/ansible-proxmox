@@ -308,6 +308,27 @@
       it and investigate rather than restoring an incomplete guest.
     quiet: true
 
+- name: Record backed LXC mountpoint volume keys
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_restore_lxc_mountpoint_volume_keys: >-
+      {{ pve_guest_evacuation_restore_expected_volume_keys
+         | select('match', '^mp[0-9]+$') | list }}
+
+- name: Refuse automatic restore of LXC archives with additional backed mounts
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_guest_evacuation_restore_expected_guest_type != 'lxc'
+        or pve_guest_evacuation_restore_lxc_mountpoint_volume_keys | length == 0
+    fail_msg: >-
+      The selected LXC archive has backed mountpoint volumes
+      ({{ pve_guest_evacuation_restore_lxc_mountpoint_volume_keys | join(', ') }}).
+      Proxmox can recreate their volume configuration without restoring their
+      archived payload, so this role refuses the restore before creating a
+      target guest. Preserve the archive and use a volume-manifested restore
+      procedure that proves every mountpoint payload.
+    quiet: true
+
 - name: Restore the verified QEMU archive without starting it
   ansible.builtin.command:
     argv:

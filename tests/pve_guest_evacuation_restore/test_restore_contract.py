@@ -49,7 +49,19 @@ def test_restore_preserves_target_and_uses_only_native_restore_commands() -> Non
     assert "- ln" in writer
 
 
+def test_restore_refuses_lxc_mountpoint_volumes_before_creating_a_target() -> None:
+    restore = (ROLE / "tasks" / "restore.yml").read_text()
+
+    assert "pve_guest_evacuation_restore_lxc_mountpoint_volume_keys" in restore
+    assert "Refuse automatic restore of LXC archives with additional backed mounts" in restore
+    assert "Proxmox can recreate their volume configuration without restoring their" in restore
+    assert restore.index("Refuse automatic restore of LXC archives with additional backed mounts") < restore.index(
+        "Restore the verified LXC archive"
+    )
+
+
 if __name__ == "__main__":
     test_restore_requires_exact_verified_archive_identity()
     test_restore_verifies_archive_before_writing_target()
     test_restore_preserves_target_and_uses_only_native_restore_commands()
+    test_restore_refuses_lxc_mountpoint_volumes_before_creating_a_target()
