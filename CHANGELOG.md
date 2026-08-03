@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.73.0](https://github.com/dryvist/ansible-proxmox/compare/v1.72.2...v1.73.0) (2026-08-03)
+
+
+### Features
+
+* **nas_storage:** read managed-user Samba passwords from OpenBao ([#581](https://github.com/dryvist/ansible-proxmox/issues/581)) ([ed6c334](https://github.com/dryvist/ansible-proxmox/commit/ed6c334f12268b15307c3e5d23fc35b76598f64e))
+* **pve_ha:** enroll every container under HA pinned to its home node ([#583](https://github.com/dryvist/ansible-proxmox/issues/583)) ([23f0af1](https://github.com/dryvist/ansible-proxmox/commit/23f0af1ea7b7552f4610cba4b0be109de3f982c7))
+
+
+### Bug Fixes
+
+* **ansible:** bound a dead SSH connection so a converge cannot hang ([#585](https://github.com/dryvist/ansible-proxmox/issues/585)) ([0466cd3](https://github.com/dryvist/ansible-proxmox/commit/0466cd3e7850fec60d0c967cb1dad5461694571a))
+* **evacuation:** render skipped resume evidence safely ([#580](https://github.com/dryvist/ansible-proxmox/issues/580)) ([14205a1](https://github.com/dryvist/ansible-proxmox/commit/14205a1f5f4bf2a8e853a0812691251b95c3f9c5))
+* **evacuation:** resume verified managed transfers ([#578](https://github.com/dryvist/ansible-proxmox/issues/578)) ([c05c94c](https://github.com/dryvist/ansible-proxmox/commit/c05c94c5e7a18fa043664eab1060527ac595440d))
+* **evacuation:** use mapping lookup for resume copy evidence ([#579](https://github.com/dryvist/ansible-proxmox/issues/579)) ([47808d6](https://github.com/dryvist/ansible-proxmox/commit/47808d6e49d49ca40c6624fa524bf2ab84c1b9eb))
+* **idrac_kiosk:** skip Debian AMD firmware where pve-firmware provides it ([#582](https://github.com/dryvist/ansible-proxmox/issues/582)) ([6cced4a](https://github.com/dryvist/ansible-proxmox/commit/6cced4a244644b483e71bf6bb201818d46e951c3))
+* **idrac_kiosk:** stop the kiosk from powering nodes off ([#584](https://github.com/dryvist/ansible-proxmox/issues/584)) ([53294a8](https://github.com/dryvist/ansible-proxmox/commit/53294a8d2d104fa35b84ee44346efcbd81c0cf42))
+* **pve3:** stop the converge powering off the node that carries the ingress ([#587](https://github.com/dryvist/ansible-proxmox/issues/587)) ([fa8423f](https://github.com/dryvist/ansible-proxmox/commit/fa8423f5e6fd45f40851dbaebaf9a66402b1533c))
+
 ## [1.72.2](https://github.com/dryvist/ansible-proxmox/compare/v1.72.1...v1.72.2) (2026-08-03)
 
 
