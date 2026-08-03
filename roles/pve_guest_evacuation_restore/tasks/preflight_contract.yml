@@ -17,6 +17,7 @@
       - pve_guest_evacuation_restore_expected_config_digest is match('^[A-Fa-f0-9]{40,64}$')
       - pve_guest_evacuation_restore_expected_archive_sha256 is match('^[A-Fa-f0-9]{64}$')
       - pve_guest_evacuation_restore_target_storage is match('^[a-z0-9][a-z0-9_-]{0,39}$')
+      - pve_guest_evacuation_restore_lxc_mountpoint_strategy in ['refuse', 'manifested_copy']
       - pve_guest_evacuation_restore_archive_evidence_path is match('^/bulk/evacuation-816/evidence/[^/ ]+[.]json$')
       - pve_guest_evacuation_restore_result_evidence_path is match('^/bulk/evacuation-816/evidence/restore-[^/ ]+[.]json$')
     fail_msg: >-

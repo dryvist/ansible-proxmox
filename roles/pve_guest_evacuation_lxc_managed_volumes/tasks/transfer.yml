@@ -1,0 +1,549 @@
+---
+# This procedure deliberately copies only after archive and restore evidence
+# bind a fresh pve540 skeleton to the stopped pve2 source. It never uses a ZFS
+# snapshot and never creates a destination volume or directory.
+
+- name: Read pve3 managed-volume evidence directory metadata
+  ansible.builtin.stat:
+    path: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_dir }}"
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_staging_host }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat
+  changed_when: false
+
+- name: Require a root-only non-symlink pve3 evidence directory
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.exists | default(false)
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.isdir | default(false)
+      - not (pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.islnk | default(false))
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.pw_name == 'root'
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.gr_name == 'root'
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.mode == '0700'
+    fail_msg: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_evidence_dir }} must remain a
+      root-owned, non-symlink directory with mode 0700 before this transfer
+      trusts archive/restore evidence or writes its result.
+    quiet: true
+
+# Reserve the immutable evidence name before every transfer gate.  This lets
+# the rescue path record failures before any payload is copied.
+- name: Check managed-volume evidence paths before transfer gates
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_staging_host }}"
+  loop:
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_result_evidence_path }}"
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_result_evidence_path }}.tmp"
+  register: pve_guest_evacuation_lxc_managed_volumes_evidence_paths
+  changed_when: false
+
+- name: Require unused immutable managed-volume evidence paths
+  ansible.builtin.assert:
+    that: [not item.stat.exists]
+    fail_msg: "Evidence path {{ item.item }} already exists; choose a new run id."
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_paths.results }}"
+
+- name: Read pve3 archive and pending-restore evidence
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_staging_host }}"
+  loop:
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_archive_evidence_path }}"
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_restore_evidence_path }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_evidence_raw
+
+- name: Decode pve3 archive and pending-restore evidence
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_archive_evidence: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_evidence_raw.results[0].content | b64decode | from_json }}
+    pve_guest_evacuation_lxc_managed_volumes_restore_evidence: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_evidence_raw.results[1].content | b64decode | from_json }}
+
+- name: Require exact verified archive and pending managed-volume restore evidence
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence.schema_version | int == 1
+      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence.checkpoint == 'archive_verified'
+      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence.run_id == pve_guest_evacuation_lxc_managed_volumes_archive_run_id
+      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence.guest.vmid | int == pve_guest_evacuation_lxc_managed_volumes_expected_vmid | int
+      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence.guest.type == 'lxc'
+      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence.guest.source_node == pve_guest_evacuation_lxc_managed_volumes_source_node
+      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence.guest.target_node == pve_guest_evacuation_lxc_managed_volumes_target_node
+      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence.guest.config_digest == pve_guest_evacuation_lxc_managed_volumes_expected_config_digest
+      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence.archive.sha256 == pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256
+      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence.checkpoint == 'restore_pending_managed_mount_copy'
+      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence.restore_run_id == pve_guest_evacuation_lxc_managed_volumes_restore_run_id
+      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence.input_archive_evidence.archive_run_id == pve_guest_evacuation_lxc_managed_volumes_archive_run_id
+      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence.input_archive_evidence.vmid | int == pve_guest_evacuation_lxc_managed_volumes_expected_vmid | int
+      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence.input_archive_evidence.type == 'lxc'
+      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence.input_archive_evidence.source_config_digest == pve_guest_evacuation_lxc_managed_volumes_expected_config_digest
+      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence.input_archive_evidence.archive_sha256 == pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256
+      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence.target.node == pve_guest_evacuation_lxc_managed_volumes_target_node
+      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence.target.storage == pve_guest_evacuation_lxc_managed_volumes_target_storage
+    fail_msg: >-
+      Archive and pending restore evidence do not prove the exact same stopped
+      pve2 LXC and fresh pve540 target. Preserve both records and investigate.
+    quiet: true
+
+- name: Read current source and target LXC configuration and status
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ item.node }}/lxc/{{ pve_guest_evacuation_lxc_managed_volumes_expected_vmid }}/{{ item.endpoint }}"
+      - --output-format
+      - json
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node if item.node == pve_guest_evacuation_lxc_managed_volumes_target_node else inventory_hostname }}"
+  loop:
+    - { side: source, node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}", endpoint: config }
+    - { side: source, node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}", endpoint: status/current }
+    - { side: target, node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}", endpoint: config }
+    - { side: target, node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}", endpoint: status/current }
+  register: pve_guest_evacuation_lxc_managed_volumes_guest_raw
+  changed_when: false
+
+- name: Decode current source and target LXC state
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_source_config: "{{ pve_guest_evacuation_lxc_managed_volumes_guest_raw.results[0].stdout | from_json }}"
+    pve_guest_evacuation_lxc_managed_volumes_source_status: "{{ pve_guest_evacuation_lxc_managed_volumes_guest_raw.results[1].stdout | from_json }}"
+    pve_guest_evacuation_lxc_managed_volumes_target_config: "{{ pve_guest_evacuation_lxc_managed_volumes_guest_raw.results[2].stdout | from_json }}"
+    pve_guest_evacuation_lxc_managed_volumes_target_status: "{{ pve_guest_evacuation_lxc_managed_volumes_guest_raw.results[3].stdout | from_json }}"
+
+- name: Require final stopped source and stopped restored target
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_source_config.digest == pve_guest_evacuation_lxc_managed_volumes_expected_config_digest
+      - pve_guest_evacuation_lxc_managed_volumes_source_status.status == 'stopped'
+      - pve_guest_evacuation_lxc_managed_volumes_target_status.status == 'stopped'
+      - pve_guest_evacuation_lxc_managed_volumes_target_config.digest == pve_guest_evacuation_lxc_managed_volumes_restore_evidence.target.config_digest
+    fail_msg: >-
+      Source configuration changed or either LXC is running. The final capture
+      requires the archived pve2 configuration and both containers stopped.
+    quiet: true
+
+- name: Record source managed mountpoint keys
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_source_mount_items: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_source_config | dict2items
+         | selectattr('key', 'match', '^mp[0-9]+$') | list | sort(attribute='key') }}
+    pve_guest_evacuation_lxc_managed_volumes_target_mount_items: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_target_config | dict2items
+         | selectattr('key', 'match', '^mp[0-9]+$') | list | sort(attribute='key') }}
+
+- name: Require an exact managed-volume configuration contract
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_source_mount_items | length > 0
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_source_mount_items | map(attribute='key') | list
+        == pve_guest_evacuation_lxc_managed_volumes_target_mount_items | map(attribute='key') | list
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_source_mount_items
+        | map(attribute='value') | select('match', '^[A-Za-z0-9][A-Za-z0-9._-]*:[^,]+,(?:[^,]+,)*mp=/[^,]+') | list | length
+        == pve_guest_evacuation_lxc_managed_volumes_source_mount_items | length
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_target_mount_items
+        | map(attribute='value') | select('match', '^' ~ (pve_guest_evacuation_lxc_managed_volumes_target_storage | regex_escape) ~ ':[^,]+,(?:[^,]+,)*mp=/[^,]+') | list | length
+        == pve_guest_evacuation_lxc_managed_volumes_target_mount_items | length
+    fail_msg: >-
+      The source and target do not have exactly the same managed mpN keys, or
+      a mount is external, unbacked, or outside the explicit target storage.
+    quiet: true
+
+- name: Build exact source-to-target managed-volume mappings
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_mappings: >-
+      {{ (pve_guest_evacuation_lxc_managed_volumes_mappings | default([])) + [
+        {
+          'key': item.key,
+          'source_config': item.value,
+          'target_config': (pve_guest_evacuation_lxc_managed_volumes_target_mount_items
+                            | selectattr('key', 'equalto', item.key)
+                            | map(attribute='value') | first),
+          'source_volid': (item.value | regex_replace(',.*$', '')),
+          'target_volid': ((pve_guest_evacuation_lxc_managed_volumes_target_mount_items
+                            | selectattr('key', 'equalto', item.key)
+                            | map(attribute='value') | first | regex_replace(',.*$', ''))),
+          'normalized_mount_contract': (item.value | regex_replace('^[^,]+', 'VOLUME'))
+        }
+      ] }}
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_source_mount_items }}"
+
+- name: Require target mounts preserve every source mount option
+  ansible.builtin.assert:
+    that:
+      - item.normalized_mount_contract == item.target_config | regex_replace('^[^,]+', 'VOLUME')
+    fail_msg: >-
+      {{ item.key }} changes mount semantics between pve2 and pve540. Preserve
+      the stopped target and correct its configuration before transferring.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_mappings }}"
+
+- name: Resolve each source managed volume path
+  ansible.builtin.command:
+    argv: [pvesm, path, "{{ item.source_volid }}"]
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_source_volume_paths
+  changed_when: false
+
+- name: Resolve each target managed volume path
+  ansible.builtin.command:
+    argv: [pvesm, path, "{{ item.target_volid }}"]
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_target_volume_paths
+  changed_when: false
+
+- name: Bind resolved paths to their exact mpN volume identities
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_resolved_mappings: >-
+      {{ (pve_guest_evacuation_lxc_managed_volumes_resolved_mappings | default([])) + [
+        item | combine({
+          'source_path': pve_guest_evacuation_lxc_managed_volumes_source_volume_paths.results[volume_index].stdout | trim,
+          'target_path': pve_guest_evacuation_lxc_managed_volumes_target_volume_paths.results[volume_index].stdout | trim
+        })
+      ] }}
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_mappings }}"
+  loop_control:
+    index_var: volume_index
+
+- name: Require each resolved volume path to be an existing directory
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_volume_path_checks: >-
+      {{ (pve_guest_evacuation_lxc_managed_volumes_volume_path_checks | default([])) + [
+        {'key': item.key, 'side': 'source', 'path': item.source_path},
+        {'key': item.key, 'side': 'target', 'path': item.target_path}
+      ] }}
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_resolved_mappings }}"
+
+- name: Read each resolved source and target volume path
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node if item.side == 'target' else inventory_hostname }}"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_volume_path_checks }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_volume_stats
+  changed_when: false
+
+- name: Assert every resolved managed volume is a directory
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isdir | default(false)
+      - not (item.stat.islnk | default(false))
+    fail_msg: >-
+      {{ item.item.key }} {{ item.item.side }} volume is not a real managed
+      directory. Block transfer rather than copying an ambiguous path.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_volume_stats.results }}"
+
+- name: Read source and target ZFS filesystem identity inventories
+  ansible.builtin.command:
+    argv: [zfs, list, -H, -p, -t, filesystem, -o, 'name,mountpoint']
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}"
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems
+  changed_when: false
+
+- name: Define the ZFS filesystem record separator
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator: '{{ "%c" | format(9) }}'
+
+- name: Require two-field ZFS filesystem identity records
+  ansible.builtin.assert:
+    that:
+      - item.stdout_lines | length > 0
+      - >-
+        (item.stdout_lines
+         | map('split', pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator)
+         | map('length') | unique | list)
+        == [2]
+    fail_msg: >-
+      {{ item.item }} returned a ZFS filesystem inventory without one exact
+      dataset-name and mountpoint field per record. No copy can proceed from
+      an ambiguous filesystem inventory.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems.results }}"
+
+- name: Initialize parsed ZFS filesystem identity records
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_source_zfs_dataset_records: []
+    pve_guest_evacuation_lxc_managed_volumes_target_zfs_dataset_records: []
+
+- name: Parse source ZFS filesystem identity records into name and mountpoint fields
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_source_zfs_dataset_records: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_source_zfs_dataset_records + [
+        {
+          'name': (item | split(pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator) | first),
+          'mountpoint': (item | split(pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator) | last)
+        }
+      ] }}
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems.results[0].stdout_lines }}"
+
+- name: Parse target ZFS filesystem identity records into name and mountpoint fields
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_target_zfs_dataset_records: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_target_zfs_dataset_records + [
+        {
+          'name': (item | split(pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator) | first),
+          'mountpoint': (item | split(pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator) | last)
+        }
+      ] }}
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems.results[1].stdout_lines }}"
+
+- name: Record exact ZFS dataset identities for every managed volume
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_dataset_mappings: >-
+      {{ (pve_guest_evacuation_lxc_managed_volumes_dataset_mappings | default([])) + [
+        item | combine({
+          'source_dataset_identity': (pve_guest_evacuation_lxc_managed_volumes_source_zfs_dataset_records
+                                      | selectattr('mountpoint', 'equalto', item.source_path) | list),
+          'target_dataset_identity': (pve_guest_evacuation_lxc_managed_volumes_target_zfs_dataset_records
+                                      | selectattr('mountpoint', 'equalto', item.target_path) | list)
+        })
+      ] }}
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_resolved_mappings }}"
+
+- name: Require one exact ZFS dataset identity for each source and target volume
+  ansible.builtin.assert:
+    that:
+      - item.source_dataset_identity | length == 1
+      - item.target_dataset_identity | length == 1
+    fail_msg: >-
+      {{ item.key }} does not resolve to exactly one mounted ZFS dataset on
+      both hosts. No copy can proceed without exact dataset identities.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+
+- name: Assert no ZFS snapshots exist on either evacuation node
+  ansible.builtin.command:
+    argv: [zfs, list, -H, -t, snapshot, -o, name]
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}"
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_snapshots
+  changed_when: false
+
+- name: Refuse transfer when either evacuation node has a snapshot
+  ansible.builtin.assert:
+    that: [item.stdout | trim | length == 0]
+    fail_msg: >-
+      {{ item.item }} has ZFS snapshots. This workflow neither creates nor
+      uses snapshots; remove the ambiguity before a final stopped-source copy.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_snapshots.results }}"
+
+- name: Require the target managed volumes to be empty skeletons
+  ansible.builtin.command:
+    argv: [find, "{{ item.target_path }}", -xdev, -mindepth, '1', -print, -quit]
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_target_contents
+  changed_when: false
+
+- name: Refuse to overwrite any preexisting target managed-volume content
+  ansible.builtin.assert:
+    that: [item.stdout | trim | length == 0]
+    fail_msg: >-
+      Target {{ item.item.key }} at {{ item.item.target_path }} is nonempty.
+      This workflow never overwrites, merges with, or deletes target payloads.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_target_contents.results }}"
+
+- name: Require metadata manifest tools on pve2 and pve540
+  ansible.builtin.command:
+    argv: ["{{ item.tool }}", --version]
+  delegate_to: "{{ item.node }}"
+  loop: >-
+    {{ [{'node': pve_guest_evacuation_lxc_managed_volumes_source_node, 'tool': 'rsync'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_source_node, 'tool': 'getfacl'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_source_node, 'tool': 'getfattr'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_target_node, 'tool': 'rsync'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_target_node, 'tool': 'getfacl'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_target_node, 'tool': 'getfattr'}] }}
+  changed_when: false
+
+- name: Require protected dedicated source-host rsync transport files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file }}"
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_transport_files
+  changed_when: false
+
+- name: Assert source-host rsync transport files are root-owned and protected
+  ansible.builtin.assert:
+    that:
+      - item.stat.isreg | default(false)
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+      - item.stat.mode in ['0400', '0600']
+    fail_msg: >-
+      {{ item.item }} must be a root-owned regular transport file with mode
+      0400 or 0600 before an rsync transfer can run.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_transport_files.results }}"
+
+- name: Require one reviewed pve540 ED25519 host key
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -F
+      - "{{ pve_guest_evacuation_lxc_managed_volumes_target_rsync_host }}"
+      - -f
+      - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_known_host
+  changed_when: false
+  failed_when: false
+
+- name: Verify reviewed pve540 ED25519 host key contract
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_known_host.rc == 0
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_known_host.stdout_lines
+        | reject('match', '^# ') | list | length == 1
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_known_host.stdout_lines
+        | reject('match', '^# ') | first
+        is match('^' ~ (pve_guest_evacuation_lxc_managed_volumes_target_rsync_host | regex_escape)
+          ~ ' ssh-ed25519 [A-Za-z0-9+/=]+( .*)?$')
+    fail_msg: >-
+      The dedicated known-hosts file must contain exactly one reviewed ED25519
+      key for the pve540 rsync endpoint.
+    quiet: true
+
+- name: Build strict rsync SSH transport
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_rsync_rsh: >-
+      ssh -i {{ pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file }}
+      -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+      -o UserKnownHostsFile={{ pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file }}
+      -o GlobalKnownHostsFile=/dev/null -o PasswordAuthentication=no
+      -o KbdInteractiveAuthentication=no -T
+
+- name: Copy each stopped-source managed volume without overwrite or deletion
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - --archive
+      - --hard-links
+      - --acls
+      - --xattrs
+      - --numeric-ids
+      - --sparse
+      - --one-file-system
+      - --protect-args
+      - --checksum
+      - --itemize-changes
+      - --stats
+      - -e
+      - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_rsh }}"
+      - "{{ item.source_path }}/"
+      - "root@{{ pve_guest_evacuation_lxc_managed_volumes_target_rsync_host }}:{{ item.target_path }}/"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_rsync_copy
+  changed_when: true
+
+- name: Require checksum dry run to report no remaining differences
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - --archive
+      - --hard-links
+      - --acls
+      - --xattrs
+      - --numeric-ids
+      - --sparse
+      - --one-file-system
+      - --protect-args
+      - --checksum
+      - --dry-run
+      - --itemize-changes
+      - -e
+      - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_rsh }}"
+      - "{{ item.source_path }}/"
+      - "root@{{ pve_guest_evacuation_lxc_managed_volumes_target_rsync_host }}:{{ item.target_path }}/"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_rsync_verify
+  changed_when: false
+
+- name: Assert checksum dry runs have no remaining changes
+  ansible.builtin.assert:
+    that: [item.stdout | trim | length == 0]
+    fail_msg: >-
+      Final checksum dry run for {{ item.item.key }} reports remaining changes.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_verify.results }}"
+
+- name: Build deterministic source byte file metadata ACL xattr manifests
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd -- {{ item.source_path | quote }}
+    printf 'bytes '
+    find . -xdev -type f -printf '%s\n' | awk '{ total += $1 } END { print total + 0 }'
+    printf 'files '
+    find . -xdev -type f -printf . | wc -c
+    printf 'metadata '
+    find . -xdev -printf '%y\t%m\t%U\t%G\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+    printf 'content '
+    find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
+    printf 'hardlinks '
+    find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
+    printf 'acl '
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --absolute-names --numeric --skip-base --no-effective | sha256sum
+    printf 'xattr '
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfattr --absolute-names --no-dereference --encoding=hex -d -m - | sha256sum
+  args:
+    executable: /bin/bash
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_source_manifests
+  changed_when: false
+
+- name: Build deterministic target byte file metadata ACL xattr manifests
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd -- {{ item.target_path | quote }}
+    printf 'bytes '
+    find . -xdev -type f -printf '%s\n' | awk '{ total += $1 } END { print total + 0 }'
+    printf 'files '
+    find . -xdev -type f -printf . | wc -c
+    printf 'metadata '
+    find . -xdev -printf '%y\t%m\t%U\t%G\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+    printf 'content '
+    find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
+    printf 'hardlinks '
+    find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
+    printf 'acl '
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --absolute-names --numeric --skip-base --no-effective | sha256sum
+    printf 'xattr '
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfattr --absolute-names --no-dereference --encoding=hex -d -m - | sha256sum
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_target_manifests
+  changed_when: false
+
+- name: Require exact source and target manifest equality for every volume
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.stdout == (pve_guest_evacuation_lxc_managed_volumes_target_manifests.results
+                        | selectattr('item.key', 'equalto', item.item.key)
+                        | map(attribute='stdout') | first)
+    fail_msg: >-
+      Manifest comparison failed for {{ item.item.key }}. Preserve the stopped
+      target for investigation; this workflow never retries into it.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_source_manifests.results }}"
+
+- name: Write immutable verified managed-volume transfer evidence
+  ansible.builtin.include_tasks: write_evidence.yml
+  vars:
+    pve_guest_evacuation_lxc_managed_volumes_checkpoint: transfer_verified

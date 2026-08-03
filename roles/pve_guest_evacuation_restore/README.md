@@ -40,6 +40,15 @@ can change Proxmox disk references, so the exact source digest is used to bind
 the archive evidence before restore; disk and configuration structure are then
 verified on pve540 after the intentional storage placement.
 
+For an LXC with managed `mpN` volumes, VZDump restoration deliberately remains
+refused by default because Proxmox can create empty target skeletons. The only
+supported opt-in is `pve_guest_evacuation_restore_lxc_mountpoint_strategy=
+manifested_copy`; it writes a `restore_pending_managed_mount_copy` evidence
+record while leaving the stopped target intact. Follow it with
+`playbooks/transfer_evacuated_lxc_managed_volumes.yml`, which requires an empty
+target volume, a stopped source, a checksum rsync transfer, and exact
+per-volume manifests before it writes final immutable evidence.
+
 ## Evidence and failure policy
 
 The result is atomically written as a new, root-owned `0600` file below the

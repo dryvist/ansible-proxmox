@@ -1,0 +1,39 @@
+---
+- name: Verify the manifested LXC volume role remains inert and fail-closed
+  hosts: all
+  become: false
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert the inert role created no pve3 evidence directory
+      ansible.builtin.stat:
+        path: /bulk/evacuation-816/evidence
+      register: pve_guest_evacuation_lxc_managed_volumes_evidence_dir
+
+    - name: Assert the inert contract
+      ansible.builtin.assert:
+        that: [not pve_guest_evacuation_lxc_managed_volumes_evidence_dir.stat.exists]
+
+    - name: Exercise the incomplete enabled-input gate
+      block:
+        - name: Run the incomplete managed-volume contract
+          ansible.builtin.include_role:
+            name: pve_guest_evacuation_lxc_managed_volumes
+            tasks_from: preflight_contract.yml
+          vars:
+            pve_guest_evacuation_lxc_managed_volumes_enabled: true
+            pve_guest_evacuation_lxc_managed_volumes_source_node: pve2
+            pve_guest_evacuation_lxc_managed_volumes_target_node: pve540
+            pve_guest_evacuation_lxc_managed_volumes_staging_host: pve3
+            pve_guest_evacuation_lxc_managed_volumes_archive_run_id: archive-1
+            pve_guest_evacuation_lxc_managed_volumes_restore_run_id: restore-1
+            pve_guest_evacuation_lxc_managed_volumes_run_id: transfer-1
+            pve_guest_evacuation_lxc_managed_volumes_expected_vmid: '101'
+      rescue:
+        - name: Record incomplete managed-volume input failure
+          ansible.builtin.set_fact:
+            pve_guest_evacuation_lxc_managed_volumes_input_failed: true
+
+    - name: Assert incomplete managed-volume inputs fail closed
+      ansible.builtin.assert:
+        that: [pve_guest_evacuation_lxc_managed_volumes_input_failed | default(false)]

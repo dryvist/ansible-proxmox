@@ -378,6 +378,10 @@
       - "{{ pve_guest_evacuation_staging_storage }}"
       - --compress
       - zstd
+      - --zstd
+      - "{{ pve_guest_evacuation_zstd_threads | string }}"
+      - --tmpdir
+      - "{{ pve_guest_evacuation_tmpdir }}"
   register: pve_guest_evacuation_vzdump
   changed_when: true
 
