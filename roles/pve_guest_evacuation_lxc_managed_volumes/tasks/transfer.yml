@@ -71,12 +71,13 @@
 - name: Require protected immutable failed-transfer evidence
   ansible.builtin.assert:
     that:
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.exists | default(false)
       - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.isreg | default(false)
       - not (pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.islnk | default(false))
-      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.pw_name == 'root'
-      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.gr_name == 'root'
-      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.mode == '0600'
-      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.checksum == pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.pw_name | default('') == 'root'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.gr_name | default('') == 'root'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.mode | default('') == '0600'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.checksum | default('') == pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256
     fail_msg: Resume evidence must be the exact root-owned, mode 0600, immutable failed-run record.
     quiet: true
   when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
@@ -426,7 +427,7 @@
       This workflow never overwrites, merges with, or deletes target payloads.
     quiet: true
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_target_contents.results }}"
-  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | length == 0
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length == 0
 
 - name: Require populated preserved targets for an explicit resume
   ansible.builtin.assert:
@@ -434,7 +435,7 @@
     fail_msg: Resume target {{ item.item.key }} is empty; use a normal transfer with a new skeleton.
     quiet: true
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_target_contents.results }}"
-  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | length > 0
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
 
 - name: Require metadata manifest tools on pve2 and pve540
   ansible.builtin.command:
@@ -531,7 +532,7 @@
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
   register: pve_guest_evacuation_lxc_managed_volumes_rsync_copy
   changed_when: true
-  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | length == 0
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length == 0
 
 - name: Require checksum dry run to report no remaining differences
   ansible.builtin.command:

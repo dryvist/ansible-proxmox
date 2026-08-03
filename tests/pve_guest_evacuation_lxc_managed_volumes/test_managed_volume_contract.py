@@ -393,7 +393,7 @@ def test_resume_is_bound_to_exact_post_copy_failure_and_never_recopies() -> None
     assert "Require populated preserved targets for an explicit resume" in transfer
     copy_task = transfer[transfer.index("- name: Copy each stopped-source managed volume"):]
     copy_task = copy_task[:copy_task.index("- name: Require checksum dry run")]
-    assert "resume_from_run_id | length == 0" in copy_task
+    assert "resume_from_run_id | default('') | length == 0" in copy_task
     assert '"resume": {' in evidence
     assert "resume_evidence_sha256" in contract
 

@@ -88,17 +88,6 @@
         executable: /bin/bash
       changed_when: false
 
-    - name: Prove a populated target is accepted only by explicit resume
-      ansible.builtin.assert:
-        that:
-          - pve_guest_evacuation_lxc_managed_volumes_synthetic_target_content | length > 0
-          - pve_guest_evacuation_lxc_managed_volumes_synthetic_resume_run_id | length > 0
-          - pve_guest_evacuation_lxc_managed_volumes_synthetic_empty_run_id | length == 0
-      vars:
-        pve_guest_evacuation_lxc_managed_volumes_synthetic_target_content: payload
-        pve_guest_evacuation_lxc_managed_volumes_synthetic_resume_run_id: failed-transfer-1
-        pve_guest_evacuation_lxc_managed_volumes_synthetic_empty_run_id: ""
-
     - name: Remove isolated checksum dry-run regression directories
       ansible.builtin.file:
         path: "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}"
