@@ -389,7 +389,9 @@ def test_resume_is_bound_to_exact_post_copy_failure_and_never_recopies() -> None
     assert "checkpoint == 'transfer_failed'" in transfer
     assert "failure.task == 'Build deterministic source byte file metadata ACL xattr manifests'" in transfer
     assert "resume_evidence.volumes == pve_guest_evacuation_lxc_managed_volumes_dataset_mappings" in transfer
-    assert "rsync.checksum_dry_run | flatten | length == 0" in transfer
+    assert "rsync['copy'] | length" in transfer
+    assert "rsync['checksum_dry_run'] | flatten | length == 0" in transfer
+    assert ".rsync.copy" not in transfer
     assert "Require populated preserved targets for an explicit resume" in transfer
     copy_task = transfer[transfer.index("- name: Copy each stopped-source managed volume"):]
     copy_task = copy_task[:copy_task.index("- name: Require checksum dry run")]

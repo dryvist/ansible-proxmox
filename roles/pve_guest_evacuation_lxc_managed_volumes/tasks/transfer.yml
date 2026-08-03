@@ -119,9 +119,9 @@
       - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.target.config_digest == pve_guest_evacuation_lxc_managed_volumes_restore_evidence.target.config_digest
       - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.target.status.status == 'stopped'
       - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.failure.task == 'Build deterministic source byte file metadata ACL xattr manifests'
-      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync.copy | length == pve_guest_evacuation_lxc_managed_volumes_resume_evidence.volumes | length
-      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync.checksum_dry_run | length == pve_guest_evacuation_lxc_managed_volumes_resume_evidence.volumes | length
-      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync.checksum_dry_run | flatten | length == 0
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync['copy'] | length == pve_guest_evacuation_lxc_managed_volumes_resume_evidence.volumes | length
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync['checksum_dry_run'] | length == pve_guest_evacuation_lxc_managed_volumes_resume_evidence.volumes | length
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync['checksum_dry_run'] | flatten | length == 0
     fail_msg: Resume requires the exact immutable evidence from a completed copy that failed only while building the source manifest.
     quiet: true
   when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
