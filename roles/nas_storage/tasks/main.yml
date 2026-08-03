@@ -216,14 +216,45 @@
     - nas_storage
     - nas_storage_samba
 
+- name: Read the managed-user Samba passwords from OpenBao
+  ansible.builtin.uri:
+    url: "{{ nas_storage_bao_addr }}/v1/{{ nas_storage_bao_path }}"
+    headers:
+      X-Vault-Token: "{{ nas_storage_bao_token }}"
+    follow_redirects: all
+  register: nas_storage_bao_read
+  delegate_to: localhost
+  run_once: true
+  become: false
+  no_log: true
+  when:
+    - nas_storage_managed_users | length > 0
+    - nas_storage_bao_addr | length > 0
+    - nas_storage_bao_token | length > 0
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
+- name: Set the managed-user password map
+  ansible.builtin.set_fact:
+    nas_storage_passwords: >-
+      {{ nas_storage_bao_read.json.data.data | default({}, true) }}
+  run_once: true
+  no_log: true
+  when: nas_storage_managed_users | length > 0
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
 - name: Verify Samba password secrets are available
   ansible.builtin.assert:
     that:
-      - lookup('env', item.password_secret_env) | length > 0
+      - nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] | default('', true) | length > 0
     fail_msg: >-
-      Environment variable {{ item.password_secret_env }} is required for
-      managed Samba user {{ item.name }}.
-      Run the playbook with sops exec-env secrets.sops.yml.
+      No password for managed Samba user {{ item.name }}. It is read from
+      {{ nas_storage_bao_path }}, field
+      {{ item.name }}{{ nas_storage_password_field_suffix }}. Check that the
+      converge has BAO_ADDR and BAO_TOKEN, and that the field exists.
   loop: "{{ nas_storage_managed_users }}"
   loop_control:
     label: "{{ item.name }}"
@@ -257,7 +288,7 @@
     nas_storage_password_hashes: >-
       {{
         (nas_storage_password_hashes | default({}))
-        | combine({item.name: (lookup('env', item.password_secret_env) | hash('sha256'))})
+        | combine({item.name: (nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] | hash('sha256'))})
       }}
   loop: "{{ nas_storage_managed_users }}"
   loop_control:
@@ -314,7 +345,7 @@
 - name: Add Samba users to passdb
   ansible.builtin.command:
     cmd: "smbpasswd -s -a {{ item.name }}"
-    stdin: "{{ lookup('env', item.password_secret_env) }}\n{{ lookup('env', item.password_secret_env) }}"
+    stdin: "{{ nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] }}\n{{ nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] }}"
   loop: "{{ nas_storage_managed_users }}"
   loop_control:
     label: "{{ item.name }}"
@@ -331,7 +362,7 @@
 - name: Rotate Samba passwords when fingerprints drift
   ansible.builtin.command:
     cmd: "smbpasswd -s {{ item.name }}"
-    stdin: "{{ lookup('env', item.password_secret_env) }}\n{{ lookup('env', item.password_secret_env) }}"
+    stdin: "{{ nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] }}\n{{ nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] }}"
   loop: "{{ nas_storage_managed_users }}"
   loop_control:
     label: "{{ item.name }}"

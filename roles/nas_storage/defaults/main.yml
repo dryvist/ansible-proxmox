@@ -61,3 +61,15 @@ nas_storage_shares: >-
         ]
       )
   }}
+
+# Managed-user Samba passwords come from OpenBao, not the process environment.
+# The converge runner exports BAO_ADDR and a short-lived BAO_TOKEN for exactly
+# this kind of controller-side read (scripts/run-ansible.sh), and the ansible
+# AppRole policy already covers `secret/data/apps/*` — so this needs no new
+# grant. A user's password is the field `<name>_smb_password`.
+nas_storage_bao_addr: >-
+  {{ lookup('env', 'BAO_ADDR')
+     | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
+nas_storage_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
+nas_storage_bao_path: secret/data/apps/nas
+nas_storage_password_field_suffix: _smb_password
