@@ -38,6 +38,18 @@
       ansible.builtin.assert:
         that: [pve_guest_evacuation_lxc_managed_volumes_input_failed | default(false)]
 
+    - name: Decode representative post-copy resume evidence
+      ansible.builtin.set_fact:
+        pve_guest_evacuation_lxc_managed_volumes_resume_regression: >-
+          {{ '{"rsync":{"copy":[{"rc":0}],"checksum_dry_run":[[]]},"volumes":[{"key":"mp0"}]}' | from_json }}
+
+    - name: Prove resume evidence keys use mapping lookup semantics
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_lxc_managed_volumes_resume_regression.rsync['copy'] | length == 1
+          - pve_guest_evacuation_lxc_managed_volumes_resume_regression.rsync['checksum_dry_run'] | length == 1
+          - pve_guest_evacuation_lxc_managed_volumes_resume_regression.rsync['checksum_dry_run'] | flatten | length == 0
+
     - name: Create isolated absolute-symlink ACL regression directories
       ansible.builtin.tempfile:
         state: directory
