@@ -14,3 +14,6 @@ pve_guest_evacuation_guest_vmid: null
 pve_guest_evacuation_run_id: ""
 pve_guest_evacuation_shutdown_timeout: 180
 pve_guest_evacuation_staging_headroom_percent: 20
+# VZDump's working directory must be local. The staging NFS export uses
+# root_squash, which cannot host the remapped workspace of an unprivileged LXC.
+pve_guest_evacuation_tmpdir: /var/tmp

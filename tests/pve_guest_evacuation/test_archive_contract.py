@@ -13,7 +13,13 @@ def test_archive_uses_stop_mode_and_has_snapshot_gate() -> None:
     assert "Assert no ZFS snapshots exist on either evacuation node" in archive
     assert "- snapshot" in archive
     assert "- --mode\n      - stop" in archive
+    assert '- "{{ pve_guest_evacuation_tmpdir }}"' in archive
     assert "- snapshot\n" not in archive.split("Create a stop-mode VZDump archive", 1)[1]
+
+    defaults = (ROLE / "defaults" / "main.yml").read_text()
+    contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
+    assert "pve_guest_evacuation_tmpdir: /var/tmp" in defaults
+    assert "pve_guest_evacuation_tmpdir is match" in contract
 
 
 def test_unsupported_phases_and_external_resources_are_fail_closed() -> None:
