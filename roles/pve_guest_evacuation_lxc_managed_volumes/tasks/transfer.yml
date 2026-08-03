@@ -140,11 +140,11 @@
         == pve_guest_evacuation_lxc_managed_volumes_target_mount_items | map(attribute='key') | list
       - >-
         pve_guest_evacuation_lxc_managed_volumes_source_mount_items
-        | map(attribute='value') | select('match', '^[A-Za-z0-9][A-Za-z0-9._-]*:[^,]+,mp=/[^,]+') | list | length
+        | map(attribute='value') | select('match', '^[A-Za-z0-9][A-Za-z0-9._-]*:[^,]+,(?:[^,]+,)*mp=/[^,]+') | list | length
         == pve_guest_evacuation_lxc_managed_volumes_source_mount_items | length
       - >-
         pve_guest_evacuation_lxc_managed_volumes_target_mount_items
-        | map(attribute='value') | select('match', '^' ~ (pve_guest_evacuation_lxc_managed_volumes_target_storage | regex_escape) ~ ':[^,]+,mp=/[^,]+') | list | length
+        | map(attribute='value') | select('match', '^' ~ (pve_guest_evacuation_lxc_managed_volumes_target_storage | regex_escape) ~ ':[^,]+,(?:[^,]+,)*mp=/[^,]+') | list | length
         == pve_guest_evacuation_lxc_managed_volumes_target_mount_items | length
     fail_msg: >-
       The source and target do not have exactly the same managed mpN keys, or
@@ -443,7 +443,7 @@
     printf 'files '
     find . -xdev -type f -printf . | wc -c
     printf 'metadata '
-    find . -xdev -printf '%y\t%m\t%u\t%g\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+    find . -xdev -printf '%y\t%m\t%U\t%G\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
     printf 'content '
     find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
     printf 'hardlinks '
@@ -467,7 +467,7 @@
     printf 'files '
     find . -xdev -type f -printf . | wc -c
     printf 'metadata '
-    find . -xdev -printf '%y\t%m\t%u\t%g\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+    find . -xdev -printf '%y\t%m\t%U\t%G\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
     printf 'content '
     find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
     printf 'hardlinks '

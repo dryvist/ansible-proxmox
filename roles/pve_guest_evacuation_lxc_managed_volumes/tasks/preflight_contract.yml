@@ -18,6 +18,7 @@
       - pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256 is match('^[A-Fa-f0-9]{64}$')
       - pve_guest_evacuation_lxc_managed_volumes_target_storage is match('^[a-z0-9][a-z0-9_-]{0,39}$')
       - pve_guest_evacuation_lxc_managed_volumes_target_rsync_host is match('^[A-Za-z0-9][A-Za-z0-9.-]*$')
+      - hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host is defined
       - pve_guest_evacuation_lxc_managed_volumes_target_rsync_host == hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
       - pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file is match('^/root/[A-Za-z0-9._/-]+$')
       - pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file is match('^/root/[A-Za-z0-9._/-]+$')

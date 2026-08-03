@@ -29,6 +29,7 @@ def test_role_is_inert_and_requires_exact_three_record_identity() -> None:
     assert transfer.index("Check managed-volume evidence paths before transfer gates") < transfer.index(
         "Read pve3 archive and pending-restore evidence"
     )
+    assert "hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host is defined" in contract
 
 
 def test_transfer_requires_stopped_source_empty_target_and_no_snapshots() -> None:
@@ -61,6 +62,8 @@ def test_transfer_preserves_metadata_and_proves_each_volume() -> None:
         assert f"printf '{manifest} " in transfer
     assert "getfacl --absolute-names --numeric" in transfer
     assert "getfattr --absolute-names --no-dereference --encoding=hex" in transfer
+    assert "-printf '%y\\t%m\\t%U\\t%G\\t%s" in transfer
+    assert "(?:[^,]+,)*mp=/[^,]+" in transfer
     assert "Require exact source and target manifest equality for every volume" in transfer
     assert "Require one exact ZFS dataset identity for each source and target volume" in transfer
 
