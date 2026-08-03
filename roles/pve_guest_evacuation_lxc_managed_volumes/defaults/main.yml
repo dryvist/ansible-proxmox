@@ -15,9 +15,14 @@ pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256: ""
 pve_guest_evacuation_lxc_managed_volumes_target_storage: ""
 
 # The source host owns the dedicated, reviewed transport material. The role
-# proves it is root-owned and bound to the pve540 inventory endpoint before it
-# invokes rsync.
+# proves it is root-owned and bound to the pve540 inventory endpoint, or the
+# explicitly approved canonical FQDN which resolves on pve2 to that endpoint's
+# IPv4 address, before it invokes rsync.
 pve_guest_evacuation_lxc_managed_volumes_target_rsync_host: ""
+# Set only when the inventory endpoint cannot be used literally. This is the
+# sole approved alternate spelling; unapproved aliases and IP literals are
+# rejected.
+pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn: ""
 pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file: ""
 pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file: ""
 

@@ -32,6 +32,58 @@ def test_role_is_inert_and_requires_exact_three_record_identity() -> None:
     assert "hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host is defined" in contract
 
 
+def test_rsync_endpoint_keeps_the_literal_inventory_fast_path() -> None:
+    contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
+
+    assert (
+        "pve_guest_evacuation_lxc_managed_volumes_target_rsync_host\n"
+        "        == hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host"
+        in contract
+    )
+    assert "or (" in contract
+
+
+def test_unequal_rsync_endpoint_requires_a_verified_canonical_fqdn() -> None:
+    defaults = (ROLE / "defaults" / "main.yml").read_text()
+    contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
+
+    assert "pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn: \"\"" in defaults
+    assert "Resolve the approved pve540 canonical FQDN from pve2" in contract
+    assert "Resolve the pve540 inventory endpoint from pve2" in contract
+    assert "- ahostsv4" in contract
+    assert "pve_guest_evacuation_lxc_managed_volumes_target_rsync_host\n              == pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn" in contract
+    assert "pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_ipv4s" in contract
+    assert "pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_ipv4s" in contract
+    assert "| intersect(pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_ipv4s)" in contract
+
+
+def test_unequal_rsync_endpoint_rejects_aliases_and_unverified_resolution() -> None:
+    contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
+
+    assert "is match('^[A-Za-z0-9][A-Za-z0-9-]*(\\\\.[A-Za-z0-9][A-Za-z0-9-]*)+$')" in contract
+    assert "is not match('^([0-9]{1,3}\\\\.){3}[0-9]{1,3}$')" in contract
+    assert "pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution.rc == 0" in contract
+    assert "pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_resolution.rc == 0" in contract
+    assert "pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_ipv4s | length > 0" in contract
+    assert "pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_ipv4s | length > 0" in contract
+    assert "unapproved aliases, IP literals, missing DNS results, and mismatches" in contract
+
+
+def test_verified_fqdn_preserves_one_ed25519_key_and_strict_ssh() -> None:
+    transfer = (ROLE / "tasks" / "transfer.yml").read_text()
+
+    assert "| list | length == 1" in transfer
+    assert "ssh-ed25519" in transfer
+    for setting in (
+        "StrictHostKeyChecking=yes",
+        "UserKnownHostsFile={{ pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file }}",
+        "GlobalKnownHostsFile=/dev/null",
+        "PasswordAuthentication=no",
+        "KbdInteractiveAuthentication=no",
+    ):
+        assert setting in transfer
+
+
 def test_transfer_requires_stopped_source_empty_target_and_no_snapshots() -> None:
     transfer = (ROLE / "tasks" / "transfer.yml").read_text()
 
@@ -86,6 +138,10 @@ def test_evidence_is_immutable_and_failure_preserves_the_target() -> None:
 
 if __name__ == "__main__":
     test_role_is_inert_and_requires_exact_three_record_identity()
+    test_rsync_endpoint_keeps_the_literal_inventory_fast_path()
+    test_unequal_rsync_endpoint_requires_a_verified_canonical_fqdn()
+    test_unequal_rsync_endpoint_rejects_aliases_and_unverified_resolution()
+    test_verified_fqdn_preserves_one_ed25519_key_and_strict_ssh()
     test_transfer_requires_stopped_source_empty_target_and_no_snapshots()
     test_transfer_preserves_metadata_and_proves_each_volume()
     test_evidence_is_immutable_and_failure_preserves_the_target()

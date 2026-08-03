@@ -35,7 +35,10 @@ the stopped pve540 target for investigation.
 
 Supply identity values from the verified archive record and the pending restore
 record. The root-owned source-host SSH identity and known-hosts paths are
-deliberately explicit.
+deliberately explicit. The rsync host normally matches pve540's inventory
+endpoint literally. If it cannot, provide the sole approved alternate spelling
+as a canonical FQDN; it is accepted only when both names resolve on pve2 to a
+shared IPv4 address. Unapproved aliases remain rejected.
 
 ```bash
 doppler run -- ./scripts/run-ansible.sh playbooks/transfer_evacuated_lxc_managed_volumes.yml \
@@ -48,6 +51,7 @@ doppler run -- ./scripts/run-ansible.sh playbooks/transfer_evacuated_lxc_managed
   -e pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256=<archive-sha256> \
   -e pve_guest_evacuation_lxc_managed_volumes_target_storage=<pve540-storage> \
   -e pve_guest_evacuation_lxc_managed_volumes_target_rsync_host=<pve540-inventory-host> \
+  -e pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn=<pve540-canonical-fqdn> \
   -e pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file=<root-only-identity> \
   -e pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file=<root-only-known-hosts>
 ```

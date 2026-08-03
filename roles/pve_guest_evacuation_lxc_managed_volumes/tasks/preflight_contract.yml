@@ -19,7 +19,6 @@
       - pve_guest_evacuation_lxc_managed_volumes_target_storage is match('^[a-z0-9][a-z0-9_-]{0,39}$')
       - pve_guest_evacuation_lxc_managed_volumes_target_rsync_host is match('^[A-Za-z0-9][A-Za-z0-9.-]*$')
       - hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host is defined
-      - pve_guest_evacuation_lxc_managed_volumes_target_rsync_host == hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
       - pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file is match('^/root/[A-Za-z0-9._/-]+$')
       - pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file is match('^/root/[A-Za-z0-9._/-]+$')
       - pve_guest_evacuation_lxc_managed_volumes_archive_evidence_path is match('^/bulk/evacuation-816/evidence/[^/ ]+[.]json$')
@@ -29,4 +28,75 @@
       Managed-volume transfer runs only from pve2 to standalone pve540 with
       exact archive and pending-restore evidence, explicit storage, reviewed
       root transport files, and a new immutable evidence run id.
+    quiet: true
+
+- name: Resolve the approved pve540 canonical FQDN from pve2
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahostsv4
+      - "{{ pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution
+  changed_when: false
+  failed_when: false
+  when: >-
+    pve_guest_evacuation_lxc_managed_volumes_target_rsync_host
+    != hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
+
+- name: Resolve the pve540 inventory endpoint from pve2
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahostsv4
+      - "{{ hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_resolution
+  changed_when: false
+  failed_when: false
+  when: >-
+    pve_guest_evacuation_lxc_managed_volumes_target_rsync_host
+    != hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
+
+- name: Derive pve2 IPv4 resolutions for the approved pve540 endpoint
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_ipv4s: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution.stdout_lines
+         | map('split') | map('first')
+         | select('match', '^([0-9]{1,3}\\.){3}[0-9]{1,3}$') | unique | list }}
+    pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_ipv4s: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_resolution.stdout_lines
+         | map('split') | map('first')
+         | select('match', '^([0-9]{1,3}\\.){3}[0-9]{1,3}$') | unique | list }}
+  when: >-
+    pve_guest_evacuation_lxc_managed_volumes_target_rsync_host
+    != hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
+
+- name: Require the literal inventory endpoint or its verified canonical FQDN
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_target_rsync_host
+        == hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
+        or (
+          pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn
+          is match('^[A-Za-z0-9][A-Za-z0-9-]*(\\.[A-Za-z0-9][A-Za-z0-9-]*)+$')
+          and pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn
+              is not match('^([0-9]{1,3}\\.){3}[0-9]{1,3}$')
+          and pve_guest_evacuation_lxc_managed_volumes_target_rsync_host
+              == pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn
+          and pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution.rc == 0
+          and pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_resolution.rc == 0
+          and pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_ipv4s | length > 0
+          and pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_ipv4s | length > 0
+          and (
+            pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_ipv4s
+            | intersect(pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_ipv4s)
+            | length > 0
+          )
+        )
+    fail_msg: >-
+      The source-host rsync endpoint must be the literal pve540 inventory
+      endpoint or the explicitly approved canonical FQDN. On pve2, that FQDN
+      and the inventory endpoint must both resolve to a shared IPv4 address;
+      unapproved aliases, IP literals, missing DNS results, and mismatches are
+      rejected.
     quiet: true
