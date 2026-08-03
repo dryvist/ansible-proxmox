@@ -55,9 +55,18 @@ def test_restore_refuses_lxc_mountpoint_volumes_before_creating_a_target() -> No
     assert "pve_guest_evacuation_restore_lxc_mountpoint_volume_keys" in restore
     assert "Refuse automatic restore of LXC archives with additional backed mounts" in restore
     assert "Proxmox can recreate their volume configuration without restoring their" in restore
+    assert "pve_guest_evacuation_restore_lxc_mountpoint_strategy == 'manifested_copy'" in restore
     assert restore.index("Refuse automatic restore of LXC archives with additional backed mounts") < restore.index(
         "Restore the verified LXC archive"
     )
+
+
+def test_manifested_lxc_restore_is_explicitly_pending_not_verified() -> None:
+    restore = (ROLE / "tasks" / "restore.yml").read_text()
+    defaults = (ROLE / "defaults" / "main.yml").read_text()
+
+    assert "pve_guest_evacuation_restore_lxc_mountpoint_strategy: refuse" in defaults
+    assert "restore_pending_managed_mount_copy" in restore
 
 
 if __name__ == "__main__":

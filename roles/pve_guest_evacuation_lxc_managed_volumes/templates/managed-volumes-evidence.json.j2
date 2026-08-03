@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "run_id": {{ pve_guest_evacuation_lxc_managed_volumes_run_id | to_json }},
+  "checkpoint": {{ pve_guest_evacuation_lxc_managed_volumes_checkpoint | to_json }},
+  "input_archive": {
+    "path": {{ pve_guest_evacuation_lxc_managed_volumes_archive_evidence_path | to_json }},
+    "run_id": {{ pve_guest_evacuation_lxc_managed_volumes_archive_run_id | to_json }},
+    "vmid": {{ pve_guest_evacuation_lxc_managed_volumes_expected_vmid | int }},
+    "source_config_digest": {{ pve_guest_evacuation_lxc_managed_volumes_expected_config_digest | to_json }},
+    "sha256": {{ pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256 | to_json }}
+  },
+  "input_restore": {
+    "path": {{ pve_guest_evacuation_lxc_managed_volumes_restore_evidence_path | to_json }},
+    "run_id": {{ pve_guest_evacuation_lxc_managed_volumes_restore_run_id | to_json }},
+    "target_storage": {{ pve_guest_evacuation_lxc_managed_volumes_target_storage | to_json }}
+  },
+  "source": {
+    "node": {{ pve_guest_evacuation_lxc_managed_volumes_source_node | to_json }},
+    "status": {{ pve_guest_evacuation_lxc_managed_volumes_source_status | default({}) | to_json }},
+    "config_digest": {{ pve_guest_evacuation_lxc_managed_volumes_source_config.digest | default('') | to_json }}
+  },
+  "target": {
+    "node": {{ pve_guest_evacuation_lxc_managed_volumes_target_node | to_json }},
+    "status": {{ pve_guest_evacuation_lxc_managed_volumes_target_status | default({}) | to_json }},
+    "config_digest": {{ pve_guest_evacuation_lxc_managed_volumes_target_config.digest | default('') | to_json }}
+  },
+  "volumes": {{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings | default([]) | to_json }},
+  "rsync": {
+    "copy": {{ pve_guest_evacuation_lxc_managed_volumes_rsync_copy.results | default([]) | map(attribute='stdout_lines') | list | to_json }},
+    "checksum_dry_run": {{ pve_guest_evacuation_lxc_managed_volumes_rsync_verify.results | default([]) | map(attribute='stdout_lines') | list | to_json }}
+  },
+  "source_manifests": {{ pve_guest_evacuation_lxc_managed_volumes_source_manifests.results | default([]) | map(attribute='stdout_lines') | list | to_json }},
+  "target_manifests": {{ pve_guest_evacuation_lxc_managed_volumes_target_manifests.results | default([]) | map(attribute='stdout_lines') | list | to_json }},
+  "failure": {{ pve_guest_evacuation_lxc_managed_volumes_failure | default({}) | to_json }},
+  "written_at_utc": {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') | to_json }}
+}

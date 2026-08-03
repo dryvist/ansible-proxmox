@@ -320,6 +320,7 @@
       - >-
         pve_guest_evacuation_restore_expected_guest_type != 'lxc'
         or pve_guest_evacuation_restore_lxc_mountpoint_volume_keys | length == 0
+        or pve_guest_evacuation_restore_lxc_mountpoint_strategy == 'manifested_copy'
     fail_msg: >-
       The selected LXC archive has backed mountpoint volumes
       ({{ pve_guest_evacuation_restore_lxc_mountpoint_volume_keys | join(', ') }}).
@@ -437,4 +438,7 @@
 - name: Record a completed restore evidence checkpoint
   ansible.builtin.include_tasks: write_evidence.yml
   vars:
-    pve_guest_evacuation_restore_checkpoint: restore_verified
+    pve_guest_evacuation_restore_checkpoint: >-
+      {{ (pve_guest_evacuation_restore_expected_guest_type == 'lxc'
+          and pve_guest_evacuation_restore_lxc_mountpoint_volume_keys | length > 0)
+         | ternary('restore_pending_managed_mount_copy', 'restore_verified') }}
