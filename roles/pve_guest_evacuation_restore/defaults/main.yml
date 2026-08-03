@@ -24,3 +24,8 @@ pve_guest_evacuation_restore_result_evidence_path: >-
 # Restoration never uses the backup-only staging storage as its destination.
 # This identifier must already exist and be active on standalone pve540.
 pve_guest_evacuation_restore_target_storage: ""
+
+# VZDump can recreate an LXC mpN volume as an empty skeleton.  The default
+# therefore remains a refusal.  The manifested-copy workflow opts in only
+# when its separate, stopped-source transfer will prove every mpN payload.
+pve_guest_evacuation_restore_lxc_mountpoint_strategy: refuse

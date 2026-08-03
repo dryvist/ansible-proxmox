@@ -1,0 +1,38 @@
+---
+- name: Validate the enabled managed-volume transfer contract
+  ansible.builtin.include_tasks: preflight_contract.yml
+  when: pve_guest_evacuation_lxc_managed_volumes_enabled | bool
+  tags:
+    - pve_guest_evacuation_lxc_managed_volumes
+    - migration
+
+- name: Transfer one manifested LXC mpN payload set
+  when: pve_guest_evacuation_lxc_managed_volumes_enabled | bool
+  tags:
+    - pve_guest_evacuation_lxc_managed_volumes
+    - migration
+  block:
+    - name: Run the stopped-source managed-volume transfer
+      ansible.builtin.include_tasks: transfer.yml
+  rescue:
+    - name: Record the managed-volume transfer failure
+      ansible.builtin.set_fact:
+        pve_guest_evacuation_lxc_managed_volumes_failure:
+          task: "{{ ansible_failed_task.name | default('unknown') }}"
+          message: >-
+            {{ ansible_failed_result.msg
+               | default(ansible_failed_result.stderr | default('no failure detail returned')) }}
+
+    - name: Preserve a failed managed-volume transfer evidence record
+      ansible.builtin.include_tasks: write_evidence.yml
+      vars:
+        pve_guest_evacuation_lxc_managed_volumes_checkpoint: transfer_failed
+      when: pve_guest_evacuation_lxc_managed_volumes_evidence_paths is defined
+
+    - name: Stop after preserving target state for investigation
+      ansible.builtin.fail:
+        msg: >-
+          Managed-volume transfer stopped at
+          {{ pve_guest_evacuation_lxc_managed_volumes_failure.task }}. Any
+          pve540 target state is preserved; this role performs no rollback,
+          deletion, snapshot, or retry-in-place.

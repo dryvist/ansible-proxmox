@@ -1,0 +1,34 @@
+---
+# Final, stopped-source transfer for LXC-managed mpN volumes. This role is
+# deliberately inert and never creates, removes, starts, or overwrites a CT.
+pve_guest_evacuation_lxc_managed_volumes_enabled: false
+pve_guest_evacuation_lxc_managed_volumes_source_node: pve2
+pve_guest_evacuation_lxc_managed_volumes_target_node: pve540
+pve_guest_evacuation_lxc_managed_volumes_staging_host: pve3
+pve_guest_evacuation_lxc_managed_volumes_evidence_dir: /bulk/evacuation-816/evidence
+pve_guest_evacuation_lxc_managed_volumes_archive_run_id: ""
+pve_guest_evacuation_lxc_managed_volumes_restore_run_id: ""
+pve_guest_evacuation_lxc_managed_volumes_run_id: ""
+pve_guest_evacuation_lxc_managed_volumes_expected_vmid: null
+pve_guest_evacuation_lxc_managed_volumes_expected_config_digest: ""
+pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256: ""
+pve_guest_evacuation_lxc_managed_volumes_target_storage: ""
+
+# The source host owns the dedicated, reviewed transport material. The role
+# proves it is root-owned and bound to the pve540 inventory endpoint, or the
+# explicitly approved canonical FQDN which resolves on pve2 to that endpoint's
+# IPv4 address, before it invokes rsync.
+pve_guest_evacuation_lxc_managed_volumes_target_rsync_host: ""
+# Set only when the inventory endpoint cannot be used literally. This is the
+# sole approved alternate spelling; unapproved aliases and IP literals are
+# rejected.
+pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn: ""
+pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file: ""
+pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file: ""
+
+pve_guest_evacuation_lxc_managed_volumes_archive_evidence_path: >-
+  {{ pve_guest_evacuation_lxc_managed_volumes_evidence_dir }}/{{ pve_guest_evacuation_lxc_managed_volumes_archive_run_id }}-{{ pve_guest_evacuation_lxc_managed_volumes_expected_vmid }}.json
+pve_guest_evacuation_lxc_managed_volumes_restore_evidence_path: >-
+  {{ pve_guest_evacuation_lxc_managed_volumes_evidence_dir }}/restore-{{ pve_guest_evacuation_lxc_managed_volumes_restore_run_id }}-{{ pve_guest_evacuation_lxc_managed_volumes_expected_vmid }}.json
+pve_guest_evacuation_lxc_managed_volumes_result_evidence_path: >-
+  {{ pve_guest_evacuation_lxc_managed_volumes_evidence_dir }}/managed-volumes-{{ pve_guest_evacuation_lxc_managed_volumes_run_id }}-{{ pve_guest_evacuation_lxc_managed_volumes_expected_vmid }}.json

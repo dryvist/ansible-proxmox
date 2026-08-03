@@ -1,0 +1,9 @@
+---
+- name: Converge the inert manifested LXC volume role
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    pve_guest_evacuation_lxc_managed_volumes_enabled: false
+  roles:
+    - role: pve_guest_evacuation_lxc_managed_volumes

@@ -23,6 +23,9 @@
       - pve_guest_evacuation_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
       - pve_guest_evacuation_shutdown_timeout | int > 0
       - pve_guest_evacuation_staging_headroom_percent | int >= 0
+      - pve_guest_evacuation_tmpdir is match('^/var/tmp(?:/[A-Za-z0-9._-]+)?$')
+      - pve_guest_evacuation_zstd_threads | int >= 0
     fail_msg: >-
       Archive runs only on its declared source with one positive numeric VMID,
-      an explicit pve3 NFS staging endpoint, and a safe run identifier.
+      an explicit pve3 NFS staging endpoint, a local /var/tmp workspace,
+      nonnegative Zstandard thread count, and a safe run identifier.

@@ -7,13 +7,30 @@
 # ZFS Dataset
 # ============================================================
 
+# A missing POOL and a missing DATASET both make the `zfs list` below exit
+# non-zero, so checking only the dataset makes the create fire on a node whose
+# pool does not exist at all, where it can only fail ("cannot open 'rpool': no
+# such pool"). Nodes installed on LVM/ext4 have no ZFS root pool.
+- name: Check if the ZFS pool exists
+  ansible.builtin.command:
+    cmd: "zpool list {{ nas_storage_zfs_dataset | split('/') | first }}"
+  register: nas_storage_zpool_check
+  changed_when: false
+  failed_when: false
+  when: ansible_virtualization_type != 'docker'
+  tags:
+    - nas_storage
+    - nas_storage_zfs
+
 - name: Check if ZFS dataset exists
   ansible.builtin.command:
     cmd: "zfs list {{ nas_storage_zfs_dataset }}"
   register: nas_storage_zfs_check
   changed_when: false
   failed_when: false
-  when: ansible_virtualization_type != 'docker'
+  when:
+    - ansible_virtualization_type != 'docker'
+    - nas_storage_zpool_check.rc | default(1) == 0
   tags:
     - nas_storage
     - nas_storage_zfs
@@ -25,7 +42,8 @@
       {{ nas_storage_zfs_dataset }}
   when:
     - ansible_virtualization_type != 'docker'
-    - nas_storage_zfs_check.rc != 0
+    - nas_storage_zpool_check.rc | default(1) == 0
+    - nas_storage_zfs_check.rc | default(1) != 0
   changed_when: true
   tags:
     - nas_storage
@@ -38,7 +56,7 @@
   changed_when: false
   when:
     - ansible_virtualization_type != 'docker'
-    - nas_storage_zfs_check.rc == 0
+    - nas_storage_zfs_check.rc | default(1) == 0
   tags:
     - nas_storage
     - nas_storage_zfs
@@ -48,8 +66,8 @@
     cmd: "zfs set mountpoint={{ nas_storage_mount_point }} {{ nas_storage_zfs_dataset }}"
   when:
     - ansible_virtualization_type != 'docker'
-    - nas_storage_zfs_check.rc == 0
-    - nas_storage_zfs_current_mountpoint.stdout != nas_storage_mount_point
+    - nas_storage_zfs_check.rc | default(1) == 0
+    - nas_storage_zfs_current_mountpoint.stdout | default('') != nas_storage_mount_point
   changed_when: true
   tags:
     - nas_storage
@@ -61,7 +79,9 @@
     cmd: "zfs get -Hp -o value quota {{ nas_storage_zfs_dataset }}"
   register: nas_storage_zfs_current_quota
   changed_when: false
-  when: ansible_virtualization_type != 'docker'
+  when:
+    - ansible_virtualization_type != 'docker'
+    - nas_storage_zpool_check.rc | default(1) == 0
   tags:
     - nas_storage
     - nas_storage_zfs
@@ -71,6 +91,7 @@
     cmd: "zfs set quota={{ nas_storage_zfs_quota }} {{ nas_storage_zfs_dataset }}"
   when:
     - ansible_virtualization_type != 'docker'
+    - nas_storage_zpool_check.rc | default(1) == 0
     - nas_storage_zfs_current_quota.stdout | default('') != nas_storage_zfs_quota
   changed_when: true
   tags:
