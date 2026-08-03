@@ -1,9 +1,77 @@
-"""Static safety contract for manifested LXC mpN evacuation transfers."""
+"""Safety contract and parser regression for manifested LXC mpN transfers."""
 
+import json
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 
 ROLE = Path(__file__).resolve().parents[2] / "roles" / "pve_guest_evacuation_lxc_managed_volumes"
+
+
+def run_zfs_dataset_identity_parser(
+    tmp_path: Path,
+    source_lines: list[str],
+    target_lines: list[str],
+    expected_mappings: list[dict[str, object]] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Execute the role's extracted parser tasks with fixture ZFS output."""
+    ansible_playbook = shutil.which("ansible-playbook")
+    if ansible_playbook is None:
+        pytest.skip("ansible-playbook is required to execute the parser regression")
+
+    transfer = (ROLE / "tasks" / "transfer.yml").read_text()
+    parser_start = transfer.index("- name: Define the ZFS filesystem record separator")
+    parser_end = transfer.index("- name: Assert no ZFS snapshots exist on either evacuation node")
+    parser_path = tmp_path / "zfs-parser.yml"
+    parser_path.write_text(transfer[parser_start:parser_end])
+
+    zfs_filesystems = {
+        "results": [
+            {"item": "pve2", "stdout_lines": source_lines},
+            {"item": "pve540", "stdout_lines": target_lines},
+        ]
+    }
+    resolved_mappings = [
+        {
+            "key": "mp0",
+            "source_path": "/bulk/subvol-519010-disk-1",
+            "target_path": "/rpool/data/subvol-519010-disk-1",
+        }
+    ]
+    playbook_tasks = "    - ansible.builtin.include_tasks: zfs-parser.yml\n"
+    if expected_mappings is not None:
+        playbook_tasks += (
+            "    - ansible.builtin.assert:\n"
+            "        that:\n"
+            "          - pve_guest_evacuation_lxc_managed_volumes_dataset_mappings == "
+            "expected_dataset_mappings\n"
+        )
+    playbook_path = tmp_path / "playbook.yml"
+    playbook_path.write_text(
+        "---\n"
+        "- hosts: localhost\n"
+        "  connection: local\n"
+        "  gather_facts: false\n"
+        "  vars:\n"
+        "    pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems: "
+        f"{json.dumps(zfs_filesystems)}\n"
+        "    pve_guest_evacuation_lxc_managed_volumes_resolved_mappings: "
+        f"{json.dumps(resolved_mappings)}\n"
+        "    expected_dataset_mappings: "
+        f"{json.dumps(expected_mappings or [])}\n"
+        "  tasks:\n"
+        f"{playbook_tasks}"
+    )
+    return subprocess.run(
+        [ansible_playbook, "-i", "localhost,", str(playbook_path)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
 
 
 def test_role_is_inert_and_requires_exact_three_record_identity() -> None:
@@ -121,6 +189,88 @@ def test_transfer_preserves_metadata_and_proves_each_volume() -> None:
     assert "Require one exact ZFS dataset identity for each source and target volume" in transfer
 
 
+def test_zfs_dataset_identity_parser_uses_actual_tab_delimited_fields(tmp_path: Path) -> None:
+    """Run the extracted parser tasks against representative live ZFS output."""
+    source_line = "bulk/subvol-519010-disk-1\t/bulk/subvol-519010-disk-1"
+    target_line = "rpool/data/subvol-519010-disk-1\t/rpool/data/subvol-519010-disk-1"
+    # This is the failure mode from the live output: matching a literal
+    # backslash followed by t cannot find either actual tab-delimited record.
+    assert [line for line in (source_line, target_line) if "\\t" in line] == []
+
+    expected_mappings = [
+        {
+            "key": "mp0",
+            "source_path": "/bulk/subvol-519010-disk-1",
+            "target_path": "/rpool/data/subvol-519010-disk-1",
+            "source_dataset_identity": [
+                {"name": "bulk/subvol-519010-disk-1", "mountpoint": "/bulk/subvol-519010-disk-1"}
+            ],
+            "target_dataset_identity": [
+                {
+                    "name": "rpool/data/subvol-519010-disk-1",
+                    "mountpoint": "/rpool/data/subvol-519010-disk-1",
+                }
+            ],
+        }
+    ]
+    result = run_zfs_dataset_identity_parser(
+        tmp_path,
+        [source_line],
+        [target_line],
+        expected_mappings,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    ("source_lines", "target_lines", "failure_message"),
+    [
+        (
+            ["bulk/subvol-519010-disk-1"],
+            ["rpool/data/subvol-519010-disk-1\t/rpool/data/subvol-519010-disk-1"],
+            "returned a ZFS filesystem inventory without one exact dataset-name",
+        ),
+        (
+            ["bulk/subvol-519010-disk-1\t/bulk/subvol-519010-disk-1\textra"],
+            ["rpool/data/subvol-519010-disk-1\t/rpool/data/subvol-519010-disk-1"],
+            "returned a ZFS filesystem inventory without one exact dataset-name",
+        ),
+        (
+            [
+                "bulk/subvol-519010-disk-1\t/bulk/subvol-519010-disk-1",
+                "bulk/duplicate\t/bulk/subvol-519010-disk-1",
+            ],
+            ["rpool/data/subvol-519010-disk-1\t/rpool/data/subvol-519010-disk-1"],
+            "does not resolve to exactly one mounted ZFS dataset",
+        ),
+    ],
+    ids=["one-field-record", "three-field-record", "duplicate-mountpoint-record"],
+)
+def test_zfs_dataset_identity_parser_rejects_ambiguous_records(
+    tmp_path: Path,
+    source_lines: list[str],
+    target_lines: list[str],
+    failure_message: str,
+) -> None:
+    result = run_zfs_dataset_identity_parser(tmp_path, source_lines, target_lines)
+
+    assert result.returncode != 0
+    assert failure_message in result.stdout + result.stderr
+
+
+def test_zfs_dataset_identity_parser_contract_uses_field_parsing() -> None:
+    transfer = (ROLE / "tasks" / "transfer.yml").read_text()
+
+    assert "Require two-field ZFS filesystem identity records" in transfer
+    assert "pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator: '{{ \"%c\" | format(9) }}'" in transfer
+    assert "map('split', pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator)" in transfer
+    assert "Parse source ZFS filesystem identity records into name and mountpoint fields" in transfer
+    assert "Parse target ZFS filesystem identity records into name and mountpoint fields" in transfer
+    assert "selectattr('mountpoint', 'equalto', item.source_path)" in transfer
+    assert "selectattr('mountpoint', 'equalto', item.target_path)" in transfer
+    assert "select('match', '^.+\\\\t'" not in transfer
+
+
 def test_evidence_is_immutable_and_failure_preserves_the_target() -> None:
     main = (ROLE / "tasks" / "main.yml").read_text()
     writer = (ROLE / "tasks" / "write_evidence.yml").read_text()
@@ -144,4 +294,5 @@ if __name__ == "__main__":
     test_verified_fqdn_preserves_one_ed25519_key_and_strict_ssh()
     test_transfer_requires_stopped_source_empty_target_and_no_snapshots()
     test_transfer_preserves_metadata_and_proves_each_volume()
+    test_zfs_dataset_identity_parser_contract_uses_field_parsing()
     test_evidence_is_immutable_and_failure_preserves_the_target()

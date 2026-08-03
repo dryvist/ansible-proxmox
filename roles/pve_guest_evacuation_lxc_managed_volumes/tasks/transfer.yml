@@ -247,15 +247,62 @@
   register: pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems
   changed_when: false
 
+- name: Define the ZFS filesystem record separator
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator: '{{ "%c" | format(9) }}'
+
+- name: Require two-field ZFS filesystem identity records
+  ansible.builtin.assert:
+    that:
+      - item.stdout_lines | length > 0
+      - >-
+        (item.stdout_lines
+         | map('split', pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator)
+         | map('length') | unique | list)
+        == [2]
+    fail_msg: >-
+      {{ item.item }} returned a ZFS filesystem inventory without one exact
+      dataset-name and mountpoint field per record. No copy can proceed from
+      an ambiguous filesystem inventory.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems.results }}"
+
+- name: Initialize parsed ZFS filesystem identity records
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_source_zfs_dataset_records: []
+    pve_guest_evacuation_lxc_managed_volumes_target_zfs_dataset_records: []
+
+- name: Parse source ZFS filesystem identity records into name and mountpoint fields
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_source_zfs_dataset_records: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_source_zfs_dataset_records + [
+        {
+          'name': (item | split(pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator) | first),
+          'mountpoint': (item | split(pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator) | last)
+        }
+      ] }}
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems.results[0].stdout_lines }}"
+
+- name: Parse target ZFS filesystem identity records into name and mountpoint fields
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_target_zfs_dataset_records: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_target_zfs_dataset_records + [
+        {
+          'name': (item | split(pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator) | first),
+          'mountpoint': (item | split(pve_guest_evacuation_lxc_managed_volumes_zfs_record_separator) | last)
+        }
+      ] }}
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems.results[1].stdout_lines }}"
+
 - name: Record exact ZFS dataset identities for every managed volume
   ansible.builtin.set_fact:
     pve_guest_evacuation_lxc_managed_volumes_dataset_mappings: >-
       {{ (pve_guest_evacuation_lxc_managed_volumes_dataset_mappings | default([])) + [
         item | combine({
-          'source_dataset_identity': (pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems.results[0].stdout_lines
-                                      | select('match', '^.+\\t' ~ (item.source_path | regex_escape) ~ '$') | list),
-          'target_dataset_identity': (pve_guest_evacuation_lxc_managed_volumes_zfs_filesystems.results[1].stdout_lines
-                                      | select('match', '^.+\\t' ~ (item.target_path | regex_escape) ~ '$') | list)
+          'source_dataset_identity': (pve_guest_evacuation_lxc_managed_volumes_source_zfs_dataset_records
+                                      | selectattr('mountpoint', 'equalto', item.source_path) | list),
+          'target_dataset_identity': (pve_guest_evacuation_lxc_managed_volumes_target_zfs_dataset_records
+                                      | selectattr('mountpoint', 'equalto', item.target_path) | list)
         })
       ] }}
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_resolved_mappings }}"
