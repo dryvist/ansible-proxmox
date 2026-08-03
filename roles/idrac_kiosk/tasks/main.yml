@@ -48,9 +48,22 @@
   tags:
     - idrac_kiosk
 
+- name: Detect pve-firmware, which supersedes firmware-amd-graphics
+  # pve-firmware ships the AMD GPU microcode and declares a conflict with the
+  # Debian firmware-* packages. On a Proxmox node apt therefore resolves an
+  # install of firmware-amd-graphics into REMOVING pve-firmware, proxmox-ve and
+  # every proxmox-kernel — pve-apt-hook refuses it and the play fails.
+  ansible.builtin.command: dpkg-query -W -f='${Status}' pve-firmware
+  register: idrac_kiosk_pve_firmware
+  changed_when: false
+  failed_when: false
+  when: idrac_kiosk_enabled | bool
+  tags:
+    - idrac_kiosk
+
 - name: Install AMD GPU firmware
-  # Separate task: this package only exists once non-free-firmware is enabled.
-  # Do not fail the play if it is unavailable; the warning above covers it.
+  # Separate task: this package only exists once non-free-firmware is enabled,
+  # and only on a host where pve-firmware does not already provide it.
   ansible.builtin.apt:
     name: firmware-amd-graphics
     state: present
@@ -59,6 +72,7 @@
     - idrac_kiosk_enabled | bool
     - "'Candidate: (none)' not in (idrac_kiosk_amd_fw_policy.stdout | default(''))"
     - idrac_kiosk_amd_fw_policy.rc | default(1) == 0
+    - "'install ok installed' not in (idrac_kiosk_pve_firmware.stdout | default(''))"
   tags:
     - idrac_kiosk
 
