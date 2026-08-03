@@ -69,7 +69,10 @@
     owner: root
     group: root
     mode: "0644"
-  notify: Restart watchdog-mux
+  # Deliberately notifies a reporting handler, NOT a watchdog-mux restart. See
+  # handlers/main.yml: restarting watchdog-mux on a node with active HA resets
+  # the node this role exists to protect.
+  notify: Report watchdog module change
 
 # --- Layer 2: liveness daemon -------------------------------------------------
 #

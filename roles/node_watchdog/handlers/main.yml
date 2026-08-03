@@ -9,12 +9,17 @@
     state: restarted
   when: node_watchdog_arm | default(true)
 
-# watchdog-mux is restarted rather than reloaded because it reads
-# WATCHDOG_MODULE only at start. On a node with active HA services this briefly
-# drops the armed watchdog, which is safe: nothing is being petted during the
-# gap, and the LRM re-arms on reconnect.
-- name: Restart watchdog-mux
-  ansible.builtin.systemd_service:
-    name: watchdog-mux
-    state: restarted
-  failed_when: false
+# There is deliberately no "Restart watchdog-mux" handler. watchdog-mux reads
+# WATCHDOG_MODULE only at start, but restarting it on a node with active HA is
+# what makes this role reset the node it exists to protect: watchdog-mux exits
+# "with active connections", the kernel refuses to disarm the device
+# ("watchdog0: watchdog did not stop!"), and with nothing petting an armed
+# hardware watchdog the board resets seconds later. Observed on a live node,
+# whose journal ends mid-converge on exactly that kernel line.
+- name: Report watchdog module change
+  ansible.builtin.debug:
+    msg: >-
+      WATCHDOG_MODULE is now '{{ node_watchdog_module }}'. watchdog-mux reads it
+      only at start and is deliberately NOT restarted, because that resets a node
+      with active HA. The change takes effect at this node's next reboot; until
+      then the previously loaded module remains in use.
