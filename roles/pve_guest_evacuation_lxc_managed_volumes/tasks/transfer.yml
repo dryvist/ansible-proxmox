@@ -3,6 +3,47 @@
 # bind a fresh pve540 skeleton to the stopped pve2 source. It never uses a ZFS
 # snapshot and never creates a destination volume or directory.
 
+- name: Read pve3 managed-volume evidence directory metadata
+  ansible.builtin.stat:
+    path: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_dir }}"
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_staging_host }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat
+  changed_when: false
+
+- name: Require a root-only non-symlink pve3 evidence directory
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.exists | default(false)
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.isdir | default(false)
+      - not (pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.islnk | default(false))
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.pw_name == 'root'
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.gr_name == 'root'
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.mode == '0700'
+    fail_msg: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_evidence_dir }} must remain a
+      root-owned, non-symlink directory with mode 0700 before this transfer
+      trusts archive/restore evidence or writes its result.
+    quiet: true
+
+# Reserve the immutable evidence name before every transfer gate.  This lets
+# the rescue path record failures before any payload is copied.
+- name: Check managed-volume evidence paths before transfer gates
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_staging_host }}"
+  loop:
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_result_evidence_path }}"
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_result_evidence_path }}.tmp"
+  register: pve_guest_evacuation_lxc_managed_volumes_evidence_paths
+  changed_when: false
+
+- name: Require unused immutable managed-volume evidence paths
+  ansible.builtin.assert:
+    that: [not item.stat.exists]
+    fail_msg: "Evidence path {{ item.item }} already exists; choose a new run id."
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_paths.results }}"
+
 - name: Read pve3 archive and pending-restore evidence
   ansible.builtin.slurp:
     src: "{{ item }}"
@@ -338,24 +379,6 @@
       -o UserKnownHostsFile={{ pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file }}
       -o GlobalKnownHostsFile=/dev/null -o PasswordAuthentication=no
       -o KbdInteractiveAuthentication=no -T
-
-# The evidence file is intentionally written only once at completion or
-# failure. Check its paths now so a copied payload can never replace evidence.
-- name: Check managed-volume evidence paths before copying
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_staging_host }}"
-  loop:
-    - "{{ pve_guest_evacuation_lxc_managed_volumes_result_evidence_path }}"
-    - "{{ pve_guest_evacuation_lxc_managed_volumes_result_evidence_path }}.tmp"
-  register: pve_guest_evacuation_lxc_managed_volumes_evidence_paths
-
-- name: Require unused immutable managed-volume evidence paths
-  ansible.builtin.assert:
-    that: [not item.stat.exists]
-    fail_msg: "Evidence path {{ item.item }} already exists; choose a new run id."
-    quiet: true
-  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_paths.results }}"
 
 - name: Copy each stopped-source managed volume without overwrite or deletion
   ansible.builtin.command:

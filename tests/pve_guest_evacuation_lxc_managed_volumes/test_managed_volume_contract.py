@@ -24,6 +24,11 @@ def test_role_is_inert_and_requires_exact_three_record_identity() -> None:
     assert "archive_verified" in transfer
     assert "restore_pending_managed_mount_copy" in transfer
     assert "source_config.digest == pve_guest_evacuation_lxc_managed_volumes_expected_config_digest" in transfer
+    assert "Require a root-only non-symlink pve3 evidence directory" in transfer
+    assert "pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.mode == '0700'" in transfer
+    assert transfer.index("Check managed-volume evidence paths before transfer gates") < transfer.index(
+        "Read pve3 archive and pending-restore evidence"
+    )
 
 
 def test_transfer_requires_stopped_source_empty_target_and_no_snapshots() -> None:
