@@ -64,6 +64,7 @@ def test_transfer_preserves_metadata_and_proves_each_volume() -> None:
     assert "getfattr --absolute-names --no-dereference --encoding=hex" in transfer
     assert "-printf '%y\\t%m\\t%U\\t%G\\t%s" in transfer
     assert "(?:[^,]+,)*mp=/[^,]+" in transfer
+    assert transfer.count("set -euo pipefail") >= 2
     assert "Require exact source and target manifest equality for every volume" in transfer
     assert "Require one exact ZFS dataset identity for each source and target volume" in transfer
 

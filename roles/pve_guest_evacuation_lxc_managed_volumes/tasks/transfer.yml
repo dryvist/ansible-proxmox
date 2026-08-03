@@ -436,7 +436,7 @@
 
 - name: Build deterministic source byte file metadata ACL xattr manifests
   ansible.builtin.shell: |
-    set -o pipefail
+    set -euo pipefail
     cd -- {{ item.source_path | quote }}
     printf 'bytes '
     find . -xdev -type f -printf '%s\n' | awk '{ total += $1 } END { print total + 0 }'
@@ -460,7 +460,7 @@
 
 - name: Build deterministic target byte file metadata ACL xattr manifests
   ansible.builtin.shell: |
-    set -o pipefail
+    set -euo pipefail
     cd -- {{ item.target_path | quote }}
     printf 'bytes '
     find . -xdev -type f -printf '%s\n' | awk '{ total += $1 } END { print total + 0 }'
