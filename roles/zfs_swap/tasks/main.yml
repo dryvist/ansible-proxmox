@@ -1,61 +1,65 @@
 ---
 # ZFS Swap role tasks
 
-- name: Check if ZFS swap dataset exists
+- name: Check if the ZFS swap pool exists
   ansible.builtin.command:
-    cmd: "zfs list {{ zfs_swap_pool }}/{{ zfs_swap_dataset }}"
-  register: zfs_swap_check
+    cmd: "zpool list {{ zfs_swap_pool }}"
+  register: zfs_swap_pool_check
   changed_when: false
   failed_when: false
   tags:
     - zfs_swap
 
-- name: Get system page size
-  ansible.builtin.command:
-    cmd: getconf PAGESIZE
-  register: zfs_swap_page_size
-  changed_when: false
+- name: Configure ZFS swap
+  # Nodes installed on LVM/ext4 have no ZFS root pool and carry their own
+  # partition swap, so the whole role is inapplicable there.
+  when: zfs_swap_pool_check.rc == 0
   tags:
     - zfs_swap
+  block:
+    - name: Check if ZFS swap dataset exists
+      ansible.builtin.command:
+        cmd: "zfs list {{ zfs_swap_pool }}/{{ zfs_swap_dataset }}"
+      register: zfs_swap_check
+      changed_when: false
+      failed_when: false
 
-- name: Create ZFS swap ZVOL
-  ansible.builtin.command:
-    cmd: >-
-      zfs create -V {{ zfs_swap_size }} -b {{ zfs_swap_page_size.stdout }}
-      -o compression=zle
-      -o sync=disabled
-      -o primarycache=metadata
-      -o secondarycache=none
-      -o logbias=throughput
-      {{ zfs_swap_pool }}/{{ zfs_swap_dataset }}
-  when: zfs_swap_check.rc != 0
-  changed_when: true
-  tags:
-    - zfs_swap
+    - name: Get system page size
+      ansible.builtin.command:
+        cmd: getconf PAGESIZE
+      register: zfs_swap_page_size
+      changed_when: false
 
-- name: Format swap device
-  ansible.builtin.command:
-    cmd: "mkswap {{ zfs_swap_device }}"
-  when: zfs_swap_check.rc != 0
-  changed_when: true
-  tags:
-    - zfs_swap
+    - name: Create ZFS swap ZVOL
+      ansible.builtin.command:
+        cmd: >-
+          zfs create -V {{ zfs_swap_size }} -b {{ zfs_swap_page_size.stdout }}
+          -o compression=zle
+          -o sync=disabled
+          -o primarycache=metadata
+          -o secondarycache=none
+          -o logbias=throughput
+          {{ zfs_swap_pool }}/{{ zfs_swap_dataset }}
+      when: zfs_swap_check.rc != 0
+      changed_when: true
 
-- name: Add swap to fstab
-  ansible.posix.mount:
-    path: none
-    src: "{{ zfs_swap_device }}"
-    fstype: swap
-    opts: sw
-    state: present
-  tags:
-    - zfs_swap
+    - name: Format swap device
+      ansible.builtin.command:
+        cmd: "mkswap {{ zfs_swap_device }}"
+      when: zfs_swap_check.rc != 0
+      changed_when: true
 
-- name: Enable swap
-  ansible.builtin.command:
-    cmd: "swapon {{ zfs_swap_device }}"
-  register: zfs_swap_swapon_result
-  changed_when: zfs_swap_swapon_result.rc == 0
-  failed_when: false
-  tags:
-    - zfs_swap
+    - name: Add swap to fstab
+      ansible.posix.mount:
+        path: none
+        src: "{{ zfs_swap_device }}"
+        fstype: swap
+        opts: sw
+        state: present
+
+    - name: Enable swap
+      ansible.builtin.command:
+        cmd: "swapon {{ zfs_swap_device }}"
+      register: zfs_swap_swapon_result
+      changed_when: zfs_swap_swapon_result.rc == 0
+      failed_when: false
