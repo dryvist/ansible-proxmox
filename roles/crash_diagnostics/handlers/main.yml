@@ -1,9 +1,14 @@
 ---
 # Crash Diagnostics role handlers
 
+# `sysctl -p` with no argument reads /etc/sysctl.conf, which a current Debian
+# install does not ship — a freshly commissioned node fails with
+# `cannot open "/etc/sysctl.conf": No such file or directory`. This role writes
+# its settings to /etc/sysctl.d/ anyway, so --system is both correct and the
+# only form that actually loads them.
 - name: Reload sysctl
   ansible.builtin.command:
-    cmd: sysctl -p
+    cmd: sysctl --system
   changed_when: false
   # Some kernel settings require hardware access and may fail in containers
   when: ansible_virtualization_type != 'docker'
