@@ -218,6 +218,140 @@
       # ponytail: idempotent enforce, same rationale as the resource-affinity set.
       changed_when: false
 
+    # --- Estate-wide enrollment (pve_ha_manage_all) -------------------------
+    # Every remaining container joins HA pinned to the single node holding its
+    # rootfs. See the defaults for why the pin is the safety property: without
+    # it, ha-manager relocates a local-ZFS guest onto a node that cannot start
+    # it, after the source node has already self-fenced to get there.
+    #
+    # Containers only: containers_from_tofu is the container map. A VM that
+    # should be HA-managed goes in pve_ha_extra_sids, which is not pinned and so
+    # must only carry VMs on storage every node can reach.
+    - name: Resolve the home-pinned guests, grouped by their home node
+      ansible.builtin.set_fact:
+        pve_ha_home_entries: >-
+          {{ (containers_from_tofu | default({})) | dict2items
+             | rejectattr('key', 'in', pve_ha_ct_hostnames)
+             | selectattr('value.vmid', 'defined')
+             | selectattr('value.node', 'defined')
+             | list }}
+      when: pve_ha_manage_all | bool
+
+    - name: Resolve the home-pinned SIDs
+      ansible.builtin.set_fact:
+        pve_ha_home_sids: >-
+          {{ pve_ha_home_entries | map(attribute='value.vmid') | map('string')
+             | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
+      when: pve_ha_manage_all | bool
+
+    # HA state must follow the guest's CURRENT power state, not a blanket
+    # `started`. A large share of the estate is deliberately stopped, and
+    # enrolling those with state=started would have HA boot every one of them
+    # the moment the rule lands. Enrollment is a management change; it is not
+    # licence to change what is running.
+    - name: Read current guest power state from the cluster
+      ansible.builtin.command: pvesh get /cluster/resources --type vm --output-format json
+      register: pve_ha_cluster_resources_raw
+      changed_when: false
+      when: pve_ha_manage_all | bool
+
+    - name: Map vmid -> current power status
+      ansible.builtin.set_fact:
+        pve_ha_status_by_vmid: >-
+          {{ dict(
+               (pve_ha_cluster_resources_raw.stdout | from_json)
+               | selectattr('vmid', 'defined')
+               | map(attribute='vmid') | map('string') | list
+               | zip(
+                   (pve_ha_cluster_resources_raw.stdout | from_json)
+                   | selectattr('vmid', 'defined')
+                   | map(attribute='status') | list
+                 )
+             ) }}
+      when: pve_ha_manage_all | bool
+
+
+    - name: Warn about containers with no home node (skipped, cannot be pinned)
+      ansible.builtin.debug:
+        msg: >-
+          pve_ha: these containers have no `node` in the tofu inventory and are
+          left OUT of HA — an unpinned guest under HA can be relocated onto a
+          node without its storage:
+          {{ (containers_from_tofu | default({})) | dict2items
+             | rejectattr('value.node', 'defined')
+             | map(attribute='key') | list }}
+      when:
+        - pve_ha_manage_all | bool
+        - ((containers_from_tofu | default({})) | dict2items
+           | rejectattr('value.node', 'defined') | list) | length > 0
+
+    - name: Add the home-pinned guests to HA (only those not yet managed)
+      ansible.builtin.command: >-
+        ha-manager add {{ item }}
+        --state {{ 'started'
+                   if pve_ha_status_by_vmid[item | regex_replace('^ct:', '')]
+                      | default('') == 'running'
+                   else 'stopped' }}
+        --max_restart {{ pve_ha_max_restart }}
+        --max_relocate {{ pve_ha_pinned_max_relocate }}
+      loop: "{{ pve_ha_home_sids | default([]) }}"
+      when:
+        - pve_ha_manage_all | bool
+        - item not in pve_ha_existing_sids
+      changed_when: true
+
+    # Params only. The state of an already-managed guest is left alone: an
+    # operator may have stopped or started it deliberately since enrollment.
+    - name: Enforce HA params on already-managed home-pinned guests
+      ansible.builtin.command: >-
+        ha-manager set {{ item }}
+        --max_restart {{ pve_ha_max_restart }}
+        --max_relocate {{ pve_ha_pinned_max_relocate }}
+      loop: "{{ pve_ha_home_sids | default([]) }}"
+      when:
+        - pve_ha_manage_all | bool
+        - item in pve_ha_existing_sids
+      # ponytail: idempotent enforce, same rationale as the tier-0 set above.
+      changed_when: false
+
+    # One strict rule per home node rather than one per guest: same constraint,
+    # a rule set an operator can read.
+    - name: Pin each home node's guests to that node (strict; add if absent)
+      ansible.builtin.command: >-
+        ha-manager rules add node-affinity
+        {{ pve_ha_home_rule_prefix }}-{{ item.0 }}
+        --resources {{ item.1 | map(attribute='value.vmid') | map('string')
+                       | map('regex_replace', '^(.+)$', 'ct:\1')
+                       | join(',') }}
+        --nodes {{ item.0 }}
+        --strict 1
+        --comment 'pve_ha: {{ item.0 }} holds these guests rootfs; HA may only restart them here'
+      loop: "{{ pve_ha_home_entries | default([]) | groupby('value.node') }}"
+      loop_control:
+        label: "{{ item.0 }}"
+      when:
+        - pve_ha_manage_all | bool
+        - (pve_ha_home_rule_prefix ~ '-' ~ item.0) not in pve_ha_existing_rules
+      changed_when: true
+
+    - name: Enforce membership on the existing home-node pins
+      ansible.builtin.command: >-
+        ha-manager rules set node-affinity
+        {{ pve_ha_home_rule_prefix }}-{{ item.0 }}
+        --resources {{ item.1 | map(attribute='value.vmid') | map('string')
+                       | map('regex_replace', '^(.+)$', 'ct:\1')
+                       | join(',') }}
+        --nodes {{ item.0 }}
+        --strict 1
+      loop: "{{ pve_ha_home_entries | default([]) | groupby('value.node') }}"
+      loop_control:
+        label: "{{ item.0 }}"
+      when:
+        - pve_ha_manage_all | bool
+        - (pve_ha_home_rule_prefix ~ '-' ~ item.0) in pve_ha_existing_rules
+      # ponytail: idempotent enforce, same rationale as the rules above.
+      changed_when: false
+
 # Storage replication (pvesr) for the SINGLETON app guests, so ha-manager can
 # relocate them to the always-on partner node on node loss (see STORAGE NOTE in
 # defaults). Unlike the cluster-wide HA config above (run_once on the config
