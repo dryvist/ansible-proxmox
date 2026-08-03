@@ -4,6 +4,31 @@
   become: false
   connection: local
   gather_facts: false
+  vars:
+    pve_guest_evacuation_lxc_managed_volumes_run_id: render-regression
+    pve_guest_evacuation_lxc_managed_volumes_checkpoint: transfer_verified
+    pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id: prior-run
+    pve_guest_evacuation_lxc_managed_volumes_resume_evidence_path: /bulk/evacuation-816/evidence/prior.json
+    pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    pve_guest_evacuation_lxc_managed_volumes_resume_evidence:
+      rsync:
+        copy:
+          - [prior-copy]
+    pve_guest_evacuation_lxc_managed_volumes_archive_evidence_path: /bulk/evacuation-816/evidence/archive.json
+    pve_guest_evacuation_lxc_managed_volumes_archive_run_id: archive-run
+    pve_guest_evacuation_lxc_managed_volumes_expected_vmid: 405000
+    pve_guest_evacuation_lxc_managed_volumes_expected_config_digest: config-digest
+    pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    pve_guest_evacuation_lxc_managed_volumes_restore_evidence_path: /bulk/evacuation-816/evidence/restore.json
+    pve_guest_evacuation_lxc_managed_volumes_restore_run_id: restore-run
+    pve_guest_evacuation_lxc_managed_volumes_target_storage: local-zfs
+    pve_guest_evacuation_lxc_managed_volumes_source_node: pve2
+    pve_guest_evacuation_lxc_managed_volumes_target_node: pve540
+    pve_guest_evacuation_lxc_managed_volumes_source_status: {status: stopped}
+    pve_guest_evacuation_lxc_managed_volumes_target_status: {status: stopped}
+    pve_guest_evacuation_lxc_managed_volumes_source_config: {digest: source-digest}
+    pve_guest_evacuation_lxc_managed_volumes_target_config: {digest: target-digest}
+    pve_guest_evacuation_lxc_managed_volumes_dataset_mappings: [{key: mp0}]
   tasks:
     - name: Assert the inert role created no pve3 evidence directory
       ansible.builtin.stat:
@@ -37,3 +62,131 @@
     - name: Assert incomplete managed-volume inputs fail closed
       ansible.builtin.assert:
         that: [pve_guest_evacuation_lxc_managed_volumes_input_failed | default(false)]
+
+    - name: Decode representative post-copy resume evidence
+      ansible.builtin.set_fact:
+        pve_guest_evacuation_lxc_managed_volumes_resume_regression: >-
+          {{ '{"rsync":{"copy":[{"rc":0}],"checksum_dry_run":[[]]},"volumes":[{"key":"mp0"}]}' | from_json }}
+
+    - name: Prove resume evidence keys use mapping lookup semantics
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_lxc_managed_volumes_resume_regression.rsync['copy'] | length == 1
+          - pve_guest_evacuation_lxc_managed_volumes_resume_regression.rsync['checksum_dry_run'] | length == 1
+          - pve_guest_evacuation_lxc_managed_volumes_resume_regression.rsync['checksum_dry_run'] | flatten | length == 0
+
+    - name: Create isolated evidence-render regression directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: managed-volume-evidence-
+      register: pve_guest_evacuation_lxc_managed_volumes_evidence_tmp
+
+    - name: Render successful resume evidence with a skipped copy result
+      ansible.builtin.template:
+        src: ../../roles/pve_guest_evacuation_lxc_managed_volumes/templates/managed-volumes-evidence.json.j2
+        dest: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path }}/success.json"
+        mode: '0600'
+      vars:
+        pve_guest_evacuation_lxc_managed_volumes_rsync_copy:
+          results: [{skipped: true}]
+        pve_guest_evacuation_lxc_managed_volumes_rsync_verify:
+          results: [{stdout_lines: []}]
+        pve_guest_evacuation_lxc_managed_volumes_source_manifests:
+          results: [{stdout_lines: [source-manifest]}]
+        pve_guest_evacuation_lxc_managed_volumes_target_manifests:
+          results: [{stdout_lines: [target-manifest]}]
+
+    - name: Render rescued resume evidence with partial registered results
+      ansible.builtin.template:
+        src: ../../roles/pve_guest_evacuation_lxc_managed_volumes/templates/managed-volumes-evidence.json.j2
+        dest: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path }}/rescue.json"
+        mode: '0600'
+      vars:
+        pve_guest_evacuation_lxc_managed_volumes_checkpoint: transfer_failed
+        pve_guest_evacuation_lxc_managed_volumes_failure: {task: manifest}
+        pve_guest_evacuation_lxc_managed_volumes_rsync_copy:
+          results: [{skipped: true}]
+        pve_guest_evacuation_lxc_managed_volumes_rsync_verify:
+          results: [{stdout_lines: null}]
+        pve_guest_evacuation_lxc_managed_volumes_source_manifests:
+          results: null
+        pve_guest_evacuation_lxc_managed_volumes_target_manifests: null
+
+    - name: Decode rendered resume evidence regressions
+      ansible.builtin.set_fact:
+        pve_guest_evacuation_lxc_managed_volumes_success_render: >-
+          {{ lookup('ansible.builtin.file', pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path + '/success.json') | from_json }}
+        pve_guest_evacuation_lxc_managed_volumes_rescue_render: >-
+          {{ lookup('ansible.builtin.file', pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path + '/rescue.json') | from_json }}
+
+    - name: Assert success and rescue resume evidence remain auditable
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_lxc_managed_volumes_success_render.rsync['copy'] == [['prior-copy']]
+          - pve_guest_evacuation_lxc_managed_volumes_success_render.rsync['checksum_dry_run'] == [[]]
+          - pve_guest_evacuation_lxc_managed_volumes_success_render.source_manifests == [['source-manifest']]
+          - pve_guest_evacuation_lxc_managed_volumes_success_render.target_manifests == [['target-manifest']]
+          - pve_guest_evacuation_lxc_managed_volumes_rescue_render.rsync['copy'] == [['prior-copy']]
+          - pve_guest_evacuation_lxc_managed_volumes_rescue_render.rsync['checksum_dry_run'] == [[]]
+          - pve_guest_evacuation_lxc_managed_volumes_rescue_render.source_manifests == []
+          - pve_guest_evacuation_lxc_managed_volumes_rescue_render.target_manifests == []
+
+    - name: Remove isolated evidence-render regression directory
+      ansible.builtin.file:
+        path: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path }}"
+        state: absent
+
+    - name: Create isolated absolute-symlink ACL regression directories
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: managed-volume-acl-
+      register: pve_guest_evacuation_lxc_managed_volumes_acl_tmp
+
+    - name: Prove physical ACL manifests accept identical broken absolute symlinks
+      ansible.builtin.shell: |
+        set -euo pipefail
+        mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin"
+        printf '%s\n' '#!/bin/bash' 'test "$1" = --physical' 'shift' 'printf "%s\\n" "$@"' >"{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
+        chmod 0700 "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
+        export PATH="{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin:$PATH"
+        mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target"
+        ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source/absolute-link"
+        ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target/absolute-link"
+        source_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        target_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        test "$source_acl" = "$target_acl"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Remove isolated ACL regression directories
+      ansible.builtin.file:
+        path: "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}"
+        state: absent
+
+    - name: Create isolated checksum dry-run regression directories
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: managed-volume-rsync-
+      register: pve_guest_evacuation_lxc_managed_volumes_rsync_tmp
+
+    - name: Prove delete dry run reports arbitrary extra target content
+      ansible.builtin.shell: |
+        set -euo pipefail
+        mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target"
+        printf source >"{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload"
+        cp "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload" "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/payload"
+        printf arbitrary >"{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/extra"
+        output=$(nix shell nixpkgs#rsync -c rsync --archive --checksum --dry-run --delete --itemize-changes \
+          "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/" \
+          "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/")
+        test -n "$output"
+        printf '%s\n' "$output" | grep -F '*deleting   extra'
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Remove isolated checksum dry-run regression directories
+      ansible.builtin.file:
+        path: "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}"
+        state: absent

@@ -163,3 +163,27 @@ pve_ha_replication_jobnum: 0
 # which holds no replica). A strict rule = run ONLY on the listed nodes, so a
 # relocation onto a replica-less node can't happen and then start-fail/flap.
 pve_ha_replication_affinity_rule: apps-replication-nodes
+
+# --- Estate-wide HA enrollment ----------------------------------------------
+# With this true, EVERY container in the tofu inventory that is not already a
+# tier-0 guest above is placed under HA as a HOME-PINNED guest: auto-restart in
+# place, and a STRICT node-affinity rule confining it to the single node that
+# holds its rootfs.
+#
+# The pin is what makes estate-wide enrollment safe. These guests live on
+# node-local ZFS and have no pvesr replica, so relocation cannot work for them:
+# ha-manager would move one to a node lacking its storage, the guest would fail
+# to start and park in `error`, and the source node has already self-fenced to
+# get there. A strict single-node rule plus max_relocate 0 means HA can only
+# restart a guest where its disks are.
+#
+# A guest whose inventory entry has no `node` is skipped — there is nothing to
+# pin it to, and an unpinned guest under HA is worse than one outside HA.
+pve_ha_manage_all: false
+
+# Relocation bound for the home-pinned guests. Zero: there is nowhere to go.
+pve_ha_pinned_max_relocate: 0
+
+# Prefix for the per-node strict affinity rules (one rule per home node,
+# e.g. "pve-ha-home-pve1"), so the rule set stays small and readable.
+pve_ha_home_rule_prefix: pve-ha-home
