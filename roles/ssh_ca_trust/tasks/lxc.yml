@@ -39,6 +39,15 @@
     executable: /bin/bash
     cmd: |
       set -euo pipefail
+      # Fingerprint the managed files BEFORE writing. Writing identical bytes is
+      # harmless, but reloading sshd in every container on every converge is not,
+      # and reporting `changed` unconditionally hides real drift in the noise.
+      fingerprint() {
+        pct exec {{ item }} -- sh -c \
+          'cat {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }} {{ ssh_ca_trust_principals_dir }}/* 2>/dev/null | md5sum' \
+          2>/dev/null || echo absent
+      }
+      before=$(fingerprint)
       pct exec {{ item }} -- mkdir -p {{ ssh_ca_trust_principals_dir }} /etc/ssh/sshd_config.d
       printf '%s\n' "{{ ([ssh_ca_trust_fetched.content | trim] + ssh_ca_trust_extra_ca_keys) | join('\n') }}" \
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_ca_file }} > /dev/null
@@ -52,18 +61,24 @@
         "AuthorizedPrincipalsFile {{ ssh_ca_trust_principals_dir }}/%u" \
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_dropin }} > /dev/null
       pct exec {{ item }} -- chmod 0644 {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}
+      after=$(fingerprint)
       if pct exec {{ item }} -- sh -c 'command -v sshd' > /dev/null 2>&1; then
         # sshd -t needs the privilege-separation dir, which a bare `pct exec`
         # shell lacks (systemd normally creates it at sshd start) — create it
         # so the config test doesn't abort with "Missing privilege separation
         # directory: /run/sshd".
         pct exec {{ item }} -- mkdir -p /run/sshd
+        # Validate on every run: the trust config is what lets the CA in, so a
+        # guest that would refuse to start sshd must surface now, not at the
+        # next restart.
         pct exec {{ item }} -- sshd -t
-        pct exec {{ item }} -- sh -c 'systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true'
-        echo "CONFIGURED-SSHD"
-      else
-        echo "CONFIGURED-NO-SSHD"
+        if [ "$before" != "$after" ]; then
+          pct exec {{ item }} -- sh -c 'systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true'
+        fi
       fi
+      if [ "$before" != "$after" ]; then echo "RESULT=changed"; else echo "RESULT=unchanged"; fi
   loop: "{{ ssh_ca_trust_lxc_running }}"
   register: ssh_ca_trust_lxc_push
-  changed_when: "'CONFIGURED' in ssh_ca_trust_lxc_push.stdout"
+  # 'RESULT=changed' is not a substring of 'RESULT=unchanged', so this cannot
+  # match the negative case the way a bare 'CHANGED' test would.
+  changed_when: "'RESULT=changed' in ssh_ca_trust_lxc_push.stdout"

@@ -3,7 +3,7 @@
 #
 # Enforced, not opt-in. Without a local Edge agent, host-level signals (ZFS
 # state, pvesr replication status, PVE task logs, SMART) have no approved route
-# into Splunk — see the observability convention in docs-starlight.
+# into Splunk — see the observability convention in the private docs site.
 #
 # Ansible installs and applies packs. It does NOT template inputs/routes/
 # pipelines: packs are the unit of Cribl config, and templating them per node
