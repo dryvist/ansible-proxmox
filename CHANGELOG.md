@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.72.1](https://github.com/dryvist/ansible-proxmox/compare/v1.72.0...v1.72.1) (2026-08-03)
+
+
+### Bug Fixes
+
+* **crash_diagnostics:** select one boot UUID and create the GRUB dir ([#564](https://github.com/dryvist/ansible-proxmox/issues/564)) ([ede6ac0](https://github.com/dryvist/ansible-proxmox/commit/ede6ac0da24f93ba2da8dd15d5f4acc5e7ab21de))
+* **node_watchdog:** never restart watchdog-mux on a live node ([#566](https://github.com/dryvist/ansible-proxmox/issues/566)) ([9927caf](https://github.com/dryvist/ansible-proxmox/commit/9927caf17494a5d3203f181eba7b93cf36800600))
+* **node_watchdog:** skip the liveness daemon where pve-ha-manager conflicts ([#565](https://github.com/dryvist/ansible-proxmox/issues/565)) ([ab7b74d](https://github.com/dryvist/ansible-proxmox/commit/ab7b74dae7d88776a85d0ee57d871344c59a4ab2))
+* **zfs_swap:** skip the role on nodes without a ZFS root pool ([#563](https://github.com/dryvist/ansible-proxmox/issues/563)) ([4f2015d](https://github.com/dryvist/ansible-proxmox/commit/4f2015d0cf3a638d59170cdc3db1690544d2e6b0))
+
 ## [1.72.0](https://github.com/dryvist/ansible-proxmox/compare/v1.71.0...v1.72.0) (2026-08-02)
 
 
