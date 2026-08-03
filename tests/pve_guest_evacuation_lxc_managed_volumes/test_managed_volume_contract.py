@@ -74,6 +74,57 @@ def run_zfs_dataset_identity_parser(
     )
 
 
+def run_canonical_endpoint_contract(
+    tmp_path: Path,
+    canonical_fqdn: str,
+    inventory_endpoint: str,
+    canonical_ipv4s: list[str],
+    inventory_ipv4s: list[str],
+) -> subprocess.CompletedProcess[str]:
+    """Execute the role's exact canonical-endpoint assertion with fixture DNS."""
+    ansible_playbook = shutil.which("ansible-playbook")
+    if ansible_playbook is None:
+        pytest.skip("ansible-playbook is required to execute the endpoint regression")
+
+    contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
+    task_start = contract.index("- name: Derive pve2 IPv4 resolutions")
+    endpoint_tasks = tmp_path / "endpoint-contract.yml"
+    endpoint_tasks.write_text(contract[task_start:])
+
+    def getent_lines(addresses: list[str]) -> list[str]:
+        return [f"{address} STREAM" for address in addresses]
+
+    playbook = tmp_path / "playbook.yml"
+    playbook.write_text(
+        "---\n"
+        "- hosts: localhost\n"
+        "  connection: local\n"
+        "  gather_facts: false\n"
+        "  vars:\n"
+        f"    pve_guest_evacuation_lxc_managed_volumes_target_rsync_host: {json.dumps(canonical_fqdn)}\n"
+        f"    pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn: {json.dumps(canonical_fqdn)}\n"
+        "    pve_guest_evacuation_lxc_managed_volumes_target_node: pve540\n"
+        "    pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution:\n"
+        "      rc: 0\n"
+        f"      stdout_lines: {json.dumps(getent_lines(canonical_ipv4s))}\n"
+        "    pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_resolution:\n"
+        "      rc: 0\n"
+        f"      stdout_lines: {json.dumps(getent_lines(inventory_ipv4s))}\n"
+        "  tasks:\n"
+        "    - ansible.builtin.add_host:\n"
+        "        name: pve540\n"
+        f"        ansible_host: {json.dumps(inventory_endpoint)}\n"
+        "    - ansible.builtin.include_tasks: endpoint-contract.yml\n"
+    )
+    return subprocess.run(
+        [ansible_playbook, "-i", "localhost,", str(playbook)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
 def test_role_is_inert_and_requires_exact_three_record_identity() -> None:
     defaults = (ROLE / "defaults" / "main.yml").read_text()
     contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
@@ -128,13 +179,52 @@ def test_unequal_rsync_endpoint_requires_a_verified_canonical_fqdn() -> None:
 def test_unequal_rsync_endpoint_rejects_aliases_and_unverified_resolution() -> None:
     contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
 
-    assert "is match('^[A-Za-z0-9][A-Za-z0-9-]*(\\\\.[A-Za-z0-9][A-Za-z0-9-]*)+$')" in contract
-    assert "is not match('^([0-9]{1,3}\\\\.){3}[0-9]{1,3}$')" in contract
+    assert "is match('^[A-Za-z0-9][A-Za-z0-9-]*(\\.[A-Za-z0-9][A-Za-z0-9-]*)+$')" in contract
+    assert "is not match('^([0-9]{1,3}\\.){3}[0-9]{1,3}$')" in contract
     assert "pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution.rc == 0" in contract
     assert "pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_resolution.rc == 0" in contract
     assert "pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_ipv4s | length > 0" in contract
     assert "pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_ipv4s | length > 0" in contract
     assert "unapproved aliases, IP literals, missing DNS results, and mismatches" in contract
+
+
+def test_canonical_fqdn_endpoint_contract_accepts_a_matching_literal_inventory_ipv4(tmp_path: Path) -> None:
+    result = run_canonical_endpoint_contract(
+        tmp_path,
+        "pve540.jacobpevans.com",
+        "192.0.2.54",
+        ["192.0.2.54"],
+        ["192.0.2.54"],
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    ("canonical_fqdn", "inventory_endpoint", "canonical_ipv4s", "inventory_ipv4s"),
+    [
+        ("pve540", "192.0.2.54", ["192.0.2.54"], ["192.0.2.54"]),
+        ("192.0.2.54", "192.0.2.55", ["192.0.2.54"], ["192.0.2.55"]),
+        ("pve540.jacobpevans.com", "192.0.2.54", ["192.0.2.55"], ["192.0.2.54"]),
+    ],
+    ids=["single-label-alias", "ip-literal", "dns-mismatch"],
+)
+def test_canonical_fqdn_endpoint_contract_rejects_invalid_or_mismatched_inputs(
+    tmp_path: Path,
+    canonical_fqdn: str,
+    inventory_endpoint: str,
+    canonical_ipv4s: list[str],
+    inventory_ipv4s: list[str],
+) -> None:
+    result = run_canonical_endpoint_contract(
+        tmp_path,
+        canonical_fqdn,
+        inventory_endpoint,
+        canonical_ipv4s,
+        inventory_ipv4s,
+    )
+
+    assert result.returncode != 0
 
 
 def test_verified_fqdn_preserves_one_ed25519_key_and_strict_ssh() -> None:

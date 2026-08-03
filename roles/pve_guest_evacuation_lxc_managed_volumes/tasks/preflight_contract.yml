@@ -61,11 +61,11 @@
     pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_ipv4s: >-
       {{ pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution.stdout_lines
          | map('split') | map('first')
-         | select('match', '^([0-9]{1,3}\\.){3}[0-9]{1,3}$') | unique | list }}
+         | select('match', '^([0-9]{1,3}\.){3}[0-9]{1,3}$') | unique | list }}
     pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_ipv4s: >-
       {{ pve_guest_evacuation_lxc_managed_volumes_inventory_endpoint_resolution.stdout_lines
          | map('split') | map('first')
-         | select('match', '^([0-9]{1,3}\\.){3}[0-9]{1,3}$') | unique | list }}
+         | select('match', '^([0-9]{1,3}\.){3}[0-9]{1,3}$') | unique | list }}
   when: >-
     pve_guest_evacuation_lxc_managed_volumes_target_rsync_host
     != hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
@@ -78,9 +78,9 @@
         == hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
         or (
           pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn
-          is match('^[A-Za-z0-9][A-Za-z0-9-]*(\\.[A-Za-z0-9][A-Za-z0-9-]*)+$')
+          is match('^[A-Za-z0-9][A-Za-z0-9-]*(\.[A-Za-z0-9][A-Za-z0-9-]*)+$')
           and pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn
-              is not match('^([0-9]{1,3}\\.){3}[0-9]{1,3}$')
+          is not match('^([0-9]{1,3}\.){3}[0-9]{1,3}$')
           and pve_guest_evacuation_lxc_managed_volumes_target_rsync_host
               == pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn
           and pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution.rc == 0
