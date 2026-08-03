@@ -2,6 +2,11 @@
   "schema_version": 1,
   "run_id": {{ pve_guest_evacuation_lxc_managed_volumes_run_id | to_json }},
   "checkpoint": {{ pve_guest_evacuation_lxc_managed_volumes_checkpoint | to_json }},
+  "resume": {
+    "from_run_id": {{ pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | to_json }},
+    "evidence_path": {{ (pve_guest_evacuation_lxc_managed_volumes_resume_evidence_path if pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | length > 0 else '') | to_json }},
+    "evidence_sha256": {{ pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256 | to_json }}
+  },
   "input_archive": {
     "path": {{ pve_guest_evacuation_lxc_managed_volumes_archive_evidence_path | to_json }},
     "run_id": {{ pve_guest_evacuation_lxc_managed_volumes_archive_run_id | to_json }},

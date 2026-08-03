@@ -270,7 +270,7 @@ def test_transfer_preserves_metadata_and_proves_each_volume() -> None:
         assert rsync_flag in transfer
     for manifest in ("bytes", "files", "metadata", "content", "hardlinks", "acl", "xattr"):
         assert f"printf '{manifest} " in transfer
-    assert "getfacl --absolute-names --numeric" in transfer
+    assert "getfacl --physical --absolute-names --numeric" in transfer
     assert "getfattr --absolute-names --no-dereference --encoding=hex" in transfer
     assert "-printf '%y\\t%m\\t%U\\t%G\\t%s" in transfer
     assert "(?:[^,]+,)*mp=/[^,]+" in transfer
@@ -376,6 +376,52 @@ def test_evidence_is_immutable_and_failure_preserves_the_target() -> None:
     assert "target_manifests" in evidence
 
 
+def test_resume_is_bound_to_exact_post_copy_failure_and_never_recopies() -> None:
+    defaults = (ROLE / "defaults" / "main.yml").read_text()
+    contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
+    transfer = (ROLE / "tasks" / "transfer.yml").read_text()
+    evidence = (ROLE / "templates" / "managed-volumes-evidence.json.j2").read_text()
+
+    assert 'pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id: ""' in defaults
+    assert 'pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256: ""' in defaults
+    assert "managed-volumes-{{ pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id }}" in defaults
+    assert "resume_evidence_actual_sha256 == pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256" in transfer
+    assert "checkpoint == 'transfer_failed'" in transfer
+    assert "failure.task == 'Build deterministic source byte file metadata ACL xattr manifests'" in transfer
+    assert "resume_evidence.volumes == pve_guest_evacuation_lxc_managed_volumes_dataset_mappings" in transfer
+    assert "rsync.checksum_dry_run | flatten | length == 0" in transfer
+    assert "Require populated preserved targets for an explicit resume" in transfer
+    copy_task = transfer[transfer.index("- name: Copy each stopped-source managed volume"):]
+    copy_task = copy_task[:copy_task.index("- name: Require checksum dry run")]
+    assert "resume_from_run_id | default('') | length == 0" in copy_task
+    assert '"resume": {' in evidence
+    assert "resume_evidence_sha256" in contract
+
+
+def test_checksum_verification_rejects_extra_target_content_and_acl_is_physical() -> None:
+    transfer = (ROLE / "tasks" / "transfer.yml").read_text()
+    verify = transfer[transfer.index("- name: Require checksum dry run"):]
+    verify = verify[:verify.index("- name: Assert checksum dry runs")]
+    assert "- --dry-run" in verify
+    assert "- --delete" in verify
+    assert transfer.count("getfacl --physical --absolute-names --numeric") == 2
+
+
+def test_missing_resume_evidence_metadata_fails_cleanly() -> None:
+    transfer = (ROLE / "tasks" / "transfer.yml").read_text()
+    evidence_gate = transfer[transfer.index("- name: Require protected immutable failed-transfer evidence"):]
+    evidence_gate = evidence_gate[:evidence_gate.index("- name: Read exact immutable failed-transfer evidence")]
+
+    assert "stat.exists | default(false)" in evidence_gate
+    assert "stat.isreg | default(false)" in evidence_gate
+    assert "stat.islnk | default(false)" in evidence_gate
+    for field in ("pw_name", "gr_name", "mode", "checksum"):
+        assert f"stat.{field} | default('')" in evidence_gate
+    resume_conditions = [line for line in transfer.splitlines() if line.lstrip().startswith("when:") and "resume_from_run_id" in line]
+    assert resume_conditions
+    assert all("| default('') | length" in line for line in resume_conditions)
+
+
 if __name__ == "__main__":
     test_role_is_inert_and_requires_exact_three_record_identity()
     test_rsync_endpoint_keeps_the_literal_inventory_fast_path()
@@ -386,3 +432,6 @@ if __name__ == "__main__":
     test_transfer_preserves_metadata_and_proves_each_volume()
     test_zfs_dataset_identity_parser_contract_uses_field_parsing()
     test_evidence_is_immutable_and_failure_preserves_the_target()
+    test_resume_is_bound_to_exact_post_copy_failure_and_never_recopies()
+    test_checksum_verification_rejects_extra_target_content_and_acl_is_physical()
+    test_missing_resume_evidence_metadata_fails_cleanly()

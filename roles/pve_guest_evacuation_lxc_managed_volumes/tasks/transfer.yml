@@ -60,6 +60,72 @@
     pve_guest_evacuation_lxc_managed_volumes_restore_evidence: >-
       {{ pve_guest_evacuation_lxc_managed_volumes_evidence_raw.results[1].content | b64decode | from_json }}
 
+- name: Read exact failed-transfer evidence metadata for an explicit resume
+  ansible.builtin.stat:
+    path: "{{ pve_guest_evacuation_lxc_managed_volumes_resume_evidence_path }}"
+    checksum_algorithm: sha256
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_staging_host }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
+
+- name: Require protected immutable failed-transfer evidence
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.exists | default(false)
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.isreg | default(false)
+      - not (pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.islnk | default(false))
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.pw_name | default('') == 'root'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.gr_name | default('') == 'root'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.mode | default('') == '0600'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_stat.stat.checksum | default('') == pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256
+    fail_msg: Resume evidence must be the exact root-owned, mode 0600, immutable failed-run record.
+    quiet: true
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
+
+- name: Read exact immutable failed-transfer evidence for an explicit resume
+  ansible.builtin.slurp:
+    src: "{{ pve_guest_evacuation_lxc_managed_volumes_resume_evidence_path }}"
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_staging_host }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_resume_evidence_raw
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
+
+- name: Decode immutable failed-transfer evidence
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_resume_evidence: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_resume_evidence_raw.content | b64decode | from_json }}
+    pve_guest_evacuation_lxc_managed_volumes_resume_evidence_actual_sha256: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_resume_evidence_raw.content | b64decode | hash('sha256') }}
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
+
+- name: Require exact post-copy manifest failure evidence for resume
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence_actual_sha256 == pve_guest_evacuation_lxc_managed_volumes_resume_evidence_sha256
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.schema_version | int == 1
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.checkpoint == 'transfer_failed'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.run_id == pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.input_archive.path == pve_guest_evacuation_lxc_managed_volumes_archive_evidence_path
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.input_archive.run_id == pve_guest_evacuation_lxc_managed_volumes_archive_run_id
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.input_archive.vmid | int == pve_guest_evacuation_lxc_managed_volumes_expected_vmid | int
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.input_archive.source_config_digest == pve_guest_evacuation_lxc_managed_volumes_expected_config_digest
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.input_archive.sha256 == pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.input_restore.run_id == pve_guest_evacuation_lxc_managed_volumes_restore_run_id
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.input_restore.path == pve_guest_evacuation_lxc_managed_volumes_restore_evidence_path
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.input_restore.target_storage == pve_guest_evacuation_lxc_managed_volumes_target_storage
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.source.node == pve_guest_evacuation_lxc_managed_volumes_source_node
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.source.config_digest == pve_guest_evacuation_lxc_managed_volumes_expected_config_digest
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.source.status.status == 'stopped'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.target.node == pve_guest_evacuation_lxc_managed_volumes_target_node
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.target.config_digest == pve_guest_evacuation_lxc_managed_volumes_restore_evidence.target.config_digest
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.target.status.status == 'stopped'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.failure.task == 'Build deterministic source byte file metadata ACL xattr manifests'
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync.copy | length == pve_guest_evacuation_lxc_managed_volumes_resume_evidence.volumes | length
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync.checksum_dry_run | length == pve_guest_evacuation_lxc_managed_volumes_resume_evidence.volumes | length
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.rsync.checksum_dry_run | flatten | length == 0
+    fail_msg: Resume requires the exact immutable evidence from a completed copy that failed only while building the source manifest.
+    quiet: true
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
+
 - name: Require exact verified archive and pending managed-volume restore evidence
   ansible.builtin.assert:
     that:
@@ -318,6 +384,14 @@
     quiet: true
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
 
+- name: Require resumed volume mappings to match immutable failure evidence
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_resume_evidence.volumes == pve_guest_evacuation_lxc_managed_volumes_dataset_mappings
+    fail_msg: Current managed-volume mappings differ from the immutable failed transfer.
+    quiet: true
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
+
 - name: Assert no ZFS snapshots exist on either evacuation node
   ansible.builtin.command:
     argv: [zfs, list, -H, -t, snapshot, -o, name]
@@ -353,6 +427,15 @@
       This workflow never overwrites, merges with, or deletes target payloads.
     quiet: true
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_target_contents.results }}"
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length == 0
+
+- name: Require populated preserved targets for an explicit resume
+  ansible.builtin.assert:
+    that: [item.stdout | trim | length > 0]
+    fail_msg: Resume target {{ item.item.key }} is empty; use a normal transfer with a new skeleton.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_target_contents.results }}"
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
 
 - name: Require metadata manifest tools on pve2 and pve540
   ansible.builtin.command:
@@ -449,6 +532,7 @@
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
   register: pve_guest_evacuation_lxc_managed_volumes_rsync_copy
   changed_when: true
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length == 0
 
 - name: Require checksum dry run to report no remaining differences
   ansible.builtin.command:
@@ -464,6 +548,7 @@
       - --protect-args
       - --checksum
       - --dry-run
+      - --delete
       - --itemize-changes
       - -e
       - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_rsh }}"
@@ -496,7 +581,7 @@
     printf 'hardlinks '
     find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
     printf 'acl '
-    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --absolute-names --numeric --skip-base --no-effective | sha256sum
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum
     printf 'xattr '
     find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfattr --absolute-names --no-dereference --encoding=hex -d -m - | sha256sum
   args:
@@ -520,7 +605,7 @@
     printf 'hardlinks '
     find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
     printf 'acl '
-    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --absolute-names --numeric --skip-base --no-effective | sha256sum
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum
     printf 'xattr '
     find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfattr --absolute-names --no-dereference --encoding=hex -d -m - | sha256sum
   args:
