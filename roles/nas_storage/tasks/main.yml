@@ -79,7 +79,9 @@
     cmd: "zfs get -Hp -o value quota {{ nas_storage_zfs_dataset }}"
   register: nas_storage_zfs_current_quota
   changed_when: false
-  when: ansible_virtualization_type != 'docker'
+  when:
+    - ansible_virtualization_type != 'docker'
+    - nas_storage_zpool_check.rc | default(1) == 0
   tags:
     - nas_storage
     - nas_storage_zfs
@@ -89,6 +91,7 @@
     cmd: "zfs set quota={{ nas_storage_zfs_quota }} {{ nas_storage_zfs_dataset }}"
   when:
     - ansible_virtualization_type != 'docker'
+    - nas_storage_zpool_check.rc | default(1) == 0
     - nas_storage_zfs_current_quota.stdout | default('') != nas_storage_zfs_quota
   changed_when: true
   tags:
