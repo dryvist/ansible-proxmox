@@ -1,0 +1,10 @@
+#: {{ ansible_managed }}
+#: <vmid> <type>  — projected from the published inventory at converge.
+#: Containers are lxc, every VM family is qemu; that is exactly the distinction
+#: a vzdump archive name carries, so the two are directly comparable.
+{% for vmid in pve_health_telemetry_identity_containers | sort %}
+{{ vmid }} lxc
+{% endfor %}
+{% for vmid in pve_health_telemetry_identity_vms | sort %}
+{{ vmid }} qemu
+{% endfor %}

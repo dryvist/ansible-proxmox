@@ -1,0 +1,138 @@
+---
+# Pin the pve_backup_jobs declaration guard without a live cluster: run the SAME
+# validate.yml the role imports, against fixtures that model both the shape this
+# role exists to enforce and the shapes it must refuse.
+# Run: ansible-playbook tests/pve_backup_jobs/verify_declaration.yml -i localhost,
+#
+# The refusals are the point. A guard that is present but never exercised is
+# indistinguishable from one that does not fire, and a guest-id list slipping
+# past it reintroduces exactly the failure the role was written to remove.
+- name: Verify the pve_backup_jobs declaration guard
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    pve_backup_jobs_storage:
+      name: fixture-backup-store
+      path: /fixture/backups
+      nodes: [fixture-node-a, fixture-node-b]
+    pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
+
+  tasks:
+    # A well-formed pool-scoped declaration must pass, or every refusal below
+    # proves nothing — a guard that rejects everything is not a guard.
+    - name: Accept a pool-scoped declaration
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs:
+          - id: fixture-platform-daily
+            pool: fixture-pool
+            storage: fixture-backup-store
+            schedule: "02:30"
+            enabled: false
+
+    - name: Refuse a declaration carrying a guest-id list
+      block:
+        - name: Run the guard against a guest-id declaration
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-by-vmid
+                pool: fixture-pool
+                storage: fixture-backup-store
+                schedule: "02:30"
+                vmid: "4242,4243"
+
+        - name: Fail because the guest-id declaration was accepted
+          ansible.builtin.fail:
+            msg: >-
+              A declaration carrying a vmid list was ACCEPTED. Guest-id
+              selection is what lets a job keep running against a recycled id.
+      rescue:
+        - name: Record the guest-id refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['vmid'] }}"
+
+    - name: Refuse a declaration with no pool
+      block:
+        - name: Run the guard against a pool-less declaration
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-no-pool
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because the pool-less declaration was accepted
+          ansible.builtin.fail:
+            msg: "A declaration selecting no pool was ACCEPTED; it would protect nothing."
+      rescue:
+        - name: Record the pool-less refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['pool'] }}"
+
+    - name: Refuse two jobs sharing one id
+      block:
+        - name: Run the guard against duplicate ids
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-dup
+                pool: fixture-pool-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+              - id: fixture-dup
+                pool: fixture-pool-b
+                storage: fixture-backup-store
+                schedule: "03:30"
+
+        - name: Fail because duplicate ids were accepted
+          ansible.builtin.fail:
+            msg: "Duplicate job ids were ACCEPTED; one of the two intents would vanish silently."
+      rescue:
+        - name: Record the duplicate-id refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['duplicate'] }}"
+
+    - name: Refuse jobs declared with no backup storage
+      block:
+        - name: Run the guard with no storage declared
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_storage: {}
+            pve_backup_jobs_jobs:
+              - id: fixture-no-store
+                pool: fixture-pool
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because a job with no ensured storage was accepted
+          ansible.builtin.fail:
+            msg: "Jobs were ACCEPTED with no storage declared; they would fail hours after converge."
+      rescue:
+        - name: Record the missing-storage refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['storage'] }}"
+
+    # Counting the refusals is what makes this test unable to pass vacuously: if
+    # a rescue never ran, the list is short and this fails.
+    - name: Assert every refusal actually fired
+      ansible.builtin.assert:
+        that:
+          - (pve_backup_jobs_refusals | default([]) | sort)
+            == ['duplicate', 'pool', 'storage', 'vmid']
+        fail_msg: >-
+          Expected four refusals (vmid, pool, duplicate, storage); got
+          {{ pve_backup_jobs_refusals | default([]) | sort }}.
+        success_msg: "PASS: all four declaration refusals fired"
+        quiet: false

@@ -18,6 +18,55 @@
   tags:
     - pve_health_telemetry
 
+- name: Project the published inventory into a guest id -> type map
+  # Only ids are taken, and only to compare against ids the archive names
+  # already contain — no hostname, address or topology is written to the node.
+  # An inventory that is not loaded leaves both lists empty, which the next task
+  # turns into "no map", not "an empty map": see its `when`.
+  ansible.builtin.set_fact:
+    pve_health_telemetry_identity_containers: >-
+      {{ (pve_health_telemetry_inventory.containers | default({})).values()
+         | map(attribute='vmid') | select('defined') | list }}
+    pve_health_telemetry_identity_vms: >-
+      {{ ((pve_health_telemetry_inventory.vms | default({}))
+          | combine(pve_health_telemetry_inventory.docker_vms | default({}))
+          | combine(pve_health_telemetry_inventory.splunk_vm | default({}))).values()
+         | map(attribute='vmid') | select('defined') | list }}
+  vars:
+    pve_health_telemetry_inventory: "{{ hostvars['localhost']['tofu_data'] | default({}) }}"
+  when: pve_health_telemetry_backup_check | bool
+  tags:
+    - pve_health_telemetry
+
+- name: Ensure the guest identity map directory exists
+  ansible.builtin.file:
+    path: "{{ pve_health_telemetry_identity_map_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: pve_health_telemetry_backup_check | bool
+  tags:
+    - pve_health_telemetry
+
+- name: Deploy the guest identity map
+  # Skipped rather than written empty when the inventory is absent (a
+  # credential-free host-only run). An empty map would mark every archive on the
+  # node as an identity mismatch; no map makes the identity field report UNKNOWN,
+  # which is the honest answer and cannot be mistaken for a passing check.
+  ansible.builtin.template:
+    src: guest-identity.map.j2
+    dest: "{{ pve_health_telemetry_identity_map_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - pve_health_telemetry_backup_check | bool
+    - (pve_health_telemetry_identity_containers | length
+       + pve_health_telemetry_identity_vms | length) > 0
+  tags:
+    - pve_health_telemetry
+
 - name: Deploy the health telemetry script
   ansible.builtin.template:
     src: pve-health.sh.j2
@@ -92,6 +141,7 @@
       - "'dstate_persist=' in pve_health_telemetry_sample.stdout"
       - "'clocksource=' in pve_health_telemetry_sample.stdout"
       - "'guest_drift=' in pve_health_telemetry_sample.stdout"
+      - "'backup_type_change=' in pve_health_telemetry_sample.stdout"
     fail_msg: >-
       No usable health telemetry line found in the journal under tag
       '{{ pve_health_telemetry_tag }}'. Got: {{ pve_health_telemetry_sample.stdout | default('') | truncate(200) }}

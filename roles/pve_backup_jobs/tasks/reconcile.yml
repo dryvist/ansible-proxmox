@@ -1,0 +1,93 @@
+---
+# Reconcile the live vzdump job set against the declaration. Split from main.yml
+# so it can be driven against a stubbed `pvesh` without a cluster
+# (tests/pve_backup_jobs/verify_reconcile.yml) — the command lines below only
+# ever run on a live cluster otherwise, which is the worst place to discover a
+# rendering error.
+
+- name: Read the current backup job set
+  ansible.builtin.command: pvesh get /cluster/backup --output-format json
+  register: pve_backup_jobs_current
+  changed_when: false
+
+- name: Index the current vzdump jobs by id
+  ansible.builtin.set_fact:
+    pve_backup_jobs_observed: >-
+      {{ (pve_backup_jobs_current.stdout | from_json)
+         | selectattr('type', 'defined') | selectattr('type', 'eq', 'vzdump') | list }}
+
+- name: Reconcile each declared backup job
+  # One command covers create and update: the option set is identical, only
+  # the verb and the path differ. `--delete vmid` clears a guest-id list left
+  # by a job that predates pool selection — without it the API keeps both and
+  # the id list continues to decide what is protected.
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['pvesh',
+         (pve_backup_jobs_existing | length > 0) | ternary('set', 'create'),
+         (pve_backup_jobs_existing | length > 0)
+           | ternary('/cluster/backup/' ~ item.id, '/cluster/backup')]
+        + ((pve_backup_jobs_existing | length > 0) | ternary([], ['--id', item.id]))
+        + ['--pool', item.pool,
+           '--storage', item.storage,
+           '--schedule', item.schedule,
+           '--enabled', pve_backup_jobs_desired.enabled,
+           '--mode', pve_backup_jobs_desired.mode,
+           '--compress', pve_backup_jobs_desired.compress,
+           '--comment', pve_backup_jobs_desired.comment,
+           '--prune-backups', item.prune | default(pve_backup_jobs_default_prune)]
+        + ((pve_backup_jobs_existing | length > 0
+            and (pve_backup_jobs_existing | first).vmid is defined)
+           | ternary(['--delete', 'vmid'], []))
+      }}
+  vars:
+    pve_backup_jobs_existing: >-
+      {{ pve_backup_jobs_observed | selectattr('id', 'eq', item.id) | list }}
+    pve_backup_jobs_found: "{{ (pve_backup_jobs_existing | first) | default({}, true) }}"
+    pve_backup_jobs_desired:
+      pool: "{{ item.pool }}"
+      storage: "{{ item.storage }}"
+      schedule: "{{ item.schedule }}"
+      enabled: "{{ (item.enabled | default(false) | bool) | ternary(1, 0) }}"
+      mode: "{{ item.mode | default(pve_backup_jobs_default_mode) }}"
+      compress: "{{ item.compress | default(pve_backup_jobs_default_compress) }}"
+      comment: "{{ item.comment | default('') }}"
+    pve_backup_jobs_actual:
+      pool: "{{ pve_backup_jobs_found.pool | default('') }}"
+      storage: "{{ pve_backup_jobs_found.storage | default('') }}"
+      schedule: "{{ pve_backup_jobs_found.schedule | default('') }}"
+      enabled: "{{ pve_backup_jobs_found.enabled | default(0) }}"
+      mode: "{{ pve_backup_jobs_found.mode | default('') }}"
+      compress: "{{ pve_backup_jobs_found.compress | default('') }}"
+      comment: "{{ pve_backup_jobs_found.comment | default('') }}"
+    # The API returns retention as a dict and accepts it as a string, so the
+    # declared string is parsed rather than the returned dict flattened —
+    # one direction, and it fails loudly on a malformed declaration.
+    pve_backup_jobs_prune_desired: >-
+      {{ dict((item.prune | default(pve_backup_jobs_default_prune)).split(',')
+              | map('ansible.builtin.split', '=') | list) }}
+  loop: "{{ pve_backup_jobs_jobs }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: >-
+    pve_backup_jobs_existing | length == 0
+    or pve_backup_jobs_desired != pve_backup_jobs_actual
+    or pve_backup_jobs_prune_desired != (pve_backup_jobs_found['prune-backups'] | default({}))
+    or pve_backup_jobs_found.vmid is defined
+  changed_when: true
+
+- name: Remove backup jobs this role does not declare
+  # A job left behind is not neutral. One pinned to a node that has left the
+  # cluster, or aimed at a guest id that has since been reused, still reads
+  # as coverage on the schedule page while protecting nothing that was meant
+  # to be protected.
+  ansible.builtin.command:
+    argv: ["pvesh", "delete", "/cluster/backup/{{ item.id }}"]
+  loop: >-
+    {{ pve_backup_jobs_observed
+       | rejectattr('id', 'in', pve_backup_jobs_jobs | map(attribute='id') | list) | list }}
+  loop_control:
+    label: "{{ item.id }}"
+  when: pve_backup_jobs_prune_unmanaged | bool
+  changed_when: true

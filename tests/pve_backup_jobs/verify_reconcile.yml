@@ -1,0 +1,153 @@
+---
+# Pin the pve_backup_jobs reconcile without a live cluster: `pvesh` is replaced
+# by a stub that serves a fixture job set and records every command line it is
+# handed, then the role's own reconcile.yml is run against it.
+# Run: ansible-playbook tests/pve_backup_jobs/verify_reconcile.yml -i localhost, -c local
+#
+# These command lines otherwise execute for the first time on a live cluster, so
+# a rendering error surfaces during a converge that is already touching backup
+# configuration. The fixture models the conversion that matters: a job that
+# currently selects a bare guest id must be moved to pool selection AND have the
+# id list explicitly deleted, because the API keeps both and the id list is what
+# then decides what gets protected.
+- name: Verify the pve_backup_jobs reconcile command construction
+  hosts: localhost
+  become: false
+  gather_facts: false
+  # Play-level so the stub is ahead of any real pvesh for every task here.
+  # Nothing in this play may reach a cluster.
+  environment:
+    PATH: "/tmp/pve-backup-jobs-fixture:{{ ansible_env.PATH | default('/usr/bin:/bin') }}"
+  vars:
+    pve_backup_jobs_stub_dir: /tmp/pve-backup-jobs-fixture
+    pve_backup_jobs_default_mode: snapshot
+    pve_backup_jobs_default_compress: zstd
+    pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
+    pve_backup_jobs_prune_unmanaged: true
+    pve_backup_jobs_jobs:
+      # Exists, but selects a guest id — the conversion case.
+      - id: fixture-convert
+        pool: fixture-pool
+        storage: fixture-backup-store
+        schedule: "02:30"
+        enabled: false
+      # Does not exist yet — the create case.
+      - id: fixture-new
+        pool: fixture-pool-b
+        storage: fixture-backup-store
+        schedule: "03:30"
+        enabled: false
+      # Exists and already matches — must produce no command at all, or the
+      # role churns the cluster on every converge.
+      - id: fixture-insync
+        pool: fixture-pool-c
+        storage: fixture-backup-store
+        schedule: "04:30"
+        enabled: false
+        prune: keep-daily=3
+    # Serves as `pvesh get /cluster/backup`. `fixture-orphan` models the job
+    # left behind after the node it named left the cluster.
+    pve_backup_jobs_fixture_state:
+      - id: fixture-convert
+        type: vzdump
+        vmid: "4242,4243"
+        storage: fixture-backup-store
+        schedule: "02:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-insync
+        type: vzdump
+        pool: fixture-pool-c
+        storage: fixture-backup-store
+        schedule: "04:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "3"}
+      - id: fixture-orphan
+        type: vzdump
+        pool: fixture-pool-gone
+        storage: fixture-backup-store
+        schedule: "05:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-last: "1"}
+
+  tasks:
+    - name: Create the stub directory
+      ansible.builtin.file:
+        path: "{{ pve_backup_jobs_stub_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Write the fixture job set the stub serves
+      ansible.builtin.copy:
+        content: "{{ pve_backup_jobs_fixture_state | to_json }}"
+        dest: "{{ pve_backup_jobs_stub_dir }}/state.json"
+        mode: "0644"
+
+    - name: Reset the recorded command log
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+        mode: "0644"
+
+    - name: Install the pvesh stub
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          # Serves the fixture on `get`, records everything else verbatim.
+          printf '%s\n' "$*" >> {{ pve_backup_jobs_stub_dir }}/commands.log
+          [ "$1" = get ] && cat {{ pve_backup_jobs_stub_dir }}/state.json
+          exit 0
+        dest: "{{ pve_backup_jobs_stub_dir }}/pvesh"
+        mode: "0755"
+
+    - name: Run the role's own reconcile against the stub
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: reconcile.yml
+
+    - name: Read back the recorded command lines
+      ansible.builtin.slurp:
+        src: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+      register: pve_backup_jobs_command_log
+
+    - name: Assert the reconcile issued exactly the intended commands
+      ansible.builtin.assert:
+        that:
+          # The conversion: updated in place, moved to pool selection, and the
+          # guest-id list explicitly removed. Without the delete the API keeps
+          # the ids and they, not the pool, decide what is protected.
+          - "'set /cluster/backup/fixture-convert' in pve_backup_jobs_commands"
+          - "'--pool fixture-pool' in pve_backup_jobs_commands"
+          - "'--delete vmid' in pve_backup_jobs_commands"
+          # The create: carries an explicit id so the job is addressable by the
+          # declaration afterwards rather than by a generated UUID.
+          - "'create /cluster/backup --id fixture-new' in pve_backup_jobs_commands"
+          # Jobs ship disabled; a first full run is a deliberate act.
+          - "'--enabled 1' not in pve_backup_jobs_commands"
+          # The already-correct job must not be touched.
+          - "'fixture-insync' not in pve_backup_jobs_commands"
+          # The job left behind is removed, not left reading as coverage.
+          - "'delete /cluster/backup/fixture-orphan' in pve_backup_jobs_commands"
+          # And nothing else was removed.
+          - "(pve_backup_jobs_commands | regex_findall('delete /cluster/backup/') | length) == 1"
+        fail_msg: |
+          Reconcile issued the wrong commands.
+          {{ pve_backup_jobs_commands }}
+        success_msg: "PASS: reconcile converts, creates, skips in-sync and prunes orphans"
+        quiet: false
+      vars:
+        pve_backup_jobs_commands: "{{ pve_backup_jobs_command_log.content | b64decode }}"
+
+    - name: Remove the stub directory
+      ansible.builtin.file:
+        path: "{{ pve_backup_jobs_stub_dir }}"
+        state: absent
