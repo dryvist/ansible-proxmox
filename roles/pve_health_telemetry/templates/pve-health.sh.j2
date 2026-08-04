@@ -102,6 +102,39 @@ if command -v pvesr >/dev/null 2>&1; then
   pvesr_fail="$(pvesr status 2>/dev/null | awk 'NR > 1 && $NF !~ /^(OK|-)$/ {n++} END {print n + 0}')"
 fi
 
+# --- backup identity (no native source) -------------------------------------
+#
+# Asserts WHAT the archives on this node protect, not that a job ran. See the
+# role defaults for why both layers exist and why one is critical and one is
+# not. The index is (vmid, type) pairs parsed out of the archive names.
+backup_type_change=0
+backup_identity_mismatch="$UNKNOWN"
+backup_archive_ids=0
+{% if pve_health_telemetry_backup_check | bool %}
+backup_index="$(
+  for d in {% for d in pve_health_telemetry_backup_dirs %}"{{ d }}" {% endfor %}; do
+    [ -d "$d" ] || continue
+    find "$d" -maxdepth 1 -type f -name 'vzdump-*' -printf '%f\n' 2>/dev/null
+  done | sed -n 's/^vzdump-\(qemu\|lxc\)-\([0-9]\{1,\}\)-.*/\2 \1/p' | sort -u
+)"
+
+backup_archive_ids="$(printf '%s\n' "$backup_index" | awk 'NF {print $1}' | sort -u | grep -c . || true)"
+
+# One id carrying two types is the unambiguous case: a guest cannot change
+# type, so the id was recycled onto a different guest and the job followed it.
+backup_type_change="$(printf '%s\n' "$backup_index" |
+  awk 'NF {n[$1]++} END {for (v in n) if (n[v] > 1) c++; print c + 0}')"
+
+# Same-type recycling leaves no trace in the names, so it needs the map. No map
+# => UNKNOWN, never 0: a map that failed to render must not read as a pass.
+if [ -r "{{ pve_health_telemetry_identity_map_path }}" ]; then
+  backup_identity_mismatch="$(printf '%s\n' "$backup_index" |
+    awk 'NR == FNR {if ($0 !~ /^#/ && NF == 2) t[$1] = $2; next}
+         NF == 2 && t[$1] != $2 {c++}
+         END {print c + 0}' "{{ pve_health_telemetry_identity_map_path }}" -)"
+fi
+{% endif %}
+
 # --- hardware: power, fans, temperature -------------------------------------
 #
 # Nothing collected any of this before, on any node, which is why a UPS running
@@ -156,14 +189,18 @@ else
 fi
 
 severity=info
-if [ "$dstate_persist" -ge "{{ pve_health_telemetry_dstate_alert_threshold }}" ] ||
+if [ "$backup_type_change" -gt 0 ] ||
+  [ "$dstate_persist" -ge "{{ pve_health_telemetry_dstate_alert_threshold }}" ] ||
   { [ "$fan_rpm_min" != "$UNKNOWN" ] && [ "$fan_rpm_min" -eq 0 ]; } ||
   { [ "$temp_max_c" != "$UNKNOWN" ] && [ "$temp_max_c" -ge "$temp_limit" ]; }; then
   # A fan reading exactly 0 RPM is a stopped fan, not a depopulated slot — an
   # absent sensor produces no row and is never counted here. Either that or a
   # temperature past the chassis limit is a "look now", same tier as a stall.
+  # A guest id that has produced archives of both types is the same tier: the
+  # job is protecting something other than what it was aimed at, right now.
   severity=critical
-elif [ "$guest_drift" -gt 0 ] ||
+elif { [ "$backup_identity_mismatch" != "$UNKNOWN" ] && [ "$backup_identity_mismatch" -gt 0 ]; } ||
+  [ "$guest_drift" -gt 0 ] ||
   { [ "$pvesr_fail" != "$UNKNOWN" ] && [ "$pvesr_fail" -gt 0 ]; } ||
   { [ "$sensor_fail" -gt 0 ]; } ||
   { [ "$fan_count" -gt 0 ] && [ "$fan_count" -lt "{{ pve_health_telemetry_fan_count_expected }}" ]; } ||
@@ -188,6 +225,9 @@ logger -t "{{ pve_health_telemetry_tag }}" -p "$priority" \
   "guests_running=$running" \
   "guest_drift=$guest_drift" \
   "pvesr_fail=$pvesr_fail" \
+  "backup_archive_ids=$backup_archive_ids" \
+  "backup_type_change=$backup_type_change" \
+  "backup_identity_mismatch=$backup_identity_mismatch" \
   "bmc=$bmc" \
   "psu_watts=$psu_watts" \
   "fan_count=$fan_count" \

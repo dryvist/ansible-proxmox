@@ -55,3 +55,41 @@ pve_health_telemetry_temp_critical_die_c: 90
 # to notice one is missing — which is exactly how a missing fan went unseen.
 # 0 disables the check; set it per host, since population differs by chassis.
 pve_health_telemetry_fan_count_expected: 0
+
+# --- backup identity assertion ---------------------------------------------
+#
+# Every signal a backup job produces asserts that it RAN — exit status, archive
+# mtime, archive size, prune activity, the task log. None of them asserts WHAT
+# it protected. A job selecting a bare guest id keeps succeeding after that id
+# is recycled onto a different guest: same schedule, same storage, real files,
+# clean exits, and a completely different thing inside. Nothing in PVE reports
+# it, which is why this belongs on the line rather than being left downstream.
+#
+# Two layers, cheapest first, because they catch different failures:
+#
+#   1. TYPE CHANGE. Archive names carry the guest type (vzdump-qemu-* vs
+#      vzdump-lxc-*). One id that has produced both is unambiguous — a single
+#      guest cannot change type — so it is derived from a directory listing
+#      alone, needs no source of truth, and is stamped critical.
+#   2. IDENTITY. Type change misses a recycle onto the SAME type, which needs
+#      the published inventory's id -> type/name map (rendered below at
+#      converge). Stamped warning, not critical: retained archives of a guest
+#      that was legitimately decommissioned land here too, until they prune out.
+#
+# Neither asserts RESTORABILITY. Size and presence are not evidence that an
+# archive restores, and the only thing that would be is a periodic restore into
+# a scratch pool with a content check — deliberately out of scope here.
+pve_health_telemetry_backup_check: true
+
+# Directories holding vzdump archives. The PVE default dump path is the only
+# entry; add a node's other backup-content storages via host_vars. Missing
+# directories are skipped, so listing one that does not exist on every node is
+# harmless.
+pve_health_telemetry_backup_dirs:
+  - /var/lib/vz/dump
+
+# Rendered id -> type map the identity layer compares against, sourced from the
+# published inventory (no second source of truth). Absent file => the identity
+# field reports UNKNOWN rather than 0, so a map that never rendered cannot read
+# as "checked, all clear" — the type-change layer above still works without it.
+pve_health_telemetry_identity_map_path: /etc/pve-health/guest-identity.map

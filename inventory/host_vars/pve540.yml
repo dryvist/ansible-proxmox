@@ -1,8 +1,69 @@
 ---
-# Migration window (tofu-proxmox#816): keep the roles active solely to
-# reconcile any scheduler drift to absent.  The timer is stopped and disabled;
-# the empty job list removes both Syncoid scheduling paths.
+# Host vars for the replacement storage node — now the primary home for
+# persistent application state and the database dump archive, and the source
+# the DR leg pulls from.
+#
+# The migration-window guard that kept snapshots off here is removed. It was
+# correct while this node held nothing; it is not correct now that the node
+# carries the live application state, because a node holding state with no
+# snapshots has no rollback point for any of it, and sanoid snapshots are the
+# prerequisite for the syncoid pulls that put a copy on another node's pool
+# (syncoid runs with --no-sync-snap: no snapshot here means nothing to send).
 sanoid_enabled: true
-sanoid_timer_enabled: false
+sanoid_timer_enabled: true
+
+# The unified media dataset is DELIBERATELY absent here: terraform-proxmox
+# declares it with com.sun:auto-snapshot=false because acquisition churn would
+# bloat snapshots, and the payload is re-acquirable. That is also why the
+# `media` retention template is assigned to no dataset anywhere — a deliberate
+# non-assignment, not an oversight, and it stays that way. Snapshotting it
+# would pin the churn it was excluded for and dwarf everything else on the pool.
+sanoid_datasets:
+  "bulk/databases":
+    use_template: database
+    recursive: "yes"
+    # Per-dataset override of the template's `hourly: 0`. The template suits a
+    # warm standby that is continuously current; this is a DUMP ARCHIVE written
+    # once a night, so a daily-only snapshot leaves a fresh dump uncaptured —
+    # and therefore un-replicated — until the following midnight, roughly two
+    # days from write to off-pool copy. Hourly closes that to same-day.
+    # Overriding here rather than in the shared template keeps `database`
+    # meaning what it says for warm standbys.
+    hourly: 24
+  # Persistent app config/state. Changes constantly and wants point-in-time
+  # recovery, so the `critical` template (hourly) rather than the daily-cadence
+  # `database` one. Recursive so every per-app child inherits it.
+  "bulk/appdata":
+    use_template: critical
+    recursive: "yes"
+
+# This node is a replication SOURCE, not a target: the DR leg pulls from it, so
+# it runs no pull jobs of its own. Kept declared (rather than omitted) so the
+# role reconciles any leftover schedule to absent.
 syncoid_enabled: true
 syncoid_jobs: []
+
+# Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).
+# Mirrors each source guest's pg-backup directory into the bulk/databases
+# namespace above, which the sanoid entry snapshots hourly and the DR leg
+# replicates off-pool with no per-instance edit.
+#
+# The dump — not the live dataset — is what earns replication. A ZFS snapshot of
+# a running cluster is inconsistent by construction, so replicating the live
+# database volume would produce a copy that exists but cannot be trusted to
+# restore. A logical dump is consistent and is the correct restore granularity.
+#
+# Source guests are addressed by FQDN derived from tofu (hostname + domain),
+# never a literal address. Gated on domain_from_tofu so a scoped run without
+# load_tofu.yml stays inert instead of pulling from a bogus host.
+postgres_standby_jobs: >-
+  {{ [] if (domain_from_tofu | default('') | length == 0) else [
+       {'name': 'postgres',
+        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres'] | default({})).hostname | default('postgres')) ~ '.' ~ domain_from_tofu,
+        'source_dir': '/var/lib/postgresql/backups',
+        'archive_dir': '/bulk/databases/postgres'},
+       {'name': 'postgres-ai',
+        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-ai-1'] | default({})).hostname | default('postgres-ai-1')) ~ '.' ~ domain_from_tofu,
+        'source_dir': '/var/lib/postgresql/backups',
+        'archive_dir': '/bulk/databases/postgres-ai'}
+     ] }}

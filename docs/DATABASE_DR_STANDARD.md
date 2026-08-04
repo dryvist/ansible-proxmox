@@ -27,6 +27,14 @@ So a dump must reach `bulk/databases/<instance>` on the standby node. It gets th
 by a **pull on the standby node** (the `*_standby` pattern), never by writing to the
 live guest's own unreplicated volume.
 
+For a database with multiple guest instances spread across nodes (e.g. a
+primary and a hot standby that each dump themselves locally), "the standby
+node" is not necessarily one fixed host: the pull for a given instance must
+land on a node that is not the one that instance runs on, or it is not an
+off-node copy at all. Where two such nodes each hold one instance, they pull
+for each other (`host_vars/<node>.yml` on each names the other's instance as
+its `*_standby_jobs` source) rather than each pulling its own co-located one.
+
 ## The workflow (per database)
 
 ### 1. Produce a consistent dump on the source (the DB role)

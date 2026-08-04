@@ -30,3 +30,17 @@
         fail_msg: >-
           load_tofu.yml did not inject the container/splunk identity that
           sanoid_datasets and syncoid_jobs derive VMIDs from.
+
+    - name: Assert the storage node declares a snapshot policy for the state it holds
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve540'].sanoid_timer_enabled | bool
+          - "'bulk/databases' in hostvars['pve540'].sanoid_datasets"
+          - "'bulk/appdata' in hostvars['pve540'].sanoid_datasets"
+          - hostvars['pve540'].sanoid_datasets['bulk/databases'].hourly | int > 0
+          - hostvars['pve540'].sanoid_datasets['bulk/appdata'].recursive == 'yes'
+        fail_msg: >-
+          The storage node holds live application state and the dump archive, so
+          it must declare a sanoid policy for both. syncoid runs --no-sync-snap:
+          with no snapshot here there is nothing for the DR leg to send, and the
+          off-pool copy silently never happens.
