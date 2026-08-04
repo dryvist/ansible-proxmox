@@ -67,6 +67,19 @@
     - crash_diagnostics
     - smartd
 
+- name: Deploy smartd hotplug re-scan udev rule
+  ansible.builtin.template:
+    src: 60-smartd-rescan.rules.j2
+    dest: "{{ crash_diagnostics_smartd_udev_rule }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload udev rules
+  when: ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - crash_diagnostics
+    - smartd
+
 - name: Enable and start smartd service
   ansible.builtin.systemd:
     name: smartd
