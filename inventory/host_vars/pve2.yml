@@ -33,36 +33,17 @@ pve_evacuation_gate_smart_devices:
     index: 2
     serial: 372IK3DGFE1C
 
-# Host vars for pve2 (secondary, always-on — the backup/replica target).
+# Host vars for the node being retired (formerly the backup/replica target).
 #
-# The dataset policy remains declared below, but its scheduler is disabled for
-# the migration window.  It resumes only when this explicit guard is removed.
-# bulk/data (the unified media dataset the pve2 media LXCs bind-mount) is
-# DELIBERATELY absent here: terraform-proxmox declares it with
-# com.sun:auto-snapshot=false because torrent churn would bloat snapshots, and
-# the media payload is re-acquirable. If the library half ever deserves
-# snapshots, that means either splitting it back out or accepting short-lived
-# sanoid retention on the whole dataset — a maintainer decision, not a default.
-sanoid_datasets:
-  "bulk/databases":
-    use_template: database
-    recursive: "yes"
-    # Per-dataset override of the template's `hourly: 0`. The template is right
-    # for a warm standby that is continuously current, but this dataset is a
-    # DUMP ARCHIVE: the dump lands at 02:32 and daily-only snapshots run at
-    # 00:00, so a dump written today is first captured at tomorrow's 00:00 and
-    # only then replicated — roughly two days from write to off-node copy.
-    # Hourly closes that to same-day. Overriding here rather than in the shared
-    # template keeps `database` meaning what it says for warm standbys.
-    hourly: 24
-  # Persistent app config/state (e.g. bulk/appdata/plex = Plex identity + watch
-  # history). HOT data that changes constantly (watch progress) and wants
-  # point-in-time recovery, so the `critical` template (hourly) — not the
-  # daily-cadence `database` one. Recursive so every bulk/appdata/<app> child
-  # inherits it.
-  "bulk/appdata":
-    use_template: critical
-    recursive: "yes"
+# Its dataset snapshot policy and its postgres dump-archive jobs have MOVED to
+# host_vars/pve540.yml along with the datasets themselves; they are not
+# duplicated here. Leaving them declared on a node that no longer serves the
+# data would mean a converge of this node re-creates a second dump writer and a
+# second snapshot schedule for an archive nothing replicates — two writers for
+# one archive, and the unreplicated one indistinguishable from the real one.
+#
+# What stays here is the evacuation gate above and the inert scheduler guards,
+# so a converge reconciles leftovers to absent rather than resuming anything.
 
 # Insert-only SQLite warm-standby jobs (sqlite_standby role). The storage is
 # engine-agnostic and generic; the per-database specifics (source host/path,
@@ -76,21 +57,8 @@ sanoid_datasets:
 #     tables:
 #       - { name: "events", key: "id" }
 
-# Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).
-# Mirrors the shared-postgres guest's pg-backup directory into the replicated
-# bulk/databases namespace above (sanoid `database` template + pve3 syncoid pull
-# cover it with no per-instance edit). The source guest is addressed by FQDN
-# derived from tofu (hostname + domain) — never a literal IP or domain. Gated on
-# domain_from_tofu so a scoped run without load_tofu.yml stays inert instead of
-# pulling from a bogus host.
-postgres_standby_jobs: >-
-  {{ [] if (domain_from_tofu | default('') | length == 0) else [
-       {'name': 'postgres',
-        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres'] | default({})).hostname | default('postgres')) ~ '.' ~ domain_from_tofu,
-        'source_dir': '/var/lib/postgresql/backups',
-        'archive_dir': '/bulk/databases/postgres'},
-       {'name': 'postgres-ai',
-        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-ai-1'] | default({})).hostname | default('postgres-ai-1')) ~ '.' ~ domain_from_tofu,
-        'source_dir': '/var/lib/postgresql/backups',
-        'archive_dir': '/bulk/databases/postgres-ai'}
-     ] }}
+# The postgres dump-archive jobs that used to live here moved to
+# host_vars/pve540.yml with the datasets. Explicitly empty rather than removed,
+# so a converge of this node tears down the deployed sync script instead of
+# leaving an orphan that keeps writing to an archive nothing replicates.
+postgres_standby_jobs: []

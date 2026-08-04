@@ -49,11 +49,12 @@ syncoid_extra_schedules:
 # (unrelated to the always-on change above).
 proxmox_monitoring_enable_healthchecks: false
 
-# Layer-2 protection (cross-node ZFS replication via syncoid, PULL model): pve3
-# is the second (offline-DR) replica target. It pulls the Splunk VM disk
-# snapshots from its source node into bulk/replica/<node> — the same jobs pve2
-# runs into bulk/replica/<node>, so both always-on (pve2) and offline-DR (pve3)
-# legs hold an independent copy. The source NODE NAME is derived from tofu
+# Layer-2 protection (cross-node ZFS replication via syncoid, PULL model): this
+# node is the replica target for the estate. It pulls each source node's
+# snapshots into bulk/replica/<node>, so every dataset named below holds a copy
+# on a pool that is not the one it lives on — which is the whole point, and the
+# reason a dump sitting on a sibling dataset of the same pool does not count.
+# The source NODE NAME is derived from tofu
 # (splunk_vm_from_tofu, injected by load_tofu) — never hard-coded — so this
 # follows the VM if it is ever defined on a different node. bulk is pve3's own
 # local raidz2 pool; the bulk/replica/<node> parent is created by zfs_pools from
@@ -95,22 +96,21 @@ splunk_node: >-
 # live cluster, not a replicated archive.
 #
 # Deliberately NOT also given a new syncoid pull job off this node. The
-# genuine off-node copy for this cluster already exists in code as the
-# postgres_standby "postgres-ai" job (host_vars/pve2.yml) — it pulls the
-# guest's own pg_dump archive (a consistent logical backup, the correct
-# restore granularity for a database) into pve2's bulk/databases, which
-# pve2's existing sanoid + pve3's existing "databases" syncoid job already
-# cover recursively with zero further edits. That job is merged but has not
-# yet run against a converged pve2 (verified live 2026-08-01: the deployed
-# /usr/local/bin/postgres-standby-sync.sh on pve2 still only contains the
-# pre-#419 single "postgres" job — pve2 needs reconverging with the
-# postgres_standby tag to pick it up). Inventing a second, ZFS-level
-# off-node replica of the live disk here would duplicate that at a worse
-# granularity (a snapshot mid-write vs. a consistent dump) and there is no
-# existing "pull off pve3" pattern anywhere in this repo to extend safely —
-# every current syncoid job pulls INTO pve3, none pull FROM it. Snapshots
-# alone still convert "one bad delete and it is gone" into "recoverable",
-# which is the real gap this closes.
+# genuine off-node copy for this cluster is the postgres_standby "postgres-ai"
+# job, which moved with the storage role to host_vars/pve540.yml — it pulls the
+# guest's own pg_dump archive (a consistent logical backup, the correct restore
+# granularity for a database) into the storage node's bulk/databases, which
+# that node's sanoid entry and this node's "databases" syncoid job already
+# cover recursively with zero further edits. Note the direction: this node
+# holds the live cluster, the storage node holds its dump, and the dump comes
+# back here as part of the replicated bulk/databases namespace — so the dump
+# lands on a pool that is not the one the database runs on, in both copies.
+#
+# Inventing a second, ZFS-level off-node replica of the live disk here would
+# duplicate that at a worse granularity (a snapshot mid-write vs. a consistent
+# dump), and every syncoid job in this repo pulls INTO this node, none pull
+# FROM it. Snapshots alone still convert "one bad delete and it is gone" into
+# "recoverable", which is the real gap the sanoid entry below closes.
 postgres_ai_vmid: >-
   {{ ((containers_from_tofu | default({}))['postgres-ai-1'] | default({})).vmid
      | mandatory('containers_from_tofu is unset, so the postgres-ai-1 VMID
@@ -137,20 +137,26 @@ syncoid_jobs:
   # across nodes and owns its own redundancy, so a ZFS replica underneath it
   # would duplicate what erasure coding already provides.
   #
-  # Database warm-standby DR: pull the whole bulk/databases namespace from the
-  # always-on node 2 into this offline-DR leg (recursive via default options, so
-  # every bulk/databases/<instance> child comes along). The source node is fixed
-  # by design (node 2, the warm-standby home), unlike the splunk jobs whose source
-  # node is derived from tofu; the prefix comes from proxmox_node_prefix so the
-  # node name is never hard-coded. Refreshes only during this node's power-on
-  # windows.
+  # Database DR: pull the whole bulk/databases namespace off the storage node
+  # (recursive via default options, so every bulk/databases/<instance> child
+  # comes along). What this carries is the logical dump archive, not a live
+  # database volume — a snapshot of a running cluster is inconsistent by
+  # construction, so the dump is the thing worth having on a second pool.
+  #
+  # The source node moved with the storage role: these two jobs previously named
+  # node 2, whose datasets now live on node 540. A pull job pointed at a node
+  # that no longer serves the dataset does not degrade quietly — it fails every
+  # cycle while the replica it left behind ages, so the source has to follow the
+  # data. The source node is fixed by design (the storage home), unlike the
+  # splunk jobs whose source node is derived from tofu; the prefix comes from
+  # proxmox_node_prefix so the node name is never hard-coded.
   - name: "databases"
-    source: "root@{{ proxmox_node_prefix }}2:bulk/databases"
-    target: "bulk/replica/{{ proxmox_node_prefix }}2/databases"
-  # App config/state DR: pull the whole bulk/appdata namespace from the always-on
-  # node 2 (recursive via default options, so every bulk/appdata/<app> child comes
-  # along). Same pull pattern (and same proxmox_node_prefix parameterization) as
-  # the databases job. Refreshes only during this node's power-on windows.
+    source: "root@{{ proxmox_node_prefix }}540:bulk/databases"
+    target: "bulk/replica/{{ proxmox_node_prefix }}540/databases"
+  # App config/state DR: pull the whole bulk/appdata namespace off the same
+  # storage node (recursive via default options, so every bulk/appdata/<app>
+  # child comes along). Same pull pattern and same proxmox_node_prefix
+  # parameterization as the databases job.
   - name: "appdata"
-    source: "root@{{ proxmox_node_prefix }}2:bulk/appdata"
-    target: "bulk/replica/{{ proxmox_node_prefix }}2/appdata"
+    source: "root@{{ proxmox_node_prefix }}540:bulk/appdata"
+    target: "bulk/replica/{{ proxmox_node_prefix }}540/appdata"

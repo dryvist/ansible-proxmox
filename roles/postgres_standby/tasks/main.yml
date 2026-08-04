@@ -121,6 +121,38 @@
   tags:
     - postgres_standby
 
+# Emptying the job list has to actually stop the archive, not merely stop
+# managing it. Without this, the enable above simply skips and a previously
+# enabled timer keeps firing against a job list nothing declares — so a host
+# handed off to another node goes on writing a second copy of the archive that
+# no replication covers, and the stale copy is indistinguishable from the live
+# one at restore time. Declared state has to include the absence.
+#
+# Gated on a stat rather than blanket error suppression, so a systemd failure
+# on a unit that IS present still fails the run.
+- name: Check whether the standby timer unit is present
+  ansible.builtin.stat:
+    path: /etc/systemd/system/postgres-standby.timer
+  register: postgres_standby_timer_unit
+  when:
+    - postgres_standby_enabled
+    - postgres_standby_jobs | length == 0
+  tags:
+    - postgres_standby
+
+- name: Stop and disable the standby timer when no jobs are declared
+  ansible.builtin.systemd:
+    name: postgres-standby.timer
+    enabled: false
+    state: stopped
+  when:
+    - postgres_standby_enabled
+    - postgres_standby_jobs | length == 0
+    - postgres_standby_timer_unit.stat.exists | default(false)
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - postgres_standby
+
 # Opt-in immediate run (seed/refresh on demand) — mirrors sqlite_standby_run_now.
 # Via the service (not the script directly) so the S3 EnvironmentFile loads.
 - name: Run the standby sync now (opt-in seed/refresh)
