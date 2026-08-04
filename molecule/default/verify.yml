@@ -145,6 +145,29 @@
           - "'POOL_THRESHOLDS=(50 75 85 90 94)' in (zfs_capacity_body.content | b64decode)"
         fail_msg: "The rendered capacity monitor lost its transport or band contract"
 
+    # The smartd tasks are gated to physical hosts, so a container converge
+    # cannot assert the deployed file. What it can assert is the directive
+    # contract itself, which is where the regression would land: `-a` tracks
+    # only NORMALIZED attribute values, and the sector-health counters stay
+    # pinned at 100 normalized while their raw counts climb. Drop the -R
+    # directives and smartd keeps running, keeps looking configured, and stops
+    # reporting accumulating bad sectors entirely.
+    - name: Assert smartd tracks raw sector-health counters
+      ansible.builtin.assert:
+        that:
+          - "'-R 5!' in crash_diagnostics_smartd_directives"
+          - "'-R 197!' in crash_diagnostics_smartd_directives"
+          - "'-R 198!' in crash_diagnostics_smartd_directives"
+          # -C/-U must stay at their non-zero-report defaults. The increase-only
+          # '+' form announces a counter once and then goes quiet, so a counter
+          # that rose while the log pipeline was down is never mentioned again.
+          - "'-C 197+' not in crash_diagnostics_smartd_directives"
+          - "'-U 198+' not in crash_diagnostics_smartd_directives"
+        fail_msg: >-
+          crash_diagnostics_smartd_directives lost its raw sector-counter
+          tracking: reallocated and pending sectors will accumulate without a
+          single syslog line.
+
 # The shared PR CI runs the default Molecule scenario, so importing the native
 # contract here makes the start-only gates mandatory before merge as well as in
 # the repository's post-merge Molecule workflow.

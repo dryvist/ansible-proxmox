@@ -54,7 +54,29 @@ crash_diagnostics_smartd_conf: /etc/smartd.conf
 # -s scheduled short (daily 02:00) + long (Saturday 03:00) self-tests, -W
 # temperature warning. The -W thresholds (diff, info, crit degrees C) are the
 # fleet calibration knob — tune per drive class without editing the template.
-crash_diagnostics_smartd_directives: "DEVICESCAN -a -o on -S on -s (S/../.././02|L/../../6/03) -W 4,45,55"
+#
+# -R 5! / -R 197! / -R 198! track the RAW values of the three sector-health
+# counters and log any change at LOG_CRIT. `-a` already implies -t (-p -u),
+# but that tracks only NORMALIZED values, and on these drive families the
+# normalized value stays pinned at 100 while the raw count climbs — so
+# reallocated and pending sectors accumulate with no attribute-change line at
+# all. -R is the smartd-native fix ('-R 5!' is the manual's own example for
+# "warn when new sectors are reallocated"); it needs no external collector.
+# The standing -C 197 / -U 198 non-zero reports stay at their defaults rather
+# than the increase-only '+' form, so a counter that is already non-zero keeps
+# re-reporting every cycle instead of announcing itself once and going quiet
+# for good if the log pipeline happens to be down at that moment.
+crash_diagnostics_smartd_directives: "DEVICESCAN -a -o on -S on -s (S/../.././02|L/../../6/03) -W 4,45,55 -R 5! -R 197! -R 198!"
+
+# udev rule installing a smartd device re-scan on disk hotplug.
+# smartd expands DEVICESCAN once, at start, and never again: its device list is
+# a boot-time snapshot. Kernel names and controller slot indices are reassigned
+# whenever the disk set changes, so a drive added after start is not monitored,
+# and smartd's duplicate-identity suppression can drop the real device in favour
+# of a stale entry — silently, with the daemon still reporting itself healthy.
+# Reloading on a block-device change re-expands DEVICESCAN (ExecReload sends
+# SIGHUP, which makes smartd re-read its config and re-enumerate).
+crash_diagnostics_smartd_udev_rule: /etc/udev/rules.d/60-smartd-rescan.rules
 
 # =============================================================================
 # SYSCTL CONFIGURATION

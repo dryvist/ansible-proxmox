@@ -36,3 +36,15 @@
     - ansible_service_mgr == 'systemd'
     - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
   listen: Restart smartd
+
+# udev only consults rules loaded into the running daemon, so a freshly written
+# rule file does nothing until control is reloaded. Without this the re-scan
+# rule is present on disk and inert until the next boot — the same
+# looks-configured-but-does-nothing failure the rule exists to close.
+- name: Reload udev rules
+  ansible.builtin.command:
+    cmd: udevadm control --reload-rules
+  changed_when: false
+  when:
+    - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  listen: Reload udev rules
