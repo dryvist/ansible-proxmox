@@ -141,6 +141,15 @@
       tags:
         - sanoid
 
+    # Cluster vzdump jobs, selected by pool rather than by guest id. Runs after
+    # zfs_pools so the datasets a backup storage sits on already exist. Inert
+    # until pve_backup_jobs_manage is set AND a job set is declared, and the
+    # declared jobs ship disabled — a first full run is a deliberate act.
+    - role: pve_backup_jobs
+      tags:
+        - pve_backup_jobs
+        - backup
+
     # Root-only media LXC features (bind-mounts, keyctl, /dev/net/tun) that the
     # BPG provider's API token cannot set. Runs AFTER OpenTofu creates the
     # media LXC shells and zfs_pools mounts the bulk/data dataset, and

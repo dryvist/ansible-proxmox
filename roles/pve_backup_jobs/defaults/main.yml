@@ -1,0 +1,91 @@
+---
+# Declarative Proxmox VE backup jobs, selected by POOL rather than by guest id.
+#
+# WHY POOL SELECTION
+# ------------------
+# vzdump offers exactly three selection modes: every guest, a pool, or a literal
+# list of guest ids. A literal list is a snapshot of an intent, not the intent
+# itself: it says which numbers were true on the day someone typed them, and it
+# keeps selecting those numbers after a number is reused for something else. The
+# job then protects a different guest on the same schedule to the same storage
+# with the same clean exits, and no signal the job produces contradicts it.
+#
+# Every guest already carries a declared pool in the published inventory, so a
+# pool-scoped job expresses the intent directly — a guest enters or leaves
+# coverage by its declared identity, and provisioning a new one covers it with
+# no edit here. There is no tag-based selection to use instead.
+#
+# The identity assertion that catches the failure this design prevents lives in
+# pve_health_telemetry, not here: a job cannot be trusted to audit itself.
+#
+# WHAT IS NOT COVERED, DELIBERATELY
+# ---------------------------------
+# An image backup is the fallback for state that has no better home, so most
+# guests want none. Excluded on purpose, per pool:
+#   - bulk media: re-acquirable, and multiple TB of it
+#   - model/agent working sets: reconstructed by their roles from source
+#   - log/telemetry data: explicitly outside the DR scope
+# Databases are excluded even inside a covered pool's rationale, because a
+# native dump is a better artifact than an image of a running engine — a
+# crash-consistent image of a database is a restore you have to be lucky with.
+# What remains is service state that is neither re-acquirable nor covered by a
+# native mechanism, which is a small set.
+
+# Inert by default. Nothing is created, changed or removed until this is on —
+# the same shape as the other roles here that alter live cluster behaviour.
+pve_backup_jobs_manage: false
+
+# Backup jobs live in the cluster filesystem, so they are configured from ONE
+# node and apply cluster-wide. Set to the inventory hostname that owns this.
+pve_backup_jobs_config_host: ""
+
+# Desired job set. Each entry:
+#   id        stable job id; the reconcile keys off it
+#   pool      pool id to select (never a guest id list — see above)
+#   storage   storage id to write to; MUST NOT be backed by a pool that holds
+#             the guests being protected, or one failure takes both
+#   schedule  systemd calendar expression
+#   enabled   false ships the job present-but-off, so a first full run stays a
+#             deliberate act rather than a side effect of a converge
+#   prune     retention, e.g. keep-daily=7,keep-weekly=4
+#   mode      snapshot | suspend | stop
+#   compress  zstd | gzip | lzo | 0
+#   comment   free text shown in the UI
+#
+# Empty by default, and no pool id is committed here: the ids are environment
+# values, set in host_vars/group_vars alongside the other environment-derived
+# settings. Example (placeholders, keep the live list empty):
+#   pve_backup_jobs_jobs:
+#     - id: platform-daily
+#       pool: "<pool-id>"
+#       storage: "<backup-storage-id>"
+#       schedule: "02:30"
+#       enabled: false
+#       prune: keep-daily=7,keep-weekly=4
+pve_backup_jobs_jobs: []
+
+pve_backup_jobs_default_mode: snapshot
+pve_backup_jobs_default_compress: zstd
+pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
+
+# Remove vzdump jobs this role does not declare. On by default because the
+# failure being designed out is a job nobody remembers aiming: a job left behind
+# after the guest it named was renumbered, or one pinned to a node that has left
+# the cluster, is not neutral — it reads as coverage and provides none. With the
+# desired list empty the reconcile does nothing at all, so this cannot sweep a
+# cluster by accident.
+pve_backup_jobs_prune_unmanaged: true
+
+# Backup target storage, ensured before the jobs that write to it. Empty by
+# default; a `dir` on a pool that does NOT hold the guests being protected is
+# the intended shape. Keys map to community.proxmox.proxmox_storage:
+#   name, type, nodes, content, path, prune_backups
+pve_backup_jobs_storage: {}
+
+# PVE API connection for the storage definition. Same env-sourced shape the
+# other API-using roles here take; no literal belongs in this file.
+pve_backup_jobs_api_host: "{{ lookup('env', 'PROXMOX_VE_ENDPOINT_HOST') | default(omit, true) }}"
+pve_backup_jobs_api_user: "{{ lookup('env', 'PROXMOX_VE_USERNAME') | default(omit, true) }}"
+pve_backup_jobs_api_token_id: "{{ lookup('env', 'PROXMOX_VE_API_TOKEN_ID') | default(omit, true) }}"
+pve_backup_jobs_api_token_secret: "{{ lookup('env', 'PROXMOX_VE_API_TOKEN_SECRET') | default(omit, true) }}"
+pve_backup_jobs_api_validate_certs: false

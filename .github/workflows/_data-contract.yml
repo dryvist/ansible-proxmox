@@ -68,6 +68,22 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_ha_replication/verify_targets.yml -i localhost, -c local
 
+      # A backup job's declaration guard is only worth having if it fires. Both
+      # playbooks run the role's OWN task files — the guard against fixtures it
+      # must refuse, the reconcile against a stubbed pvesh — so neither can pass
+      # against a stale copy, and neither reaches a cluster.
+      - name: Verify pve_backup_jobs declaration guard
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_backup_jobs/verify_declaration.yml -i localhost, -c local
+
+      - name: Verify pve_backup_jobs reconcile command construction
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_backup_jobs/verify_reconcile.yml -i localhost, -c local
+
       - name: Verify pve evacuation staging static contract
         run: |
           mkdir -p /tmp/ansible-tmp
@@ -81,6 +97,15 @@ jobs:
       # the role rather than copying it, so role drift fails here.
       - name: Verify the ZFS capacity monitor band-state contract
         run: python3 tests/zfs_capacity_monitor/test_band_state.py
+
+      # Backup identity: every other signal a backup job produces asserts only
+      # that it RAN, so a guest id recycled onto a different guest keeps every
+      # check green. Molecule cannot present a plausible archive history on real
+      # storage, so the template is rendered against the role's own defaults and
+      # driven over fixture dump directories. Includes the false-green guard:
+      # with no identity map, the field must report UNKNOWN rather than 0.
+      - name: Verify backup identity assertion contract
+        run: python3 tests/pve_backup_identity/test_identity_assert.py
 
       - name: Verify snapshot-free guest archive safety contract
         run: python3 tests/pve_guest_evacuation/test_archive_contract.py

@@ -1,0 +1,59 @@
+---
+# pve_backup_jobs — reconcile the cluster's vzdump job set from a declared,
+# pool-scoped desired state. Backup jobs live in the cluster filesystem, so all
+# work runs on exactly ONE node (pve_backup_jobs_config_host), the same shape
+# pve_ha uses for cluster-wide state. Inert unless pve_backup_jobs_manage; all
+# CLI work is skipped under Docker so the role stays molecule-testable without a
+# live cluster.
+#
+# Everything goes through the PVE API rather than /etc/pve/jobs.cfg. That file
+# also holds job types this role knows nothing about (realm sync, and whatever
+# a future release adds), so templating it whole would silently delete them —
+# which is the same class of failure this role exists to prevent.
+
+# Validated on EVERY host, outside the reconcile block below. A malformed
+# declaration is wrong everywhere, so it should fail on the first host of the
+# run rather than only on the single config host, and only once the role is
+# enabled — by which point the declaration has been carried unchallenged for as
+# long as it took someone to flip the switch.
+- name: Validate the declared backup job set
+  ansible.builtin.import_tasks: validate.yml
+  tags:
+    - pve_backup_jobs
+
+- name: Reconcile cluster backup jobs from the single config host
+  when:
+    - pve_backup_jobs_manage | bool
+    - pve_backup_jobs_jobs | length > 0
+    - inventory_hostname == pve_backup_jobs_config_host
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_backup_jobs
+  block:
+    - name: Ensure the backup target storage exists
+      # Ensured before the jobs that write to it: a job pointing at a storage
+      # that does not exist fails at run time, hours after the converge that
+      # looked successful.
+      community.proxmox.proxmox_storage:
+        api_host: "{{ pve_backup_jobs_api_host }}"
+        api_user: "{{ pve_backup_jobs_api_user }}"
+        api_token_id: "{{ pve_backup_jobs_api_token_id }}"
+        api_token_secret: "{{ pve_backup_jobs_api_token_secret }}"
+        validate_certs: "{{ pve_backup_jobs_api_validate_certs | bool }}"
+        name: "{{ pve_backup_jobs_storage.name }}"
+        type: "{{ pve_backup_jobs_storage.type | default('dir') }}"
+        nodes: "{{ pve_backup_jobs_storage.nodes }}"
+        content: "{{ pve_backup_jobs_storage.content | default(['backup']) }}"
+        state: present
+        dir_options:
+          path: "{{ pve_backup_jobs_storage.path }}"
+          # The path is a dataset mountpoint, so an unmounted pool must mark the
+          # storage offline rather than let vzdump write into the empty
+          # directory underneath it — a backup onto the root filesystem that
+          # reports success is worse than a backup that fails.
+          is_mountpoint: "yes"
+          prune_backups: "{{ pve_backup_jobs_storage.prune_backups | default(pve_backup_jobs_default_prune) }}"
+      when: pve_backup_jobs_storage | length > 0
+
+    - name: Reconcile the live job set against the declaration
+      ansible.builtin.import_tasks: reconcile.yml

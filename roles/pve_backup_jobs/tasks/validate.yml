@@ -1,0 +1,58 @@
+---
+# Declaration validation, deliberately separate from the reconcile so it runs on
+# every host and can be exercised without a cluster
+# (tests/pve_backup_jobs/verify_declaration.yml).
+
+- name: Assert every declared job selects a pool and names a storage
+  # A guest-id list is exactly the shape this role exists to replace: it keeps
+  # selecting a number after that number is reused for a different guest, and
+  # every signal the job then emits still says the job ran. Refusing it here is
+  # what stops it coming back in through the declaration.
+  ansible.builtin.assert:
+    that:
+      - item.id | default('') | length > 0
+      - item.pool | default('') | length > 0
+      - item.storage | default('') | length > 0
+      - item.schedule | default('') | length > 0
+      - item.vmid is not defined
+    fail_msg: >-
+      Backup job '{{ item.id | default('<no id>') }}' must declare id, pool,
+      storage and schedule, and must not carry a vmid list. Guest-id selection
+      keeps pointing at a number after that number is reused for another guest.
+    quiet: true
+  loop: "{{ pve_backup_jobs_jobs }}"
+  loop_control:
+    label: "{{ item.id | default('<no id>') }}"
+  tags:
+    - pve_backup_jobs
+
+- name: Assert declared job ids are unique
+  # Two entries sharing an id silently collapse: the reconcile applies both to
+  # the same job and the last one wins, so one of the two intents disappears
+  # with nothing reporting that it did.
+  ansible.builtin.assert:
+    that:
+      - (pve_backup_jobs_jobs | map(attribute='id') | list | unique | length)
+        == (pve_backup_jobs_jobs | length)
+    fail_msg: "Duplicate backup job id in pve_backup_jobs_jobs; ids must be unique."
+    quiet: true
+  when: pve_backup_jobs_jobs | length > 0
+  tags:
+    - pve_backup_jobs
+
+- name: Assert a backup storage is declared when jobs are
+  # A job pointing at a storage nothing ensures fails hours after a converge
+  # that reported success.
+  ansible.builtin.assert:
+    that:
+      - pve_backup_jobs_storage | length > 0
+      - pve_backup_jobs_storage.name | default('') | length > 0
+      - pve_backup_jobs_storage.path | default('') | length > 0
+      - pve_backup_jobs_storage.nodes | default([]) | length > 0
+    fail_msg: >-
+      pve_backup_jobs_jobs is non-empty but pve_backup_jobs_storage does not
+      declare name, path and nodes.
+    quiet: true
+  when: pve_backup_jobs_jobs | length > 0
+  tags:
+    - pve_backup_jobs
