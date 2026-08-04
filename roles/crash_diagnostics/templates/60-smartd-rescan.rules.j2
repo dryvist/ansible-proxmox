@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+#
+# Crash Diagnostics - smartd device re-scan on disk hotplug
+#
+# smartd expands DEVICESCAN exactly once, at daemon start. Any disk that
+# appears afterwards is never monitored, and because kernel names and
+# controller slot indices are reassigned as the disk set changes, smartd can
+# also keep polling a slot that now belongs to a different physical drive.
+# Reloading sends SIGHUP, which re-reads the config and re-enumerates devices.
+#
+# --no-block so udev's event worker is never held on a daemon reload, and
+# reload-or-restart so an event arriving before smartmontools is up is a no-op
+# rather than an error.
+#
+# ponytail: one reload per disk event, so a boot with N disks costs N
+# re-scans. Harmless and self-limiting at fleet disk counts; add a debounce
+# (systemd .path unit or a timer coalescing the events) only if a node's boot
+# time measurably suffers.
+ACTION=="add|change|remove", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", \
+  KERNEL=="sd*|nvme*n1|hd*", \
+  RUN+="/bin/systemctl reload-or-restart --no-block smartmontools.service"
