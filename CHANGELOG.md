@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.74.0](https://github.com/dryvist/ansible-proxmox/compare/v1.73.1...v1.74.0) (2026-08-04)
+
+
+### Features
+
+* **crash-diagnostics:** track raw sector counters and rescan disks on hotplug ([#597](https://github.com/dryvist/ansible-proxmox/issues/597)) ([bd4178e](https://github.com/dryvist/ansible-proxmox/commit/bd4178ec51ceef2c4c45871387576fed1e7b8de0))
+
 ## [1.73.1](https://github.com/dryvist/ansible-proxmox/compare/v1.73.0...v1.73.1) (2026-08-03)
 
 
