@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.75.0](https://github.com/dryvist/ansible-proxmox/compare/v1.74.0...v1.75.0) (2026-08-04)
+
+
+### Features
+
+* **backup:** assert what a backup protected, and select guests by pool ([#600](https://github.com/dryvist/ansible-proxmox/issues/600)) ([c299d0e](https://github.com/dryvist/ansible-proxmox/commit/c299d0e15df2166cb491060ef4c4f8fff0d2972a))
+* **pve_ha:** enroll the Plex container for in-place crash auto-restart ([#604](https://github.com/dryvist/ansible-proxmox/issues/604)) ([aa3a643](https://github.com/dryvist/ansible-proxmox/commit/aa3a6434dd398cde4d030c8b0e2aec20a48e72da)), closes [#396](https://github.com/dryvist/ansible-proxmox/issues/396)
+* **replication:** snapshot the storage node and follow it with the DR pulls ([#598](https://github.com/dryvist/ansible-proxmox/issues/598)) ([f605a0e](https://github.com/dryvist/ansible-proxmox/commit/f605a0ea58aebed5fd94db93d9c0a7fad595fe5f))
+
+
+### Bug Fixes
+
+* **postgres_standby:** cross the postgres-ai dump pull between its two nodes ([#603](https://github.com/dryvist/ansible-proxmox/issues/603)) ([bd8dfd2](https://github.com/dryvist/ansible-proxmox/commit/bd8dfd27e974b22b8b69449607858506b8ac904c))
+
 ## [1.74.0](https://github.com/dryvist/ansible-proxmox/compare/v1.73.1...v1.74.0) (2026-08-04)
 
 
