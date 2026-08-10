@@ -40,6 +40,7 @@ def flatten_included_tasks(path: Path) -> str:
     text = path.read_text()
     out = []
     pos = 0
+    resolved = 0
     for match in re.finditer(
         r"- name:.*\n\s*ansible\.builtin\.include_tasks:\s*(\S+)\s*\n", text
     ):
@@ -48,7 +49,15 @@ def flatten_included_tasks(path: Path) -> str:
         included = re.sub(r"^---\n", "", target.read_text())
         out.append(included)
         pos = match.end()
+        resolved += 1
     out.append(text[pos:])
+    # Without this, a dispatcher entry the pattern fails to match is silently
+    # dropped from the flattened text, and every assertion that greps for
+    # something inside that phase file starts passing on absence instead.
+    assert resolved == text.count("include_tasks:"), (
+        f"{resolved} of {text.count('include_tasks:')} dispatcher includes were "
+        "inlined — the assertions below would grep text that is not there"
+    )
     return "".join(out)
 
 
