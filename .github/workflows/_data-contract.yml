@@ -123,4 +123,7 @@ jobs:
       # Extracted tasks execute against literal TAB-delimited ZFS records and
       # malformed/ambiguous fixtures, so parser drift fails the PR gate.
       - name: Verify managed-volume ZFS identity parser regression
-        run: python -m pytest tests/pve_guest_evacuation_lxc_managed_volumes/test_managed_volume_contract.py
+        # The whole directory, not one named file: the contract now spans
+        # several behaviour-named modules, and naming them individually is how
+        # a newly added one silently never runs.
+        run: python -m pytest tests/pve_guest_evacuation_lxc_managed_volumes/
