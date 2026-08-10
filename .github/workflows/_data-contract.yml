@@ -66,7 +66,9 @@ jobs:
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_ha_replication/verify_targets.yml -i localhost, -c local
+          ansible-playbook tests/pve_ha_replication/verify_replication_targets.yml -i localhost, -c local
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_ha_replication/verify_broken_job_selection.yml -i localhost, -c local
 
       # A backup job's declaration guard is only worth having if it fires. Both
       # playbooks run the role's OWN task files — the guard against fixtures it
@@ -96,7 +98,9 @@ jobs:
       # container scenario cannot present. The test extracts the template from
       # the role rather than copying it, so role drift fails here.
       - name: Verify the ZFS capacity monitor band-state contract
-        run: python3 tests/zfs_capacity_monitor/test_band_state.py
+        run: |
+          python3 tests/zfs_capacity_monitor/test_dropped_alert.py
+          python3 tests/zfs_capacity_monitor/test_transport_contract.py
 
       # Backup identity: every other signal a backup job produces asserts only
       # that it RAN, so a guest id recycled onto a different guest keeps every

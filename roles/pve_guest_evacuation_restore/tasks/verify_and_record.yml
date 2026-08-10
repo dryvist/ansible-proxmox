@@ -1,0 +1,94 @@
+---
+# Part 4 of 4 (see restore.yml). Reads the restored guest back, proves its
+# configuration, backed volumes, and stopped state match what was
+# expected, proves every restored volume exists on disk, then records the
+# restore evidence checkpoint.
+- name: Read the restored target guest configuration
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ pve_guest_evacuation_restore_target_node }}/{{ pve_guest_evacuation_restore_expected_guest_type }}/{{ pve_guest_evacuation_restore_expected_vmid }}/config"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_restore_target_config_raw
+  changed_when: false
+
+- name: Read the restored target guest status
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ pve_guest_evacuation_restore_target_node }}/{{ pve_guest_evacuation_restore_expected_guest_type }}/{{ pve_guest_evacuation_restore_expected_vmid }}/status/current"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_restore_target_status_raw
+  changed_when: false
+
+- name: Decode the restored target guest state
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_restore_target_config: "{{ pve_guest_evacuation_restore_target_config_raw.stdout | from_json }}"
+    pve_guest_evacuation_restore_target_status: "{{ pve_guest_evacuation_restore_target_status_raw.stdout | from_json }}"
+
+- name: Record restored target volume keys and volume identifiers
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_restore_target_volume_items: >-
+      {{ pve_guest_evacuation_restore_target_config | dict2items
+         | selectattr('key', 'in', pve_guest_evacuation_restore_expected_volume_keys)
+         | list }}
+    pve_guest_evacuation_restore_target_volume_ids: >-
+      {{ pve_guest_evacuation_restore_target_config | dict2items
+         | selectattr('key', 'in', pve_guest_evacuation_restore_expected_volume_keys)
+         | map(attribute='value') | map('regex_replace', ',.*$', '') | list }}
+
+- name: Verify the restored configuration and stopped target state
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_restore_target_config.digest | default('') | length > 0
+      - pve_guest_evacuation_restore_target_status.status == 'stopped'
+      - >-
+        pve_guest_evacuation_restore_target_volume_items | map(attribute='key')
+        | list | sort == pve_guest_evacuation_restore_expected_volume_keys
+      - >-
+        pve_guest_evacuation_restore_target_volume_items | map(attribute='value')
+        | reject('match', '^' ~ (pve_guest_evacuation_restore_target_storage | regex_escape) ~ ':')
+        | list | length == 0
+    fail_msg: >-
+      pve540 did not restore the expected guest configuration, backed volumes,
+      or stopped state. Preserve this target guest for investigation; no
+      automatic rollback or deletion is permitted.
+    quiet: true
+
+- name: Resolve each restored target volume on the explicit storage
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - path
+      - "{{ item }}"
+  loop: "{{ pve_guest_evacuation_restore_target_volume_ids }}"
+  register: pve_guest_evacuation_restore_target_volume_paths
+  changed_when: false
+
+- name: Verify every restored target volume exists
+  ansible.builtin.stat:
+    path: "{{ item.stdout | trim }}"
+  loop: "{{ pve_guest_evacuation_restore_target_volume_paths.results }}"
+  register: pve_guest_evacuation_restore_target_volume_stats
+
+- name: Require all restored target volumes to be present
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+    fail_msg: >-
+      Restored volume {{ item.item.item }} is not present on the explicit
+      pve540 target storage. Preserve the failed target for investigation.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_restore_target_volume_stats.results }}"
+
+- name: Record a completed restore evidence checkpoint
+  ansible.builtin.include_tasks: write_evidence.yml
+  vars:
+    pve_guest_evacuation_restore_checkpoint: >-
+      {{ (pve_guest_evacuation_restore_expected_guest_type == 'lxc'
+          and pve_guest_evacuation_restore_lxc_mountpoint_volume_keys | length > 0)
+         | ternary('restore_pending_managed_mount_copy', 'restore_verified') }}

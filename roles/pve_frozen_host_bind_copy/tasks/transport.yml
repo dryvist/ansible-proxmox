@@ -1,0 +1,74 @@
+---
+# Part 2 of 7 (see main.yml). Verifies SSH to pve540 over the dedicated
+# transport identity proven in preflight.yml, then derives the rsync rsh
+# command and the approved host path list used by every phase below.
+- name: Read the pve540 host key from the dedicated source-host known-hosts file
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -F
+      - "{{ pve_frozen_host_bind_copy_target_rsync_host }}"
+      - -f
+      - "{{ pve_frozen_host_bind_copy_rsync_known_hosts_file }}"
+  register: pve_frozen_host_bind_copy_known_host
+  changed_when: false
+  failed_when: false
+
+- name: Require one reviewed ED25519 pve540 host key
+  ansible.builtin.assert:
+    that:
+      - pve_frozen_host_bind_copy_known_host.rc == 0
+      - >-
+        pve_frozen_host_bind_copy_known_host.stdout_lines
+        | reject('match', '^# ')
+        | list | length == 1
+      - >-
+        pve_frozen_host_bind_copy_known_host.stdout_lines
+        | reject('match', '^# ')
+        | first
+        is match('^' ~ (pve_frozen_host_bind_copy_target_rsync_host | regex_escape)
+          ~ ' ssh-ed25519 [A-Za-z0-9+/=]+( .*)?$')
+    fail_msg: >-
+      The dedicated source-host known-hosts file must contain exactly one
+      reviewed ED25519 key for the pve540 rsync destination.
+
+- name: Verify strict source-host SSH transport to pve540
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -i
+      - "{{ pve_frozen_host_bind_copy_rsync_identity_file }}"
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - BatchMode=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - "UserKnownHostsFile={{ pve_frozen_host_bind_copy_rsync_known_hosts_file }}"
+      - -o
+      - GlobalKnownHostsFile=/dev/null
+      - -o
+      - PasswordAuthentication=no
+      - -o
+      - KbdInteractiveAuthentication=no
+      - -T
+      - "root@{{ pve_frozen_host_bind_copy_target_rsync_host }}"
+      - "true"
+  changed_when: false
+
+- name: Build the fixed strict SSH command for rsync
+  ansible.builtin.set_fact:
+    pve_frozen_host_bind_copy_rsync_rsh: >-
+      ssh -i {{ pve_frozen_host_bind_copy_rsync_identity_file }}
+      -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+      -o UserKnownHostsFile={{ pve_frozen_host_bind_copy_rsync_known_hosts_file }}
+      -o GlobalKnownHostsFile=/dev/null -o PasswordAuthentication=no
+      -o KbdInteractiveAuthentication=no -T
+
+- name: Derive the unique approved host paths
+  ansible.builtin.set_fact:
+    pve_frozen_host_bind_copy_paths: >-
+      {{ pve_frozen_host_bind_copy_allowed_mounts | dict2items
+         | map(attribute='value') | flatten | map(attribute='source')
+         | unique | list }}

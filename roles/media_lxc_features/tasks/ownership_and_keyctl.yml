@@ -1,0 +1,82 @@
+---
+# Part 3 of 5 (see configure_container.yml). Reconciles owner_user/owner_uid
+# config-mount ownership, then merges the keyctl feature into the
+# container's existing features line without disturbing tofu-set nesting.
+# ---------------------------------------------------------------------------
+# Per-app config-mount ownership (mounts carrying `owner_user` or `owner_uid`)
+# ---------------------------------------------------------------------------
+# A mount whose host dataset must be owned by an in-container app owner (e.g. the
+# plex user on bulk/appdata/plex, or seerr's raw uid 1000 on bulk/appdata/seerr)
+# gets chowned to that owner's MAPPED host uid/gid (unpriv_base + the
+# in-container id — except a punched-through shared-data gid, which maps to
+# itself; see reconcile_config_owner.yml). Looped over every owner-bearing
+# mount, so a container with more than one
+# app-config mount (download-vpn: qbittorrent + prowlarr) reconciles each. A mount
+# carries EITHER owner_user (named, resolved live) OR owner_uid/owner_gid
+# (explicit) — the union below selects both; no mount carries both keys.
+# Per-mount logic in the included file (idempotent stat-then-chown; non-fatal skip
+# when the app user isn't installed yet on a fresh build — the dataset data lives
+# off the rootfs and is never at risk).
+- name: "Reconcile config-mount ownership on {{ media_ct.key }}"
+  ansible.builtin.include_tasks: reconcile_config_owner.yml
+  loop: >-
+    {{
+      (media_ct.value.mounts | default([]) | selectattr('owner_user', 'defined') | list)
+      + (media_ct.value.mounts | default([]) | selectattr('owner_uid', 'defined') | list)
+    }}
+  loop_control:
+    loop_var: media_cfg_mp
+    label: >-
+      {{ media_ct.key }} {{ media_cfg_mp.src }} -> owner
+      {{ media_cfg_mp.owner_user | default('uid ' ~ media_cfg_mp.owner_uid | default('?')) }}
+  tags:
+    - media_lxc_features
+
+# ---------------------------------------------------------------------------
+# keyctl feature — MERGE into existing features (preserve tofu-set nesting)
+# ---------------------------------------------------------------------------
+# Parse the current `features:` line into a key=val map, add keyctl=1 if absent,
+# and only `pct set --features` when the merged set differs from the current.
+
+- name: "Ensure keyctl feature on container {{ media_ct.key }}"
+  when: media_ct.value.keyctl | default(false)
+  tags:
+    - media_lxc_features
+  block:
+    - name: "Parse current features into a token set for {{ media_ct.key }}"
+      ansible.builtin.set_fact:
+        # `features:` value (e.g. "nesting=1") -> ["nesting=1"]. Empty list when
+        # the container has no features line yet.
+        media_lxc_features_cur_tokens: >-
+          {{
+            media_lxc_features_cfg.stdout_lines
+            | select('match', '^features:')
+            | map('regex_replace', '^features:\s*', '')
+            | list | first | default('')
+            | split(',') | select('truthy') | list
+          }}
+
+    - name: "Compute merged feature tokens (keyctl added, nesting preserved) for {{ media_ct.key }}"
+      ansible.builtin.set_fact:
+        # Drop any existing keyctl=* token, append keyctl=1, sort for stability.
+        # Every other token (e.g. tofu-set nesting=1) is preserved verbatim.
+        media_lxc_features_merged_tokens: >-
+          {{
+            (
+              (media_lxc_features_cur_tokens | reject('match', '^keyctl=') | list)
+              + ['keyctl=1']
+            ) | sort
+          }}
+
+    - name: "Apply merged features to container {{ media_ct.key }}"
+      ansible.builtin.command:
+        cmd: "pct set {{ media_ct.key }} --features {{ media_lxc_features_merged_tokens | join(',') }}"
+      when: (media_lxc_features_cur_tokens | sort) != media_lxc_features_merged_tokens
+      changed_when: true
+      notify: Restart changed media containers
+      register: media_lxc_features_feat_set
+
+    - name: "Record feature change for container {{ media_ct.key }}"
+      ansible.builtin.set_fact:
+        media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"
+      when: media_lxc_features_feat_set is defined and media_lxc_features_feat_set.changed

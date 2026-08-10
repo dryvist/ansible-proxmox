@@ -1,0 +1,85 @@
+---
+# Part 4 of 4 (see archive.yml). Resolves the archive path, proves its
+# SHA-256 and compressed stream, verifies a QEMU archive with vma, proves
+# its configuration extracts, then writes the verified-archive evidence.
+- name: Record the exact archive volume identifier
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archive_volid: "{{ pve_guest_evacuation_new_archives[0] }}"
+
+- name: Resolve the archive path from Proxmox storage
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - path
+      - "{{ pve_guest_evacuation_archive_volid }}"
+  register: pve_guest_evacuation_archive_path_raw
+  changed_when: false
+
+- name: Record the exact archive path
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archive_path: "{{ pve_guest_evacuation_archive_path_raw.stdout | trim }}"
+
+- name: Calculate archive byte size
+  ansible.builtin.command:
+    argv:
+      - stat
+      - -c
+      - '%s'
+      - "{{ pve_guest_evacuation_archive_path }}"
+  register: pve_guest_evacuation_archive_size_raw
+  changed_when: false
+
+- name: Calculate archive SHA-256
+  ansible.builtin.command:
+    argv:
+      - sha256sum
+      - "{{ pve_guest_evacuation_archive_path }}"
+  register: pve_guest_evacuation_archive_sha256_raw
+  changed_when: false
+
+- name: Verify the compressed archive stream
+  ansible.builtin.command:
+    argv:
+      - zstd
+      - -t
+      - "{{ pve_guest_evacuation_archive_path }}"
+  changed_when: false
+
+- name: Verify the decompressed QEMU archive with vma
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      zstd --quiet --decompress --stdout -- {{ pve_guest_evacuation_archive_path | quote }} | vma verify -
+    executable: /bin/bash
+  when: pve_guest_evacuation_guest_type == 'qemu'
+  changed_when: false
+
+- name: Extract archived Proxmox guest configuration
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - extractconfig
+      - "{{ pve_guest_evacuation_archive_volid }}"
+  register: pve_guest_evacuation_archive_config
+  changed_when: false
+
+- name: Assert archive configuration was extracted
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_archive_config.stdout | trim | length > 0
+    fail_msg: "Proxmox could not extract configuration from {{ pve_guest_evacuation_archive_volid }}."
+
+- name: Record verified archive evidence
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archive:
+      status: verified
+      volid: "{{ pve_guest_evacuation_archive_volid }}"
+      path: "{{ pve_guest_evacuation_archive_path }}"
+      size_bytes: "{{ pve_guest_evacuation_archive_size_raw.stdout | trim | int }}"
+      sha256: "{{ pve_guest_evacuation_archive_sha256_raw.stdout.split()[0] }}"
+      extracted_config: "{{ pve_guest_evacuation_archive_config.stdout }}"
+
+- name: Write verified archive evidence atomically
+  ansible.builtin.include_tasks: write_evidence.yml
+  vars:
+    pve_guest_evacuation_checkpoint: archive_verified

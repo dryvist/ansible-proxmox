@@ -1,9 +1,28 @@
 """Static safety contract for the frozen pve2 to pve540 host-bind copy."""
 
+import re
 from pathlib import Path
 
 
 ROLE = Path(__file__).resolve().parents[2] / "roles" / "pve_frozen_host_bind_copy"
+
+
+def _flattened_tasks() -> str:
+    """tasks/main.yml is a thin dispatcher over ordered phase files (split out
+    for the token budget); inline them so the grep-based assertions below see
+    the same content main.yml held before the split."""
+    text = (ROLE / "tasks" / "main.yml").read_text()
+    out = []
+    pos = 0
+    for match in re.finditer(
+        r"- name:.*\n\s*ansible\.builtin\.include_tasks:\s*(\S+)\s*\n", text
+    ):
+        out.append(text[pos : match.start()])
+        included = re.sub(r"^---\n", "", (ROLE / "tasks" / match.group(1)).read_text())
+        out.append(included)
+        pos = match.end()
+    out.append(text[pos:])
+    return "".join(out)
 
 
 def test_frozen_contract_covers_exactly_the_six_live_media_containers() -> None:
@@ -30,7 +49,7 @@ def test_frozen_contract_covers_exactly_the_six_live_media_containers() -> None:
 
 
 def test_live_guards_are_exact_and_fail_closed() -> None:
-    tasks = (ROLE / "tasks" / "main.yml").read_text()
+    tasks = _flattened_tasks()
 
     assert "inventory_hostname == 'pve2'" in tasks
     assert "pve_frozen_host_bind_copy_target_inventory_host == 'pve540'" in tasks
@@ -49,7 +68,7 @@ def test_live_guards_are_exact_and_fail_closed() -> None:
 
 
 def test_rsync_is_strict_one_way_and_non_destructive() -> None:
-    tasks = (ROLE / "tasks" / "main.yml").read_text()
+    tasks = _flattened_tasks()
 
     for flag in [
         "--archive",
@@ -81,7 +100,7 @@ def test_rsync_is_strict_one_way_and_non_destructive() -> None:
 
 
 def test_evidence_is_immutable_and_manifests_are_numeric() -> None:
-    tasks = (ROLE / "tasks" / "main.yml").read_text()
+    tasks = _flattened_tasks()
 
     assert "pve_frozen_host_bind_copy_run_id" in tasks
     assert "copy_gated" in tasks

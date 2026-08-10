@@ -1,14 +1,33 @@
 #!/usr/bin/env python3
 """Static safety contract for the standalone archive-only evacuation role."""
 
+import re
 from pathlib import Path
 
 
 ROLE = Path(__file__).resolve().parents[2] / "roles" / "pve_guest_evacuation"
 
 
+def _flattened_archive() -> str:
+    """tasks/archive.yml is a thin dispatcher over ordered phase files (split
+    out for the token budget); inline them so the grep-based assertions below
+    see the same content archive.yml held before the split."""
+    text = (ROLE / "tasks" / "archive.yml").read_text()
+    out = []
+    pos = 0
+    for match in re.finditer(
+        r"- name:.*\n\s*ansible\.builtin\.include_tasks:\s*(\S+)\s*\n", text
+    ):
+        out.append(text[pos : match.start()])
+        included = re.sub(r"^---\n", "", (ROLE / "tasks" / match.group(1)).read_text())
+        out.append(included)
+        pos = match.end()
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def test_archive_uses_stop_mode_and_has_snapshot_gate() -> None:
-    archive = (ROLE / "tasks" / "archive.yml").read_text()
+    archive = _flattened_archive()
 
     assert "Assert no ZFS snapshots exist on either evacuation node" in archive
     assert "- snapshot" in archive
@@ -33,8 +52,9 @@ def test_unsupported_phases_and_external_resources_are_fail_closed() -> None:
     assert "lxc_bind_mount_keys" in gates
     assert "lxc_unbacked_mount_keys" in gates
     assert "lxc_external_keys" in gates
-    assert "Read each node's independent staging storage view" in (ROLE / "tasks" / "archive.yml").read_text()
-    assert "vma verify -" in (ROLE / "tasks" / "archive.yml").read_text()
+    archive = _flattened_archive()
+    assert "Read each node's independent staging storage view" in archive
+    assert "vma verify -" in archive
 
 
 if __name__ == "__main__":
