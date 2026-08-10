@@ -1,0 +1,107 @@
+---
+# Part 3 of 4 (see restore.yml). Refuses to replace an existing target
+# VMID, derives the archive's backed-volume contract (and refuses an
+# automatic LXC mountpoint restore), then runs the actual restore command.
+# This is the one phase that changes pve540 state.
+- name: Check for an existing target QEMU VMID
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ pve_guest_evacuation_restore_target_node }}/qemu/{{ pve_guest_evacuation_restore_expected_vmid }}/config"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_restore_existing_qemu
+  changed_when: false
+  failed_when: false
+
+- name: Check for an existing target LXC VMID
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ pve_guest_evacuation_restore_target_node }}/lxc/{{ pve_guest_evacuation_restore_expected_vmid }}/config"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_restore_existing_lxc
+  changed_when: false
+  failed_when: false
+
+- name: Refuse to replace any existing pve540 guest VMID
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_restore_existing_qemu.rc != 0
+      - pve_guest_evacuation_restore_existing_lxc.rc != 0
+    fail_msg: >-
+      VMID {{ pve_guest_evacuation_restore_expected_vmid }} already exists on
+      pve540. This restore never overwrites or removes a target guest.
+    quiet: true
+
+- name: Derive the archive's backed volume-key contract
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_restore_volume_key_pattern: >-
+      {{ (pve_guest_evacuation_restore_expected_guest_type == 'qemu')
+         | ternary('^(ide|sata|scsi|virtio)[0-9]+$|^(efidisk|tpmstate)0$',
+                   '^(rootfs|mp[0-9]+)$') }}
+
+- name: Record the archive's backed volume keys
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_restore_expected_volume_keys: >-
+      {{ pve_guest_evacuation_restore_source_config | dict2items
+         | selectattr('key', 'match', pve_guest_evacuation_restore_volume_key_pattern)
+         | selectattr('value', 'match', '^[A-Za-z0-9][A-Za-z0-9._-]*:')
+         | map(attribute='key') | list | sort }}
+
+- name: Require at least one backed volume in the selected archive
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_restore_expected_volume_keys | length > 0
+    fail_msg: >-
+      The verified archive evidence contains no backed guest volumes. Preserve
+      it and investigate rather than restoring an incomplete guest.
+    quiet: true
+
+- name: Record backed LXC mountpoint volume keys
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_restore_lxc_mountpoint_volume_keys: >-
+      {{ pve_guest_evacuation_restore_expected_volume_keys
+         | select('match', '^mp[0-9]+$') | list }}
+
+- name: Refuse automatic restore of LXC archives with additional backed mounts
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_guest_evacuation_restore_expected_guest_type != 'lxc'
+        or pve_guest_evacuation_restore_lxc_mountpoint_volume_keys | length == 0
+        or pve_guest_evacuation_restore_lxc_mountpoint_strategy == 'manifested_copy'
+    fail_msg: >-
+      The selected LXC archive has backed mountpoint volumes
+      ({{ pve_guest_evacuation_restore_lxc_mountpoint_volume_keys | join(', ') }}).
+      Proxmox can recreate their volume configuration without restoring their
+      archived payload, so this role refuses the restore before creating a
+      target guest. Preserve the archive and use a volume-manifested restore
+      procedure that proves every mountpoint payload.
+    quiet: true
+
+- name: Restore the verified QEMU archive without starting it
+  ansible.builtin.command:
+    argv:
+      - qmrestore
+      - "{{ pve_guest_evacuation_restore_archive_path }}"
+      - "{{ pve_guest_evacuation_restore_expected_vmid | string }}"
+      - --storage
+      - "{{ pve_guest_evacuation_restore_target_storage }}"
+  when: pve_guest_evacuation_restore_expected_guest_type == 'qemu'
+  changed_when: true
+
+- name: Restore the verified LXC archive without starting it
+  ansible.builtin.command:
+    argv:
+      - pct
+      - restore
+      - "{{ pve_guest_evacuation_restore_expected_vmid | string }}"
+      - "{{ pve_guest_evacuation_restore_archive_path }}"
+      - --storage
+      - "{{ pve_guest_evacuation_restore_target_storage }}"
+  when: pve_guest_evacuation_restore_expected_guest_type == 'lxc'
+  changed_when: true

@@ -1,0 +1,125 @@
+---
+# Part 2 of 4 (see archive.yml). Proves pve2 and pve540 independently
+# expose the exact same backup-only pve3 staging endpoint, proves the
+# guest fits with headroom, then writes the preflight evidence checkpoint.
+- name: Read each node's independent staging storage view
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - /storage
+      - --output-format
+      - json
+  register: pve_guest_evacuation_storage_raw
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_source_node }}"
+    - "{{ pve_guest_evacuation_target_node }}"
+  changed_when: false
+
+- name: Assert the storage ID resolves exactly once on each node
+  ansible.builtin.assert:
+    that:
+      - node_staging_config | length == 1
+    fail_msg: >-
+      {{ item.item }} must independently configure exactly one
+      {{ pve_guest_evacuation_staging_storage }} storage record.
+  vars:
+    node_staging_config: >-
+      {{ (item.stdout | from_json)
+         | selectattr('storage', 'equalto', pve_guest_evacuation_staging_storage)
+         | list }}
+  loop: "{{ pve_guest_evacuation_storage_raw.results }}"
+
+- name: Assert each node uses the exact pve3 NFS staging endpoint
+  ansible.builtin.assert:
+    that:
+      - node_staging_config.type == 'nfs'
+      - node_staging_config.server == pve_guest_evacuation_staging_server
+      - node_staging_config.export == pve_guest_evacuation_staging_export
+      - "'backup' in node_staging_config.content"
+      - node_staging_config.nodes is not defined or item.item in node_staging_config.nodes.split(',')
+      - not (node_staging_config.disable | default(0) | bool)
+    fail_msg: >-
+      {{ item.item }} must independently use the exact enabled, backup-only
+      pve3 NFS endpoint. pve540 is standalone and is not inferred from pve2's
+      cluster-scoped storage record.
+  vars:
+    node_staging_config: >-
+      {{ ((item.stdout | from_json)
+         | selectattr('storage', 'equalto', pve_guest_evacuation_staging_storage)
+         | list)[0] }}
+  loop: "{{ pve_guest_evacuation_storage_raw.results }}"
+
+- name: Read staging storage status on pve2 and pve540
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ item }}/storage/{{ pve_guest_evacuation_staging_storage }}/status"
+      - --output-format
+      - json
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_source_node }}"
+    - "{{ pve_guest_evacuation_target_node }}"
+  register: pve_guest_evacuation_storage_status_raw
+  changed_when: false
+
+- name: Assert staging storage is active on both independent nodes
+  ansible.builtin.assert:
+    that:
+      - (item.stdout | from_json).active | int == 1
+    fail_msg: >-
+      {{ item.item }} cannot actively access
+      {{ pve_guest_evacuation_staging_storage }}.
+  loop: "{{ pve_guest_evacuation_storage_status_raw.results }}"
+
+- name: Record source staging configuration and status
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_staging_config: >-
+      {{ (((pve_guest_evacuation_storage_raw.results
+         | selectattr('item', 'equalto', pve_guest_evacuation_source_node)
+         | first).stdout | from_json)
+         | selectattr('storage', 'equalto', pve_guest_evacuation_staging_storage)
+         | list)[0] }}
+    pve_guest_evacuation_source_storage_status: >-
+      {{ (pve_guest_evacuation_storage_status_raw.results
+         | selectattr('item', 'equalto', pve_guest_evacuation_source_node)
+         | first).stdout | from_json }}
+
+- name: Assert guest size plus headroom fits staging
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_matching_resources[0].maxdisk | default(0) | int > 0
+      - >-
+        pve_guest_evacuation_source_storage_status.avail | int >=
+        ((pve_guest_evacuation_matching_resources[0].maxdisk | default(0) | int)
+        * (100 + pve_guest_evacuation_staging_headroom_percent | int) / 100) | round(0, 'ceil') | int
+    fail_msg: >-
+      Staging does not have the guest's declared disk size plus
+      {{ pve_guest_evacuation_staging_headroom_percent }} percent headroom.
+
+- name: Capture archive volume identifiers before backup
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ pve_guest_evacuation_source_node }}/storage/{{ pve_guest_evacuation_staging_storage }}/content"
+      - --content
+      - backup
+      - --output-format
+      - json
+  register: pve_guest_evacuation_archives_before_raw
+  changed_when: false
+
+- name: Record archive identifiers before backup
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archives_before: >-
+      {{ (pve_guest_evacuation_archives_before_raw.stdout | from_json)
+         | map(attribute='volid') | list }}
+
+- name: Write preflight evidence atomically
+  ansible.builtin.include_tasks: write_evidence.yml
+  vars:
+    pve_guest_evacuation_checkpoint: preflight_complete

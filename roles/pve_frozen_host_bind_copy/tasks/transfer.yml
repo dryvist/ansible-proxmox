@@ -1,0 +1,152 @@
+---
+# Part 7 of 7 (see main.yml). Copies each approved path once, verifies a
+# checksum dry run reports no remaining changes, proves source and target
+# manifests match, then writes the immutable verified-copy evidence.
+- name: Copy each approved source path once without snapshots or deletion
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - --archive
+      - --hard-links
+      - --acls
+      - --xattrs
+      - --numeric-ids
+      - --sparse
+      - --one-file-system
+      - --protect-args
+      - --itemize-changes
+      - --human-readable
+      - --stats
+      - -e
+      - "{{ pve_frozen_host_bind_copy_rsync_rsh }}"
+      - "{{ item }}/"
+      - "root@{{ pve_frozen_host_bind_copy_target_rsync_host }}:{{ item }}/"
+  loop: "{{ pve_frozen_host_bind_copy_paths }}"
+  register: pve_frozen_host_bind_copy_rsync_copy
+  changed_when: >-
+    pve_frozen_host_bind_copy_rsync_copy.stdout is search('^>f', multiline=True)
+
+- name: Verify final rsync dry run has no remaining changes
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - --archive
+      - --hard-links
+      - --acls
+      - --xattrs
+      - --numeric-ids
+      - --sparse
+      - --one-file-system
+      - --protect-args
+      - --checksum
+      - --dry-run
+      - --itemize-changes
+      - -e
+      - "{{ pve_frozen_host_bind_copy_rsync_rsh }}"
+      - "{{ item }}/"
+      - "root@{{ pve_frozen_host_bind_copy_target_rsync_host }}:{{ item }}/"
+  changed_when: false
+  loop: "{{ pve_frozen_host_bind_copy_paths }}"
+  register: pve_frozen_host_bind_copy_rsync_verify
+
+- name: Assert final rsync dry runs report no changes
+  ansible.builtin.assert:
+    that: [item.stdout | trim | length == 0]
+    fail_msg: "Final rsync dry run for {{ item.item }} reports remaining changes."
+  loop: "{{ pve_frozen_host_bind_copy_rsync_verify.results }}"
+
+- name: Build deterministic source manifests and content hashes
+  ansible.builtin.shell: |
+    set -o pipefail
+    cd -- {{ item | quote }}
+    printf 'metadata '
+    find . -xdev -printf '%y\t%m\t%u\t%g\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+    printf 'content '
+    find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
+    printf 'hardlinks '
+    find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
+  args:
+    executable: /bin/bash
+  changed_when: false
+  loop: "{{ pve_frozen_host_bind_copy_paths }}"
+  register: pve_frozen_host_bind_copy_source_manifests
+
+- name: Build deterministic target manifests and content hashes
+  ansible.builtin.shell: |
+    set -o pipefail
+    cd -- {{ item | quote }}
+    printf 'metadata '
+    find . -xdev -printf '%y\t%m\t%u\t%g\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+    printf 'content '
+    find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
+    printf 'hardlinks '
+    find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ pve_frozen_host_bind_copy_target_inventory_host }}"
+  changed_when: false
+  loop: "{{ pve_frozen_host_bind_copy_paths }}"
+  register: pve_frozen_host_bind_copy_target_manifests
+
+- name: Require source and target manifests to match exactly
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.stdout ==
+        (pve_frozen_host_bind_copy_target_manifests.results
+        | selectattr('item', 'equalto', item.item)
+        | map(attribute='stdout') | first)
+    fail_msg: "Manifest/hash comparison failed for {{ item.item }}."
+  loop: "{{ pve_frozen_host_bind_copy_source_manifests.results }}"
+
+- name: Write immutable reconstruction mapping root-only on pve3
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'schema_version': 1,
+        'run_id': pve_frozen_host_bind_copy_run_id,
+        'source_node': pve_frozen_host_bind_copy_source_inventory_host,
+        'target_node': pve_frozen_host_bind_copy_target_inventory_host,
+        'allowed_mounts': pve_frozen_host_bind_copy_allowed_mounts,
+        'dataset_mappings': pve_frozen_host_bind_copy_dataset_mappings
+      } | to_nice_json }}
+    dest: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}/reconstruction-mapping.json"
+    force: false
+    owner: root
+    group: root
+    mode: '0600'
+  delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+
+- name: Write immutable verified copy and manifest evidence root-only on pve3
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'schema_version': 1,
+        'checkpoint': 'copy_verified',
+        'run_id': pve_frozen_host_bind_copy_run_id,
+        'source_node': pve_frozen_host_bind_copy_source_inventory_host,
+        'target_node': pve_frozen_host_bind_copy_target_inventory_host,
+        'target_rsync_host': pve_frozen_host_bind_copy_target_rsync_host,
+        'source_pool': pve_frozen_host_bind_copy_source_pool,
+        'target_pool': pve_frozen_host_bind_copy_target_pool,
+        'copied_paths': pve_frozen_host_bind_copy_paths,
+        'source_dataset_used_bytes': pve_frozen_host_bind_copy_source_used.results
+          | map(attribute='stdout') | map('trim') | map('int') | list,
+        'target_dataset_available_bytes': pve_frozen_host_bind_copy_target_available.results
+          | map(attribute='stdout') | map('trim') | map('int') | list,
+        'capacity_margin_bytes': pve_frozen_host_bind_copy_capacity_margin_bytes | int,
+        'rsync_version': pve_frozen_host_bind_copy_rsync_version.stdout_lines,
+        'rsync_copy': pve_frozen_host_bind_copy_rsync_copy.results | map(attribute='stdout_lines') | list,
+        'rsync_checksum_dry_run': pve_frozen_host_bind_copy_rsync_verify.results
+          | map(attribute='stdout_lines') | list,
+        'source_manifests': pve_frozen_host_bind_copy_source_manifests.results
+          | map(attribute='stdout_lines') | list,
+        'target_manifests': pve_frozen_host_bind_copy_target_manifests.results
+          | map(attribute='stdout_lines') | list
+      } | to_nice_json }}
+    dest: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}/copy-verified.json"
+    force: false
+    owner: root
+    group: root
+    mode: '0600'
+  delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"

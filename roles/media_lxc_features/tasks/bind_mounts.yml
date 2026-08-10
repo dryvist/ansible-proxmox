@@ -1,0 +1,93 @@
+---
+# Part 2 of 5 (see configure_container.yml). Sets each desired bind-mount
+# (skipping any whose host source is missing, per mount_preflight.yml),
+# then prunes any orphaned mpN slot left behind when the mounts list shrinks.
+# ---------------------------------------------------------------------------
+# Bind-mounts (mp0, mp1, ...) — host path -> in-container target, optional ro
+# ---------------------------------------------------------------------------
+# Desired line shape (matches `pct config` readback, e.g. CT 252):
+#   mpN: <host>,mp=<target>[,ro=1]
+# We compare the desired mp string against the current value of that exact mpN
+# slot and only `pct set` when missing or different.
+
+- name: "Set bind-mounts on container {{ media_ct.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      pct set {{ media_ct.key }}
+      --mp{{ media_mp_idx }}
+      {{ media_mp.src }},mp={{ media_mp.dst }}{{ ',ro=1' if (media_mp.ro | default(false)) else '' }}
+  loop: "{{ media_ct.value.mounts | default([]) }}"
+  loop_control:
+    loop_var: media_mp
+    index_var: media_mp_idx
+    label: "{{ media_ct.key }} mp{{ media_mp_idx }}: {{ media_mp.src }} -> {{ media_mp.dst }}"
+  vars:
+    media_mp_desired: >-
+      {{ media_mp.src }},mp={{ media_mp.dst }}{{ ',ro=1' if (media_mp.ro | default(false)) else '' }}
+    media_mp_current: >-
+      {{
+        media_lxc_features_cfg.stdout_lines
+        | select('match', '^mp' ~ media_mp_idx ~ ':')
+        | map('regex_replace', '^mp' ~ media_mp_idx ~ ':\s*', '')
+        | list | first | default('')
+      }}
+  when:
+    - media_mp_current != media_mp_desired
+    # Never mount a host source that does not exist — `pct` would auto-create an
+    # empty dir and shadow a live config. A missing dataset is skipped (warned above).
+    - media_lxc_features_src_exists[media_mp.src] | default(false)
+  changed_when: true
+  notify: Restart changed media containers
+  register: media_lxc_features_mp_set
+  tags:
+    - media_lxc_features
+
+- name: "Record bind-mount change for container {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"
+  when: media_lxc_features_mp_set is defined and media_lxc_features_mp_set.changed
+  tags:
+    - media_lxc_features
+
+# ---------------------------------------------------------------------------
+# Prune orphaned bind-mount slots left behind when the mounts list SHRINKS
+# ---------------------------------------------------------------------------
+# Bind-mounts are POSITION-indexed: the loop above assigns mp0, mp1, ... by the
+# desired list's order. When that list shrinks (an entry removed), every slot at
+# an index >= the new length is orphaned — `pct set --mpN` rewrites the lower
+# slots but never deletes the now-surplus higher ones, leaving a stale duplicate
+# mount on the live container. Parse the mpN indices actually present and delete
+# any the (now shorter) desired list no longer reaches.
+- name: "Compute orphaned bind-mount slot indices on {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    media_lxc_features_stale_mp_idxs: >-
+      {{
+        media_lxc_features_cfg.stdout_lines
+        | select('match', '^mp[0-9]+:')
+        | map('regex_replace', '^mp([0-9]+):.*$', '\1')
+        | map('int')
+        | select('ge', media_ct.value.mounts | default([]) | list | length)
+        | list
+      }}
+  tags:
+    - media_lxc_features
+
+- name: "Delete orphaned bind-mount slots on {{ media_ct.key }}"
+  ansible.builtin.command:
+    cmd: "pct set {{ media_ct.key }} --delete mp{{ media_stale_mp_idx }}"
+  loop: "{{ media_lxc_features_stale_mp_idxs }}"
+  loop_control:
+    loop_var: media_stale_mp_idx
+    label: "{{ media_ct.key }} delete mp{{ media_stale_mp_idx }}"
+  changed_when: true
+  notify: Restart changed media containers
+  register: media_lxc_features_mp_del
+  tags:
+    - media_lxc_features
+
+- name: "Record orphaned bind-mount deletion for container {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"
+  when: media_lxc_features_mp_del is defined and media_lxc_features_mp_del.changed
+  tags:
+    - media_lxc_features

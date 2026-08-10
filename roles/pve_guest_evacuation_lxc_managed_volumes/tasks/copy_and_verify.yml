@@ -1,0 +1,126 @@
+---
+# Part 5 of 5 (see transfer.yml). Copies each volume once, proves a checksum
+# dry run reports no remaining differences, proves source and target
+# manifests match byte-for-byte, then writes the verified-transfer evidence.
+- name: Copy each stopped-source managed volume without overwrite or deletion
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - --archive
+      - --hard-links
+      - --acls
+      - --xattrs
+      - --numeric-ids
+      - --sparse
+      - --one-file-system
+      - --protect-args
+      - --checksum
+      - --itemize-changes
+      - --stats
+      - -e
+      - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_rsh }}"
+      - "{{ item.source_path }}/"
+      - "root@{{ pve_guest_evacuation_lxc_managed_volumes_target_rsync_host }}:{{ item.target_path }}/"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_rsync_copy
+  changed_when: true
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length == 0
+
+- name: Require checksum dry run to report no remaining differences
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - --archive
+      - --hard-links
+      - --acls
+      - --xattrs
+      - --numeric-ids
+      - --sparse
+      - --one-file-system
+      - --protect-args
+      - --checksum
+      - --dry-run
+      - --delete
+      - --itemize-changes
+      - -e
+      - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_rsh }}"
+      - "{{ item.source_path }}/"
+      - "root@{{ pve_guest_evacuation_lxc_managed_volumes_target_rsync_host }}:{{ item.target_path }}/"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_rsync_verify
+  changed_when: false
+
+- name: Assert checksum dry runs have no remaining changes
+  ansible.builtin.assert:
+    that: [item.stdout | trim | length == 0]
+    fail_msg: >-
+      Final checksum dry run for {{ item.item.key }} reports remaining changes.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_verify.results }}"
+
+- name: Build deterministic source byte file metadata ACL xattr manifests
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd -- {{ item.source_path | quote }}
+    printf 'bytes '
+    find . -xdev -type f -printf '%s\n' | awk '{ total += $1 } END { print total + 0 }'
+    printf 'files '
+    find . -xdev -type f -printf . | wc -c
+    printf 'metadata '
+    find . -xdev -printf '%y\t%m\t%U\t%G\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+    printf 'content '
+    find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
+    printf 'hardlinks '
+    find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
+    printf 'acl '
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum
+    printf 'xattr '
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfattr --absolute-names --no-dereference --encoding=hex -d -m - | sha256sum
+  args:
+    executable: /bin/bash
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_source_manifests
+  changed_when: false
+
+- name: Build deterministic target byte file metadata ACL xattr manifests
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd -- {{ item.target_path | quote }}
+    printf 'bytes '
+    find . -xdev -type f -printf '%s\n' | awk '{ total += $1 } END { print total + 0 }'
+    printf 'files '
+    find . -xdev -type f -printf . | wc -c
+    printf 'metadata '
+    find . -xdev -printf '%y\t%m\t%U\t%G\t%s\t%T@\t%l\t%p\0' | LC_ALL=C sort -z | sha256sum
+    printf 'content '
+    find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum
+    printf 'hardlinks '
+    find . -xdev -type f -links +1 -printf '%i\t%p\0' | LC_ALL=C perl -0ne 's/\0\z//; ($inode, $path) = split /\t/, $_, 2; push @{$groups{$inode}}, $path; END { for my $group (sort map { join("\0", sort @{$_}) } values %groups) { print "$group\0\0"; } }' | sha256sum
+    printf 'acl '
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum
+    printf 'xattr '
+    find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfattr --absolute-names --no-dereference --encoding=hex -d -m - | sha256sum
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_target_manifests
+  changed_when: false
+
+- name: Require exact source and target manifest equality for every volume
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.stdout == (pve_guest_evacuation_lxc_managed_volumes_target_manifests.results
+                        | selectattr('item.key', 'equalto', item.item.key)
+                        | map(attribute='stdout') | first)
+    fail_msg: >-
+      Manifest comparison failed for {{ item.item.key }}. Preserve the stopped
+      target for investigation; this workflow never retries into it.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_source_manifests.results }}"
+
+- name: Write immutable verified managed-volume transfer evidence
+  ansible.builtin.include_tasks: write_evidence.yml
+  vars:
+    pve_guest_evacuation_lxc_managed_volumes_checkpoint: transfer_verified

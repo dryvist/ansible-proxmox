@@ -1,0 +1,100 @@
+---
+# Part 2 of 4 (see restore.yml). Resolves the archive on pve540, proves its
+# SHA-256 and extracted configuration match the pve3 evidence, and proves
+# pve540 carries no ZFS snapshots before any restore command runs.
+- name: Resolve the selected archive path through pve540 storage
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - path
+      - "{{ pve_guest_evacuation_restore_archive.volid }}"
+  register: pve_guest_evacuation_restore_archive_path_raw
+  changed_when: false
+
+- name: Record the pve540 archive path
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_restore_archive_path: "{{ pve_guest_evacuation_restore_archive_path_raw.stdout | trim }}"
+
+- name: Require a nonempty zstd archive path on pve540
+  ansible.builtin.stat:
+    path: "{{ pve_guest_evacuation_restore_archive_path }}"
+  register: pve_guest_evacuation_restore_archive_stat
+
+- name: Verify the selected archive file identity
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_restore_archive_path is match('^/[^ ]+[.]zst$')
+      - pve_guest_evacuation_restore_archive_stat.stat.isreg | default(false)
+      - pve_guest_evacuation_restore_archive_stat.stat.size | int > 0
+    fail_msg: >-
+      pve540 cannot resolve the selected verified archive as a nonempty zstd
+      file. Do not restore from another archive or storage path.
+    quiet: true
+
+- name: Calculate the pve540 archive SHA-256
+  ansible.builtin.command:
+    argv:
+      - sha256sum
+      - "{{ pve_guest_evacuation_restore_archive_path }}"
+  register: pve_guest_evacuation_restore_archive_sha256_raw
+  changed_when: false
+
+- name: Require the archive SHA-256 recorded in pve3 evidence
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_restore_archive_sha256_raw.stdout.split()[0] == pve_guest_evacuation_restore_expected_archive_sha256
+    fail_msg: >-
+      The archive SHA-256 on pve540 differs from the pve3 verified archive
+      evidence. Preserve both artifacts; no restore was attempted.
+    quiet: true
+
+- name: Verify the compressed archive stream
+  ansible.builtin.command:
+    argv:
+      - zstd
+      - -t
+      - "{{ pve_guest_evacuation_restore_archive_path }}"
+  changed_when: false
+
+- name: Extract the archived Proxmox configuration on pve540
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - extractconfig
+      - "{{ pve_guest_evacuation_restore_archive.volid }}"
+  register: pve_guest_evacuation_restore_archive_config_raw
+  changed_when: false
+
+- name: Require the archived configuration recorded in pve3 evidence
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_guest_evacuation_restore_archive_config_raw.stdout | trim
+        == pve_guest_evacuation_restore_archive.extracted_config | trim
+    fail_msg: >-
+      pve540 extracted configuration differs from the configuration recorded
+      with the verified archive. Preserve the archive and investigate the
+      evidence mismatch before restoring.
+    quiet: true
+
+- name: Assert no ZFS snapshots exist on standalone pve540
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -t
+      - snapshot
+      - -o
+      - name
+  register: pve_guest_evacuation_restore_snapshots
+  changed_when: false
+
+- name: Refuse a restore while pve540 has ZFS snapshots
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_restore_snapshots.stdout | trim | length == 0
+    fail_msg: >-
+      pve540 has ZFS snapshots. This restore neither creates nor uses snapshots;
+      preserve the evidence and remove that ambiguity before retrying.
+    quiet: true

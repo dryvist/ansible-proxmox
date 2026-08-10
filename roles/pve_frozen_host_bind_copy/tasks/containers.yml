@@ -1,0 +1,89 @@
+---
+# Part 3 of 7 (see main.yml). Confirms the six approved containers are
+# stopped and carry only their exact approved bind/device/TUN entries —
+# runs after transport.yml so the path list it needs already exists.
+- name: Read the exact approved containers from Proxmox
+  ansible.builtin.command:
+    argv:
+      - pct
+      - config
+      - "{{ item.key }}"
+  changed_when: false
+  loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items }}"
+  register: pve_frozen_host_bind_copy_pct_configs
+
+- name: Require every approved container to be stopped
+  ansible.builtin.command:
+    argv:
+      - pct
+      - status
+      - "{{ item.key }}"
+  changed_when: false
+  loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items }}"
+  register: pve_frozen_host_bind_copy_pct_statuses
+
+- name: Assert all six approved containers are stopped
+  ansible.builtin.assert:
+    that:
+      - item.stdout == 'status: stopped'
+    fail_msg: "{{ item.item.key }} is not stopped; refusing an unfrozen host-bind copy."
+  loop: "{{ pve_frozen_host_bind_copy_pct_statuses.results }}"
+
+- name: Require each exact approved host bind line
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((pve_frozen_host_bind_copy_pct_configs.results
+        | selectattr('item.key', 'equalto', item.0)
+        | map(attribute='stdout_lines') | first
+        | select('match', '^mp[0-9]+: ' ~ (item.1.source | regex_escape)
+          ~ ',mp=' ~ (item.1.target | regex_escape) ~ '$')
+        | list | length) == 1)
+    fail_msg: >-
+      {{ item.0 }} does not have exactly one approved live bind line for
+      {{ item.1.source }} -> {{ item.1.target }}.
+  loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items | subelements('value') }}"
+
+- name: Reject extra bind mounts on an approved container
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((pve_frozen_host_bind_copy_pct_configs.results | selectattr('item.key', 'equalto', item.key)
+        | map(attribute='stdout_lines') | first
+        | select('match', '^mp[0-9]+:') | list | length) == (item.value | length))
+    fail_msg: "{{ item.key }} has an unapproved host bind mount."
+  loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items }}"
+
+- name: Reject unapproved container device or raw mount mappings
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((pve_frozen_host_bind_copy_pct_configs.results | selectattr('item.key', 'equalto', item.key)
+        | map(attribute='stdout_lines') | first
+        | select('match', '^dev[0-9]+:') | list | length) == 0)
+      - >-
+        item.key == '725140' or
+        ((pve_frozen_host_bind_copy_pct_configs.results
+        | selectattr('item.key', 'equalto', item.key)
+        | map(attribute='stdout_lines') | first
+        | select('match', '^lxc\\.(mount\\.entry|cgroup2\\.devices\\.allow|hook\\.mount):')
+        | list | length) == 0)
+    fail_msg: "{{ item.key }} has an unapproved external device or mount entry."
+  loop: "{{ pve_frozen_host_bind_copy_allowed_mounts | dict2items }}"
+
+- name: Require the exact approved download-vpn TUN entries
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pve_frozen_host_bind_copy_pct_configs.results
+        | selectattr('item.key', 'equalto', '725140')
+        | map(attribute='stdout_lines') | first
+        | select('match', '^lxc\\.mount\\.entry:') | list)
+        == [pve_frozen_host_bind_copy_tun_mount_line]
+      - >-
+        (pve_frozen_host_bind_copy_pct_configs.results
+        | selectattr('item.key', 'equalto', '725140')
+        | map(attribute='stdout_lines') | first
+        | select('match', '^lxc\\.cgroup2\\.devices\\.allow:') | list)
+        == [pve_frozen_host_bind_copy_tun_cgroup_line]
+    fail_msg: "725140 no longer has exactly its approved TUN-only device entries."

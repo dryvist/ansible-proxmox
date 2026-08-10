@@ -1,0 +1,97 @@
+---
+# Part 6 of 7 (see main.yml). Creates the immutable, root-only pve3
+# evidence run directory and records the pre-copy gate — everything
+# checked in parts 1-5 — before any data is copied.
+- name: Read the pve3 frozen-copy evidence root metadata
+  ansible.builtin.stat:
+    path: "{{ pve_frozen_host_bind_copy_evidence_dir }}"
+  delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+  changed_when: false
+  register: pve_frozen_host_bind_copy_evidence_root
+
+- name: Require an absent or root-only pve3 frozen-copy evidence root
+  ansible.builtin.assert:
+    that:
+      - >-
+        not pve_frozen_host_bind_copy_evidence_root.stat.exists
+        or
+        (pve_frozen_host_bind_copy_evidence_root.stat.isdir
+         and not pve_frozen_host_bind_copy_evidence_root.stat.islnk
+         and pve_frozen_host_bind_copy_evidence_root.stat.pw_name == 'root'
+         and pve_frozen_host_bind_copy_evidence_root.stat.gr_name == 'root'
+         and pve_frozen_host_bind_copy_evidence_root.stat.mode == '0700')
+    fail_msg: >-
+      pve3 frozen-copy evidence root must be absent or an existing,
+      root-owned, non-symlink directory with mode 0700.
+
+- name: Create the root-only pve3 frozen-copy evidence root
+  ansible.builtin.file:
+    path: "{{ pve_frozen_host_bind_copy_evidence_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+
+- name: Select the immutable pve3 evidence run directory
+  ansible.builtin.set_fact:
+    pve_frozen_host_bind_copy_evidence_run_dir: >-
+      {{ pve_frozen_host_bind_copy_evidence_dir }}/{{ pve_frozen_host_bind_copy_run_id }}
+
+- name: Require a previously unused pve3 evidence run identifier
+  ansible.builtin.stat:
+    path: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}"
+  delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+  changed_when: false
+  register: pve_frozen_host_bind_copy_evidence_run_dir_stat
+
+- name: Refuse to overwrite existing pve3 frozen-copy evidence
+  ansible.builtin.assert:
+    that:
+      - not pve_frozen_host_bind_copy_evidence_run_dir_stat.stat.exists
+    fail_msg: >-
+      Evidence run {{ pve_frozen_host_bind_copy_run_id }} already exists on
+      pve3. Preserve it and choose a new run identifier.
+
+- name: Create the immutable root-only pve3 evidence run directory
+  ansible.builtin.file:
+    path: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"
+
+- name: Record the pre-copy gate and reconstruction contract on pve3
+  ansible.builtin.copy:
+    content: >-
+      {{ {
+        'schema_version': 1,
+        'checkpoint': 'copy_gated',
+        'run_id': pve_frozen_host_bind_copy_run_id,
+        'source_node': pve_frozen_host_bind_copy_source_inventory_host,
+        'target_node': pve_frozen_host_bind_copy_target_inventory_host,
+        'target_rsync_host': pve_frozen_host_bind_copy_target_rsync_host,
+        'allowed_mounts': pve_frozen_host_bind_copy_allowed_mounts,
+        'dataset_mappings': pve_frozen_host_bind_copy_dataset_mappings,
+        'pct_configs': pve_frozen_host_bind_copy_pct_configs.results
+          | map(attribute='stdout_lines') | list,
+        'pct_statuses': pve_frozen_host_bind_copy_pct_statuses.results
+          | map(attribute='stdout') | map('trim') | list,
+        'source_snapshots': pve_frozen_host_bind_copy_source_snapshots.stdout_lines,
+        'target_snapshots': pve_frozen_host_bind_copy_target_snapshots.stdout_lines,
+        'pool_freeing_bytes': pve_frozen_host_bind_copy_freeing.results
+          | map(attribute='stdout') | map('trim') | map('int') | list,
+        'source_dataset_used_bytes': pve_frozen_host_bind_copy_source_used.results
+          | map(attribute='stdout') | map('trim') | map('int') | list,
+        'target_dataset_available_bytes': pve_frozen_host_bind_copy_target_available.results
+          | map(attribute='stdout') | map('trim') | map('int') | list,
+        'capacity_margin_bytes': pve_frozen_host_bind_copy_capacity_margin_bytes | int,
+        'rsync_version': pve_frozen_host_bind_copy_rsync_version.stdout_lines
+      } | to_nice_json }}
+    dest: "{{ pve_frozen_host_bind_copy_evidence_run_dir }}/copy-gated.json"
+    force: false
+    owner: root
+    group: root
+    mode: '0600'
+  delegate_to: "{{ pve_frozen_host_bind_copy_evidence_inventory_host }}"

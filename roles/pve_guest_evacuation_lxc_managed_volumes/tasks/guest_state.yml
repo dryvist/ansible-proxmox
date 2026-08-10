@@ -1,0 +1,97 @@
+---
+# Part 2 of 5 (see transfer.yml). Reads current source/target LXC state,
+# requires the stopped-source + stopped-restored-target contract, and
+# builds the exact source-to-target managed-volume mount mappings.
+- name: Read current source and target LXC configuration and status
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ item.node }}/lxc/{{ pve_guest_evacuation_lxc_managed_volumes_expected_vmid }}/{{ item.endpoint }}"
+      - --output-format
+      - json
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node if item.node == pve_guest_evacuation_lxc_managed_volumes_target_node else inventory_hostname }}"
+  loop:
+    - { side: source, node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}", endpoint: config }
+    - { side: source, node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}", endpoint: status/current }
+    - { side: target, node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}", endpoint: config }
+    - { side: target, node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}", endpoint: status/current }
+  register: pve_guest_evacuation_lxc_managed_volumes_guest_raw
+  changed_when: false
+
+- name: Decode current source and target LXC state
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_source_config: "{{ pve_guest_evacuation_lxc_managed_volumes_guest_raw.results[0].stdout | from_json }}"
+    pve_guest_evacuation_lxc_managed_volumes_source_status: "{{ pve_guest_evacuation_lxc_managed_volumes_guest_raw.results[1].stdout | from_json }}"
+    pve_guest_evacuation_lxc_managed_volumes_target_config: "{{ pve_guest_evacuation_lxc_managed_volumes_guest_raw.results[2].stdout | from_json }}"
+    pve_guest_evacuation_lxc_managed_volumes_target_status: "{{ pve_guest_evacuation_lxc_managed_volumes_guest_raw.results[3].stdout | from_json }}"
+
+- name: Require final stopped source and stopped restored target
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_source_config.digest == pve_guest_evacuation_lxc_managed_volumes_expected_config_digest
+      - pve_guest_evacuation_lxc_managed_volumes_source_status.status == 'stopped'
+      - pve_guest_evacuation_lxc_managed_volumes_target_status.status == 'stopped'
+      - pve_guest_evacuation_lxc_managed_volumes_target_config.digest == pve_guest_evacuation_lxc_managed_volumes_restore_evidence.target.config_digest
+    fail_msg: >-
+      Source configuration changed or either LXC is running. The final capture
+      requires the archived pve2 configuration and both containers stopped.
+    quiet: true
+
+- name: Record source managed mountpoint keys
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_source_mount_items: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_source_config | dict2items
+         | selectattr('key', 'match', '^mp[0-9]+$') | list | sort(attribute='key') }}
+    pve_guest_evacuation_lxc_managed_volumes_target_mount_items: >-
+      {{ pve_guest_evacuation_lxc_managed_volumes_target_config | dict2items
+         | selectattr('key', 'match', '^mp[0-9]+$') | list | sort(attribute='key') }}
+
+- name: Require an exact managed-volume configuration contract
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_source_mount_items | length > 0
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_source_mount_items | map(attribute='key') | list
+        == pve_guest_evacuation_lxc_managed_volumes_target_mount_items | map(attribute='key') | list
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_source_mount_items
+        | map(attribute='value') | select('match', '^[A-Za-z0-9][A-Za-z0-9._-]*:[^,]+,(?:[^,]+,)*mp=/[^,]+') | list | length
+        == pve_guest_evacuation_lxc_managed_volumes_source_mount_items | length
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_target_mount_items
+        | map(attribute='value') | select('match', '^' ~ (pve_guest_evacuation_lxc_managed_volumes_target_storage | regex_escape) ~ ':[^,]+,(?:[^,]+,)*mp=/[^,]+') | list | length
+        == pve_guest_evacuation_lxc_managed_volumes_target_mount_items | length
+    fail_msg: >-
+      The source and target do not have exactly the same managed mpN keys, or
+      a mount is external, unbacked, or outside the explicit target storage.
+    quiet: true
+
+- name: Build exact source-to-target managed-volume mappings
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_mappings: >-
+      {{ (pve_guest_evacuation_lxc_managed_volumes_mappings | default([])) + [
+        {
+          'key': item.key,
+          'source_config': item.value,
+          'target_config': (pve_guest_evacuation_lxc_managed_volumes_target_mount_items
+                            | selectattr('key', 'equalto', item.key)
+                            | map(attribute='value') | first),
+          'source_volid': (item.value | regex_replace(',.*$', '')),
+          'target_volid': ((pve_guest_evacuation_lxc_managed_volumes_target_mount_items
+                            | selectattr('key', 'equalto', item.key)
+                            | map(attribute='value') | first | regex_replace(',.*$', ''))),
+          'normalized_mount_contract': (item.value | regex_replace('^[^,]+', 'VOLUME'))
+        }
+      ] }}
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_source_mount_items }}"
+
+- name: Require target mounts preserve every source mount option
+  ansible.builtin.assert:
+    that:
+      - item.normalized_mount_contract == item.target_config | regex_replace('^[^,]+', 'VOLUME')
+    fail_msg: >-
+      {{ item.key }} changes mount semantics between pve2 and pve540. Preserve
+      the stopped target and correct its configuration before transferring.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_mappings }}"

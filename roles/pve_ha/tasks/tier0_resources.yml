@@ -1,0 +1,107 @@
+---
+# Included from main.yml's "Configure cluster-wide HA" block (inherits its
+# when/tags). Part 1 of 3: resolves the tier-0 SID set (skipping replica-less
+# singletons) and adds/enforces it in ha-manager.
+# Reuse the same hostname -> vmid projection load_tofu.yml builds for the
+# media/GPU feature maps, so a VMID renumber flows through with no edit.
+- name: Map container hostname -> vmid from the tofu inventory
+  ansible.builtin.set_fact:
+    pve_ha_vmid_by_host: >-
+      {{
+        dict(
+          (containers_from_tofu | default({})) | dict2items
+          | selectattr('value.vmid', 'defined')
+          | map(attribute='key') | list
+          | zip(
+              (containers_from_tofu | default({})) | dict2items
+              | selectattr('value.vmid', 'defined')
+              | map(attribute='value.vmid') | list
+            )
+        )
+      }}
+
+# A singleton app guest is only safe under HA if it has somewhere to be
+# relocated TO. Its two safety mechanisms — the pvesr replica and the strict
+# node-affinity pin — are both conditional on the guest being homed in
+# pve_ha_replication_pair, but `ha-manager add` below was not. A guest that
+# failed that condition still got added, ending up HA-managed with neither a
+# replica nor a pin.
+#
+# That is strictly WORSE than leaving it out of HA. On any node hiccup,
+# ha-manager relocates it to a node holding no replica, where it cannot
+# start and parks in `error` — and the source node has already self-fenced
+# via the HA watchdog to get there. Observed 2026-07-26: one such guest put
+# its home node into a reset loop, nine hard resets in a day.
+- name: Resolve singleton app guests with no viable replica
+  ansible.builtin.set_fact:
+    pve_ha_unsafe_singletons: >-
+      {{ pve_ha_replication_ct_hostnames
+         | reject('in',
+             (containers_from_tofu | default({})) | dict2items
+             | selectattr('value.vmid', 'defined')
+             | selectattr('value.node', 'defined')
+             | selectattr('value.node', 'in', pve_ha_replication_pair)
+             | map(attribute='key') | list)
+         | list }}
+
+- name: Refuse to place a replica-less singleton under HA
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: NOT adding {{ pve_ha_unsafe_singletons }} to HA — each is a
+      singleton with no pvesr replica on {{ pve_ha_replication_pair }}, so
+      ha-manager could only relocate it to a node that cannot start it.
+      Give the guest a home node inside the pair (or a working replication
+      job), then re-converge. If one is ALREADY under HA, remove it until
+      that is true: ha-manager remove ct:<vmid>
+  when: pve_ha_unsafe_singletons | length > 0
+
+- name: Resolve managed tier-0 SIDs (present hosts only) + any extra SIDs
+  ansible.builtin.set_fact:
+    pve_ha_managed_sids: >-
+      {{ (pve_ha_ct_hostnames | reject('in', pve_ha_unsafe_singletons)
+          | select('in', pve_ha_vmid_by_host)
+          | map('extract', pve_ha_vmid_by_host) | map('string')
+          | map('regex_replace', '^(.+)$', 'ct:\1') | list)
+         + (pve_ha_extra_sids | default([])) }}
+
+- name: Warn about tier-0 hostnames missing from the inventory (skipped)
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: these tier-0 hostnames are not in the tofu inventory and are
+      SKIPPED: {{ pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host)
+      | list }}
+  when: (pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host) | list)
+    | length > 0
+
+- name: Read current HA resources
+  ansible.builtin.command: pvesh get /cluster/ha/resources --output-format json
+  register: pve_ha_resources_raw
+  changed_when: false
+
+- name: Parse existing HA resource SIDs
+  ansible.builtin.set_fact:
+    pve_ha_existing_sids: >-
+      {{ (pve_ha_resources_raw.stdout | from_json)
+         | map(attribute='sid') | list }}
+
+- name: Add tier-0 guests to HA (only those not yet managed)
+  ansible.builtin.command: >-
+    ha-manager add {{ item }}
+    --state {{ pve_ha_state }}
+    --max_restart {{ pve_ha_max_restart }}
+    --max_relocate {{ pve_ha_max_relocate }}
+  loop: "{{ pve_ha_managed_sids }}"
+  when: item not in pve_ha_existing_sids
+  changed_when: true
+
+- name: Enforce HA params on already-managed guests
+  ansible.builtin.command: >-
+    ha-manager set {{ item }}
+    --state {{ pve_ha_state }}
+    --max_restart {{ pve_ha_max_restart }}
+    --max_relocate {{ pve_ha_max_relocate }}
+  loop: "{{ pve_ha_managed_sids }}"
+  when: item in pve_ha_existing_sids
+  # ponytail: ha-manager set is idempotent server-side; we do not diff each
+  # field, so report unchanged rather than a spurious change every converge.
+  changed_when: false
