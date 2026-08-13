@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.75.1](https://github.com/dryvist/ansible-proxmox/compare/v1.75.0...v1.75.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* **sanoid:** cover the postgres dump archive, which had no snapshot at all ([#608](https://github.com/dryvist/ansible-proxmox/issues/608)) ([ea0b70a](https://github.com/dryvist/ansible-proxmox/commit/ea0b70adad0d0441992798891a197cdded2d740b))
+
 ## [1.75.0](https://github.com/dryvist/ansible-proxmox/compare/v1.74.0...v1.75.0) (2026-08-04)
 
 
