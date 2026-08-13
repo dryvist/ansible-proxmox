@@ -1,0 +1,92 @@
+---
+# Part 2 of 3 (see main.yml). Anti-affinity rules for redundant pairs, then
+# the strict node-affinity pin that keeps singleton app guests on the node
+# holding their pvesr replica.
+- name: Resolve anti-affinity rule SID sets (present members only)
+  ansible.builtin.set_fact:
+    pve_ha_affinity_rules: >-
+      {{ pve_ha_affinity_rules | default([]) + [ {
+           'name': item.name,
+           'sids': (item.hostnames | select('in', pve_ha_vmid_by_host)
+                    | map('extract', pve_ha_vmid_by_host) | map('string')
+                    | map('regex_replace', '^(.+)$', 'ct:\1') | list)
+         } ] }}
+  loop: "{{ pve_ha_anti_affinity_groups }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Read current HA rules
+  ansible.builtin.command: pvesh get /cluster/ha/rules --output-format json
+  register: pve_ha_rules_raw
+  changed_when: false
+
+- name: Parse existing HA rule names
+  ansible.builtin.set_fact:
+    pve_ha_existing_rules: >-
+      {{ (pve_ha_rules_raw.stdout | from_json)
+         | map(attribute='rule') | list }}
+
+- name: Add anti-affinity (negative) rules for redundant pairs
+  ansible.builtin.command: >-
+    ha-manager rules add resource-affinity {{ item.name }}
+    --resources {{ item.sids | join(',') }}
+    --affinity negative
+    --comment 'pve_ha: keep {{ item.name }} members on separate nodes'
+  loop: "{{ pve_ha_affinity_rules }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.sids | length >= 2
+    - item.name not in pve_ha_existing_rules
+  changed_when: true
+
+- name: Enforce membership on existing anti-affinity rules
+  ansible.builtin.command: >-
+    ha-manager rules set resource-affinity {{ item.name }}
+    --resources {{ item.sids | join(',') }}
+    --affinity negative
+  loop: "{{ pve_ha_affinity_rules }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.sids | length >= 2
+    - item.name in pve_ha_existing_rules
+  # ponytail: idempotent enforce, same rationale as the resource set above.
+  changed_when: false
+
+# SIDs of replication guests that actually have a replica: present in the
+# inventory AND homed in the pair (same scope as the pvesr jobs). A guest
+# outside the pair has no replica, so it must NOT go in the strict rule (a
+# strict rule with no available node would STOP it).
+- name: Resolve replication guest SIDs (present, homed in the always-on pair)
+  ansible.builtin.set_fact:
+    pve_ha_replication_sids: >-
+      {{ pve_ha_replication_ct_hostnames | select('in', pve_ha_vmid_by_host)
+         | map('extract', containers_from_tofu | default({}))
+         | selectattr('node', 'in', pve_ha_replication_pair)
+         | map(attribute='vmid') | map('string')
+         | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
+
+- name: Pin replication guests to the always-on pair (strict; add if absent)
+  ansible.builtin.command: >-
+    ha-manager rules add node-affinity {{ pve_ha_replication_affinity_rule }}
+    --resources {{ pve_ha_replication_sids | join(',') }}
+    --nodes {{ pve_ha_replication_pair | join(',') }}
+    --strict 1
+    --comment 'pve_ha: keep singleton app guests on nodes holding their pvesr replica'
+  when:
+    - pve_ha_replication_sids | length > 0
+    - pve_ha_replication_affinity_rule not in pve_ha_existing_rules
+  changed_when: true
+
+- name: Enforce the replication node-affinity rule (nodes + strict)
+  ansible.builtin.command: >-
+    ha-manager rules set node-affinity {{ pve_ha_replication_affinity_rule }}
+    --resources {{ pve_ha_replication_sids | join(',') }}
+    --nodes {{ pve_ha_replication_pair | join(',') }}
+    --strict 1
+  when:
+    - pve_ha_replication_sids | length > 0
+    - pve_ha_replication_affinity_rule in pve_ha_existing_rules
+  # ponytail: idempotent enforce, same rationale as the resource-affinity set.
+  changed_when: false

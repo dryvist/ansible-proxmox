@@ -1,0 +1,77 @@
+---
+# Part 5 of 5 (see configure_container.yml). Shared-data GID idmap via raw
+# lxc.idmap lines, same drop-all-and-re-add strategy as tun_passthrough.yml
+# and for the same reason (pmxcfs rewrites defeat blockinfile markers).
+# ---------------------------------------------------------------------------
+# Shared-data GID idmap — raw LXC config lines in the .conf file
+# ---------------------------------------------------------------------------
+# Maps host GID 13000 (owner of /bulk/data) 1:1 into the unprivileged container
+# so the bind-mounted /data is writable by the in-container `media` user instead
+# of showing up as nobody:nogroup. `pct set` has no flag for idmap, so the lines
+# live directly in /etc/pve/lxc/<vmid>.conf.
+#
+# IMPORTANT: blockinfile is NOT usable here. Proxmox's pmxcfs rewrites the .conf
+# on every change — it relocates raw `lxc.*` keys to the end of the file and
+# strips comment markers — so the blockinfile markers vanish and a second run
+# re-appends the lines, duplicating `u 0 100000 65536` and making the container
+# refuse to start. Instead, compare the present idmap line-set to the desired
+# one and only rewrite (drop-all + re-add) on a difference; a converged host
+# makes no change and triggers no restart. Apply BEFORE the apps converge so the
+# rootfs remap is harmless (no app data yet).
+
+# One-time cleanup of the stale blockinfile markers left by the earlier
+# (withdrawn) implementation. Idempotent: a no-op once the comment lines are gone.
+- name: "Remove stale idmap blockinfile markers on {{ media_ct.key }}"
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ media_ct.key }}.conf"
+    regexp: "ANSIBLE MANAGED BLOCK media_lxc_features data idmap"
+    state: absent
+  when: media_ct.value.data_idmap | default(false)
+  tags:
+    - media_lxc_features
+
+- name: "Read the LXC config to compare the idmap on {{ media_ct.key }}"
+  ansible.builtin.slurp:
+    src: "/etc/pve/lxc/{{ media_ct.key }}.conf"
+  register: media_lxc_features_conf_raw
+  when: media_ct.value.data_idmap | default(false)
+  tags:
+    - media_lxc_features
+
+- name: "Compute the present idmap line-set on {{ media_ct.key }}"
+  ansible.builtin.set_fact:
+    media_lxc_features_cur_idmap: >-
+      {{
+        (media_lxc_features_conf_raw.content | b64decode).splitlines()
+        | map('trim') | select('match', '^lxc\.idmap:') | list
+      }}
+  when: media_ct.value.data_idmap | default(false)
+  tags:
+    - media_lxc_features
+
+- name: "Reconcile the shared-data idmap on {{ media_ct.key }}"
+  when:
+    - media_ct.value.data_idmap | default(false)
+    - (media_lxc_features_cur_idmap | sort)
+      != (media_lxc_features_data_idmap_lines | map('trim') | sort)
+  tags:
+    - media_lxc_features
+  block:
+    - name: "Drop any existing idmap lines on {{ media_ct.key }}"
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ media_ct.key }}.conf"
+        regexp: '^lxc\.idmap:'
+        state: absent
+
+    - name: "Write the desired idmap lines on {{ media_ct.key }}"
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ media_ct.key }}.conf"
+        line: "{{ item }}"
+        insertafter: EOF
+        state: present
+      loop: "{{ media_lxc_features_data_idmap_lines }}"
+      notify: Restart changed media containers
+
+    - name: "Record idmap change for container {{ media_ct.key }}"
+      ansible.builtin.set_fact:
+        media_lxc_features_changed: "{{ media_lxc_features_changed | default([]) + [media_ct.key] }}"

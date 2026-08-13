@@ -1,0 +1,107 @@
+---
+# Part 3 of 4 (see archive.yml). Stops the source guest (graceful, then
+# forced), writes the stopped-source evidence checkpoint, runs the stop-mode
+# vzdump archive, and proves exactly one new archive volume was added.
+- name: Gracefully stop a running source guest
+  ansible.builtin.command: >-
+    {{ (pve_guest_evacuation_guest_type == 'qemu') | ternary('qm', 'pct') }}
+    shutdown {{ pve_guest_evacuation_guest_vmid }}
+    --timeout {{ pve_guest_evacuation_shutdown_timeout }}
+  when: pve_guest_evacuation_status.status != 'stopped'
+  changed_when: true
+  failed_when: false
+  register: pve_guest_evacuation_graceful_stop
+
+- name: Refresh source guest status after graceful stop
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "{{ pve_guest_evacuation_guest_api_path }}/status/current"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_stopped_status_raw
+  changed_when: false
+
+- name: Decode source guest post-stop status
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_stopped_status: "{{ pve_guest_evacuation_stopped_status_raw.stdout | from_json }}"
+
+- name: Force stop a guest that did not stop gracefully
+  ansible.builtin.command: >-
+    {{ (pve_guest_evacuation_guest_type == 'qemu') | ternary('qm', 'pct') }}
+    stop {{ pve_guest_evacuation_guest_vmid }}
+  when: pve_guest_evacuation_stopped_status.status != 'stopped'
+  changed_when: true
+
+- name: Confirm the source guest is stopped
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "{{ pve_guest_evacuation_guest_api_path }}/status/current"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_final_status_raw
+  changed_when: false
+
+- name: Assert the source guest is stopped
+  ansible.builtin.assert:
+    that:
+      - (pve_guest_evacuation_final_status_raw.stdout | from_json).status == 'stopped'
+    fail_msg: "VMID {{ pve_guest_evacuation_guest_vmid }} did not stop; no archive was started."
+
+- name: Write stopped-source evidence atomically
+  ansible.builtin.include_tasks: write_evidence.yml
+  vars:
+    pve_guest_evacuation_checkpoint: source_stopped
+
+- name: Create a stop-mode VZDump archive
+  ansible.builtin.command:
+    argv:
+      - vzdump
+      - "{{ pve_guest_evacuation_guest_vmid | string }}"
+      - --mode
+      - stop
+      - --storage
+      - "{{ pve_guest_evacuation_staging_storage }}"
+      - --compress
+      - zstd
+      - --zstd
+      - "{{ pve_guest_evacuation_zstd_threads | string }}"
+      - --tmpdir
+      - "{{ pve_guest_evacuation_tmpdir }}"
+  register: pve_guest_evacuation_vzdump
+  changed_when: true
+
+- name: Capture archive volume identifiers after backup
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ pve_guest_evacuation_source_node }}/storage/{{ pve_guest_evacuation_staging_storage }}/content"
+      - --content
+      - backup
+      - --output-format
+      - json
+  register: pve_guest_evacuation_archives_after_raw
+  changed_when: false
+
+- name: Resolve the exact newly-created archive volume
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_archives_after: >-
+      {{ (pve_guest_evacuation_archives_after_raw.stdout | from_json)
+         | map(attribute='volid') | list }}
+    pve_guest_evacuation_new_archives: >-
+      {{ ((pve_guest_evacuation_archives_after_raw.stdout | from_json)
+         | map(attribute='volid') | list)
+         | difference(pve_guest_evacuation_archives_before) }}
+
+- name: Assert exactly one archive was added without pruning an existing archive
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_new_archives | length == 1
+      - pve_guest_evacuation_archives_before | difference(pve_guest_evacuation_archives_after) | length == 0
+    fail_msg: >-
+      VZDump did not produce exactly one new archive without removing an
+      existing archive; preserve the source guest and inspect staging storage.

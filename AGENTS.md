@@ -29,6 +29,21 @@ configured by `ansible-proxmox-apps` and `ansible-splunk`.
 
 - Physical Proxmox VE cluster (not provisioned by OpenTofu)
 
+### Inventory system of record
+
+**Nautobot is the system of record for infrastructure inventory** — device
+identity, hardware (serials, asset tags, models), interfaces and MAC
+addresses, IP addresses and their DNS names, rack and power topology, and
+location. No dynamic (or possibly-dynamic) configuration may live outside it:
+every other system reads from Nautobot and keeps no second copy, and docs
+point at it rather than restating its contents.
+
+**Direction, not current behaviour.** Nothing here reads Nautobot yet. Host
+identity still comes from the static `inventory/hosts.yml` and guest data from
+the published upstream inventory artifact described below; closing that gap is
+the work. Until it closes, do not add a *new* copy of a fact Nautobot models —
+read it from Nautobot or record the gap.
+
 ### Upstream inventory (read-only consumer)
 
 The `tofu-proxmox` Terrakube workspace provisions the hosts and publishes the inventory this repo
@@ -96,6 +111,6 @@ After cloning, run `direnv allow` to enable automatic shell activation.
 
 ## Related Repositories
 
-- \*_tofu-proxmox_: VM/container provisioning
+- **tofu-proxmox**: VM/container provisioning
 - **ansible-proxmox-apps**: Application deployment on VMs
-- \*_ansible-splunk_: Splunk configuration
+- **ansible-splunk**: Splunk configuration

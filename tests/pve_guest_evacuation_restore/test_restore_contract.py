@@ -1,14 +1,42 @@
 """Static safety contract for the standalone restore-only evacuation role."""
 
+import re
 from pathlib import Path
 
 
 ROLE = Path(__file__).resolve().parents[2] / "roles" / "pve_guest_evacuation_restore"
 
 
+def _flattened_restore() -> str:
+    """tasks/restore.yml is a thin dispatcher over ordered phase files (split
+    out for the token budget); inline them so the grep-based assertions below
+    see the same content restore.yml held before the split."""
+    text = (ROLE / "tasks" / "restore.yml").read_text()
+    out = []
+    pos = 0
+    resolved = 0
+    for match in re.finditer(
+        r"- name:.*\n\s*ansible\.builtin\.include_tasks:\s*(\S+)\s*\n", text
+    ):
+        out.append(text[pos : match.start()])
+        included = re.sub(r"^---\n", "", (ROLE / "tasks" / match.group(1)).read_text())
+        out.append(included)
+        pos = match.end()
+        resolved += 1
+    out.append(text[pos:])
+    # Without this, a dispatcher entry the pattern fails to match is silently
+    # dropped from the flattened text, and every assertion that greps for
+    # something inside that phase file starts passing on absence instead.
+    assert resolved == text.count("include_tasks:"), (
+        f"{resolved} of {text.count('include_tasks:')} dispatcher includes were "
+        "inlined — the assertions below would grep text that is not there"
+    )
+    return "".join(out)
+
+
 def test_restore_requires_exact_verified_archive_identity() -> None:
     contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
-    restore = (ROLE / "tasks" / "restore.yml").read_text()
+    restore = _flattened_restore()
 
     assert "pve_guest_evacuation_restore_expected_vmid" in contract
     assert "pve_guest_evacuation_restore_expected_guest_type" in contract
@@ -21,7 +49,7 @@ def test_restore_requires_exact_verified_archive_identity() -> None:
 
 
 def test_restore_verifies_archive_before_writing_target() -> None:
-    restore = (ROLE / "tasks" / "restore.yml").read_text()
+    restore = _flattened_restore()
 
     assert "zstd" in restore
     assert "vma verify" not in restore
@@ -32,7 +60,7 @@ def test_restore_verifies_archive_before_writing_target() -> None:
 
 def test_restore_preserves_target_and_uses_only_native_restore_commands() -> None:
     main = (ROLE / "tasks" / "main.yml").read_text()
-    restore = (ROLE / "tasks" / "restore.yml").read_text()
+    restore = _flattened_restore()
     writer = (ROLE / "tasks" / "write_evidence.yml").read_text()
 
     assert "qmrestore" in restore
@@ -50,7 +78,7 @@ def test_restore_preserves_target_and_uses_only_native_restore_commands() -> Non
 
 
 def test_restore_refuses_lxc_mountpoint_volumes_before_creating_a_target() -> None:
-    restore = (ROLE / "tasks" / "restore.yml").read_text()
+    restore = _flattened_restore()
 
     assert "pve_guest_evacuation_restore_lxc_mountpoint_volume_keys" in restore
     assert "Refuse automatic restore of LXC archives with additional backed mounts" in restore
@@ -62,7 +90,7 @@ def test_restore_refuses_lxc_mountpoint_volumes_before_creating_a_target() -> No
 
 
 def test_manifested_lxc_restore_is_explicitly_pending_not_verified() -> None:
-    restore = (ROLE / "tasks" / "restore.yml").read_text()
+    restore = _flattened_restore()
     defaults = (ROLE / "defaults" / "main.yml").read_text()
 
     assert "pve_guest_evacuation_restore_lxc_mountpoint_strategy: refuse" in defaults

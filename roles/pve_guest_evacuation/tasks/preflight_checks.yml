@@ -1,0 +1,192 @@
+---
+# Included from archive.yml, in ORDER — part 1 of 4. Proves the pve3
+# evidence directory, no ZFS snapshots or pending frees, resolves the
+# exact guest, and rejects a locked, HA-managed, or replicated guest
+# before anything about staging or the guest's power state is touched.
+- name: Assert pve3 evidence directory is ready
+  ansible.builtin.command:
+    argv:
+      - test
+      - -d
+      - "{{ pve_guest_evacuation_evidence_dir }}"
+  delegate_to: "{{ pve_guest_evacuation_staging_host }}"
+  changed_when: false
+
+- name: Assert pve3 evidence directory is writable
+  ansible.builtin.command:
+    argv:
+      - test
+      - -w
+      - "{{ pve_guest_evacuation_evidence_dir }}"
+  delegate_to: "{{ pve_guest_evacuation_staging_host }}"
+  changed_when: false
+
+- name: Assert no ZFS snapshots exist on either evacuation node
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -t
+      - snapshot
+      - -o
+      - name
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_source_node }}"
+    - "{{ pve_guest_evacuation_target_node }}"
+  register: pve_guest_evacuation_snapshots
+  changed_when: false
+
+- name: Fail when an evacuation node has ZFS snapshots
+  ansible.builtin.assert:
+    that:
+      - item.stdout | trim | length == 0
+    fail_msg: >-
+      {{ item.item }} has ZFS snapshots. This evacuation never creates or
+      carries snapshots; remove them before rerunning this archive phase.
+  loop: "{{ pve_guest_evacuation_snapshots.results }}"
+
+- name: Read pool freeing counters on both evacuation nodes
+  ansible.builtin.command:
+    argv:
+      - zpool
+      - get
+      - -H
+      - -p
+      - -o
+      - value
+      - freeing
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_source_node }}"
+    - "{{ pve_guest_evacuation_target_node }}"
+  register: pve_guest_evacuation_freeing
+  changed_when: false
+
+- name: Fail when an evacuation node is still freeing storage
+  ansible.builtin.assert:
+    that:
+      - item.stdout_lines | map('int') | max == 0
+    fail_msg: >-
+      {{ item.item }} still has freeing work; wait for zero before archiving.
+  loop: "{{ pve_guest_evacuation_freeing.results }}"
+
+- name: Read Proxmox guest inventory
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - /cluster/resources
+      - --type
+      - vm
+      - --output-format
+      - json
+  register: pve_guest_evacuation_resources_raw
+  changed_when: false
+
+- name: Select the exact guest to archive
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_resources: "{{ pve_guest_evacuation_resources_raw.stdout | from_json }}"
+    pve_guest_evacuation_matching_resources: >-
+      {{ (pve_guest_evacuation_resources_raw.stdout | from_json)
+         | selectattr('vmid', 'equalto', pve_guest_evacuation_guest_vmid | int)
+         | list }}
+
+- name: Assert the VMID resolves exactly once on the source node
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_matching_resources | length == 1
+      - pve_guest_evacuation_matching_resources[0].node == pve_guest_evacuation_source_node
+      - pve_guest_evacuation_matching_resources[0].type in ['qemu', 'lxc']
+    fail_msg: >-
+      VMID {{ pve_guest_evacuation_guest_vmid }} must resolve exactly once as a
+      QEMU VM or LXC container on {{ pve_guest_evacuation_source_node }}.
+
+- name: Record guest type
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_guest_type: "{{ pve_guest_evacuation_matching_resources[0].type }}"
+    pve_guest_evacuation_guest_api_path: >-
+      /nodes/{{ pve_guest_evacuation_source_node }}/{{ pve_guest_evacuation_matching_resources[0].type }}/{{ pve_guest_evacuation_guest_vmid }}
+    pve_guest_evacuation_evidence_path: >-
+      {{ pve_guest_evacuation_evidence_dir }}/{{ pve_guest_evacuation_run_id }}-{{ pve_guest_evacuation_guest_vmid }}.json
+
+- name: Capture source guest configuration and digest
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "{{ pve_guest_evacuation_guest_api_path }}/config"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_config_raw
+  changed_when: false
+
+- name: Capture source guest status
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "{{ pve_guest_evacuation_guest_api_path }}/status/current"
+      - --output-format
+      - json
+  register: pve_guest_evacuation_status_raw
+  changed_when: false
+
+- name: Decode source guest evidence
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_config: "{{ pve_guest_evacuation_config_raw.stdout | from_json }}"
+    pve_guest_evacuation_status: "{{ pve_guest_evacuation_status_raw.stdout | from_json }}"
+
+- name: Reject a locked source guest
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_config.lock | default('') | length == 0
+    fail_msg: >-
+      VMID {{ pve_guest_evacuation_guest_vmid }} is locked with
+      {{ pve_guest_evacuation_config.lock | default('unknown') }}; resolve the
+      lock before archiving.
+
+- name: Validate guest external-resource gates
+  ansible.builtin.include_tasks: resource_gates.yml
+
+- name: Capture HA status
+  ansible.builtin.command:
+    argv:
+      - ha-manager
+      - status
+  register: pve_guest_evacuation_ha_status
+  changed_when: false
+
+- name: Reject HA-managed guests
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pve_guest_evacuation_ha_status.stdout
+        | regex_search('(?m)(ct|vm):' ~ (pve_guest_evacuation_guest_vmid | string) ~ '([ ]|$)')) is none
+    fail_msg: >-
+      VMID {{ pve_guest_evacuation_guest_vmid }} is HA-managed. Remove its HA
+      ownership through the approved runbook before archiving it.
+
+- name: Capture Proxmox replication configuration
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - /cluster/replication
+      - --output-format
+      - json
+  register: pve_guest_evacuation_replication_raw
+  changed_when: false
+
+- name: Reject guests with active Proxmox replication
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((pve_guest_evacuation_replication_raw.stdout | from_json)
+        | selectattr('guest', 'equalto', pve_guest_evacuation_guest_vmid | int)
+        | rejectattr('disable', 'equalto', 1) | list
+        | length) == 0
+    fail_msg: >-
+      VMID {{ pve_guest_evacuation_guest_vmid }} has active Proxmox replication;
+      clear that relationship before an archive-only evacuation.

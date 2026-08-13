@@ -1,0 +1,121 @@
+---
+# Part 4 of 5 (see transfer.yml). Final safety gates before any byte moves:
+# no snapshots on either node, target skeletons empty (or, on resume,
+# already populated), required tools present, and a verified rsync transport.
+- name: Assert no ZFS snapshots exist on either evacuation node
+  ansible.builtin.command:
+    argv: [zfs, list, -H, -t, snapshot, -o, name]
+  delegate_to: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}"
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_snapshots
+  changed_when: false
+
+- name: Refuse transfer when either evacuation node has a snapshot
+  ansible.builtin.assert:
+    that: [item.stdout | trim | length == 0]
+    fail_msg: >-
+      {{ item.item }} has ZFS snapshots. This workflow neither creates nor
+      uses snapshots; remove the ambiguity before a final stopped-source copy.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_snapshots.results }}"
+
+- name: Require the target managed volumes to be empty skeletons
+  ansible.builtin.command:
+    argv: [find, "{{ item.target_path }}", -xdev, -mindepth, '1', -print, -quit]
+  delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_dataset_mappings }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_target_contents
+  changed_when: false
+
+- name: Refuse to overwrite any preexisting target managed-volume content
+  ansible.builtin.assert:
+    that: [item.stdout | trim | length == 0]
+    fail_msg: >-
+      Target {{ item.item.key }} at {{ item.item.target_path }} is nonempty.
+      This workflow never overwrites, merges with, or deletes target payloads.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_target_contents.results }}"
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length == 0
+
+- name: Require populated preserved targets for an explicit resume
+  ansible.builtin.assert:
+    that: [item.stdout | trim | length > 0]
+    fail_msg: Resume target {{ item.item.key }} is empty; use a normal transfer with a new skeleton.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_target_contents.results }}"
+  when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
+
+- name: Require metadata manifest tools on pve2 and pve540
+  ansible.builtin.command:
+    argv: ["{{ item.tool }}", --version]
+  delegate_to: "{{ item.node }}"
+  loop: >-
+    {{ [{'node': pve_guest_evacuation_lxc_managed_volumes_source_node, 'tool': 'rsync'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_source_node, 'tool': 'getfacl'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_source_node, 'tool': 'getfattr'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_target_node, 'tool': 'rsync'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_target_node, 'tool': 'getfacl'},
+        {'node': pve_guest_evacuation_lxc_managed_volumes_target_node, 'tool': 'getfattr'}] }}
+  changed_when: false
+
+- name: Require protected dedicated source-host rsync transport files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file }}"
+    - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_transport_files
+  changed_when: false
+
+- name: Assert source-host rsync transport files are root-owned and protected
+  ansible.builtin.assert:
+    that:
+      - item.stat.isreg | default(false)
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+      - item.stat.mode in ['0400', '0600']
+    fail_msg: >-
+      {{ item.item }} must be a root-owned regular transport file with mode
+      0400 or 0600 before an rsync transfer can run.
+    quiet: true
+  loop: "{{ pve_guest_evacuation_lxc_managed_volumes_transport_files.results }}"
+
+- name: Require one reviewed pve540 ED25519 host key
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -F
+      - "{{ pve_guest_evacuation_lxc_managed_volumes_target_rsync_host }}"
+      - -f
+      - "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file }}"
+  register: pve_guest_evacuation_lxc_managed_volumes_known_host
+  changed_when: false
+  failed_when: false
+
+- name: Verify reviewed pve540 ED25519 host key contract
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_known_host.rc == 0
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_known_host.stdout_lines
+        | reject('match', '^# ') | list | length == 1
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_known_host.stdout_lines
+        | reject('match', '^# ') | first
+        is match('^' ~ (pve_guest_evacuation_lxc_managed_volumes_target_rsync_host | regex_escape)
+          ~ ' ssh-ed25519 [A-Za-z0-9+/=]+( .*)?$')
+    fail_msg: >-
+      The dedicated known-hosts file must contain exactly one reviewed ED25519
+      key for the pve540 rsync endpoint.
+    quiet: true
+
+- name: Build strict rsync SSH transport
+  ansible.builtin.set_fact:
+    pve_guest_evacuation_lxc_managed_volumes_rsync_rsh: >-
+      ssh -i {{ pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file }}
+      -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+      -o UserKnownHostsFile={{ pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file }}
+      -o GlobalKnownHostsFile=/dev/null -o PasswordAuthentication=no
+      -o KbdInteractiveAuthentication=no -T
