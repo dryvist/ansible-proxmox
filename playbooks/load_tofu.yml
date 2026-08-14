@@ -119,7 +119,7 @@
 
     # Raw container identity map (service-key -> { vmid, node, ... }) for the
     # sanoid/syncoid replication config. Lets host_vars derive a container's
-    # current vmid from tofu (e.g. containers_from_tofu['object-storage'].vmid)
+    # current vmid from tofu (e.g. containers_from_tofu['s3'].vmid)
     # instead of hard-coding it, so a VMID renumber flows through with no edit.
     # Pass-through like splunk_vm/nas above; `| default({})` keeps it inert when
     # the key is absent (e.g. the hermetic test fixture).
