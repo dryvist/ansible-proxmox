@@ -101,7 +101,7 @@
       - not (pve_guest_evacuation_restore_staging_storage_records[0].disable | default(0) | bool)
       - >-
         pve_guest_evacuation_restore_staging_storage_records[0].nodes is not defined
-        or pve_guest_evacuation_restore_target_node
+        or pve_guest_evacuation_restore_target_pve_node
            in pve_guest_evacuation_restore_staging_storage_records[0].nodes.split(',')
     fail_msg: >-
       Standalone pve540 must independently expose the exact active backup-only
@@ -116,7 +116,7 @@
       - not (pve_guest_evacuation_restore_target_storage_records[0].disable | default(0) | bool)
       - >-
         pve_guest_evacuation_restore_target_storage_records[0].nodes is not defined
-        or pve_guest_evacuation_restore_target_node
+        or pve_guest_evacuation_restore_target_pve_node
            in pve_guest_evacuation_restore_target_storage_records[0].nodes.split(',')
       - >-
         (pve_guest_evacuation_restore_expected_guest_type == 'qemu'
@@ -134,7 +134,7 @@
     argv:
       - pvesh
       - get
-      - "/nodes/{{ pve_guest_evacuation_restore_target_node }}/storage/{{ item }}/status"
+      - "/nodes/{{ pve_guest_evacuation_restore_target_pve_node }}/storage/{{ item }}/status"
       - --output-format
       - json
   loop:

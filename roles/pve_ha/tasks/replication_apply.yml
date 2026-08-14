@@ -24,7 +24,7 @@
 # pvesr_fail counter the health telemetry emits.
 - name: Read this node's replication job status
   ansible.builtin.command: >-
-    pvesh get /nodes/{{ inventory_hostname }}/replication --output-format json
+    pvesh get /nodes/{{ pve_ha_this_pve_node }}/replication --output-format json
   register: pve_ha_replication_status_raw
   changed_when: false
 
@@ -32,7 +32,7 @@
   ansible.builtin.set_fact:
     pve_ha_broken_replication_ids: >-
       {{ (pve_ha_replication_status_raw.stdout | from_json)
-         | selectattr('source', 'equalto', inventory_hostname)
+         | selectattr('source', 'equalto', pve_ha_this_pve_node)
          | selectattr('error', 'defined')
          | selectattr('error', 'search', 'No common base snapshot')
          | map(attribute='id') | list }}
@@ -66,6 +66,6 @@
   loop_control:
     label: "{{ item.id }} ({{ item.source }} -> {{ item.target }})"
   when:
-    - inventory_hostname == item.source
+    - pve_ha_this_pve_node == item.source
     - item.id not in pve_ha_existing_replication_ids
   changed_when: true

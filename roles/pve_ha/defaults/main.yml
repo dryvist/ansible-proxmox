@@ -41,6 +41,13 @@ pve_ha_enabled: false
 # is undefined (e.g. a playbook run without the pve_cluster group vars loaded).
 pve_ha_config_host: "{{ pve_cluster_primary_host | default(proxmox_node_prefix ~ '1', true) }}"
 
+# This host's Proxmox NODE name, which is not necessarily its inventory key.
+# Everything the replication tasks compare against — a /nodes/<x>/ API path,
+# the pvesr `source` field, and the tofu `node` value — is a node name, so they
+# use this rather than inventory_hostname. Set proxmox_node_name in host_vars
+# when the two differ.
+pve_ha_this_pve_node: "{{ proxmox_node_name | default(inventory_hostname) }}"
+
 # Per-guest HA restart/relocate bounds and desired state.
 pve_ha_max_restart: 3
 pve_ha_max_relocate: 1

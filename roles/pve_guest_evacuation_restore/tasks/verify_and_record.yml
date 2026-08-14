@@ -8,7 +8,7 @@
     argv:
       - pvesh
       - get
-      - "/nodes/{{ pve_guest_evacuation_restore_target_node }}/{{ pve_guest_evacuation_restore_expected_guest_type }}/{{ pve_guest_evacuation_restore_expected_vmid }}/config"
+      - "/nodes/{{ pve_guest_evacuation_restore_target_pve_node }}/{{ pve_guest_evacuation_restore_expected_guest_type }}/{{ pve_guest_evacuation_restore_expected_vmid }}/config"
       - --output-format
       - json
   register: pve_guest_evacuation_restore_target_config_raw
@@ -19,7 +19,7 @@
     argv:
       - pvesh
       - get
-      - "/nodes/{{ pve_guest_evacuation_restore_target_node }}/{{ pve_guest_evacuation_restore_expected_guest_type }}/{{ pve_guest_evacuation_restore_expected_vmid }}/status/current"
+      - "/nodes/{{ pve_guest_evacuation_restore_target_pve_node }}/{{ pve_guest_evacuation_restore_expected_guest_type }}/{{ pve_guest_evacuation_restore_expected_vmid }}/status/current"
       - --output-format
       - json
   register: pve_guest_evacuation_restore_target_status_raw

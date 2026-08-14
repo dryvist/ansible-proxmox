@@ -7,6 +7,14 @@ pve_guest_evacuation_restore_target_node: pve540
 pve_guest_evacuation_restore_staging_host: pve3
 pve_guest_evacuation_restore_evidence_dir: /bulk/evacuation-816/evidence
 
+# The target's Proxmox NODE name. The *_node vars above are inventory keys
+# (they are hostvars lookups and evidence identifiers); a /nodes/<x>/ API path
+# and a storage.cfg `nodes` list are node names. Resolve one from the other so
+# the two can differ.
+pve_guest_evacuation_restore_target_pve_node: >-
+  {{ hostvars[pve_guest_evacuation_restore_target_node].proxmox_node_name
+     | default(pve_guest_evacuation_restore_target_node) }}
+
 # Both evidence records live only on pve3's root-only staging evidence path.
 # The archive path is derived from the original archive run id and VMID so a
 # restore cannot silently select an arbitrary archive record.
