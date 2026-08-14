@@ -22,14 +22,20 @@ idrac_power_action: status
 # Node that runs ipmitool (must reach the BMC subnet, be always-on, and NOT be
 # the target being powered). Derived — never hard-coded — from the shared
 # PROXMOX_VE_NODES Doppler list (same source of truth as cluster_ssh_trust):
-# the first cluster node that is not this target. Falls back to the target
-# itself when the list is empty (e.g. molecule), which is fine for `status`.
+# the first cluster node that is not this target. The list holds Proxmox NODE
+# names, which need not equal the Ansible inventory key, so the target is
+# excluded under BOTH identities — either one may appear in the list, and
+# missing the match would let the node being powered run ipmitool against
+# itself. Falls back to the target itself when the list is empty (e.g.
+# molecule), which is fine for `status`.
 # Override per-host/group if a specific controller is required.
 idrac_power_controller: >-
   {{
     ((lookup('env', 'PROXMOX_VE_NODES') | default('', true)
        | regex_findall('[A-Za-z0-9][A-Za-z0-9._-]*')
-       | reject('equalto', inventory_hostname) | list)
+       | reject('equalto', inventory_hostname)
+       | reject('equalto', proxmox_node_name | default(inventory_hostname))
+       | list)
      or [inventory_hostname]) | first
   }}
 

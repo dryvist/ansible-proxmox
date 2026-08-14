@@ -92,6 +92,16 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_evacuation_staging/verify_contract.yml -i localhost, -c local
 
+      # A controller that is the node being powered would run ipmitool against
+      # itself. The node list holds Proxmox node names, so the exclusion is
+      # driven against a host whose inventory key and node name differ.
+      - name: Verify idrac_power controller self-exclusion
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          PROXMOX_VE_NODES='localhost,node-under-test,controller-node' \
+          ansible-playbook tests/idrac_power/verify_controller_exclusion.yml -i localhost, -c local
+
       # The capacity monitor alerts on a band CHANGE, so the band state write is
       # what decides whether a filling pool keeps reporting. Molecule cannot
       # cover it: the case under test is a DOWN notification endpoint, which a
