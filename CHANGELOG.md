@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.75.2](https://github.com/dryvist/ansible-proxmox/compare/v1.75.1...v1.75.2) (2026-08-14)
+
+
+### Bug Fixes
+
+* **roles:** take the Proxmox node name from proxmox_node_name ([#614](https://github.com/dryvist/ansible-proxmox/issues/614)) ([3204f2c](https://github.com/dryvist/ansible-proxmox/commit/3204f2c681e29c43f3ce9058903366779d46b34d))
+
 ## [1.75.1](https://github.com/dryvist/ansible-proxmox/compare/v1.75.0...v1.75.1) (2026-08-13)
 
 
