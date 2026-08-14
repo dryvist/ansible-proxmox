@@ -13,7 +13,7 @@
   gather_facts: false
   vars:
     proxmox_node_prefix: pve
-    # Stands in for inventory_hostname — the role runs this per node and each
+    # Stands in for pve_ha_this_pve_node — the role runs this per node and each
     # node may only delete jobs it is the SOURCE of (pvesr jobs are node-local).
     pve_ha_test_node: "{{ proxmox_node_prefix }}1"
 

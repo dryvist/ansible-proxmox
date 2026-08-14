@@ -56,7 +56,9 @@
     argv:
       - pvesh
       - get
-      - "/nodes/{{ item }}/storage/{{ pve_guest_evacuation_staging_storage }}/status"
+      # item is an inventory key (it is also the delegate_to target); the API
+      # path segment is a node name.
+      - "/nodes/{{ hostvars[item].proxmox_node_name | default(item) }}/storage/{{ pve_guest_evacuation_staging_storage }}/status"
       - --output-format
       - json
   delegate_to: "{{ item }}"
@@ -105,7 +107,7 @@
     argv:
       - pvesh
       - get
-      - "/nodes/{{ pve_guest_evacuation_source_node }}/storage/{{ pve_guest_evacuation_staging_storage }}/content"
+      - "/nodes/{{ pve_guest_evacuation_source_pve_node }}/storage/{{ pve_guest_evacuation_staging_storage }}/content"
       - --content
       - backup
       - --output-format

@@ -6,6 +6,13 @@ pve_guest_evacuation_phase: archive
 pve_guest_evacuation_source_node: pve2
 pve_guest_evacuation_target_node: pve540
 pve_guest_evacuation_staging_host: pve3
+# The source's Proxmox NODE name. The *_node vars above are inventory keys
+# (they are delegate_to targets and hostvars lookups); a /nodes/<x>/ API path
+# and the /cluster/resources `node` field are node names. Resolve one from the
+# other so the two can differ.
+pve_guest_evacuation_source_pve_node: >-
+  {{ hostvars[pve_guest_evacuation_source_node].proxmox_node_name
+     | default(pve_guest_evacuation_source_node) }}
 pve_guest_evacuation_staging_storage: ""
 pve_guest_evacuation_staging_server: ""
 pve_guest_evacuation_staging_export: ""

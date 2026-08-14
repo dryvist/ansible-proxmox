@@ -16,6 +16,16 @@ pve_guest_evacuation_lxc_managed_volumes_expected_config_digest: ""
 pve_guest_evacuation_lxc_managed_volumes_expected_archive_sha256: ""
 pve_guest_evacuation_lxc_managed_volumes_target_storage: ""
 
+# Proxmox NODE names for the two sides. The *_node vars above are inventory
+# keys (they are delegate_to targets and hostvars lookups); a /nodes/<x>/ API
+# path segment is a node name. Resolve one from the other so they can differ.
+pve_guest_evacuation_lxc_managed_volumes_source_pve_node: >-
+  {{ hostvars[pve_guest_evacuation_lxc_managed_volumes_source_node].proxmox_node_name
+     | default(pve_guest_evacuation_lxc_managed_volumes_source_node) }}
+pve_guest_evacuation_lxc_managed_volumes_target_pve_node: >-
+  {{ hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].proxmox_node_name
+     | default(pve_guest_evacuation_lxc_managed_volumes_target_node) }}
+
 # The source host owns the dedicated, reviewed transport material. The role
 # proves it is root-owned and bound to the pve540 inventory endpoint, or the
 # explicitly approved canonical FQDN which resolves on pve2 to that endpoint's

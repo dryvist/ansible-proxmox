@@ -79,7 +79,7 @@
     argv:
       - pvesh
       - get
-      - "/nodes/{{ pve_guest_evacuation_source_node }}/storage/{{ pve_guest_evacuation_staging_storage }}/content"
+      - "/nodes/{{ pve_guest_evacuation_source_pve_node }}/storage/{{ pve_guest_evacuation_staging_storage }}/content"
       - --content
       - backup
       - --output-format
