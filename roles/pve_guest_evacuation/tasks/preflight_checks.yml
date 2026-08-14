@@ -97,7 +97,7 @@
   ansible.builtin.assert:
     that:
       - pve_guest_evacuation_matching_resources | length == 1
-      - pve_guest_evacuation_matching_resources[0].node == pve_guest_evacuation_source_node
+      - pve_guest_evacuation_matching_resources[0].node == pve_guest_evacuation_source_pve_node
       - pve_guest_evacuation_matching_resources[0].type in ['qemu', 'lxc']
     fail_msg: >-
       VMID {{ pve_guest_evacuation_guest_vmid }} must resolve exactly once as a
@@ -107,7 +107,7 @@
   ansible.builtin.set_fact:
     pve_guest_evacuation_guest_type: "{{ pve_guest_evacuation_matching_resources[0].type }}"
     pve_guest_evacuation_guest_api_path: >-
-      /nodes/{{ pve_guest_evacuation_source_node }}/{{ pve_guest_evacuation_matching_resources[0].type }}/{{ pve_guest_evacuation_guest_vmid }}
+      /nodes/{{ pve_guest_evacuation_source_pve_node }}/{{ pve_guest_evacuation_matching_resources[0].type }}/{{ pve_guest_evacuation_guest_vmid }}
     pve_guest_evacuation_evidence_path: >-
       {{ pve_guest_evacuation_evidence_dir }}/{{ pve_guest_evacuation_run_id }}-{{ pve_guest_evacuation_guest_vmid }}.json
 

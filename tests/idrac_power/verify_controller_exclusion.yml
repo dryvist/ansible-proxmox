@@ -1,0 +1,47 @@
+---
+# The ipmitool controller must never be the node being powered. PROXMOX_VE_NODES
+# holds Proxmox NODE names, which need not equal the Ansible inventory key, so
+# the role has to exclude the target under BOTH identities. This test runs the
+# role's OWN defaults expression against a host whose inventory key and
+# proxmox_node_name differ — the case a node rename creates — with both of that
+# host's identities present in the list.
+#
+# Run with the list injected into the process environment (a lookup does not
+# see a task-level `environment:`):
+#   PROXMOX_VE_NODES='localhost,node-under-test,controller-node' \
+#   ansible-playbook tests/idrac_power/verify_controller_exclusion.yml \
+#     -i localhost, -c local
+- name: Verify idrac_power controller self-exclusion
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    # inventory_hostname is "localhost"; the node name deliberately differs.
+    proxmox_node_name: node-under-test
+
+  tasks:
+    - name: Load the role defaults under test
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/idrac_power/defaults/main.yml"
+
+    - name: Require the declared node list for this test
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'PROXMOX_VE_NODES') | length > 0
+        fail_msg: >-
+          PROXMOX_VE_NODES must be set for this test — without it the
+          expression takes its empty-list fallback and asserts nothing.
+
+    - name: Assert neither identity of the target can be its own controller
+      ansible.builtin.assert:
+        that:
+          - idrac_power_controller != inventory_hostname
+          - idrac_power_controller != proxmox_node_name
+          - idrac_power_controller == 'controller-node'
+        fail_msg: >-
+          idrac_power_controller resolved to '{{ idrac_power_controller }}'.
+          The target must be excluded by BOTH its inventory key and its
+          proxmox_node_name, leaving the first remaining node in list order.
+        success_msg: >-
+          Excluded both '{{ inventory_hostname }}' and '{{ proxmox_node_name }}'
+          from the controller selection.

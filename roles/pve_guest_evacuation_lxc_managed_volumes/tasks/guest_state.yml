@@ -7,15 +7,30 @@
     argv:
       - pvesh
       - get
-      - "/nodes/{{ item.node }}/lxc/{{ pve_guest_evacuation_lxc_managed_volumes_expected_vmid }}/{{ item.endpoint }}"
+      # item.node is an inventory key (delegate_to compares against it);
+      # item.pve_node is the same host's Proxmox node name, which is what an
+      # API path segment takes.
+      - "/nodes/{{ item.pve_node }}/lxc/{{ pve_guest_evacuation_lxc_managed_volumes_expected_vmid }}/{{ item.endpoint }}"
       - --output-format
       - json
   delegate_to: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node if item.node == pve_guest_evacuation_lxc_managed_volumes_target_node else inventory_hostname }}"
   loop:
-    - { side: source, node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}", endpoint: config }
-    - { side: source, node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}", endpoint: status/current }
-    - { side: target, node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}", endpoint: config }
-    - { side: target, node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}", endpoint: status/current }
+    - side: source
+      node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}"
+      pve_node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_pve_node }}"
+      endpoint: config
+    - side: source
+      node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}"
+      pve_node: "{{ pve_guest_evacuation_lxc_managed_volumes_source_pve_node }}"
+      endpoint: status/current
+    - side: target
+      node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+      pve_node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_pve_node }}"
+      endpoint: config
+    - side: target
+      node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_node }}"
+      pve_node: "{{ pve_guest_evacuation_lxc_managed_volumes_target_pve_node }}"
+      endpoint: status/current
   register: pve_guest_evacuation_lxc_managed_volumes_guest_raw
   changed_when: false
 

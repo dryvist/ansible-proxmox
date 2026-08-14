@@ -8,7 +8,7 @@
     argv:
       - pvesh
       - get
-      - "/nodes/{{ pve_guest_evacuation_restore_target_node }}/qemu/{{ pve_guest_evacuation_restore_expected_vmid }}/config"
+      - "/nodes/{{ pve_guest_evacuation_restore_target_pve_node }}/qemu/{{ pve_guest_evacuation_restore_expected_vmid }}/config"
       - --output-format
       - json
   register: pve_guest_evacuation_restore_existing_qemu
@@ -20,7 +20,7 @@
     argv:
       - pvesh
       - get
-      - "/nodes/{{ pve_guest_evacuation_restore_target_node }}/lxc/{{ pve_guest_evacuation_restore_expected_vmid }}/config"
+      - "/nodes/{{ pve_guest_evacuation_restore_target_pve_node }}/lxc/{{ pve_guest_evacuation_restore_expected_vmid }}/config"
       - --output-format
       - json
   register: pve_guest_evacuation_restore_existing_lxc
