@@ -18,24 +18,37 @@ sanoid_timer_enabled: true
 # `media` retention template is assigned to no dataset anywhere — a deliberate
 # non-assignment, not an oversight, and it stays that way. Snapshotting it
 # would pin the churn it was excluded for and dwarf everything else on the pool.
-sanoid_datasets:
-  "bulk/databases":
-    use_template: database
-    recursive: "yes"
-    # Per-dataset override of the template's `hourly: 0`. The template suits a
-    # warm standby that is continuously current; this is a DUMP ARCHIVE written
-    # once a night, so a daily-only snapshot leaves a fresh dump uncaptured —
-    # and therefore un-replicated — until the following midnight, roughly two
-    # days from write to off-pool copy. Hourly closes that to same-day.
-    # Overriding here rather than in the shared template keeps `database`
-    # meaning what it says for warm standbys.
-    hourly: 24
-  # Persistent app config/state. Changes constantly and wants point-in-time
-  # recovery, so the `critical` template (hourly) rather than the daily-cadence
-  # `database` one. Recursive so every per-app child inherits it.
-  "bulk/appdata":
-    use_template: critical
-    recursive: "yes"
+#
+# Entries:
+# - bulk/databases: the nightly dump archive. `hourly: 24` overrides the
+#   template's `hourly: 0` — the template suits a warm standby that is
+#   continuously current, but this is written once a night, so a daily-only
+#   snapshot leaves a fresh dump uncaptured (and un-replicated) until the
+#   following midnight, roughly two days from write to off-pool copy. Overriding
+#   here rather than in the shared template keeps `database` meaning what it says.
+# - bulk/appdata: persistent app config/state. Changes constantly and wants
+#   point-in-time recovery, so `critical` (hourly). Recursive so per-app
+#   children inherit it.
+# - the object store's data volume: `critical` for the same reason, and because
+#   it holds the remote state, the desired-state object, the published inventory
+#   and the bucket other backups are written into. Its dataset path is derived
+#   from the published inventory rather than written out, so a renumbered VMID
+#   or a relocated guest flows through with no edit here.
+#
+# Built as an expression because one key is derived; same idiom as the splunk
+# and postgres datasets on the always-on node.
+object_store_vmid: >-
+  {{ ((containers_from_tofu | default({}))['s3'] | default({})).vmid
+     | mandatory('containers_from_tofu is unset, so the object-store VMID
+       cannot be resolved. Run playbooks/load_tofu.yml — it targets localhost,
+       so any --limit must include localhost. Refusing to guess a VMID.') }}
+
+sanoid_datasets: >-
+  {{ {
+       'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24},
+       'bulk/appdata': {'use_template': 'critical', 'recursive': 'yes'},
+       'bulk/subvol-' ~ object_store_vmid ~ '-disk-1': {'use_template': 'critical'}
+     } }}
 
 # This node is a replication SOURCE, not a target: the DR leg pulls from it, so
 # it runs no pull jobs of its own. Kept declared (rather than omitted) so the

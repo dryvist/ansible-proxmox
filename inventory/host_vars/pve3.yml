@@ -87,6 +87,21 @@ splunk_node: >-
        resolved. Run playbooks/load_tofu.yml (see splunk_vmid above).
        Refusing to guess a node.') }}
 
+# Object store: the pull below needs both the node it currently runs on and its
+# VMID. Both are published in the inventory, and this guest has already been
+# relocated once, so neither is written out here.
+object_store_node: >-
+  {{ ((containers_from_tofu | default({}))['s3'] | default({})).node
+     | mandatory('containers_from_tofu is unset, so the object-store node
+       cannot be resolved. Run playbooks/load_tofu.yml (see splunk_vmid above).
+       Refusing to guess a node.') }}
+
+object_store_vmid: >-
+  {{ ((containers_from_tofu | default({}))['s3'] | default({})).vmid
+     | mandatory('containers_from_tofu is unset, so the object-store VMID
+       cannot be resolved. Run playbooks/load_tofu.yml (see splunk_vmid above).
+       Refusing to guess a VMID.') }}
+
 # Layer-1 protection (local ZFS snapshots via sanoid) for postgres-ai-1's live
 # PGDATA mount (mp0, the ai-VLAN Hindsight memory cluster's primary — see
 # ansible-proxmox-apps inventory/group_vars/postgres_ai_group.yml). `critical`
@@ -154,9 +169,31 @@ syncoid_jobs:
     schedule: hourly
     source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-2"
     target: "bulk/replica/{{ splunk_node }}/vm-{{ splunk_vmid }}-disk-2"
-  # Object storage is deliberately NOT replicated here. It is erasure-coded
-  # across nodes and owns its own redundancy, so a ZFS replica underneath it
-  # would duplicate what erasure coding already provides.
+  # Object storage IS replicated, because it owns no redundancy of its own.
+  #
+  # This previously read that it was erasure-coded across nodes and therefore
+  # needed no ZFS replica. That was not true of the deployment: the store runs
+  # as a single server process over a single directory, on one guest. There is
+  # no erasure set and no second instance, so nothing underneath it was ever
+  # protecting it — and with this job absent, the replica left behind went
+  # stale where it stood.
+  #
+  # It is also the highest-consequence dataset on the estate: it holds the
+  # remote state, the desired-state object, the published inventory, and the
+  # bucket other backups are written INTO. A backup target with no copy of its
+  # own is the one that turns a disk failure into an unrecoverable one.
+  #
+  # Distributed mode upstream is still under test at the pinned version. When
+  # it is production-ready and actually deployed as an erasure set, revisit
+  # this — but delete the job in the same change that proves the replacement
+  # exists, not on the strength of an assumption about how it is deployed.
+  # Node and VMID both come from the published inventory, like the splunk jobs
+  # above: this guest has already moved once, and a pull job naming a node it no
+  # longer runs on fails every cycle while the replica it left behind ages.
+  - name: "object-store"
+    schedule: hourly
+    source: "root@{{ object_store_node }}:bulk/subvol-{{ object_store_vmid }}-disk-1"
+    target: "bulk/replica/{{ object_store_node }}/subvol-{{ object_store_vmid }}-disk-1"
   #
   # Database DR: pull the whole bulk/databases namespace off the storage node
   # (recursive via default options, so every bulk/databases/<instance> child
