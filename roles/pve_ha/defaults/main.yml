@@ -97,13 +97,22 @@ pve_ha_ct_hostnames:
   - traefik-30
   # Data platform + shared-Postgres apps tier (live under HA since 2026-07-16;
   # this records what ha-manager already holds so a converge is idempotent).
-  # postgres-apps/nautobot/vikunja are the pvesr-replicated singletons and also
-  # appear in pve_ha_replication_ct_hostnames below.
+  # nautobot/vikunja are the pvesr-replicated singletons and also appear in
+  # pve_ha_replication_ct_hostnames below.
   - postgres
-  - postgres-apps
   - vikunja
   - nautobot
   - zammad
+  # postgres-apps deliberately EXCLUDED — verified live 2026-08-15: it has no
+  # viable pvesr replica within pve_ha_replication_pair (it runs on the node
+  # holding the shared-postgres-apps guest, which is not in that pair). This
+  # guard fails loud on exactly that condition (pve_ha_fail_on_unresolved),
+  # and it is right to — that is not this guest's home. The honest fix is a
+  # per-guest replication pair (postgres-apps needs a different pair than
+  # nautobot/vikunja), not shipped here to avoid rushing a modelling change
+  # under converge pressure. postgres-apps has NO viable replica TODAY either
+  # way; excluding it here only changes whether that fact is visible. Restore
+  # it once the per-guest pair design lands (Vikunja #1359/#1362).
   # Media tier: in-place crash auto-restart only (no redundant peer, so no
   # anti-affinity entry; node placement is enforced in the IaC layer — see
   # terraform-proxmox#615). Issue #396.
@@ -151,7 +160,10 @@ pve_ha_anti_affinity_groups:
 # replica. Hostname-keyed like pve_ha_ct_hostnames; a guest absent from the tofu
 # inventory (e.g. not provisioned yet) is skipped with a warning, not a failure.
 pve_ha_replication_ct_hostnames:
-  - postgres-apps
+  # postgres-apps deliberately excluded here too — see the comment above
+  # pve_ha_ct_hostnames. A pvesr job targeting a pair it is not homed in
+  # would just fail on first sync; membership in this list is a no-op
+  # without a viable pair member.
   - nautobot
   - vikunja
 
