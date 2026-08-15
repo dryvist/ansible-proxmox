@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.76.0](https://github.com/dryvist/ansible-proxmox/compare/v1.75.2...v1.76.0) (2026-08-15)
+
+
+### Features
+
+* **wol:** persist Wake-on-LAN across reboots on opted-in hosts ([#620](https://github.com/dryvist/ansible-proxmox/issues/620)) ([574b5e2](https://github.com/dryvist/ansible-proxmox/commit/574b5e28f44e1ed29d3a26366c89d6bda09b9ea9))
+
+
+### Bug Fixes
+
+* **dr:** snapshot and replicate the object-store data volume ([#616](https://github.com/dryvist/ansible-proxmox/issues/616)) ([1b788fe](https://github.com/dryvist/ansible-proxmox/commit/1b788fe28ab30726e94676d50a39722b7edffb0d))
+* **ha:** name the ingress anti-affinity members as the generator emits them ([#622](https://github.com/dryvist/ansible-proxmox/issues/622)) ([0130d8e](https://github.com/dryvist/ansible-proxmox/commit/0130d8e7641c1e78ee353f2d252bcb5da1e277e3))
+* **inventory:** name the AMD desktop host_vars for its inventory host ([#621](https://github.com/dryvist/ansible-proxmox/issues/621)) ([481cd5d](https://github.com/dryvist/ansible-proxmox/commit/481cd5d3d02d2512ce4fc328ea3d6a3f530aa94b))
+
 ## [1.75.2](https://github.com/dryvist/ansible-proxmox/compare/v1.75.1...v1.75.2) (2026-08-14)
 
 
