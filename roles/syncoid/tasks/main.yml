@@ -25,6 +25,26 @@
   tags:
     - syncoid
 
+# syncoid's `zfs receive` creates the target dataset but NOT its ancestors, so a
+# job whose parent is missing fails every run with "cannot open <parent>:
+# dataset does not exist" — permanently, and only in the wrapper's log. Create
+# the parents here so adding a job for a new source node just works. `-p` is
+# idempotent and creates every missing ancestor, not just one level.
+- name: Ensure the parent dataset of each replication target exists
+  ansible.builtin.shell:
+    cmd: >-
+      zfs list -H -o name {{ item | quote }} >/dev/null 2>&1
+      || { zfs create -p {{ item | quote }} && echo CREATED; }
+  loop: "{{ syncoid_jobs | map(attribute='target') | map('dirname') | unique | sort }}"
+  changed_when: "'CREATED' in syncoid_parent.stdout"
+  register: syncoid_parent
+  when:
+    - syncoid_enabled
+    - syncoid_jobs | length > 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
 - name: Deploy syncoid replication wrapper
   ansible.builtin.template:
     src: syncoid-replicate.sh.j2
@@ -154,8 +174,14 @@
 # window it is powered on for — its cron would otherwise never fire while the
 # node is down. Enable with -e syncoid_run_now=true. The wrapper logs per job and
 # does not abort on a single failed job.
+#
+# Loop the schedule groups: the wrapper runs ONE group per invocation and
+# defaults to "default", so a bare call silently seeded only that group and left
+# every other group's datasets untouched — with nothing in the output to say so.
 - name: Run syncoid replication now (opt-in seed/refresh for a maintenance window)
-  ansible.builtin.command: /usr/local/bin/syncoid-replicate.sh
+  ansible.builtin.command:
+    cmd: /usr/local/bin/syncoid-replicate.sh {{ item }}
+  loop: "{{ syncoid_jobs | map(attribute='schedule', default='default') | unique | sort }}"
   when:
     - syncoid_enabled
     - syncoid_jobs | length > 0

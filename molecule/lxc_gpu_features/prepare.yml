@@ -1,0 +1,33 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Install Python and system utilities
+      ansible.builtin.raw: |
+        apt-get update && apt-get install -y python3 procps
+      changed_when: true
+
+    # The role edits /etc/pve/lxc/<vmid>.conf, which on a real PVE node always
+    # exists — Proxmox creates it when the guest is created, and the role only
+    # ever runs against vmids it has confirmed are present on the host.
+    #
+    # Both the directory AND the files are needed: the role's legacy-cleanup
+    # step uses `blockinfile state: absent`, which errors on a missing path
+    # rather than treating it as already-absent.
+    #
+    # This is TEST SCAFFOLDING. The role must not gain a "create the file if
+    # missing" step to satisfy the test — that would make it able to write
+    # passthrough config for a guest that does not exist.
+    #
+    # The vmids come from the same fixture converge and verify use, so a vmid is
+    # still written in exactly one place (molecule.yml). Hardcoding them here
+    # would quietly create a second source that could drift.
+    - name: Create the PVE guest-config files the role edits
+      ansible.builtin.raw: >-
+        mkdir -p /etc/pve/lxc &&
+        touch {{ lxc_gpu_features_test_service_vmids.values()
+                 | map('regex_replace', '^(.*)$', '/etc/pve/lxc/\1.conf')
+                 | join(' ') }}
+      changed_when: true

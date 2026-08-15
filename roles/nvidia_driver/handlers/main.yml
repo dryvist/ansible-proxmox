@@ -1,0 +1,11 @@
+---
+# nvidia_driver handlers
+
+# The nouveau blacklist only takes hold once it is in the initramfs -- nouveau
+# is loaded from there, before the root filesystem (and /etc/modprobe.d) is
+# available, so a blacklist file alone changes nothing at boot.
+- name: Regenerate the initramfs
+  ansible.builtin.command:
+    cmd: update-initramfs -u -k all
+  changed_when: true
+  when: ansible_virtualization_type | default('') != 'docker'

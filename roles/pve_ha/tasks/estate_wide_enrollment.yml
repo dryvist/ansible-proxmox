@@ -16,7 +16,7 @@
     pve_ha_home_entries: >-
       {{ (containers_from_tofu | default({})) | dict2items
          | rejectattr('key', 'in', pve_ha_ct_hostnames)
-         | selectattr('value.vmid', 'defined')
+         | selectattr('value.ansible_pct_vmid', 'defined')
          | selectattr('value.node', 'defined')
          | list }}
   when: pve_ha_manage_all | bool
@@ -24,7 +24,7 @@
 - name: Resolve the home-pinned SIDs
   ansible.builtin.set_fact:
     pve_ha_home_sids: >-
-      {{ pve_ha_home_entries | map(attribute='value.vmid') | map('string')
+      {{ pve_ha_home_entries | map(attribute='value.ansible_pct_vmid') | map('string')
          | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
   when: pve_ha_manage_all | bool
 
@@ -55,7 +55,22 @@
   when: pve_ha_manage_all | bool
 
 
-- name: Warn about containers with no home node (skipped, cannot be pinned)
+- name: Refuse containers with no home node (cannot be pinned)
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: these containers have no `node` in the tofu inventory and would
+      be left OUT of HA — an unpinned guest under HA can be relocated onto a
+      node without its storage:
+      {{ (containers_from_tofu | default({})) | dict2items
+         | rejectattr('value.node', 'defined')
+         | map(attribute='key') | list }}
+  when:
+    - pve_ha_manage_all | bool
+    - pve_ha_fail_on_unresolved | bool
+    - ((containers_from_tofu | default({})) | dict2items
+       | rejectattr('value.node', 'defined') | list) | length > 0
+
+- name: Warn about containers with no home node (non-fatal mode)
   ansible.builtin.debug:
     msg: >-
       pve_ha: these containers have no `node` in the tofu inventory and are
@@ -66,6 +81,7 @@
          | map(attribute='key') | list }}
   when:
     - pve_ha_manage_all | bool
+    - not (pve_ha_fail_on_unresolved | bool)
     - ((containers_from_tofu | default({})) | dict2items
        | rejectattr('value.node', 'defined') | list) | length > 0
 
@@ -104,7 +120,7 @@
   ansible.builtin.command: >-
     ha-manager rules add node-affinity
     {{ pve_ha_home_rule_prefix }}-{{ item.0 }}
-    --resources {{ item.1 | map(attribute='value.vmid') | map('string')
+    --resources {{ item.1 | map(attribute='value.ansible_pct_vmid') | map('string')
                    | map('regex_replace', '^(.+)$', 'ct:\1')
                    | join(',') }}
     --nodes {{ item.0 }}
@@ -122,7 +138,7 @@
   ansible.builtin.command: >-
     ha-manager rules set node-affinity
     {{ pve_ha_home_rule_prefix }}-{{ item.0 }}
-    --resources {{ item.1 | map(attribute='value.vmid') | map('string')
+    --resources {{ item.1 | map(attribute='value.ansible_pct_vmid') | map('string')
                    | map('regex_replace', '^(.+)$', 'ct:\1')
                    | join(',') }}
     --nodes {{ item.0 }}

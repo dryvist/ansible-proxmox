@@ -9,12 +9,12 @@
       {{
         dict(
           (containers_from_tofu | default({})) | dict2items
-          | selectattr('value.vmid', 'defined')
+          | selectattr('value.ansible_pct_vmid', 'defined')
           | selectattr('value.node', 'defined')
           | map(attribute='key') | list
           | zip(
               (containers_from_tofu | default({})) | dict2items
-              | selectattr('value.vmid', 'defined')
+              | selectattr('value.ansible_pct_vmid', 'defined')
               | selectattr('value.node', 'defined')
               | map(attribute='value') | list
             )
@@ -28,7 +28,7 @@
     pve_ha_replication_jobs: >-
       {{ pve_ha_replication_jobs | default([]) + [ {
            'hostname': item,
-           'id': (pve_ha_ct_by_host[item].vmid | string) ~ '-'
+           'id': (pve_ha_ct_by_host[item].ansible_pct_vmid | string) ~ '-'
                  ~ (pve_ha_replication_jobnum | string),
            'source': pve_ha_ct_by_host[item].node,
            'target': (pve_ha_replication_pair
@@ -39,15 +39,29 @@
     - item in pve_ha_ct_by_host
     - pve_ha_ct_by_host[item].node in pve_ha_replication_pair
 
-- name: Warn about app guests with no replication job (skipped)
+- name: Refuse an app guest with no replication job
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha replication: no job for {{ item }} — absent from the tofu
+      inventory, or its home node is outside the always-on pair
+      {{ pve_ha_replication_pair }}. A singleton listed under
+      pve_ha_replication_ct_hostnames with no viable replica has nowhere to
+      relocate to on node loss.
+  loop: "{{ pve_ha_replication_ct_hostnames }}"
+  when: (item not in (pve_ha_replication_jobs | default([])
+                      | map(attribute='hostname') | list))
+    and pve_ha_fail_on_unresolved | bool
+
+- name: Warn about an app guest with no replication job (non-fatal mode)
   ansible.builtin.debug:
     msg: >-
       pve_ha replication: no job for {{ item }} — absent from the tofu
       inventory, or its home node is outside the always-on pair
       {{ pve_ha_replication_pair }}.
   loop: "{{ pve_ha_replication_ct_hostnames }}"
-  when: item not in (pve_ha_replication_jobs | default([])
-                     | map(attribute='hostname') | list)
+  when: (item not in (pve_ha_replication_jobs | default([])
+                      | map(attribute='hostname') | list))
+    and not (pve_ha_fail_on_unresolved | bool)
 
 # pvesr replicates a volume to the SAME storage id on the target node. If the
 # target lacks that storage, the job fails asynchronously on first sync and
@@ -80,7 +94,7 @@
 
 - name: Read each replication guest's LXC config (to find its volumes' storage ids)
   ansible.builtin.command: >-
-    pvesh get /nodes/{{ item.source }}/lxc/{{ pve_ha_ct_by_host[item.hostname].vmid }}/config
+    pvesh get /nodes/{{ item.source }}/lxc/{{ pve_ha_ct_by_host[item.hostname].ansible_pct_vmid }}/config
     --output-format json
   loop: "{{ pve_ha_replication_jobs | default([]) }}"
   loop_control:

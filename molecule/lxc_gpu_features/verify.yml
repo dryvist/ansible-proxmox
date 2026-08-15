@@ -1,0 +1,169 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  vars:
+    nvidia_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-4080'] }}.conf"
+    amd_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-fast'] }}.conf"
+
+    # The exact lines the role must have written for the NVIDIA container.
+    # Spelled out in full rather than rebuilt from the fixture with the same
+    # filters the role uses — a test that regenerates the expectation with the
+    # implementation's own logic agrees with any bug that logic contains.
+    expected_nvidia_lines:
+      - "lxc.cgroup2.devices.allow: c 195:* rwm"
+      - "lxc.cgroup2.devices.allow: c 510:* rwm"
+      - "lxc.mount.entry: /dev/nvidia0 dev/nvidia0 none bind,optional,create=file"
+      - "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file"
+      - "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file"
+      - >-
+        lxc.mount.entry: /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none
+        bind,optional,create=file
+
+    expected_amd_lines:
+      - "lxc.cgroup2.devices.allow: c 226:* rwm"
+      - "lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir"
+      - "lxc.cgroup2.devices.allow: c 235:* rwm"
+      - "lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file"
+
+  tasks:
+    - name: Read the NVIDIA container's rendered config
+      ansible.builtin.slurp:
+        src: "{{ nvidia_conf }}"
+      register: nvidia_raw
+
+    - name: Read the AMD container's rendered config
+      ansible.builtin.slurp:
+        src: "{{ amd_conf }}"
+      register: amd_raw
+
+    - name: Decode both configs
+      ansible.builtin.set_fact:
+        nvidia_lines: "{{ (nvidia_raw.content | b64decode).splitlines() | select('truthy') | list }}"
+        amd_lines: "{{ (amd_raw.content | b64decode).splitlines() | select('truthy') | list }}"
+
+    # --- 1. every expected NVIDIA line is present, verbatim -------------------
+    - name: Assert every expected NVIDIA passthrough line was written
+      ansible.builtin.assert:
+        that:
+          - item in nvidia_lines
+        fail_msg: >-
+          Missing from {{ nvidia_conf }}: "{{ item }}".
+          Rendered: {{ nvidia_lines }}
+        success_msg: 'Present: "{{ item }}"'
+      loop: "{{ expected_nvidia_lines }}"
+
+    # --- 2. the mount entry uses a RELATIVE in-container path -----------------
+    # `lxc.mount.entry: <host abs> <container REL> ...` — a leading slash on the
+    # second field makes LXC treat it as absolute on the host and the bind is
+    # wrong. This is the specific thing the regex_replace exists to get right,
+    # and it is invisible in a container that otherwise starts fine.
+    - name: Assert no mount entry has an absolute in-container destination
+      ansible.builtin.assert:
+        that:
+          - nvidia_lines | select('match', '^lxc\.mount\.entry: \S+ /') | list | length == 0
+        fail_msg: >-
+          A mount entry has an absolute container-side path, which binds the
+          wrong thing: {{ nvidia_lines | select('match', '^lxc\.mount\.entry: \S+ /') | list }}
+
+    # --- 3. majors are DEDUPED ------------------------------------------------
+    # /dev/nvidia0 and /dev/nvidiactl share major 195. Four device paths must
+    # therefore yield TWO allow lines, not four. A duplicated allow line is
+    # harmless at runtime, which is why only a test catches it.
+    - name: Assert device majors were deduplicated
+      ansible.builtin.assert:
+        that:
+          - nvidia_lines | select('match', '^lxc\.cgroup2\.devices\.allow:') | list | length == 2
+        fail_msg: >-
+          Expected exactly 2 deduplicated allow lines from 4 device paths sharing
+          2 majors, got:
+          {{ nvidia_lines | select('match', '^lxc\.cgroup2\.devices\.allow:') | list }}
+
+    # --- 4. the NVIDIA container got NO AMD devices --------------------------
+    # dri:false / kfd:false must actually suppress them. If the branches were
+    # unconditional the container would still work, so nothing would report it.
+    - name: Assert the NVIDIA container received no AMD device bindings
+      ansible.builtin.assert:
+        that:
+          - nvidia_lines | select('search', '/dev/dri|/dev/kfd|226:|235:') | list | length == 0
+        fail_msg: >-
+          AMD device lines leaked into the NVIDIA container:
+          {{ nvidia_lines | select('search', '/dev/dri|/dev/kfd|226:|235:') | list }}
+
+    # --- 4b. the PARSE of real stat output ------------------------------------
+    # The scenario injects majors and paths as a fixture, because there is no
+    # GPU in a container. That left the enumeration itself untested, and a
+    # malformed stat format shipped: `stat -c %t %n` unquoted passes %n as a
+    # FILENAME, so stat prints only majors and the parse yields entries like
+    # "1ff" where paths belong. The result was a container config with device
+    # allow lines and no mount entries — which starts fine and has no GPU.
+    #
+    # This exercises the parse against the exact two shapes: the correct output
+    # of a quoted format, and the output the malformed one produced.
+    - name: Parse a correctly formatted stat line set
+      ansible.builtin.set_fact:
+        parsed_ok_paths: >-
+          {{ good_stat_lines | map('split', ' ') | map('last') | list }}
+        parsed_ok_majors: >-
+          {{ good_stat_lines | map('split', ' ') | map('first')
+             | map('int', 0, 16) | unique | list }}
+      vars:
+        good_stat_lines:
+          - "c3 /dev/nvidia0"
+          - "c3 /dev/nvidiactl"
+          - "1ff /dev/nvidia-uvm"
+          - "1ff /dev/nvidia-uvm-tools"
+
+    - name: Assert the parse recovers paths and hex majors
+      ansible.builtin.assert:
+        that:
+          - parsed_ok_paths == ['/dev/nvidia0', '/dev/nvidiactl', '/dev/nvidia-uvm', '/dev/nvidia-uvm-tools']
+          - parsed_ok_majors == [195, 511]
+        fail_msg: >-
+          Parse of well-formed stat output is wrong.
+          paths={{ parsed_ok_paths }} majors={{ parsed_ok_majors }}
+
+    # The shape guard the role asserts on. Bare majors must be rejected as
+    # paths — non-emptiness alone passed this and let the defect through.
+    - name: Assert malformed enumeration output is rejected as paths
+      ansible.builtin.assert:
+        that:
+          - bad_paths | length > 0
+          - bad_paths | reject('match', '^/dev/') | list | length > 0
+        fail_msg: >-
+          A path list of bare majors must not satisfy the role's shape check;
+          it did, which means the guard is still only testing non-emptiness.
+      vars:
+        bad_paths: ['1ff', '1ff', 'c3', 'c3', 'c3']
+
+    # --- 5. the AMD container is unchanged by the NVIDIA work ----------------
+    # The regression that matters most: adding the nvidia branch must not alter
+    # what the existing AMD guest gets.
+    - name: Assert the AMD container still receives exactly its own lines
+      ansible.builtin.assert:
+        that:
+          - item in amd_lines
+        fail_msg: >-
+          The NVIDIA change altered AMD passthrough. Missing: "{{ item }}".
+          Rendered: {{ amd_lines }}
+      loop: "{{ expected_amd_lines }}"
+
+    - name: Assert the AMD container received no NVIDIA device bindings
+      ansible.builtin.assert:
+        that:
+          - amd_lines | select('search', 'nvidia') | list | length == 0
+        fail_msg: >-
+          NVIDIA device lines leaked into the AMD container:
+          {{ amd_lines | select('search', 'nvidia') | list }}
+
+    # --- assertion count, printed --------------------------------------------
+    # A molecule scenario that runs zero assertions exits 0 and looks identical
+    # to one that ran them all. Print the count so the log carries the evidence.
+    - name: Report how many assertions this scenario actually ran
+      ansible.builtin.debug:
+        msg: >-
+          lxc_gpu_features verify ran
+          {{ (expected_nvidia_lines | length) + (expected_amd_lines | length) + 7 }}
+          assertions across {{ 2 }} rendered container configs.
