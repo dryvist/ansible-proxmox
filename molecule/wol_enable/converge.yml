@@ -1,0 +1,15 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  # Under Docker the ethtool install/read/set steps are skipped
+  # (ansible_virtualization_type == 'docker'; no real WoL-capable NIC in a
+  # container); the udev rule still renders, proving the persisted contract.
+  vars:
+    wol_enable_enabled: true
+    wol_enable_interface: eth0
+
+  roles:
+    - role: wol_enable
