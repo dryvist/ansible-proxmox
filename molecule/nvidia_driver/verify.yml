@@ -41,7 +41,7 @@
 
     - name: Assert nvidia packages were not installed
       ansible.builtin.command:
-        cmd: dpkg-query -W -f='${Package}\n' nvidia-open nvidia-smi
+        cmd: dpkg-query -W -f='${Package}\n' nvidia-open
       register: nvidia_driver_dpkg
       changed_when: false
       failed_when: nvidia_driver_dpkg.rc == 0
