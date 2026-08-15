@@ -34,5 +34,5 @@
         msg: >-
           Managed-volume transfer stopped at
           {{ pve_guest_evacuation_lxc_managed_volumes_failure.task }}. Any
-          pve540 target state is preserved; this role performs no rollback,
+          target state is preserved; this role performs no rollback,
           deletion, snapshot, or retry-in-place.

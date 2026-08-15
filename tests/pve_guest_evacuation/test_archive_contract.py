@@ -51,6 +51,13 @@ def test_archive_uses_stop_mode_and_has_snapshot_gate() -> None:
     assert "pve_guest_evacuation_zstd_threads: 0" in defaults
     assert "pve_guest_evacuation_zstd_threads | int >= 0" in contract
 
+    # The node variables must stay undefaulted and required: a default here is
+    # what pinned this role to one node and made it unusable against any other.
+    for var in ("source_node", "target_node", "staging_host"):
+        assert not re.search(rf"^pve_guest_evacuation_{var}:", defaults, re.M)
+        assert f"pve_guest_evacuation_{var} is defined" in contract
+        assert f"pve_guest_evacuation_{var} | default('') | length > 0" in contract
+
 
 def test_unsupported_phases_and_external_resources_are_fail_closed() -> None:
     contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()

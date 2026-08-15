@@ -104,7 +104,7 @@ jobs:
       # LOAD-BEARING. These ran as serial steps in one job, so the first failing
       # scenario left every later one `skipped` — and in a run listing a skipped
       # step is indistinguishable from one that would have passed. That is how
-      # pve_evacuation_gate stayed broken across 8 consecutive runs while the 9
+      # one scenario stayed broken across 8 consecutive runs while the 9
       # scenarios behind it reported nothing at all. Each scenario now gets its
       # own independent verdict.
       fail-fast: false

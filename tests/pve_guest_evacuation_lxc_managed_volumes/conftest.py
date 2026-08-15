@@ -80,8 +80,8 @@ def run_zfs_dataset_identity_parser(
 
     zfs_filesystems = {
         "results": [
-            {"item": "pve2", "stdout_lines": source_lines},
-            {"item": "pve540", "stdout_lines": target_lines},
+            {"item": "evacuation-source-test", "stdout_lines": source_lines},
+            {"item": "evacuation-target-test", "stdout_lines": target_lines},
         ]
     }
     resolved_mappings = [
@@ -137,7 +137,7 @@ def run_canonical_endpoint_contract(
         pytest.skip("ansible-playbook is required to execute the endpoint regression")
 
     contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
-    task_start = contract.index("- name: Derive pve2 IPv4 resolutions")
+    task_start = contract.index("- name: Derive source IPv4 resolutions")
     endpoint_tasks = tmp_path / "endpoint-contract.yml"
     endpoint_tasks.write_text(contract[task_start:])
 
@@ -153,7 +153,8 @@ def run_canonical_endpoint_contract(
         "  vars:\n"
         f"    pve_guest_evacuation_lxc_managed_volumes_target_rsync_host: {json.dumps(canonical_fqdn)}\n"
         f"    pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn: {json.dumps(canonical_fqdn)}\n"
-        "    pve_guest_evacuation_lxc_managed_volumes_target_node: pve540\n"
+        "    pve_guest_evacuation_lxc_managed_volumes_target_node: "
+        "evacuation-target-test\n"
         "    pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution:\n"
         "      rc: 0\n"
         f"      stdout_lines: {json.dumps(getent_lines(canonical_ipv4s))}\n"
@@ -162,7 +163,7 @@ def run_canonical_endpoint_contract(
         f"      stdout_lines: {json.dumps(getent_lines(inventory_ipv4s))}\n"
         "  tasks:\n"
         "    - ansible.builtin.add_host:\n"
-        "        name: pve540\n"
+        "        name: evacuation-target-test\n"
         f"        ansible_host: {json.dumps(inventory_endpoint)}\n"
         "    - ansible.builtin.include_tasks: endpoint-contract.yml\n"
     )

@@ -1,24 +1,22 @@
 ---
+# The source, target and evidence hosts have NO defaults on purpose: every
+# caller must name them, so an unset value fails closed instead of silently
+# comparing against whichever node a default happened to name.
 pve_bulk_data_compare_enabled: false
-pve_bulk_data_compare_issue_816_enabled: false
 pve_bulk_data_compare_run_id: ""
-pve_bulk_data_compare_source_node: pve2
-pve_bulk_data_compare_target_node: pve540
-pve_bulk_data_compare_evidence_host: pve3
 pve_bulk_data_compare_evidence_dir: ""
-pve_bulk_data_compare_source_manifest_dir: /mnt/pve/evacuation-816/manifests
-pve_bulk_data_compare_target_manifest_dir: /mnt/pve/evacuation-816/manifests
-pve_bulk_data_compare_pve3_manifest_dir: /bulk/evacuation-816/manifests
+pve_bulk_data_compare_source_manifest_dir: ""
+pve_bulk_data_compare_target_manifest_dir: ""
+pve_bulk_data_compare_evidence_manifest_dir: ""
 pve_bulk_data_compare_manifest_export: ""
-pve_bulk_data_compare_source_dataset: bulk/data
-pve_bulk_data_compare_target_dataset: bulk/data
-pve_bulk_data_compare_source_path: /bulk/data
-pve_bulk_data_compare_target_path: /bulk/data
-pve_bulk_data_compare_guard_state_dir: /var/lib/pve2-evacuation-gate-816
-pve_bulk_data_compare_media_writer_cts:
-  - 703040
-  - 715240
-  - 715340
-  - 725140
-  - 736030
-  - 736040
+pve_bulk_data_compare_source_dataset: ""
+pve_bulk_data_compare_target_dataset: ""
+pve_bulk_data_compare_source_path: ""
+pve_bulk_data_compare_target_path: ""
+
+# Guests that can write to the compared dataset; every one must be stopped.
+# Null, not [], on purpose: an empty list would loop over nothing and the
+# writer check would pass because it checked nothing. A caller with no writers
+# says so with the acknowledgement below, which prints in the play output.
+pve_bulk_data_compare_media_writer_cts: null
+pve_bulk_data_compare_no_media_writer_cts: false

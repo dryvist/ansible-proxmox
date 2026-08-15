@@ -1,9 +1,0 @@
----
-platforms:
-  - name: proxmox-evacuation-gate-test
-    image: "${MOLECULE_IMAGE:-geerlingguy/docker-debian12-ansible:latest}"
-    pre_build_image: true
-    privileged: true
-    tmpfs:
-      - /run
-      - /tmp

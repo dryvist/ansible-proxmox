@@ -1,15 +1,15 @@
 ---
-# Included from restore.yml, in ORDER — part 1 of 4. Proves the pve3
-# evidence directory and the selected archive evidence are exactly the
-# completed pve2 archive requested, then proves pve540's staging and
-# target storage independently match that evidence.
-- name: Read the pve3 staging evidence directory metadata
+# Included from restore.yml, in ORDER — part 1 of 4. Proves the staging
+# host's evidence directory and the selected archive evidence are exactly
+# the completed source-node archive requested, then proves the target's
+# staging and target storage independently match that evidence.
+- name: Read the staging evidence directory metadata
   ansible.builtin.stat:
     path: "{{ pve_guest_evacuation_restore_evidence_dir }}"
   delegate_to: "{{ pve_guest_evacuation_restore_staging_host }}"
   register: pve_guest_evacuation_restore_evidence_dir_stat
 
-- name: Require root-only pve3 staging evidence storage
+- name: Require root-only staging evidence storage
   ansible.builtin.assert:
     that:
       - pve_guest_evacuation_restore_evidence_dir_stat.stat.isdir | default(false)
@@ -18,10 +18,10 @@
       - pve_guest_evacuation_restore_evidence_dir_stat.stat.mode == '0700'
     fail_msg: >-
       {{ pve_guest_evacuation_restore_evidence_dir }} must already be a
-      root-only pve3-local evidence directory before a restore can run.
+      root-only staging-host-local evidence directory before a restore runs.
     quiet: true
 
-- name: Read the immutable verified archive evidence from pve3
+- name: Read the immutable verified archive evidence from the staging host
   ansible.builtin.slurp:
     src: "{{ pve_guest_evacuation_restore_archive_evidence_path }}"
   delegate_to: "{{ pve_guest_evacuation_restore_staging_host }}"
@@ -33,7 +33,7 @@
       {{ pve_guest_evacuation_restore_archive_evidence_raw.content
          | b64decode | from_json }}
 
-- name: Require the exact completed pve2 archive evidence
+- name: Require the exact completed source-node archive evidence
   ansible.builtin.assert:
     that:
       - pve_guest_evacuation_restore_archive_evidence.schema_version | int == 1
@@ -54,8 +54,8 @@
       - pve_guest_evacuation_restore_archive_evidence.staging.server | length > 0
       - pve_guest_evacuation_restore_archive_evidence.staging.export is match('^/[^ ]+$')
     fail_msg: >-
-      The selected evidence is not the exact completed, verified pve2 archive
-      requested for this restore. Preserve the archive and evidence and supply
+      The selected evidence is not the exact completed, verified source-node
+      archive requested for this restore. Preserve the archive and evidence and supply
       the matching VMID, type, config digest, and archive SHA-256.
     quiet: true
 
@@ -64,7 +64,7 @@
     pve_guest_evacuation_restore_archive: "{{ pve_guest_evacuation_restore_archive_evidence.archive }}"
     pve_guest_evacuation_restore_source_config: "{{ pve_guest_evacuation_restore_archive_evidence.guest.config }}"
 
-- name: Read pve540 storage configuration
+- name: Read target-node storage configuration
   ansible.builtin.command:
     argv:
       - pvesh
@@ -75,7 +75,7 @@
   register: pve_guest_evacuation_restore_storage_raw
   changed_when: false
 
-- name: Decode pve540 staging and target storage records
+- name: Decode target-node staging and target storage records
   ansible.builtin.set_fact:
     pve_guest_evacuation_restore_storage_records: >-
       {{ pve_guest_evacuation_restore_storage_raw.stdout | from_json }}
@@ -88,7 +88,7 @@
          | selectattr('storage', 'equalto', pve_guest_evacuation_restore_target_storage)
          | list }}
 
-- name: Require exactly one independently configured pve3 staging storage record
+- name: Require exactly one independently configured staging storage record
   ansible.builtin.assert:
     that:
       - pve_guest_evacuation_restore_staging_storage_records | length == 1
@@ -104,11 +104,11 @@
         or pve_guest_evacuation_restore_target_pve_node
            in pve_guest_evacuation_restore_staging_storage_records[0].nodes.split(',')
     fail_msg: >-
-      Standalone pve540 must independently expose the exact active backup-only
-      pve3 staging storage recorded by the selected archive evidence.
+      The standalone target must independently expose the exact active
+      backup-only staging storage recorded by the selected archive evidence.
     quiet: true
 
-- name: Require a distinct explicit pve540 target storage
+- name: Require a distinct explicit target storage
   ansible.builtin.assert:
     that:
       - pve_guest_evacuation_restore_target_storage != pve_guest_evacuation_restore_archive_evidence.staging.storage
@@ -126,10 +126,10 @@
          and 'rootdir' in (pve_guest_evacuation_restore_target_storage_records[0].content | default('')).split(','))
     fail_msg: >-
       The explicit restore destination must be distinct from the backup-only
-      staging storage and support this guest type on pve540.
+      staging storage and support this guest type on the target node.
     quiet: true
 
-- name: Read pve540 staging and target storage activation state
+- name: Read target-node staging and target storage activation state
   ansible.builtin.command:
     argv:
       - pvesh
@@ -143,12 +143,12 @@
   register: pve_guest_evacuation_restore_storage_status_raw
   changed_when: false
 
-- name: Require active pve540 staging and target storage
+- name: Require active target-node staging and target storage
   ansible.builtin.assert:
     that:
       - (item.stdout | from_json).active | int == 1
     fail_msg: >-
-      pve540 cannot activate {{ item.item }}. Preserve all evidence and resolve
+      The target node cannot activate {{ item.item }}. Preserve all evidence and resolve
       storage reachability before a restore is attempted.
     quiet: true
   loop: "{{ pve_guest_evacuation_restore_storage_status_raw.results }}"

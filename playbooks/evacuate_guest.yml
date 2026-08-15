@@ -1,9 +1,26 @@
 ---
-# Archive exactly one pve2 guest to pve3-hosted shared staging storage.
+# Archive exactly one guest to shared staging storage hosted by a third node.
 # There is deliberately no restore, probe, cutover, source deletion, storage
 # creation, or cluster membership work in this standalone playbook.
-- name: Archive one guest for pve2 evacuation
-  hosts: "{{ pve_guest_evacuation_source_node | default('pve2') }}"
+#
+# pve_guest_evacuation_source_node has no node-name default. The gate play
+# below is what makes an unset value an error: an unmatched host pattern
+# otherwise skips the play silently and the run still exits 0.
+- name: Require an explicit evacuation source node
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert the source node was supplied
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_source_node is defined
+          - pve_guest_evacuation_source_node | default('') | length > 0
+        fail_msg: >-
+          Pass pve_guest_evacuation_source_node explicitly; it has no default.
+
+- name: Archive one guest for a node evacuation
+  hosts: "{{ pve_guest_evacuation_source_node | default('evacuation-source-unset') }}"
   become: true
   gather_facts: false
   serial: 1

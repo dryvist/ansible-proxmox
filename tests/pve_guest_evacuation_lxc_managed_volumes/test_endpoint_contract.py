@@ -23,8 +23,8 @@ def test_unequal_rsync_endpoint_requires_a_verified_canonical_fqdn() -> None:
     contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
 
     assert "pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn: \"\"" in defaults
-    assert "Resolve the approved pve540 canonical FQDN from pve2" in contract
-    assert "Resolve the pve540 inventory endpoint from pve2" in contract
+    assert "Resolve the approved target canonical FQDN from the source" in contract
+    assert "Resolve the target inventory endpoint from the source" in contract
     assert "- ahostsv4" in contract
     assert "pve_guest_evacuation_lxc_managed_volumes_target_rsync_host\n              == pve_guest_evacuation_lxc_managed_volumes_target_rsync_canonical_fqdn" in contract
     assert "pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_ipv4s" in contract
@@ -47,7 +47,7 @@ def test_unequal_rsync_endpoint_rejects_aliases_and_unverified_resolution() -> N
 def test_canonical_fqdn_endpoint_contract_accepts_a_matching_literal_inventory_ipv4(tmp_path: Path) -> None:
     result = run_canonical_endpoint_contract(
         tmp_path,
-        "pve540.jacobpevans.com",
+        "evacuation-target-test.example.com",
         "192.0.2.54",
         ["192.0.2.54"],
         ["192.0.2.54"],
@@ -59,9 +59,14 @@ def test_canonical_fqdn_endpoint_contract_accepts_a_matching_literal_inventory_i
 @pytest.mark.parametrize(
     ("canonical_fqdn", "inventory_endpoint", "canonical_ipv4s", "inventory_ipv4s"),
     [
-        ("pve540", "192.0.2.54", ["192.0.2.54"], ["192.0.2.54"]),
+        ("targetnode", "192.0.2.54", ["192.0.2.54"], ["192.0.2.54"]),
         ("192.0.2.54", "192.0.2.55", ["192.0.2.54"], ["192.0.2.55"]),
-        ("pve540.jacobpevans.com", "192.0.2.54", ["192.0.2.55"], ["192.0.2.54"]),
+        (
+            "evacuation-target-test.example.com",
+            "192.0.2.54",
+            ["192.0.2.55"],
+            ["192.0.2.54"],
+        ),
     ],
     ids=["single-label-alias", "ip-literal", "dns-mismatch"],
 )

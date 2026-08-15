@@ -1,13 +1,14 @@
 ---
-# This standalone restore reads pve3 archive evidence and writes only to pve540
-# plus a new pve3 evidence record. It never delegates a state-changing action
-# to pve2 and it never starts or removes a guest.
+# This standalone restore reads the staging host's archive evidence and writes
+# only to the target node plus a new staging evidence record. It never
+# delegates a state-changing action to the source node and it never starts or
+# removes a guest.
 #
 # The phases below are ORDER-DEPENDENT: each proves a precondition the next
 # phase relies on, and no restore command runs until every check has passed.
 # Do not reorder these includes.
 
-- name: Prove archive evidence and pve540 storage match the request
+- name: Prove archive evidence and target storage match the request
   ansible.builtin.include_tasks: evidence_and_storage.yml
 
 - name: Verify the archive itself before any restore command runs

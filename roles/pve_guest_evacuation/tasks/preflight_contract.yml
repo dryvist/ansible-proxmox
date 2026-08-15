@@ -7,6 +7,21 @@
       Only phase=archive is implemented. Probe and cutover are intentionally
       unsupported and fail closed.
 
+- name: Require an explicitly named source, target and staging host
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_source_node is defined
+      - pve_guest_evacuation_source_node | default('') | length > 0
+      - pve_guest_evacuation_target_node is defined
+      - pve_guest_evacuation_target_node | default('') | length > 0
+      - pve_guest_evacuation_staging_host is defined
+      - pve_guest_evacuation_staging_host | default('') | length > 0
+    fail_msg: >-
+      The caller must pass pve_guest_evacuation_source_node,
+      pve_guest_evacuation_target_node and pve_guest_evacuation_staging_host
+      explicitly. These have no defaults so an unset value fails closed
+      instead of targeting an unintended node.
+
 - name: Validate archive invocation
   ansible.builtin.assert:
     that:
@@ -14,7 +29,7 @@
       - pve_guest_evacuation_source_node in hostvars
       - pve_guest_evacuation_target_node in hostvars
       - pve_guest_evacuation_staging_host in hostvars
-      - pve_guest_evacuation_staging_host == 'pve3'
+      - pve_guest_evacuation_source_node != pve_guest_evacuation_target_node
       - pve_guest_evacuation_guest_vmid | string is match('^[1-9][0-9]*$')
       - pve_guest_evacuation_staging_storage | length > 0
       - pve_guest_evacuation_staging_server | length > 0
@@ -27,5 +42,5 @@
       - pve_guest_evacuation_zstd_threads | int >= 0
     fail_msg: >-
       Archive runs only on its declared source with one positive numeric VMID,
-      an explicit pve3 NFS staging endpoint, a local /var/tmp workspace,
+      an explicit NFS staging endpoint, a local /var/tmp workspace,
       nonnegative Zstandard thread count, and a safe run identifier.

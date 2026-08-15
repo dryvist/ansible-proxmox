@@ -43,9 +43,9 @@
             name: pve_guest_evacuation
             tasks_from: preflight_contract.yml
           vars:
-            pve_guest_evacuation_source_node: pve-guest-evacuation-test
-            pve_guest_evacuation_target_node: pve540
-            pve_guest_evacuation_staging_host: pve3
+            pve_guest_evacuation_source_node: evacuation-source-test
+            pve_guest_evacuation_target_node: evacuation-target-test
+            pve_guest_evacuation_staging_host: evacuation-staging-test
             pve_guest_evacuation_guest_vmid: '101'
             pve_guest_evacuation_run_id: molecule
       rescue:
@@ -57,6 +57,25 @@
       ansible.builtin.assert:
         that:
           - pve_guest_evacuation_input_failed | default(false)
+
+    # The source/target/staging variables have no defaults, so an unset value
+    # must be an error. Without this the role would quietly archive against
+    # whichever node a default named.
+    - name: Exercise the unset source-node contract
+      block:
+        - name: Run the contract with no source node
+          ansible.builtin.include_role:
+            name: pve_guest_evacuation
+            tasks_from: preflight_contract.yml
+      rescue:
+        - name: Record that an unset source node failed
+          ansible.builtin.set_fact:
+            pve_guest_evacuation_unset_source_failed: true
+
+    - name: Assert an unset source node fails closed
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_unset_source_failed | default(false)
 
     - name: Permit a managed Proxmox LXC volume
       ansible.builtin.include_role:
