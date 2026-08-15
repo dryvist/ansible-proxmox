@@ -26,8 +26,11 @@
           - "'DEST=\"/bulk/git-mirror\"' in git_mirror_script_text"
           - "'api.github.com/users/example-org/repos' in git_mirror_script_text"
           - "'api.github.com/users/example-user/repos' in git_mirror_script_text"
+          # The update runs as `git -C "$path" remote update --prune`, so
+          # assert the subcommand, not a `git `-prefixed literal that the
+          # script never contains.
           - "'git clone --mirror' in git_mirror_script_text"
-          - "'git remote update --prune' in git_mirror_script_text"
+          - "'remote update --prune' in git_mirror_script_text"
         fail_msg: "git-mirror script did not render the expected contract"
 
     - name: Assert the timer is daily and persistent
