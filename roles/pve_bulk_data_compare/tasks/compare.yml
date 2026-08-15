@@ -9,26 +9,26 @@
 
 - name: Freeze manifest and compare datasets
   block:
-    - name: Freeze source bulk/data when it was writable
+    - name: Freeze the source dataset when it was writable
       ansible.builtin.command:
-        argv: [zfs, set, readonly=on, bulk/data]
+        argv: [zfs, set, readonly=on, "{{ pve_bulk_data_compare_source_dataset }}"]
       when: pve_bulk_data_compare_readonly_before.results[0].stdout.split()[0] == 'off'
       register: pve_bulk_data_compare_source_freeze
       changed_when: true
 
-    - name: Freeze target bulk/data when it was writable
+    - name: Freeze the target dataset when it was writable
       ansible.builtin.command:
-        argv: [zfs, set, readonly=on, bulk/data]
+        argv: [zfs, set, readonly=on, "{{ pve_bulk_data_compare_target_dataset }}"]
       delegate_to: "{{ pve_bulk_data_compare_target_node }}"
       when: pve_bulk_data_compare_readonly_before.results[1].stdout.split()[0] == 'off'
       register: pve_bulk_data_compare_target_freeze
       changed_when: true
 
-    - name: Generate deterministic source manifest outside bulk/data
+    - name: Generate the deterministic source manifest outside the dataset
       ansible.builtin.script:
         cmd: "manifest.py {{ pve_bulk_data_compare_source_path | quote }} {{ pve_bulk_data_compare_source_manifest | quote }}"
 
-    - name: Generate deterministic target manifest outside bulk/data
+    - name: Generate the deterministic target manifest outside the dataset
       ansible.builtin.script:
         cmd: "manifest.py {{ pve_bulk_data_compare_target_path | quote }} {{ pve_bulk_data_compare_target_manifest | quote }}"
       delegate_to: "{{ pve_bulk_data_compare_target_node }}"
@@ -44,14 +44,14 @@
     - name: Fail after classified differences are published
       ansible.builtin.assert:
         that: [pve_bulk_data_compare_result.rc == 0]
-        fail_msg: "bulk/data manifests differ; classified atomic evidence is under {{ pve_bulk_data_compare_evidence_prefix }}.*"
+        fail_msg: "Manifests differ; classified atomic evidence is under {{ pve_bulk_data_compare_evidence_prefix }}.*"
   always:
     - name: Restore target readonly state exactly # noqa no-handler
       ansible.builtin.command:
         argv: >-
-          {{ ['zfs', 'set', 'readonly=off', 'bulk/data']
+          {{ ['zfs', 'set', 'readonly=off', pve_bulk_data_compare_target_dataset]
              if pve_bulk_data_compare_readonly_before.results[1].stdout.split()[1] == 'local'
-             else ['zfs', 'inherit', 'readonly', 'bulk/data'] }}
+             else ['zfs', 'inherit', 'readonly', pve_bulk_data_compare_target_dataset] }}
       delegate_to: "{{ pve_bulk_data_compare_target_node }}"
       when: pve_bulk_data_compare_target_freeze.changed | default(false)
       changed_when: true
@@ -59,19 +59,19 @@
     - name: Restore source readonly state exactly # noqa no-handler
       ansible.builtin.command:
         argv: >-
-          {{ ['zfs', 'set', 'readonly=off', 'bulk/data']
+          {{ ['zfs', 'set', 'readonly=off', pve_bulk_data_compare_source_dataset]
              if pve_bulk_data_compare_readonly_before.results[0].stdout.split()[1] == 'local'
-             else ['zfs', 'inherit', 'readonly', 'bulk/data'] }}
+             else ['zfs', 'inherit', 'readonly', pve_bulk_data_compare_source_dataset] }}
       when: pve_bulk_data_compare_source_freeze.changed | default(false)
       changed_when: true
 
     - name: Capture readonly properties after restoration
       ansible.builtin.command:
-        argv: [zfs, get, -H, -o, 'value,source', readonly, bulk/data]
-      delegate_to: "{{ item }}"
+        argv: [zfs, get, -H, -o, 'value,source', readonly, "{{ item.dataset }}"]
+      delegate_to: "{{ item.name }}"
       loop:
-        - "{{ pve_bulk_data_compare_source_node }}"
-        - "{{ pve_bulk_data_compare_target_node }}"
+        - {name: "{{ pve_bulk_data_compare_source_node }}", dataset: "{{ pve_bulk_data_compare_source_dataset }}"}
+        - {name: "{{ pve_bulk_data_compare_target_node }}", dataset: "{{ pve_bulk_data_compare_target_dataset }}"}
       register: pve_bulk_data_compare_readonly_after
       changed_when: false
 
@@ -80,4 +80,4 @@
         that:
           - pve_bulk_data_compare_readonly_after.results[0].stdout == pve_bulk_data_compare_readonly_before.results[0].stdout
           - pve_bulk_data_compare_readonly_after.results[1].stdout == pve_bulk_data_compare_readonly_before.results[1].stdout
-        fail_msg: "A bulk/data readonly property was not restored to its exact value and source."
+        fail_msg: "A readonly property was not restored to its exact value and source."

@@ -24,8 +24,18 @@ def test_snapshot_free_frozen_comparison_contract():
     assert "PASSED" not in preflight
     assert "evidence_manifest_dir" in preflight
     assert "manifest_export" in preflight
-    assert "703040" in (ROLE / "defaults" / "main.yml").read_text()
-    assert "736040" in (ROLE / "defaults" / "main.yml").read_text()
+    defaults = (ROLE / "defaults" / "main.yml").read_text()
+    # The writer list is required and undefaulted. An empty list must not be
+    # the default: looping over nothing passes the writer check without
+    # checking anything, so a caller with no writers says so explicitly.
+    assert "pve_bulk_data_compare_media_writer_cts: null" in defaults
+    assert "pve_bulk_data_compare_no_media_writer_cts: false" in defaults
+    assert "pve_bulk_data_compare_media_writer_cts is not none" in preflight
+    assert "pve_bulk_data_compare_no_media_writer_cts | bool" in preflight
+    assert "Media writer CT {{ item.item }} is not stopped." in preflight
+    # Dataset names and paths are required too, not pinned to one estate's.
+    for var in ("source_dataset", "target_dataset", "source_path", "target_path"):
+        assert f'pve_bulk_data_compare_{var}: ""' in defaults
     assert "readonly=on" in compare
     assert "always:" in compare
     assert "readonly=off" in compare

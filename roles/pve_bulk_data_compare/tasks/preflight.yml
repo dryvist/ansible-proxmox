@@ -19,27 +19,30 @@
     that:
       - inventory_hostname == pve_bulk_data_compare_source_node
       - pve_bulk_data_compare_source_node != pve_bulk_data_compare_target_node
-      - pve_bulk_data_compare_source_dataset == 'bulk/data'
-      - pve_bulk_data_compare_target_dataset == 'bulk/data'
-      - pve_bulk_data_compare_source_path == '/bulk/data'
-      - pve_bulk_data_compare_target_path == '/bulk/data'
+      - pve_bulk_data_compare_source_dataset is match('^[A-Za-z0-9][A-Za-z0-9._-]*/[^ ]+$')
+      - pve_bulk_data_compare_target_dataset is match('^[A-Za-z0-9][A-Za-z0-9._-]*/[^ ]+$')
+      - pve_bulk_data_compare_source_path is match('^/[^ ]+$')
+      - pve_bulk_data_compare_target_path is match('^/[^ ]+$')
       - pve_bulk_data_compare_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
       - pve_bulk_data_compare_evidence_dir | length > 0
       - pve_bulk_data_compare_source_manifest_dir | length > 0
       - pve_bulk_data_compare_target_manifest_dir | length > 0
       - pve_bulk_data_compare_evidence_manifest_dir | length > 0
       - pve_bulk_data_compare_manifest_export | length > 0
-      - pve_bulk_data_compare_evidence_dir != '/bulk/data'
-      - not pve_bulk_data_compare_evidence_dir.startswith('/bulk/data/')
-      - pve_bulk_data_compare_source_manifest_dir != '/bulk/data'
-      - not pve_bulk_data_compare_source_manifest_dir.startswith('/bulk/data/')
-      - pve_bulk_data_compare_target_manifest_dir != '/bulk/data'
-      - not pve_bulk_data_compare_target_manifest_dir.startswith('/bulk/data/')
-      - pve_bulk_data_compare_evidence_manifest_dir != '/bulk/data'
-      - not pve_bulk_data_compare_evidence_manifest_dir.startswith('/bulk/data/')
+      # No manifest or evidence output may live inside either compared path:
+      # writing there would alter the very data being compared.
+      - >-
+        [pve_bulk_data_compare_evidence_dir,
+         pve_bulk_data_compare_source_manifest_dir,
+         pve_bulk_data_compare_target_manifest_dir,
+         pve_bulk_data_compare_evidence_manifest_dir]
+        | select('match', '^(' ~ (pve_bulk_data_compare_source_path | regex_escape)
+                 ~ '|' ~ (pve_bulk_data_compare_target_path | regex_escape) ~ ')(/|$)')
+        | list | length == 0
     fail_msg: >-
-      This role only compares the exact source and target bulk/data datasets,
-      with explicit enablement, run id, and evidence-host staging.
+      This role only compares the exact declared source and target datasets,
+      with explicit enablement, run id, and evidence-host staging. The dataset
+      names and paths have no defaults.
 
 - name: Assert pve client manifest staging is mounted and writable
   ansible.builtin.command:
@@ -97,9 +100,12 @@
 
 - name: Capture pool operation state
   ansible.builtin.command:
-    argv: [zpool, status, -v, bulk]
-  delegate_to: "{{ item }}"
-  loop: ["{{ pve_bulk_data_compare_source_node }}", "{{ pve_bulk_data_compare_target_node }}"]
+    # The pool is the first component of each side's dataset.
+    argv: [zpool, status, -v, "{{ item.dataset.split('/')[0] }}"]
+  delegate_to: "{{ item.name }}"
+  loop:
+    - {name: "{{ pve_bulk_data_compare_source_node }}", dataset: "{{ pve_bulk_data_compare_source_dataset }}"}
+    - {name: "{{ pve_bulk_data_compare_target_node }}", dataset: "{{ pve_bulk_data_compare_target_dataset }}"}
   register: pve_bulk_data_compare_pool_status
   changed_when: false
 
@@ -107,10 +113,10 @@
   ansible.builtin.assert:
     that:
       - item.stdout is not search('(scrub|resilver|expand) in progress')
-    fail_msg: "{{ item.item }} has an active ZFS pool operation."
+    fail_msg: "{{ item.item.name }} has an active ZFS pool operation."
   loop: "{{ pve_bulk_data_compare_pool_status.results }}"
 
-- name: Assert every reported bulk vdev counter is zero
+- name: Assert every reported pool vdev counter is zero
   ansible.builtin.assert:
     that:
       - >-
@@ -123,7 +129,7 @@
         | reject('match', '^\s+\S+\s+(ONLINE|DEGRADED|FAULTED|OFFLINE|UNAVAIL|REMOVED)\s+0\s+0\s+0\s*$')
         | list | length == 0
     fail_msg: >-
-      {{ item.item }} bulk has no parseable vdev rows or has a non-zero
+      {{ item.item.name }} has no parseable vdev rows or has a non-zero
       reported READ, WRITE, or CKSUM counter.
   loop: "{{ pve_bulk_data_compare_pool_status.results }}"
 
@@ -131,8 +137,32 @@
   ansible.builtin.assert:
     that:
       - pve_bulk_data_compare_pool_status.results[0].stdout is search('scrub repaired 0B')
-      - pve_bulk_data_compare_pool_status.results[0].stdout is search('errors: No known data errors')
-    fail_msg: "Source bulk has no zero-repair, zero-known-error scrub."
+      # Quoted for the same reason as the writer check below: ": " unquoted
+      # turns the conditional into a mapping and the assert never evaluates.
+      - "pve_bulk_data_compare_pool_status.results[0].stdout is search('errors: No known data errors')"
+    fail_msg: "The source pool has no zero-repair, zero-known-error scrub."
+
+- name: Require an explicit media writer CT declaration
+  ansible.builtin.assert:
+    that:
+      - pve_bulk_data_compare_media_writer_cts is not none
+      - pve_bulk_data_compare_media_writer_cts is sequence
+      - >-
+        pve_bulk_data_compare_media_writer_cts | length > 0
+        or pve_bulk_data_compare_no_media_writer_cts | bool
+    fail_msg: >-
+      Pass pve_bulk_data_compare_media_writer_cts, the guests that can write to
+      the compared dataset. It has no default. If there genuinely are none, set
+      pve_bulk_data_compare_no_media_writer_cts=true to say so explicitly — an
+      empty list on its own would make the writer check pass without checking
+      anything.
+
+- name: Record that the caller declared no media writer guests
+  ansible.builtin.debug:
+    msg: >-
+      No media writer guests were declared for this comparison; the
+      writer-stopped check has nothing to verify.
+  when: pve_bulk_data_compare_media_writer_cts | length == 0
 
 - name: Assert every known media writer CT is stopped
   ansible.builtin.command:
@@ -143,15 +173,19 @@
 
 - name: Reject a running media writer CT
   ansible.builtin.assert:
-    that: [item.stdout == 'status: stopped']
+    # Quoted: an unquoted conditional containing ": " parses as a MAPPING, not
+    # a condition, and the assert errors instead of evaluating.
+    that: ["item.stdout == 'status: stopped'"]
     fail_msg: "Media writer CT {{ item.item }} is not stopped."
   loop: "{{ pve_bulk_data_compare_ct_status.results }}"
 
 - name: Capture exact readonly property values and sources
   ansible.builtin.command:
-    argv: [zfs, get, -H, -o, 'value,source', readonly, bulk/data]
-  delegate_to: "{{ item }}"
-  loop: ["{{ pve_bulk_data_compare_source_node }}", "{{ pve_bulk_data_compare_target_node }}"]
+    argv: [zfs, get, -H, -o, 'value,source', readonly, "{{ item.dataset }}"]
+  delegate_to: "{{ item.name }}"
+  loop:
+    - {name: "{{ pve_bulk_data_compare_source_node }}", dataset: "{{ pve_bulk_data_compare_source_dataset }}"}
+    - {name: "{{ pve_bulk_data_compare_target_node }}", dataset: "{{ pve_bulk_data_compare_target_dataset }}"}
   register: pve_bulk_data_compare_readonly_before
   changed_when: false
 
@@ -160,5 +194,5 @@
     that:
       - item.stdout.split()[0] in ['on', 'off']
       - item.stdout.split()[1] == 'local' or item.stdout.split()[1] == 'default' or item.stdout is search(' inherited from ')
-    fail_msg: "Readonly source on {{ item.item }} is not safely restorable."
+    fail_msg: "Readonly source on {{ item.item.name }} is not safely restorable."
   loop: "{{ pve_bulk_data_compare_readonly_before.results }}"
