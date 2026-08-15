@@ -4,21 +4,21 @@ driver:
 
 platforms:
   - name: pve3
-    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    image: "${MOLECULE_IMAGE:-geerlingguy/docker-debian12-ansible:latest}"
     pre_build_image: true
     privileged: true
     tmpfs:
       - /run
       - /tmp
   - name: pve2
-    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    image: "${MOLECULE_IMAGE:-geerlingguy/docker-debian12-ansible:latest}"
     pre_build_image: true
     privileged: true
     tmpfs:
       - /run
       - /tmp
   - name: pve540
-    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    image: "${MOLECULE_IMAGE:-geerlingguy/docker-debian12-ansible:latest}"
     pre_build_image: true
     privileged: true
     tmpfs:
