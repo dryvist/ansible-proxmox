@@ -17,7 +17,9 @@
       "node": "pve1",
       "pool_id": "infrastructure",
       "tags": ["container", "object-storage", "storage"],
-      "vmid": 902000
+      "vmid": 902000,
+      "mac": "02:00:00:00:00:01",
+      "ansible_pct_vmid": 902000
     }
   },
   "host_services": {
