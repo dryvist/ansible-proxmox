@@ -1,5 +1,9 @@
 ---
-# Host vars for pve4/pve-w5900 (the always-on AMD desktop, Gigabyte board).
+# Host vars for pve-w5900 (the always-on AMD desktop, Gigabyte board).
+#
+# This file's name must match the INVENTORY host name (pve-w5900), not the
+# pve4 node-role alias. host_vars are keyed by inventory hostname, so a
+# pve4.yml here loads for nothing and leaves the role silently inert.
 #
 # No BMC/iDRAC on this hardware, so it can't use idrac_power/node_scheduled_wake
 # for a remote power-on. It is meant to run 24/7; recovery from an AC power
