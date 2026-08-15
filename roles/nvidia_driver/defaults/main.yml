@@ -69,13 +69,32 @@ nvidia_driver_header_packages:
 # the initramfs regenerated. Takes effect on the next reboot.
 nvidia_driver_blacklist_nouveau: true
 
-# nvidia-persistenced holds the driver loaded and the /dev/nvidia* character
-# devices present from boot onward.
-#
-# Without it those device nodes are created ON DEMAND, by the first process to
-# touch the GPU. On a headless hypervisor nothing does, so after a reboot the
-# nodes are simply absent — and an LXC guest's device bind for a path that does
-# not exist leaves the container running with no GPU and no error anywhere.
-# This is the same class of silent post-reboot regression as a Wake-on-LAN flag
-# that resets on every boot.
+# nvidia-persistenced keeps the driver resident so the GPU does not fall out of
+# initialised state between clients.
 nvidia_driver_persistenced_enabled: true
+
+# Materialise the device nodes at boot. This is a SEPARATE concern from
+# persistenced, and conflating the two is a mistake this role already made.
+#
+# Measured on a headless host, 27 seconds after boot, with persistenced already
+# active: /dev/nvidia0, /dev/nvidiactl and /dev/nvidia-modeset existed —
+# /dev/nvidia-uvm and /dev/nvidia-uvm-tools did NOT. They appeared moments later,
+# created by the first process to touch the GPU, which happened to be the check
+# itself. persistenced does not create them.
+#
+# That matters because an LXC guest cannot create them either: the container has
+# no kernel module to load. A device bind pointing at a path the host lacks
+# leaves the container running with no GPU and no error anywhere — and every CUDA
+# runtime needs Unified Memory, so the guest fails at inference, far from the
+# cause.
+#
+# It also means any check that reads the nodes has already created them. The
+# property worth asserting is that they exist while nothing is touching the GPU,
+# which is only observable on a fresh boot before anything else runs.
+#
+# Note the majors are genuinely dynamic, not merely "documented as dynamic":
+# across a single reboot on the same host, nvidia-uvm moved 507 -> 510 and the
+# nvidia-caps nodes moved 510 -> 236. Anything consuming these must read the
+# major off the node, never hardcode it.
+nvidia_driver_device_nodes_unit_enabled: true
+nvidia_driver_device_nodes_unit_name: nvidia-device-nodes.service

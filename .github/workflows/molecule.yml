@@ -100,6 +100,26 @@ jobs:
           PY_COLORS: "1"
           ANSIBLE_FORCE_COLOR: "1"
 
+      # Scenarios are enumerated by hand here, so a scenario that exists under
+      # molecule/ but is not listed NEVER RUNS IN CI. wol_enable and
+      # nvidia_driver were both in that state -- green PRs reported "Molecule
+      # (default)", which is a different scenario entirely, and reading that as
+      # coverage of the role under review is exactly the false green it looks
+      # like. Add every new scenario here when you add it.
+      - name: Run wol_enable molecule test
+        run: molecule test -s wol_enable
+        env:
+          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
+          PY_COLORS: "1"
+          ANSIBLE_FORCE_COLOR: "1"
+
+      - name: Run nvidia_driver molecule test
+        run: molecule test -s nvidia_driver
+        env:
+          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
+          PY_COLORS: "1"
+          ANSIBLE_FORCE_COLOR: "1"
+
       - name: Run ssh_ca_trust molecule test
         run: molecule test -s ssh_ca_trust
         env:
