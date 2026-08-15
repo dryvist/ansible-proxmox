@@ -7,10 +7,14 @@
 # build a module for, so the hardware steps are guarded off the same way
 # wol_enable guards its ethtool steps.
 
+# `lspci -d <vendor>:` filters on the vendor id itself and exits 0 with empty
+# output when nothing matches. Grepping the rendered `lspci -nn` text instead
+# is what broke the first version of this gate: the id appears as "[10de:2702]",
+# so a pattern anchored on a leading colon matched nothing and the assert below
+# failed on a host that plainly has the card.
 - name: Detect NVIDIA PCI devices on this host
-  ansible.builtin.shell:
-    cmd: "set -o pipefail && lspci -nn | grep -i ':{{ nvidia_driver_pci_vendor_id }}:' || true"
-    executable: /bin/bash
+  ansible.builtin.command:
+    cmd: "lspci -n -d {{ nvidia_driver_pci_vendor_id }}:"
   register: nvidia_driver_lspci
   changed_when: false
   when:

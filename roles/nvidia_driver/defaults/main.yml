@@ -6,7 +6,8 @@
 # host_vars. On every other node the role no-ops.
 nvidia_driver_enabled: false
 
-# PCI vendor id that identifies an NVIDIA device in `lspci -nn` output. Used as
+# PCI vendor id that identifies an NVIDIA device. Passed to `lspci -d <id>:`,
+# which filters on the vendor field itself rather than on rendered text. Used as
 # a hardware gate so an accidental opt-in on a GPU-less node fails loud at
 # converge time rather than installing a driver for hardware that isn't there.
 nvidia_driver_pci_vendor_id: "10de"
