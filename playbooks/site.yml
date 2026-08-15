@@ -276,6 +276,16 @@
       tags:
         - nvidia_driver
 
+# Proxmox VE HA (resources + anti-affinity) for the tier-0 guests. Imported here
+# rather than left as a standalone playbook so pve_ha_enabled cannot be forgotten
+# on a routine converge — it previously existed only as a hand-typed -e on this
+# standalone file, which site.yml never included, so HA silently did nothing on
+# every node loss. The role stays INERT unless pve_ha_enabled is true (set in
+# inventory group_vars, not per-run). Re-imports load_tofu.yml; import_playbook
+# is safe to repeat.
+- name: Configure Proxmox VE HA for tier-0 guests
+  import_playbook: ha.yml
+
 # Cribl Edge on every host. Imported here rather than left as a standalone
 # playbook so it is enforced by the standard converge — a node without a local
 # Edge agent has no approved route for host signals into Splunk, and would
