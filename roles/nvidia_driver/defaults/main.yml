@@ -1,0 +1,78 @@
+---
+# nvidia_driver role defaults — install NVIDIA's own host driver on a Proxmox
+# node so LXC guests can be given the GPU via device passthrough.
+#
+# Inert by default: opt a host in with nvidia_driver_enabled: true in its
+# host_vars. On every other node the role no-ops.
+nvidia_driver_enabled: false
+
+# PCI vendor id that identifies an NVIDIA device in `lspci -nn` output. Used as
+# a hardware gate so an accidental opt-in on a GPU-less node fails loud at
+# converge time rather than installing a driver for hardware that isn't there.
+nvidia_driver_pci_vendor_id: "10de"
+
+# Where the driver comes from: NVIDIA's own apt repository for this Debian
+# release, NOT Debian's non-free component.
+#
+# Two reasons, both load-bearing:
+#
+#  1. Version alignment host <-> container. In LXC passthrough the container
+#     loads no kernel module of its own; its userland libraries must match the
+#     *host's* kernel module version exactly or `nvidia-smi` in the guest fails
+#     with "Driver/library version mismatch". Guest images pull from this same
+#     NVIDIA repository, so sourcing the host from it too is the only
+#     arrangement that stays matched across upgrades.
+#  2. Debian's `nvidia-driver` lives in the `non-free` component, which this
+#     estate's nodes do not enable. Adding `non-free` would widen every node's
+#     package surface to get one driver onto one node; a separate .sources file
+#     scoped to the opted-in host does not.
+#
+# This is a FLAT apt repository ("deb <uri>/ /"), which is why the suite below
+# is "/" and no components are set. Do not copy the suite+component shape used
+# by pve_repositories here — apt rejects it against this URI.
+nvidia_driver_repo_uri: >-
+  https://developer.download.nvidia.com/compute/cuda/repos/debian{{
+  ansible_distribution_major_version }}/x86_64/
+#
+# The key filename is the key id NVIDIA currently signs this repository with.
+# It is not stable across NVIDIA key rotations, and a rotation shows up as an
+# apt NO_PUBKEY failure naming the new id — replace it here rather than
+# reaching for [trusted=yes], which disables signature verification entirely.
+nvidia_driver_repo_key_url: >-
+  https://developer.download.nvidia.com/compute/cuda/repos/debian{{
+  ansible_distribution_major_version }}/x86_64/8793F200.pub
+
+# Driver packages. `nvidia-open` is NVIDIA's own meta-package for the open
+# kernel modules (Turing and newer, so Ada/Ampere/Blackwell cards are covered);
+# it pulls nvidia-kernel-open-dkms, the CUDA userland, and nvidia-persistenced.
+#
+# `nvidia-smi` is listed separately on purpose: nothing in the nvidia-open
+# dependency chain pulls it, and without it there is no way to verify the
+# driver is working — the failure mode is a converge that reports success and
+# leaves you with no tool to check it.
+nvidia_driver_packages:
+  - nvidia-open
+  - nvidia-smi
+
+# Kernel headers DKMS builds the module against. The running kernel's headers
+# make the module build now; the metapackage makes it keep building after a
+# kernel upgrade, without which the GPU quietly disappears on the next reboot.
+nvidia_driver_header_packages:
+  - "proxmox-headers-{{ ansible_kernel }}"
+  - proxmox-default-headers
+
+# nouveau is the in-tree open-source driver. It binds the card at boot and the
+# NVIDIA module cannot load while it holds the device, so it is blacklisted and
+# the initramfs regenerated. Takes effect on the next reboot.
+nvidia_driver_blacklist_nouveau: true
+
+# nvidia-persistenced holds the driver loaded and the /dev/nvidia* character
+# devices present from boot onward.
+#
+# Without it those device nodes are created ON DEMAND, by the first process to
+# touch the GPU. On a headless hypervisor nothing does, so after a reboot the
+# nodes are simply absent — and an LXC guest's device bind for a path that does
+# not exist leaves the container running with no GPU and no error anywhere.
+# This is the same class of silent post-reboot regression as a Wake-on-LAN flag
+# that resets on every boot.
+nvidia_driver_persistenced_enabled: true

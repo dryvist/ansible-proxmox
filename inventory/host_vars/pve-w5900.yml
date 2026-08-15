@@ -20,3 +20,9 @@
 #   wakeonlan <mac-address>
 wol_enable_enabled: true
 wol_enable_interface: enp5s0
+
+# The only node in the estate with an NVIDIA card. Installs the host driver
+# from NVIDIA's own apt repository so LXC guests can be given the GPU via
+# device passthrough; see roles/nvidia_driver/README.md for why not Debian's
+# non-free packaging, and for the reboot the driver switch requires.
+nvidia_driver_enabled: true

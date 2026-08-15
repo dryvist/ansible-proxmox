@@ -1,0 +1,47 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Stat the artifacts the role manages
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: nvidia_driver_artifacts
+      loop:
+        - /etc/modprobe.d/blacklist-nouveau.conf
+        - /etc/apt/sources.list.d/nvidia-cuda.sources
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Read the rendered nouveau blacklist
+      ansible.builtin.slurp:
+        src: /etc/modprobe.d/blacklist-nouveau.conf
+      register: nvidia_driver_blacklist
+
+    - name: Assert the blacklist renders the expected contract
+      ansible.builtin.assert:
+        that:
+          - "'blacklist nouveau' in (nvidia_driver_blacklist.content | b64decode)"
+          - "'options nouveau modeset=0' in (nvidia_driver_blacklist.content | b64decode)"
+        fail_msg: "nvidia_driver did not render the expected nouveau blacklist"
+
+    # The Docker guard is what keeps a disabled or container-hosted converge
+    # from adding an apt repository, installing DKMS, or building a kernel
+    # module. Proven here by the .sources file being absent after a converge
+    # that ran the role enabled.
+    - name: Assert the apt repository was not added under Docker
+      ansible.builtin.assert:
+        that:
+          - not (nvidia_driver_artifacts.results[1].stat.exists)
+        fail_msg: >-
+          nvidia_driver added its apt repository inside a container -- the
+          ansible_virtualization_type guard is not holding.
+
+    - name: Assert nvidia packages were not installed
+      ansible.builtin.command:
+        cmd: dpkg-query -W -f='${Package}\n' nvidia-open nvidia-smi
+      register: nvidia_driver_dpkg
+      changed_when: false
+      failed_when: nvidia_driver_dpkg.rc == 0
