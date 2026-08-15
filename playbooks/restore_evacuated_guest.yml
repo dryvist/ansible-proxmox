@@ -3,10 +3,25 @@
 # This playbook is separate from archive and staging setup. It neither touches
 # the source node nor starts, overwrites, or removes a target guest.
 #
-# pve_guest_evacuation_restore_target_node has no default: an unset value must
-# be an error, never a silent fall-back to some other node.
+# pve_guest_evacuation_restore_target_node has no node-name default. The gate
+# play below is what makes an unset value an error: an unmatched host pattern
+# otherwise skips the play silently and the run still exits 0.
+- name: Require an explicit restore target node
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert the target node was supplied
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_restore_target_node is defined
+          - pve_guest_evacuation_restore_target_node | default('') | length > 0
+        fail_msg: >-
+          Pass pve_guest_evacuation_restore_target_node explicitly; it has no
+          default.
+
 - name: Restore one verified archive onto the standalone target
-  hosts: "{{ pve_guest_evacuation_restore_target_node }}"
+  hosts: "{{ pve_guest_evacuation_restore_target_node | default('evacuation-target-unset') }}"
   become: true
   gather_facts: false
   serial: 1

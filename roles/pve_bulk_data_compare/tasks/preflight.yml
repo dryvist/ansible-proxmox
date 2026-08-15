@@ -168,7 +168,7 @@
 
 - name: Capture exact readonly property values and sources
   ansible.builtin.command:
-    argv: [zfs, get, -H, -o, value,source, readonly, bulk/data] # noqa yaml[commas]
+    argv: [zfs, get, -H, -o, 'value,source', readonly, bulk/data]
   delegate_to: "{{ item }}"
   loop: ["{{ pve_bulk_data_compare_source_node }}", "{{ pve_bulk_data_compare_target_node }}"]
   register: pve_bulk_data_compare_readonly_before

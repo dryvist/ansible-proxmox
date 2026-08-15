@@ -1,8 +1,22 @@
 ---
-# pve_bulk_data_compare_source_node has no default: an unset value must be an
-# error, never a silent fall-back to some other node.
+# pve_bulk_data_compare_source_node has no node-name default. The gate play
+# below is what makes an unset value an error: an unmatched host pattern
+# otherwise skips the play silently and the run still exits 0.
+- name: Require an explicit comparison source node
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert the source node was supplied
+      ansible.builtin.assert:
+        that:
+          - pve_bulk_data_compare_source_node is defined
+          - pve_bulk_data_compare_source_node | default('') | length > 0
+        fail_msg: >-
+          Pass pve_bulk_data_compare_source_node explicitly; it has no default.
+
 - name: Freeze and compare the exact source and target bulk/data datasets
-  hosts: "{{ pve_bulk_data_compare_source_node }}"
+  hosts: "{{ pve_bulk_data_compare_source_node | default('evacuation-source-unset') }}"
   become: true
   gather_facts: false
   serial: 1

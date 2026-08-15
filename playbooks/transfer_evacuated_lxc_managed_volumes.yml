@@ -2,10 +2,28 @@
 # Final stopped-source transfer for managed LXC mpN volumes. This does not
 # create the target CT; restore_evacuated_guest.yml created its empty skeleton.
 #
-# pve_guest_evacuation_lxc_managed_volumes_source_node has no default: an unset
-# value must be an error, never a silent fall-back to some other node.
+# pve_guest_evacuation_lxc_managed_volumes_source_node has no node-name
+# default. The gate play below is what makes an unset value an error: an
+# unmatched host pattern otherwise skips the play silently and the run still
+# exits 0.
+- name: Require an explicit managed-volume source node
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert the source node was supplied
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_lxc_managed_volumes_source_node is defined
+          - >-
+            pve_guest_evacuation_lxc_managed_volumes_source_node
+            | default('') | length > 0
+        fail_msg: >-
+          Pass pve_guest_evacuation_lxc_managed_volumes_source_node
+          explicitly; it has no default.
+
 - name: Transfer one verified stopped-source LXC managed-volume payload set
-  hosts: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}"
+  hosts: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node | default('evacuation-source-unset') }}"
   become: true
   gather_facts: false
   serial: 1
