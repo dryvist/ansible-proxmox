@@ -47,13 +47,15 @@ nvidia_driver_repo_key_url: >-
 # kernel modules (Turing and newer, so Ada/Ampere/Blackwell cards are covered);
 # it pulls nvidia-kernel-open-dkms, the CUDA userland, and nvidia-persistenced.
 #
-# `nvidia-smi` is listed separately on purpose: nothing in the nvidia-open
-# dependency chain pulls it, and without it there is no way to verify the
-# driver is working — the failure mode is a converge that reports success and
-# leaves you with no tool to check it.
+# It is also where `nvidia-smi` comes from, and that is not obvious from the
+# dependency chain: no package in it is NAMED nvidia-smi. `nvidia-driver-cuda`
+# both Provides and Conflicts the standalone `nvidia-smi` package, so adding
+# that package here to "make sure" the tool is present makes the whole install
+# unsolvable — apt cannot satisfy nvidia-open and nvidia-smi at once. Verify a
+# provider with `apt-cache show`'s Provides field before adding a package to
+# this list; reading only the Depends chain is what got it added.
 nvidia_driver_packages:
   - nvidia-open
-  - nvidia-smi
 
 # Kernel headers DKMS builds the module against. The running kernel's headers
 # make the module build now; the metapackage makes it keep building after a
