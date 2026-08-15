@@ -29,7 +29,7 @@ fi
 mapfile -t existing < <(find "$DEST" -maxdepth 1 -name 'pve-etc-*.tar.gz' -type f | sort)
 excess=$(( ${#existing[@]} - RETAIN ))
 if [ "$excess" -gt 0 ]; then
-  printf '%s\n' "${existing[@]:0:$excess}" | xargs -r rm -f
+  printf '%s\0' "${existing[@]:0:$excess}" | xargs -0 -r rm -f
 fi
 
 ping_hc "${HC}"

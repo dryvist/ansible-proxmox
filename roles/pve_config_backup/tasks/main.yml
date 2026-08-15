@@ -67,3 +67,17 @@
     - ansible_virtualization_type != 'docker'
   tags:
     - pve_config_backup
+
+# Mirrors sanoid's disable branch: a host flipped back to disabled must not
+# be left with a stale timer still firing against a removed/outdated script.
+- name: Disable the config-backup timer when backups are not wanted
+  ansible.builtin.systemd:
+    name: pve-config-backup.timer
+    enabled: false
+    state: stopped
+  when:
+    - not pve_config_backup_enabled
+    - ansible_virtualization_type != 'docker'
+  failed_when: false
+  tags:
+    - pve_config_backup
