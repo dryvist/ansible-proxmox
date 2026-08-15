@@ -1,0 +1,14 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    # /etc/udev/rules.d ships with udev on every real systemd host but is
+    # absent from the slim base image, so create it here rather than making
+    # the role mkdir a directory that always exists in production.
+    - name: Install Python and system utilities, and stage the udev rules dir
+      ansible.builtin.raw: |
+        apt-get update && apt-get install -y python3 procps
+        mkdir -p /etc/udev/rules.d
+      changed_when: true

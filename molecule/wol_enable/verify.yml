@@ -1,0 +1,23 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered udev rule
+      ansible.builtin.slurp:
+        src: /etc/udev/rules.d/99-wol-enable.rules
+      register: wol_rule
+
+    - name: Assert the udev rule renders the expected contract
+      ansible.builtin.assert:
+        that:
+          - "'KERNEL==\"eth0\"' in (wol_rule.content | b64decode)"
+          - "'SUBSYSTEM==\"net\"' in (wol_rule.content | b64decode)"
+          - "'ethtool -s $env{INTERFACE} wol g' in (wol_rule.content | b64decode)"
+        fail_msg: "wol_enable udev rule did not render the expected contract"
+
+    # The Docker-skip on the ethtool install/read/set is proven by this
+    # converge succeeding (those tasks are guarded off, not failed). The
+    # rendered-rule contract is verified by the slurp assertion above.

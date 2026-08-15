@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+# Re-apply magic-packet Wake-on-LAN on every interface add -- the driver
+# resets Wake-on to its hardware default (usually disabled) on every
+# bring-up, so `ethtool -s wol g` alone does not survive a reboot.
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="{{ wol_enable_interface }}", RUN+="/usr/sbin/ethtool -s $env{INTERFACE} wol g"

@@ -10,7 +10,7 @@
     }
   },
   "containers": {
-    "object-storage": {
+    "s3": {
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "hostname": "s3",
       "ip": "192.168.0.20",

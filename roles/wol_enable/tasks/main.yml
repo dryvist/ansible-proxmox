@@ -1,0 +1,92 @@
+---
+# wol_enable tasks — enable Wake-on-LAN now and persist it across reboots via
+# a udev rule (ethtool's `wol g` setting does not survive a reboot on its
+# own). Under Docker (molecule) there is no real WoL-capable NIC, so the
+# ethtool install/read/set steps are skipped; the udev rule still renders,
+# proving the persisted contract -- matching the node_scheduled_wake pattern.
+
+- name: Assert an interface is configured when WoL is enabled
+  ansible.builtin.assert:
+    that:
+      - wol_enable_interface | trim | length > 0
+    fail_msg: >-
+      wol_enable_enabled is true but wol_enable_interface is empty -- set it
+      in this host's host_vars to the physical NIC enslaved to the bridge
+      (e.g. enp5s0), not the bridge itself.
+  when:
+    - wol_enable_enabled | bool
+  tags:
+    - wol_enable
+
+- name: Ensure ethtool is installed
+  ansible.builtin.apt:
+    name: ethtool
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when:
+    - wol_enable_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+- name: Read the interface's current Wake-on-LAN support and state
+  ansible.builtin.command:
+    cmd: "ethtool {{ wol_enable_interface }}"
+  register: wol_enable_ethtool
+  changed_when: false
+  when:
+    - wol_enable_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+- name: Extract the NIC's supported Wake-on-LAN modes
+  ansible.builtin.set_fact:
+    wol_enable_supported_modes: >-
+      {{ wol_enable_ethtool.stdout
+         | regex_search('Supports Wake-on:\s*(\S+)', '\1')
+         | first | default('') }}
+  when:
+    - wol_enable_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+# Fail loud rather than silently no-op: a node whose NIC cannot do magic-packet
+# wake will never respond to a WoL send, and that is a hardware fact worth
+# surfacing at converge time, not discovering during an outage.
+- name: Fail loud when the NIC does not support magic-packet Wake-on-LAN
+  ansible.builtin.assert:
+    that:
+      - "'g' in wol_enable_supported_modes"
+    fail_msg: >-
+      {{ wol_enable_interface }} does not advertise magic-packet (g)
+      Wake-on-LAN support (supports: '{{ wol_enable_supported_modes }}').
+  when:
+    - wol_enable_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+- name: Set Wake-on-LAN to magic packet now
+  ansible.builtin.command:
+    cmd: "ethtool -s {{ wol_enable_interface }} wol g"
+  changed_when: "'Wake-on: g' not in wol_enable_ethtool.stdout"
+  when:
+    - wol_enable_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+- name: Persist Wake-on-LAN across reboots via a udev rule
+  ansible.builtin.template:
+    src: 99-wol-enable.rules.j2
+    dest: /etc/udev/rules.d/99-wol-enable.rules
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - wol_enable_enabled | bool
+  tags:
+    - wol_enable

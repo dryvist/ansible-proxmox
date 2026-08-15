@@ -25,7 +25,7 @@
       ansible.builtin.assert:
         that:
           - hostvars['pve1'].containers_from_tofu is defined
-          - hostvars['pve1'].containers_from_tofu['object-storage'].vmid == 902000
+          - hostvars['pve1'].containers_from_tofu['s3'].vmid == 902000
           - hostvars['pve1'].splunk_vm_from_tofu.splunk.vmid == 90200
         fail_msg: >-
           load_tofu.yml did not inject the container/splunk identity that
@@ -39,6 +39,7 @@
           - "'bulk/appdata' in hostvars['pve540'].sanoid_datasets"
           - hostvars['pve540'].sanoid_datasets['bulk/databases'].hourly | int > 0
           - hostvars['pve540'].sanoid_datasets['bulk/appdata'].recursive == 'yes'
+          - "'bulk/subvol-902000-disk-1' in hostvars['pve540'].sanoid_datasets"
         fail_msg: >-
           The storage node holds live application state and the dump archive, so
           it must declare a sanoid policy for both. syncoid runs --no-sync-snap:

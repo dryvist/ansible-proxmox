@@ -108,13 +108,17 @@ pve_ha_anti_affinity_groups:
     hostnames:
       - technitium-dns
       - technitium-dns-2
-  # The Traefik ingress pair — activates automatically once traefik-2 exists in
-  # deployment.json (the VRRP VIP peer). With a single ingress node it is a
-  # no-op (skipped: not both members resolve).
+  # The Traefik ingress pair — the VRRP VIP peers. Names come from the
+  # node_services generator, which builds them as <name_prefix><suffix>, so they
+  # are not free-form: a guess here does not fail, it silently skips, because a
+  # pair whose members do not all resolve is dropped. That is why this sat inert
+  # while it named a guest that never existed.
+  #
+  # Activates on its own once the second instance is created.
   - name: ingress-traefik
     hostnames:
-      - traefik
-      - traefik-2
+      - traefik-10
+      - traefik-30
   # The Postgres primary/standby pair: a node loss must never take both the
   # primary and its streaming standby.
   - name: postgres-pair
