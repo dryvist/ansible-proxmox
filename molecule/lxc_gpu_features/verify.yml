@@ -92,6 +92,52 @@
           AMD device lines leaked into the NVIDIA container:
           {{ nvidia_lines | select('search', '/dev/dri|/dev/kfd|226:|235:') | list }}
 
+    # --- 4b. the PARSE of real stat output ------------------------------------
+    # The scenario injects majors and paths as a fixture, because there is no
+    # GPU in a container. That left the enumeration itself untested, and a
+    # malformed stat format shipped: `stat -c %t %n` unquoted passes %n as a
+    # FILENAME, so stat prints only majors and the parse yields entries like
+    # "1ff" where paths belong. The result was a container config with device
+    # allow lines and no mount entries — which starts fine and has no GPU.
+    #
+    # This exercises the parse against the exact two shapes: the correct output
+    # of a quoted format, and the output the malformed one produced.
+    - name: Parse a correctly formatted stat line set
+      ansible.builtin.set_fact:
+        parsed_ok_paths: >-
+          {{ good_stat_lines | map('split', ' ') | map('last') | list }}
+        parsed_ok_majors: >-
+          {{ good_stat_lines | map('split', ' ') | map('first')
+             | map('int', 0, 16) | unique | list }}
+      vars:
+        good_stat_lines:
+          - "c3 /dev/nvidia0"
+          - "c3 /dev/nvidiactl"
+          - "1ff /dev/nvidia-uvm"
+          - "1ff /dev/nvidia-uvm-tools"
+
+    - name: Assert the parse recovers paths and hex majors
+      ansible.builtin.assert:
+        that:
+          - parsed_ok_paths == ['/dev/nvidia0', '/dev/nvidiactl', '/dev/nvidia-uvm', '/dev/nvidia-uvm-tools']
+          - parsed_ok_majors == [195, 511]
+        fail_msg: >-
+          Parse of well-formed stat output is wrong.
+          paths={{ parsed_ok_paths }} majors={{ parsed_ok_majors }}
+
+    # The shape guard the role asserts on. Bare majors must be rejected as
+    # paths — non-emptiness alone passed this and let the defect through.
+    - name: Assert malformed enumeration output is rejected as paths
+      ansible.builtin.assert:
+        that:
+          - bad_paths | length > 0
+          - bad_paths | reject('match', '^/dev/') | list | length > 0
+        fail_msg: >-
+          A path list of bare majors must not satisfy the role's shape check;
+          it did, which means the guard is still only testing non-emptiness.
+      vars:
+        bad_paths: ['1ff', '1ff', 'c3', 'c3', 'c3']
+
     # --- 5. the AMD container is unchanged by the NVIDIA work ----------------
     # The regression that matters most: adding the nvidia branch must not alter
     # what the existing AMD guest gets.
@@ -119,5 +165,5 @@
       ansible.builtin.debug:
         msg: >-
           lxc_gpu_features verify ran
-          {{ (expected_nvidia_lines | length) + (expected_amd_lines | length) + 4 }}
+          {{ (expected_nvidia_lines | length) + (expected_amd_lines | length) + 7 }}
           assertions across {{ 2 }} rendered container configs.

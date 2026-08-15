@@ -67,18 +67,26 @@
 #
 # Runs once per host and only when some container on it actually asks for
 # nvidia, so this costs nothing on the AMD nodes.
+# `shell`, not `command`, and the quoting is the entire reason. The command
+# module splits on whitespace, so an unquoted `stat -c %t %n` passes `%n` as a
+# FILENAME rather than as part of the format string. stat then prints only the
+# major for each real device and writes `cannot statx '%n'` to stderr, so the
+# parse below sees lines with no path in them at all — and produces device
+# entries pointing at strings like "1ff".
 - name: Enumerate the host's NVIDIA character devices
-  ansible.builtin.command:
+  ansible.builtin.shell:
     cmd: >-
       find {{ lxc_gpu_features_nvidia_device_root }}
       -maxdepth {{ lxc_gpu_features_nvidia_device_depth }}
-      -name nvidia* -type c -exec stat -c %t %n {} +
+      -name 'nvidia*' -type c -exec stat -c '%t %n' {} +
   register: lxc_gpu_features_nvidia_find
   changed_when: false
   # An absent /dev/nvidia* set is not an error here — it is the "host driver not
   # installed, or the nodes did not survive the last reboot" case, which the
   # assert below names explicitly rather than letting find's exit code decide.
-  failed_when: false
+  # It does NOT excuse stat failing: that is a malformed command, not an absent
+  # device, so anything on stderr fails the task.
+  failed_when: lxc_gpu_features_nvidia_find.stderr | default('') | trim | length > 0
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - lxc_gpu_features_nvidia_requested | bool
@@ -106,10 +114,19 @@
 # device entries point at paths the host does not have starts perfectly happily
 # and simply has no GPU — there is no error anywhere, and the symptom surfaces
 # much later as an inference workload silently running on CPU.
+#
+# Non-emptiness alone is NOT enough, and assuming it was is what let a
+# malformed enumerate command through: it produced a non-empty list whose
+# entries were bare majors rather than paths. Every entry must look like an
+# absolute path under the device root, or the parse did not do what it claims.
 - name: Fail loud when NVIDIA passthrough is requested but the host has no device nodes
   ansible.builtin.assert:
     that:
       - lxc_gpu_features_nvidia_paths | default([]) | length > 0
+      - >-
+        lxc_gpu_features_nvidia_paths | default([])
+        | reject('match', '^' ~ lxc_gpu_features_nvidia_device_root ~ '/')
+        | list | length == 0
     fail_msg: >-
       NVIDIA passthrough is requested for a container on this host, but no
       /dev/nvidia* character devices exist. Install the host driver (the
@@ -118,6 +135,11 @@
       with the driver installed and loaded. nvidia-persistenced does NOT create
       them; the nvidia-device-nodes.service oneshot (nvidia-modprobe -c 0 -u)
       does, and that unit is what must be enabled.
+      Resolved paths were: {{ lxc_gpu_features_nvidia_paths | default([]) }}.
+      If that list is non-empty but its entries are not absolute paths under
+      {{ lxc_gpu_features_nvidia_device_root }}, the devices exist and the
+      ENUMERATION is malformed — check the stat format string is quoted as one
+      argument rather than split into a format plus a filename.
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - lxc_gpu_features_nvidia_requested | bool
