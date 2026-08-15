@@ -1,0 +1,20 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Create the NVIDIA device nodes at boot
+# Ordered after persistenced only so the driver is already resident; this unit
+# does not depend on it, and persistenced does NOT do this job -- see the role
+# defaults for the measurement that established that.
+After=nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# nvidia-modprobe is NVIDIA's own tool for exactly this: -c 0 materialises the
+# device file for GPU 0, -u loads the Unified Memory module and creates its
+# device files. Both are otherwise created lazily by the first CUDA process,
+# which on a headless hypervisor never runs.
+ExecStart=/usr/bin/nvidia-modprobe -c 0 -u
+
+[Install]
+WantedBy=multi-user.target

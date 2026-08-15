@@ -113,13 +113,12 @@
   tags:
     - nvidia_driver
 
-# This is what makes /dev/nvidia* exist from boot onward on a headless host.
-# See the defaults for why the on-demand default is a silent failure here.
+# Keeps the driver resident between clients.
 #
 # Enabled unconditionally so the reboot brings it up; only STARTED once nouveau
 # is gone, because until then the NVIDIA module cannot bind the card and the
 # service would fail to start on a converge that is otherwise correct.
-- name: Enable nvidia-persistenced so the device nodes exist from boot
+- name: Enable nvidia-persistenced so the driver stays resident
   ansible.builtin.systemd_service:
     name: nvidia-persistenced
     enabled: true
@@ -127,6 +126,34 @@
   when:
     - nvidia_driver_enabled | bool
     - nvidia_driver_persistenced_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+# THIS is what makes the device nodes exist from boot onward — not persistenced,
+# which was measured leaving /dev/nvidia-uvm absent. See the role defaults.
+- name: Install the boot-time NVIDIA device-node unit
+  ansible.builtin.template:
+    src: nvidia-device-nodes.service.j2
+    dest: "/etc/systemd/system/{{ nvidia_driver_device_nodes_unit_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_device_nodes_unit_enabled | bool
+  tags:
+    - nvidia_driver
+
+- name: Enable the boot-time NVIDIA device-node unit
+  ansible.builtin.systemd_service:
+    name: "{{ nvidia_driver_device_nodes_unit_name }}"
+    enabled: true
+    daemon_reload: true
+    state: "{{ 'started' if 'nouveau' not in nvidia_driver_lsmod.stdout else omit }}"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_device_nodes_unit_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
