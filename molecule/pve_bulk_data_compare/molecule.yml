@@ -1,7 +1,7 @@
 ---
 platforms:
   - name: pve-bulk-data-compare-test
-    image: "${MOLECULE_IMAGE:-geerlingguy/docker-debian12-ansible:latest}"
+    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
     pre_build_image: true
 provisioner:
   config_options:
