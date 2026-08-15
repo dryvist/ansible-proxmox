@@ -1,0 +1,37 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered backup script
+      ansible.builtin.slurp:
+        src: /usr/local/bin/pve-config-backup.sh
+      register: pve_config_backup_script
+
+    - name: Read the rendered timer unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/pve-config-backup.timer
+      register: pve_config_backup_timer
+
+    - name: Decode rendered files
+      ansible.builtin.set_fact:
+        pve_config_backup_script_text: "{{ pve_config_backup_script.content | b64decode }}"
+        pve_config_backup_timer_text: "{{ pve_config_backup_timer.content | b64decode }}"
+
+    - name: Assert the backup script renders the expected contract
+      ansible.builtin.assert:
+        that:
+          - "'SRC=\"/etc/pve\"' in pve_config_backup_script_text"
+          - "'DEST=\"/bulk/databases/pve-etc\"' in pve_config_backup_script_text"
+          - "'RETAIN=7' in pve_config_backup_script_text"
+          - "'tar czf' in pve_config_backup_script_text"
+        fail_msg: "pve-config-backup script did not render the expected contract"
+
+    - name: Assert the timer is daily and persistent
+      ansible.builtin.assert:
+        that:
+          - "'OnCalendar=*-*-* 04:15:00' in pve_config_backup_timer_text"
+          - "'Persistent=true' in pve_config_backup_timer_text"
+        fail_msg: "pve-config-backup timer did not render the expected schedule"

@@ -166,6 +166,13 @@ postgres_standby_jobs: >-
         'archive_dir': '/bulk/databases/postgres-apps'}
      ] }}
 
+# Cluster config archive (pve_config_backup role). This node already owns
+# the bulk/databases dataset (sanoid-protected above), and pmxcfs replicates
+# /etc/pve to every member, so enabling this here — rather than on every
+# node — captures the whole cluster's config from one place with no
+# cross-host pull needed.
+pve_config_backup_enabled: true
+
 syncoid_jobs:
   - name: "splunk-{{ splunk_vmid }}-disk0"
     source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-0"

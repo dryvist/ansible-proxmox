@@ -1,0 +1,35 @@
+#!/bin/bash
+# pve-config-backup — daily tar of the local pmxcfs mount into the archive
+# namespace. Managed by Ansible — do not edit manually.
+#
+# pmxcfs replicates /etc/pve cluster-wide, so this file, run on any one
+# member, captures cluster.conf, storage.cfg, firewall rules, HA rules,
+# replication.cfg and ACLs for the whole cluster — not just this node.
+set -uo pipefail
+
+SRC="{{ pve_config_backup_source_dir }}"
+DEST="{{ pve_config_backup_archive_dir }}"
+RETAIN={{ pve_config_backup_retain_count }}
+HC="{{ pve_config_backup_healthcheck_url }}"
+
+ping_hc() { [ -n "$HC" ] && curl -fsS -m 10 --retry 3 -o /dev/null "$1" >/dev/null 2>&1 || true; }
+
+mkdir -p "$DEST"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+archive="${DEST}/pve-etc-${stamp}.tar.gz"
+
+if ! tar czf "$archive" -C "$(dirname "$SRC")" "$(basename "$SRC")"; then
+  echo "pve-config-backup: tar of ${SRC} FAILED" >&2
+  rm -f "$archive"
+  ping_hc "${HC}/fail"
+  exit 1
+fi
+
+# Prune to the RETAIN most recent archives; oldest first.
+mapfile -t existing < <(find "$DEST" -maxdepth 1 -name 'pve-etc-*.tar.gz' -type f | sort)
+excess=$(( ${#existing[@]} - RETAIN ))
+if [ "$excess" -gt 0 ]; then
+  printf '%s\0' "${existing[@]:0:$excess}" | xargs -0 -r rm -f
+fi
+
+ping_hc "${HC}"
