@@ -9,12 +9,12 @@
       {{
         dict(
           (containers_from_tofu | default({})) | dict2items
-          | selectattr('value.vmid', 'defined')
+          | selectattr('value.ansible_pct_vmid', 'defined')
           | selectattr('value.node', 'defined')
           | map(attribute='key') | list
           | zip(
               (containers_from_tofu | default({})) | dict2items
-              | selectattr('value.vmid', 'defined')
+              | selectattr('value.ansible_pct_vmid', 'defined')
               | selectattr('value.node', 'defined')
               | map(attribute='value') | list
             )
@@ -28,7 +28,7 @@
     pve_ha_replication_jobs: >-
       {{ pve_ha_replication_jobs | default([]) + [ {
            'hostname': item,
-           'id': (pve_ha_ct_by_host[item].vmid | string) ~ '-'
+           'id': (pve_ha_ct_by_host[item].ansible_pct_vmid | string) ~ '-'
                  ~ (pve_ha_replication_jobnum | string),
            'source': pve_ha_ct_by_host[item].node,
            'target': (pve_ha_replication_pair
@@ -94,7 +94,7 @@
 
 - name: Read each replication guest's LXC config (to find its volumes' storage ids)
   ansible.builtin.command: >-
-    pvesh get /nodes/{{ item.source }}/lxc/{{ pve_ha_ct_by_host[item.hostname].vmid }}/config
+    pvesh get /nodes/{{ item.source }}/lxc/{{ pve_ha_ct_by_host[item.hostname].ansible_pct_vmid }}/config
     --output-format json
   loop: "{{ pve_ha_replication_jobs | default([]) }}"
   loop_control:
