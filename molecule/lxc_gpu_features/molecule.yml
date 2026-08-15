@@ -1,0 +1,36 @@
+---
+platforms:
+  - name: proxmox-lxc-gpu-features-test
+    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    pre_build_image: true
+    privileged: true
+    tmpfs:
+      - /run
+      - /tmp
+
+provisioner:
+  inventory:
+    group_vars:
+      all:
+        # SINGLE source for the test's service -> vmid fixture, inherited by both
+        # converge and verify (a vmid is therefore defined in exactly one place).
+        # ARBITRARY test ids — NEVER the real production VMIDs, which live only
+        # in deployment.json. Arbitrary ids are what prove the service-keyed
+        # feature map follows ANY renumber unchanged.
+        lxc_gpu_features_test_service_vmids:
+          llm-fast: 90101
+          llm-4080: 90102
+
+        # Device fixture for the NVIDIA line-construction test. These stand in
+        # for what `stat -c %t` reports on a real GPU host, and they are
+        # deliberately NOT the values a reader would guess: 195 is stable for
+        # /dev/nvidia0 and /dev/nvidiactl, but the UVM major is dynamic and was
+        # MEASURED moving 507 -> 510 across a single reboot on one host. A test
+        # that used one uniform major would pass against an implementation that
+        # collapsed the list, which is exactly the bug worth catching.
+        lxc_gpu_features_test_nvidia_majors: [195, 510]
+        lxc_gpu_features_test_nvidia_paths:
+          - /dev/nvidia0
+          - /dev/nvidiactl
+          - /dev/nvidia-uvm
+          - /dev/nvidia-uvm-tools

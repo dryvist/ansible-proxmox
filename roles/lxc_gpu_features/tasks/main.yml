@@ -61,6 +61,69 @@
   tags:
     - lxc_gpu_features
 
+# NVIDIA character-device majors are handed out dynamically at module load, so
+# unlike the AMD constants they are read off the host's real device nodes.
+# `stat -c '%t'` prints the major in hex.
+#
+# Runs once per host and only when some container on it actually asks for
+# nvidia, so this costs nothing on the AMD nodes.
+- name: Enumerate the host's NVIDIA character devices
+  ansible.builtin.command:
+    cmd: >-
+      find {{ lxc_gpu_features_nvidia_device_root }}
+      -maxdepth {{ lxc_gpu_features_nvidia_device_depth }}
+      -name nvidia* -type c -exec stat -c %t %n {} +
+  register: lxc_gpu_features_nvidia_find
+  changed_when: false
+  # An absent /dev/nvidia* set is not an error here — it is the "host driver not
+  # installed, or the nodes did not survive the last reboot" case, which the
+  # assert below names explicitly rather than letting find's exit code decide.
+  failed_when: false
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - lxc_gpu_features_nvidia_requested | bool
+  tags:
+    - lxc_gpu_features
+
+- name: Resolve the NVIDIA device paths and their majors
+  ansible.builtin.set_fact:
+    lxc_gpu_features_nvidia_paths: >-
+      {{ lxc_gpu_features_nvidia_lines | map('split', ' ') | map('last') | list }}
+    lxc_gpu_features_nvidia_majors: >-
+      {{ lxc_gpu_features_nvidia_lines | map('split', ' ') | map('first')
+         | map('int', 0, 16) | unique | list }}
+  vars:
+    lxc_gpu_features_nvidia_lines: >-
+      {{ (lxc_gpu_features_nvidia_find.stdout_lines | default([]))
+         | select('truthy') | list }}
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - lxc_gpu_features_nvidia_requested | bool
+  tags:
+    - lxc_gpu_features
+
+# Fail loud rather than write a config that binds nothing. A container whose
+# device entries point at paths the host does not have starts perfectly happily
+# and simply has no GPU — there is no error anywhere, and the symptom surfaces
+# much later as an inference workload silently running on CPU.
+- name: Fail loud when NVIDIA passthrough is requested but the host has no device nodes
+  ansible.builtin.assert:
+    that:
+      - lxc_gpu_features_nvidia_paths | default([]) | length > 0
+    fail_msg: >-
+      NVIDIA passthrough is requested for a container on this host, but no
+      /dev/nvidia* character devices exist. Install the host driver (the
+      nvidia_driver role) and confirm the nodes are present AFTER a reboot --
+      they are created on demand, so on a headless host they can be absent even
+      with the driver installed and loaded. nvidia-persistenced does NOT create
+      them; the nvidia-device-nodes.service oneshot (nvidia-modprobe -c 0 -u)
+      does, and that unit is what must be enabled.
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - lxc_gpu_features_nvidia_requested | bool
+  tags:
+    - lxc_gpu_features
+
 - name: Reset the changed-container accumulator
   ansible.builtin.set_fact:
     lxc_gpu_features_changed: []

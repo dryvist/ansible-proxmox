@@ -1,7 +1,7 @@
 ---
-# Bind AMD GPU device nodes into a single GPU LXC.
+# Bind GPU device nodes into a single GPU LXC.
 # gpu_ct.key   = container ID (string)
-# gpu_ct.value = { dri: bool, kfd: bool }
+# gpu_ct.value = { dri: bool, kfd: bool, nvidia: bool }
 #
 # Proxmox RELOCATES raw `lxc.*` keys to the end of /etc/pve/lxc/<vmid>.conf on
 # every rewrite/reboot, which separates them from any blockinfile markers — so a
@@ -27,18 +27,53 @@
             'lxc.cgroup2.devices.allow: c ' ~ lxc_gpu_features_kfd_major ~ ':* rwm',
             'lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file'
           ] if (gpu_ct.value.kfd | default(true)) else [])
+          +
+          (
+            (
+              lxc_gpu_features_nvidia_majors | default([])
+              | map('regex_replace', '^(.*)$',
+                    'lxc.cgroup2.devices.allow: c \1:* rwm')
+              | list
+            )
+            +
+            (
+              lxc_gpu_features_nvidia_paths | default([])
+              | map('regex_replace', '^/(.*)$',
+                    'lxc.mount.entry: /\1 \1 none bind,optional,create=file')
+              | list
+            )
+            if (gpu_ct.value.nvidia | default(false)) else []
+          )
         )
       }}
   tags:
     - lxc_gpu_features
 
 # --- cleanup of earlier-version artifacts (idempotent; no-op once clean) ---
+#
+# Both cleanup tasks use `state: absent`, and BOTH blockinfile and lineinfile
+# ERROR on a missing path rather than treating it as already-absent. So without
+# this stat they cannot converge from a clean slate: reaching the desired state
+# would require the desired state to already partially exist.
+#
+# The caller only loops over vmids that `pct list` reported, so on a healthy
+# node the config file exists by construction and this never fires. The case it
+# covers is a rebuilt or partially-restored node, where a guest can be listed
+# while its config is missing — and that is precisely when evacuation and
+# cleanup code runs. Correct every day except the day it matters.
+- name: "Stat the guest config file for container {{ gpu_ct.key }}"
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ gpu_ct.key }}.conf"
+  register: lxc_gpu_features_conf
+  tags:
+    - lxc_gpu_features
 
 - name: "Remove legacy marker block for container {{ gpu_ct.key }}"
   ansible.builtin.blockinfile:
     path: "/etc/pve/lxc/{{ gpu_ct.key }}.conf"
     marker: "# {mark} ANSIBLE MANAGED BLOCK lxc_gpu_features"
     state: absent
+  when: lxc_gpu_features_conf.stat.exists
   notify: Restart changed gpu containers
   register: lxc_gpu_features_markers
   tags:
@@ -51,6 +86,7 @@
     # line containing "devices.allow" more than once.
     regexp: 'devices\.allow.*devices\.allow'
     state: absent
+  when: lxc_gpu_features_conf.stat.exists
   notify: Restart changed gpu containers
   register: lxc_gpu_features_legacy
   tags:
@@ -58,7 +94,23 @@
 
 # --- desired state: one lineinfile per raw lxc.* directive ---
 
-- name: "Passthrough AMD GPU devices into container {{ gpu_ct.key }}"
+# Deliberately NOT `create: yes`. A missing config file means Proxmox has no
+# config for this guest, and materialising one here would write passthrough
+# directives into a file the hypervisor never made — inventing a guest rather
+# than configuring one. Skip it and say so; the node needs repair, not a file.
+- name: "Warn about a missing guest config file for container {{ gpu_ct.key }}"
+  ansible.builtin.debug:
+    msg: >-
+      SKIPPING GPU passthrough for container {{ gpu_ct.key }}: it is listed by
+      `pct list` but /etc/pve/lxc/{{ gpu_ct.key }}.conf does not exist. That
+      combination means a damaged or partially-restored node, not a
+      configuration gap. Repair the guest config before relying on GPU
+      passthrough for it.
+  when: not lxc_gpu_features_conf.stat.exists
+  tags:
+    - lxc_gpu_features
+
+- name: "Passthrough GPU devices into container {{ gpu_ct.key }}"
   ansible.builtin.lineinfile:
     path: "/etc/pve/lxc/{{ gpu_ct.key }}.conf"
     line: "{{ gpu_line }}"
@@ -67,6 +119,7 @@
   loop: "{{ lxc_gpu_features_lines }}"
   loop_control:
     loop_var: gpu_line
+  when: lxc_gpu_features_conf.stat.exists
   notify: Restart changed gpu containers
   register: lxc_gpu_features_set
   tags:
