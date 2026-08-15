@@ -45,18 +45,24 @@ lxc_gpu_features_kfd_major: 235
 # (/dev/nvidia0, /dev/nvidiactl, /dev/nvidia-uvm, /dev/nvidia-uvm-tools), all of
 # which sit directly in /dev.
 #
-# It does NOT reach /dev/nvidia-caps/*, and that is a decision, not an absence.
-# The directory DOES exist on this consumer card, holding nvidia-cap1 and
-# nvidia-cap2 — measured, not assumed. Those nodes carry MIG / capability
-# signalling, which a non-MIG card does not use, so a CUDA workload runs without
-# them. Excluding them is therefore deliberate; the depth is what records that.
-# Raise this to 2 if a MIG-capable card is ever added, and bind the caps
-# directory AS A DIRECTORY rather than per-file: `create=file` does not create
+# It does NOT reach /dev/nvidia-caps/*. Measured on the GPU host after a clean
+# boot with the device-nodes unit having run: the directory does NOT EXIST.
+#
+#   test -d /dev/nvidia-caps          -> NO
+#   ls -1 /proc/driver/nvidia/capabilities/
+#     fabric-imex-mgmt  gpu0  mig  profiler-context  profiler-device
+#     trace-device
+#
+# So the capability SOURCES exist in procfs while no /dev nodes are created for
+# them. nvidia-modprobe materialises those only when something actually needs
+# them — MIG, or profiler access — and a non-MIG consumer card serving
+# inference needs neither. Depth 1 is therefore correct on two counts: the
+# nodes are not required, and right now they are not even present to bind.
+#
+# If a MIG-capable card is ever added, raise this to 2 AND bind the caps
+# directory as a DIRECTORY rather than per-file: `create=file` does not create
 # parent directories, so a per-file entry under a directory the container lacks
 # fails at container start.
-#
-# The caps majors move too — measured 510 -> 236 across a single reboot on one
-# host — which is why nothing here may hardcode them either.
 lxc_gpu_features_nvidia_device_root: /dev
 lxc_gpu_features_nvidia_device_depth: 1
 
