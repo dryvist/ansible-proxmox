@@ -1,6 +1,23 @@
 ---
 # Group variables for Proxmox VE servers
 
+# Enables roles/pve_ha (see playbooks/site.yml, which now imports playbooks/ha.yml
+# on every converge). Previously this only existed as a hand-typed `-e
+# pve_ha_enabled=true` on a standalone playbook that site.yml never included, so
+# a node loss got no auto-restart and no relocation — see the audit at
+# docs/DR_HA.md and Vikunja #1359. Declared here, in inventory, so it survives a
+# routine converge instead of depending on someone remembering the flag.
+#
+# Deliberately on the `proxmox` group, not the narrower `pve_cluster_members`
+# group: playbooks/ha.yml's play targets `hosts: proxmox`, and pve_ha's own
+# first task (an unconditional per-host assert) runs on every host in that
+# play — including cluster members outside `pve_cluster_members` (that
+# group's membership governs corosync join eligibility, a different and
+# narrower concern, and does not cover every node actually in the cluster).
+# Placing the flag on `pve_cluster_members` left one such node failing the
+# assert on every converge — caught live 2026-08-15.
+pve_ha_enabled: true
+
 # Trust the OpenBao SSH client CA on the PVE nodes and (via pct) their LXC
 # containers (ssh-certificate-authority ADR). Additive + lockout-guarded (a
 # static break-glass key must still authenticate before the role finishes) and

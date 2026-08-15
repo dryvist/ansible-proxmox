@@ -76,12 +76,12 @@
           {{
             dict(
               (tofu_data.containers | default({})) | dict2items
-              | selectattr('value.vmid', 'defined')
+              | selectattr('value.ansible_pct_vmid', 'defined')
               | map(attribute='key') | list
               | zip(
                   (tofu_data.containers | default({})) | dict2items
-                  | selectattr('value.vmid', 'defined')
-                  | map(attribute='value.vmid') | list
+                  | selectattr('value.ansible_pct_vmid', 'defined')
+                  | map(attribute='value.ansible_pct_vmid') | list
                 )
             )
           }}
@@ -97,16 +97,44 @@
           {{
             dict(
               (tofu_data.containers | default({})) | dict2items
-              | selectattr('value.vmid', 'defined')
+              | selectattr('value.ansible_pct_vmid', 'defined')
               | map(attribute='key') | list
               | zip(
                   (tofu_data.containers | default({})) | dict2items
-                  | selectattr('value.vmid', 'defined')
-                  | map(attribute='value.vmid') | list
+                  | selectattr('value.ansible_pct_vmid', 'defined')
+                  | map(attribute='value.ansible_pct_vmid') | list
                 )
             )
           }}
       loop: "{{ groups['proxmox'] | default([]) }}"
+
+    # Fail loud when the projection comes out empty against a non-empty
+    # container map. Both maps above are consumed by roles that iterate them:
+    # an empty map makes those roles no-op at rc=0 with changed=0, which reads
+    # as "already converged" and is indistinguishable from success. Every task
+    # is skipped, nothing is reported, and the guests quietly never receive
+    # their device bindings.
+    #
+    # That is not hypothetical — it is what a wrong attribute name did here.
+    - name: Assert the service -> vmid projections resolved
+      ansible.builtin.assert:
+        that:
+          - (tofu_data.containers | default({})) | length == 0
+            or (hostvars[groups['proxmox'][0]].lxc_gpu_features_service_vmids_from_tofu
+                | default({}) | length) > 0
+        fail_msg: >-
+          The published inventory has
+          {{ (tofu_data.containers | default({})) | length }} containers, but the
+          service -> vmid projection resolved to none. The container entries do
+          not carry the attribute this projection selects on, so every consuming
+          role would skip silently at rc=0. Compare the key names in the
+          published ansible_inventory against the selectattr above.
+        success_msg: >-
+          Service -> vmid projection resolved
+          {{ hostvars[groups['proxmox'][0]].lxc_gpu_features_service_vmids_from_tofu
+             | default({}) | length }} of
+          {{ (tofu_data.containers | default({})) | length }} containers.
+      when: groups['proxmox'] | default([]) | length > 0
 
     # Splunk VM identity (node + vmid) for the sanoid/syncoid replication config.
     # Lets host_vars derive the source node + vmid from tofu instead of

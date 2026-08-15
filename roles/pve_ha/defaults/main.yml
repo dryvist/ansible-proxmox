@@ -32,6 +32,16 @@
 #     every other node.
 pve_ha_enabled: false
 
+# A membership list wrong in EITHER direction (a dead hostname, or a live guest
+# never added) produces no error by itself — a dead entry is skipped as
+# unresolvable, a missing live one is never considered at all, and both read as
+# a clean converge (see pve_ha_ct_hostnames below, corrected 2026-08-15 after
+# exactly this class of drift left the live DNS primary with no HA coverage
+# while its retired predecessor stayed listed). True fails the run loudly on
+# any unresolvable member across tier0_resources/replication_jobs/
+# estate_wide_enrollment; set false to fall back to a non-fatal debug line.
+pve_ha_fail_on_unresolved: true
+
 # Inventory hostname of the SINGLE node the ha-manager commands run on. HA state
 # is cluster-wide, so one node is sufficient and correct. Defaults to
 # pve_cluster_primary_host (the pve_cluster role's own primary, set in
@@ -68,25 +78,41 @@ pve_ha_state: started
 #     peer, so RELOCATION to a replica is their only node-loss story. They also
 #     appear in pve_ha_replication_ct_hostnames, which ships their rootfs to the
 #     always-on partner node so ha-manager can actually start them there.
-# NAMING: technitium-dns/-2 and traefik are legacy names that violate the
-# multi-instance naming law (two-digit suffix, first digit = node ID). They stay
-# here because this list must match the LIVE hostnames or the role skips them —
-# rename flows through IaC first (tofu-proxmox#679), then this list follows.
+# VERIFIED AGAINST LIVE 2026-08-15 (pvesh get /cluster/resources). This list was
+# wrong in BOTH directions at once: it named `traefik`, which resolves to no
+# guest, and `technitium-dns`, which exists but is the STOPPED, retired DNS
+# primary — while OMITTING traefik-10, traefik-30 (both halves of the live
+# ingress pair) and technitium-30 (the LIVE DNS primary). A dead entry is
+# skipped as unresolvable; a missing live guest is never considered at all.
+# Both read as a clean converge, so the guest whose failure mode caused an
+# estate-wide DNS fault had no HA coverage while its retired predecessor was
+# listed. technitium-dns is kept out deliberately — a stopped guest with no
+# viable relocation target is worse than one left outside HA.
 pve_ha_ct_hostnames:
   - openbao-01
   - openbao-02
-  - technitium-dns
+  - technitium-30
   - technitium-dns-2
-  - traefik
+  - traefik-10
+  - traefik-30
   # Data platform + shared-Postgres apps tier (live under HA since 2026-07-16;
   # this records what ha-manager already holds so a converge is idempotent).
-  # postgres-apps/nautobot/vikunja are the pvesr-replicated singletons and also
-  # appear in pve_ha_replication_ct_hostnames below.
+  # nautobot/vikunja are the pvesr-replicated singletons and also appear in
+  # pve_ha_replication_ct_hostnames below.
   - postgres
-  - postgres-apps
   - vikunja
   - nautobot
   - zammad
+  # postgres-apps deliberately EXCLUDED — verified live 2026-08-15: it has no
+  # viable pvesr replica within pve_ha_replication_pair (it runs on the node
+  # holding the shared-postgres-apps guest, which is not in that pair). This
+  # guard fails loud on exactly that condition (pve_ha_fail_on_unresolved),
+  # and it is right to — that is not this guest's home. The honest fix is a
+  # per-guest replication pair (postgres-apps needs a different pair than
+  # nautobot/vikunja), not shipped here to avoid rushing a modelling change
+  # under converge pressure. postgres-apps has NO viable replica TODAY either
+  # way; excluding it here only changes whether that fact is visible. Restore
+  # it once the per-guest pair design lands (Vikunja #1359/#1362).
   # Media tier: in-place crash auto-restart only (no redundant peer, so no
   # anti-affinity entry; node placement is enforced in the IaC layer — see
   # terraform-proxmox#615). Issue #396.
@@ -106,7 +132,7 @@ pve_ha_anti_affinity_groups:
       - openbao-02
   - name: technitium-dns
     hostnames:
-      - technitium-dns
+      - technitium-30
       - technitium-dns-2
   # The Traefik ingress pair — the VRRP VIP peers. Names come from the
   # node_services generator, which builds them as <name_prefix><suffix>, so they
@@ -121,10 +147,18 @@ pve_ha_anti_affinity_groups:
       - traefik-30
   # The Postgres primary/standby pair: a node loss must never take both the
   # primary and its streaming standby.
+  # postgres-apps deliberately EXCLUDED — verified live 2026-08-15 (converge):
+  # ha-manager rejects a resource-affinity rule referencing a guest that is
+  # not itself an HA-managed resource ("cannot use unmanaged resource(s)"),
+  # and postgres-apps is deliberately excluded from pve_ha_ct_hostnames above
+  # (no viable replica). The "skipped if a member doesn't resolve" guard only
+  # checks tofu-inventory resolution, not HA-management status, so a
+  # since-excluded guest left in a pair here reaches ha-manager and fails
+  # loud rather than skipping quietly. Restore alongside pve_ha_ct_hostnames
+  # once the per-guest replication pair design lands (Vikunja #1359/#1362).
   - name: postgres-pair
     hostnames:
       - postgres
-      - postgres-apps
 
 # --- Storage replication (pvesr) for the SINGLETON app guests ----------------
 # The guests here get a pvesr job that ships their rootfs to the always-on
@@ -134,7 +168,10 @@ pve_ha_anti_affinity_groups:
 # replica. Hostname-keyed like pve_ha_ct_hostnames; a guest absent from the tofu
 # inventory (e.g. not provisioned yet) is skipped with a warning, not a failure.
 pve_ha_replication_ct_hostnames:
-  - postgres-apps
+  # postgres-apps deliberately excluded here too — see the comment above
+  # pve_ha_ct_hostnames. A pvesr job targeting a pair it is not homed in
+  # would just fail on first sync; membership in this list is a no-op
+  # without a viable pair member.
   - nautobot
   - vikunja
 

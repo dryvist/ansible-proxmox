@@ -1,0 +1,71 @@
+---
+# Two plays, because they cover two different things and only the second one
+# exercises code that could silently emit a wrong device binding.
+
+# Play 1 — the role end to end. Under Docker every `pct`/enumerate task
+# short-circuits (ansible_virtualization_type == 'docker'), so this proves the
+# role converges cleanly, the service-keyed map loads, the service -> vmid join
+# resolves, and the skip guards hold on a host with no GPU.
+- name: Converge — role defaults and skip guards
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    lxc_gpu_features_service_vmids_from_tofu: "{{ lxc_gpu_features_test_service_vmids }}"
+
+  roles:
+    - role: lxc_gpu_features
+
+# Play 2 — the NVIDIA line construction, against the ROLE'S OWN task file.
+#
+# This includes roles/lxc_gpu_features/tasks/configure_container.yml directly
+# rather than restating its Jinja in the test. Restating it would produce a test
+# that passes whenever the COPY is self-consistent, including when the copy and
+# the role have drifted apart — the assertion would be satisfiable by the exact
+# state it is supposed to rule out.
+#
+# The device enumeration itself cannot run here (no /dev/nvidia* in a
+# container), so its output is injected as a fixture. What is under test is
+# everything downstream of enumeration: the major -> cgroup-allow mapping and
+# the path -> mount-entry mapping, which is where a regex typo silently produces
+# a container that starts fine and has no GPU.
+- name: Converge — NVIDIA passthrough line construction
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    lxc_gpu_features_nvidia_majors: "{{ lxc_gpu_features_test_nvidia_majors }}"
+    lxc_gpu_features_nvidia_paths: "{{ lxc_gpu_features_test_nvidia_paths }}"
+
+  tasks:
+    # include_role + tasks_from, NOT include_tasks with a path. Two reasons:
+    # it resolves through the role search path rather than a relative path that
+    # breaks if this scenario moves, and it loads the role's HANDLERS — the
+    # tasks notify `Restart changed gpu containers`, and a notify to a handler
+    # that was never loaded is a hard error.
+    #
+    # The fixture is handed over as a LOOP_VAR named gpu_ct, matching exactly how
+    # the role's own caller invokes these tasks. Passing it as a plain `vars:`
+    # entry would work but would not: role-internal variables are required to
+    # carry the role's prefix, and a loop_var is the sanctioned exception. So
+    # this is both the lint-clean form and the form production actually uses.
+    - name: Build and write the passthrough lines for each fixture container
+      ansible.builtin.include_role:
+        name: lxc_gpu_features
+        tasks_from: configure_container
+      loop:
+        - key: "{{ lxc_gpu_features_test_service_vmids['llm-4080'] }}"
+          value:
+            dri: false
+            kfd: false
+            nvidia: true
+        - key: "{{ lxc_gpu_features_test_service_vmids['llm-fast'] }}"
+          value:
+            dri: true
+            kfd: true
+            nvidia: false
+      loop_control:
+        loop_var: gpu_ct
+        label: "container {{ gpu_ct.key }}"

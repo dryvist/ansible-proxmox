@@ -1,0 +1,16 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    # Directory creation and timer enable are Docker-skipped; this proves the
+    # script + timer render the expected contract from the job definition.
+    pve_config_backup_enabled: true
+    pve_config_backup_healthcheck_url: "https://hc-ping.example/pve-config-backup"
+    pve_config_backup_archive_dir: "/bulk/databases/pve-etc"
+    pve_config_backup_retain_count: 7
+
+  roles:
+    - role: pve_config_backup

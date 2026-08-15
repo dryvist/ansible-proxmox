@@ -27,6 +27,25 @@
           - "'options nouveau modeset=0' in (nvidia_driver_blacklist.content | b64decode)"
         fail_msg: "nvidia_driver did not render the expected nouveau blacklist"
 
+    - name: Read the rendered boot-time device-node unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/nvidia-device-nodes.service
+      register: nvidia_driver_unit
+
+    # Both flags are load-bearing and were established by measurement, not by
+    # reading docs: -c 0 for the GPU device file, -u for Unified Memory, which
+    # persistenced leaves absent and every CUDA runtime needs.
+    - name: Assert the device-node unit runs nvidia-modprobe with both flags
+      ansible.builtin.assert:
+        that:
+          - "'nvidia-modprobe -c 0 -u' in (nvidia_driver_unit.content | b64decode)"
+          - "'Type=oneshot' in (nvidia_driver_unit.content | b64decode)"
+          - "'WantedBy=multi-user.target' in (nvidia_driver_unit.content | b64decode)"
+        fail_msg: >-
+          nvidia_driver's boot-time device-node unit did not render the expected
+          contract -- without `-u` the Unified Memory nodes stay absent at boot
+          and an LXC guest's CUDA workload fails with no error on the host.
+
     # The Docker guard is what keeps a disabled or container-hosted converge
     # from adding an apt repository, installing DKMS, or building a kernel
     # module. Proven here by the .sources file being absent after a converge

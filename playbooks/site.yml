@@ -238,6 +238,19 @@
                 'secret_key': lookup('env', 'POSTGRES_DR_AWS_SECRET_KEY')}
              ] | selectattr('access_key', 'ne', '') | list }}
 
+    # Daily tar of the local pmxcfs mount (/etc/pve: cluster.conf,
+    # storage.cfg, firewall/HA/replication config, ACLs) into the generic
+    # <pool>/databases archive namespace — same shape as sqlite_standby /
+    # postgres_standby above, new source. pmxcfs replicates cluster-wide, so
+    # running this on any one member captures the whole cluster; inert unless
+    # a host sets pve_config_backup_enabled: true (the node that already owns
+    # the <pool>/databases dataset).
+    - role: pve_config_backup
+      tags:
+        - pve_config_backup
+      vars:
+        pve_config_backup_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/pve-config-backup"
+
     - role: idrac_kiosk
       tags:
         - idrac_kiosk
@@ -275,6 +288,16 @@
     - role: nvidia_driver
       tags:
         - nvidia_driver
+
+# Proxmox VE HA (resources + anti-affinity) for the tier-0 guests. Imported here
+# rather than left as a standalone playbook so pve_ha_enabled cannot be forgotten
+# on a routine converge — it previously existed only as a hand-typed -e on this
+# standalone file, which site.yml never included, so HA silently did nothing on
+# every node loss. The role stays INERT unless pve_ha_enabled is true (set in
+# inventory group_vars, not per-run). Re-imports load_tofu.yml; import_playbook
+# is safe to repeat.
+- name: Configure Proxmox VE HA for tier-0 guests
+  import_playbook: ha.yml
 
 # Cribl Edge on every host. Imported here rather than left as a standalone
 # playbook so it is enforced by the standard converge — a node without a local

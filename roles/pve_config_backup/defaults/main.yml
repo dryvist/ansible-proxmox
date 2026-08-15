@@ -1,0 +1,30 @@
+---
+# pve_config_backup role defaults — periodic tar of /etc/pve (pmxcfs: cluster
+# config, storage.cfg, firewall rules, HA rules, replication.cfg, ACLs) into
+# the generic <pool>/databases archive namespace (see the zfs_pools role),
+# reusing the exact shape already proven by sqlite_standby/postgres_standby.
+#
+# No cross-host pull is needed: pmxcfs already replicates /etc/pve to every
+# cluster member, so running this locally on ANY one member (the archive
+# node, by convention) captures the whole cluster's config. Inert by default
+# — enable per-host in inventory, on the node that already owns the
+# <pool>/databases dataset.
+
+pve_config_backup_enabled: false
+
+pve_config_backup_source_dir: /etc/pve
+pve_config_backup_archive_dir: /bulk/databases/pve-etc
+
+# Daily, matching the sibling standby roles' cadence for the same namespace.
+pve_config_backup_on_calendar: "*-*-* 04:15:00"
+pve_config_backup_persistent: true
+
+# Local tars only, no per-guest history requirement — this is config, not
+# transactional data, so a handful of recent snapshots is the useful window
+# (pmxcfs itself, plus the ZFS snapshots sanoid takes of the dataset, already
+# provide finer-grained history behind this).
+pve_config_backup_retain_count: 14
+
+# Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" on
+# failure. Wired from the play (env-sourced), like the sibling standby roles.
+pve_config_backup_healthcheck_url: ""
