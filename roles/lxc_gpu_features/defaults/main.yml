@@ -4,30 +4,82 @@
 # Root-only LXC GPU passthrough that the BPG Proxmox provider's API token CANNOT
 # set: Proxmox restricts arbitrary device passthrough to root@pam *ticket* auth,
 # so the API token gets HTTP 403. terraform-proxmox creates the GPU LXC as a
-# plain shell; this role binds the AMD GPU device nodes into it over native root
+# plain shell; this role binds the GPU device nodes into it over native root
 # SSH, idempotently. Mirrors the media_lxc_features pattern exactly.
 #
 # Ordering: terraform-proxmox (shell) -> THIS role (devices) ->
 # ansible-proxmox-apps role: llama_cpp (inference stack). See README.md.
 #
 # Per-service shape:
-#   dri: bool — bind /dev/dri (card0 + renderD128, char major 226) for compute
-#   kfd: bool — bind /dev/kfd (char major 235) for ROCm/HIP compute
+#   dri:    bool — bind /dev/dri (card0 + renderD128, char major 226) for compute
+#   kfd:    bool — bind /dev/kfd (char major 235) for ROCm/HIP compute
+#   nvidia: bool — bind the host's /dev/nvidia* character devices for CUDA
 #
 # Keyed by SERVICE NAME; each service's current vmid is resolved at run time from
 # the tofu inventory (see lxc_gpu_features_service_vmids). A vmid renumber
 # needs no change here. Only vmids present on the host are acted on; every task
 # is skipped under Docker virtualization (molecule). No IPs, no secrets.
 lxc_gpu_features_map:
-  llm-fast:  # llama.cpp + llama-swap + ROCm on the RX 6800 (privileged LXC)
+  llm-fast:  # llama.cpp + llama-swap + ROCm on the AMD card (privileged LXC)
     dri: true
     kfd: true
+  llm-4080:  # llama.cpp + llama-swap + CUDA on the NVIDIA card (privileged LXC)
+    dri: false
+    kfd: false
+    nvidia: true
 
-# AMD GPU character-device majors on pve1, verified live:
-#   /dev/dri/card0 = 226:0, /dev/dri/renderD128 = 226:128, /dev/kfd = 235:0.
+# AMD GPU character-device majors, verified live on the host that holds the
+# card: /dev/dri/card0 = 226:0, /dev/dri/renderD128 = 226:128, /dev/kfd = 235:0.
 # A `*` minor covers card + render + any future render nodes.
 lxc_gpu_features_dri_major: 226
 lxc_gpu_features_kfd_major: 235
+
+# NVIDIA gets no equivalent constant, deliberately. Its character-device majors
+# are assigned DYNAMICALLY at module load — /dev/nvidia-uvm and the
+# /dev/nvidia-caps nodes in particular take whatever the kernel hands out — so a
+# hardcoded number is correct until something shifts the allocation and then
+# silently grants a different device class instead. The nvidia branch enumerates
+# the host's real device nodes and reads each major off the node itself.
+#
+# Where to look, and how deep. Depth 1 covers the nodes a CUDA workload needs
+# (/dev/nvidia0, /dev/nvidiactl, /dev/nvidia-uvm, /dev/nvidia-uvm-tools), all of
+# which sit directly in /dev.
+#
+# It does NOT reach /dev/nvidia-caps/*. Measured on the GPU host after a clean
+# boot with the device-nodes unit having run: the directory does NOT EXIST.
+#
+#   test -d /dev/nvidia-caps          -> NO
+#   ls -1 /proc/driver/nvidia/capabilities/
+#     fabric-imex-mgmt  gpu0  mig  profiler-context  profiler-device
+#     trace-device
+#
+# So the capability SOURCES exist in procfs while no /dev nodes are created for
+# them. nvidia-modprobe materialises those only when something actually needs
+# them — MIG, or profiler access — and a non-MIG consumer card serving
+# inference needs neither. Depth 1 is therefore correct on two counts: the
+# nodes are not required, and right now they are not even present to bind.
+#
+# If a MIG-capable card is ever added, raise this to 2 AND bind the caps
+# directory as a DIRECTORY rather than per-file: `create=file` does not create
+# parent directories, so a per-file entry under a directory the container lacks
+# fails at container start.
+lxc_gpu_features_nvidia_device_root: /dev
+lxc_gpu_features_nvidia_device_depth: 1
+
+# True when a container that is actually PRESENT on this host wants nvidia.
+# Presence is part of the test on purpose: the resolved map covers the whole
+# estate, so testing the map alone would make every AMD node enumerate NVIDIA
+# devices it does not have and then fail the assert that follows.
+lxc_gpu_features_nvidia_requested: >-
+  {{
+    (
+      lxc_gpu_features_resolved | default({}) | dict2items
+      | selectattr('key', 'in', lxc_gpu_features_present | default([]))
+      | selectattr('value.nvidia', 'defined')
+      | selectattr('value.nvidia')
+      | list | length
+    ) > 0
+  }}
 
 # Service -> VMID resolution, injected by playbooks/load_tofu.yml. Defaults
 # to {} (a safe no-op that resolves no containers) when unset — e.g. a bare role
