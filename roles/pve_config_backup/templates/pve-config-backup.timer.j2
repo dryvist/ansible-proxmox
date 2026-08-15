@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Daily tar of the local pmxcfs mount into the archive namespace
+Documentation=https://github.com/dryvist/ansible-proxmox/tree/main/roles/pve_config_backup
+
+[Timer]
+OnCalendar={{ pve_config_backup_on_calendar }}
+Persistent={{ pve_config_backup_persistent | ternary('true', 'false') }}
+
+[Install]
+WantedBy=timers.target

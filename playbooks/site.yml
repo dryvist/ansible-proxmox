@@ -238,6 +238,19 @@
                 'secret_key': lookup('env', 'POSTGRES_DR_AWS_SECRET_KEY')}
              ] | selectattr('access_key', 'ne', '') | list }}
 
+    # Daily tar of the local pmxcfs mount (/etc/pve: cluster.conf,
+    # storage.cfg, firewall/HA/replication config, ACLs) into the generic
+    # <pool>/databases archive namespace — same shape as sqlite_standby /
+    # postgres_standby above, new source. pmxcfs replicates cluster-wide, so
+    # running this on any one member captures the whole cluster; inert unless
+    # a host sets pve_config_backup_enabled: true (the node that already owns
+    # the <pool>/databases dataset).
+    - role: pve_config_backup
+      tags:
+        - pve_config_backup
+      vars:
+        pve_config_backup_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/pve-config-backup"
+
     - role: idrac_kiosk
       tags:
         - idrac_kiosk

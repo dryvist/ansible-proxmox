@@ -1,0 +1,69 @@
+---
+# pve_config_backup tasks — deploy the archive script + systemd timer.
+# Directory creation and timer enable are Docker-skipped (molecule); the
+# script and unit files always render so the contract is verifiable
+# in-container.
+
+- name: Ensure the archive directory exists
+  ansible.builtin.file:
+    path: "{{ pve_config_backup_archive_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when:
+    - pve_config_backup_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - pve_config_backup
+
+- name: Deploy the config-backup script
+  ansible.builtin.template:
+    src: pve-config-backup.sh.j2
+    dest: /usr/local/bin/pve-config-backup.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: pve_config_backup_enabled
+  tags:
+    - pve_config_backup
+
+- name: Render the config-backup service unit
+  ansible.builtin.template:
+    src: pve-config-backup.service.j2
+    dest: /etc/systemd/system/pve-config-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: pve_config_backup_enabled
+  notify: Reload systemd daemon
+  tags:
+    - pve_config_backup
+
+- name: Render the config-backup timer unit
+  ansible.builtin.template:
+    src: pve-config-backup.timer.j2
+    dest: /etc/systemd/system/pve-config-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: pve_config_backup_enabled
+  notify: Reload systemd daemon
+  tags:
+    - pve_config_backup
+
+# Apply any pending daemon-reload now so the timer below enables against the
+# freshly written unit (handlers otherwise run only at end of play).
+- name: Reload systemd before enabling the timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the config-backup timer
+  ansible.builtin.systemd:
+    name: pve-config-backup.timer
+    enabled: true
+    state: started
+  when:
+    - pve_config_backup_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - pve_config_backup

@@ -1,0 +1,9 @@
+---
+platforms:
+  - name: proxmox-pve-config-backup-test
+    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    pre_build_image: true
+    privileged: true
+    tmpfs:
+      - /run
+      - /tmp
