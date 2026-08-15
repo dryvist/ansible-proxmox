@@ -251,6 +251,17 @@
       vars:
         pve_config_backup_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/pve-config-backup"
 
+    # Daily bare-mirror of every configured owner's PUBLIC repositories.
+    # Public repos only (v1) -- no credential of any kind, cloned/fetched
+    # anonymously. Inert unless a host sets git_mirror_enabled: true and a
+    # non-empty git_mirror_owners (the node that already owns the
+    # <pool>/git-mirror dataset). See roles/git_mirror/README.md.
+    - role: git_mirror
+      tags:
+        - git_mirror
+      vars:
+        git_mirror_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/git-mirror"
+
     - role: idrac_kiosk
       tags:
         - idrac_kiosk
