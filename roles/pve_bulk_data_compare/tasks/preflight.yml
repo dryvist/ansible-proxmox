@@ -19,7 +19,6 @@
     that:
       - inventory_hostname == pve_bulk_data_compare_source_node
       - pve_bulk_data_compare_source_node != pve_bulk_data_compare_target_node
-      - pve_bulk_data_compare_guard_state_dir | length > 0
       - pve_bulk_data_compare_source_dataset == 'bulk/data'
       - pve_bulk_data_compare_target_dataset == 'bulk/data'
       - pve_bulk_data_compare_source_path == '/bulk/data'
@@ -40,8 +39,7 @@
       - not pve_bulk_data_compare_evidence_manifest_dir.startswith('/bulk/data/')
     fail_msg: >-
       This role only compares the exact source and target bulk/data datasets,
-      with explicit enablement, run id, source integrity-gate state directory,
-      and evidence-host staging.
+      with explicit enablement, run id, and evidence-host staging.
 
 - name: Assert pve client manifest staging is mounted and writable
   ansible.builtin.command:
@@ -135,23 +133,6 @@
       - pve_bulk_data_compare_pool_status.results[0].stdout is search('scrub repaired 0B')
       - pve_bulk_data_compare_pool_status.results[0].stdout is search('errors: No known data errors')
     fail_msg: "Source bulk has no zero-repair, zero-known-error scrub."
-
-- name: Read the persisted source integrity guard phase
-  ansible.builtin.command:
-    argv: [cat, "{{ pve_bulk_data_compare_guard_state_dir }}/PASSED.phase"]
-  register: pve_bulk_data_compare_guard_phase
-  changed_when: false
-
-- name: Assert the persisted source integrity guard success marker exists
-  ansible.builtin.command:
-    argv: [test, -f, "{{ pve_bulk_data_compare_guard_state_dir }}/PASSED"]
-  changed_when: false
-
-- name: Require persisted zero-error re-verification guard success
-  ansible.builtin.assert:
-    that:
-      - pve_bulk_data_compare_guard_phase.stdout | trim == 'zero_error_reverification'
-    fail_msg: "The source integrity gate is not in its migration-trusted phase."
 
 - name: Assert every known media writer CT is stopped
   ansible.builtin.command:

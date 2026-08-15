@@ -5,17 +5,14 @@
 pve_bulk_data_compare_enabled: false
 pve_bulk_data_compare_run_id: ""
 pve_bulk_data_compare_evidence_dir: ""
-pve_bulk_data_compare_source_manifest_dir: /mnt/pve/evacuation-816/manifests
-pve_bulk_data_compare_target_manifest_dir: /mnt/pve/evacuation-816/manifests
-pve_bulk_data_compare_evidence_manifest_dir: /bulk/evacuation-816/manifests
+pve_bulk_data_compare_source_manifest_dir: ""
+pve_bulk_data_compare_target_manifest_dir: ""
+pve_bulk_data_compare_evidence_manifest_dir: ""
 pve_bulk_data_compare_manifest_export: ""
 pve_bulk_data_compare_source_dataset: bulk/data
 pve_bulk_data_compare_target_dataset: bulk/data
 pve_bulk_data_compare_source_path: /bulk/data
 pve_bulk_data_compare_target_path: /bulk/data
-# Directory holding the source integrity gate's persisted PASSED marker. No
-# default: the caller names the gate whose evidence this comparison trusts.
-pve_bulk_data_compare_guard_state_dir: ""
 pve_bulk_data_compare_media_writer_cts:
   - 703040
   - 715240

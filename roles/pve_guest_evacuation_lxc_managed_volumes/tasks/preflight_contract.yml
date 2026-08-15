@@ -25,7 +25,7 @@
         != pve_guest_evacuation_lxc_managed_volumes_target_node
       - pve_guest_evacuation_lxc_managed_volumes_target_node in hostvars
       - pve_guest_evacuation_lxc_managed_volumes_staging_host in hostvars
-      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir == '/bulk/evacuation-816/evidence'
+      - pve_guest_evacuation_lxc_managed_volumes_evidence_dir is match('^/[^ ]+$')
       - pve_guest_evacuation_lxc_managed_volumes_archive_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
       - pve_guest_evacuation_lxc_managed_volumes_restore_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
       - pve_guest_evacuation_lxc_managed_volumes_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
@@ -47,9 +47,17 @@
       - hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host is defined
       - pve_guest_evacuation_lxc_managed_volumes_rsync_identity_file is match('^/root/[A-Za-z0-9._/-]+$')
       - pve_guest_evacuation_lxc_managed_volumes_rsync_known_hosts_file is match('^/root/[A-Za-z0-9._/-]+$')
-      - pve_guest_evacuation_lxc_managed_volumes_archive_evidence_path is match('^/bulk/evacuation-816/evidence/[^/ ]+[.]json$')
-      - pve_guest_evacuation_lxc_managed_volumes_restore_evidence_path is match('^/bulk/evacuation-816/evidence/restore-[^/ ]+[.]json$')
-      - pve_guest_evacuation_lxc_managed_volumes_result_evidence_path is match('^/bulk/evacuation-816/evidence/managed-volumes-[^/ ]+[.]json$')
+      # Every record must stay directly inside the declared evidence dir: one
+      # path segment, .json, no traversal out of it.
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_archive_evidence_path
+        is match('^' ~ (pve_guest_evacuation_lxc_managed_volumes_evidence_dir | regex_escape) ~ '/[^/ ]+[.]json$')
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_restore_evidence_path
+        is match('^' ~ (pve_guest_evacuation_lxc_managed_volumes_evidence_dir | regex_escape) ~ '/restore-[^/ ]+[.]json$')
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_result_evidence_path
+        is match('^' ~ (pve_guest_evacuation_lxc_managed_volumes_evidence_dir | regex_escape) ~ '/managed-volumes-[^/ ]+[.]json$')
     fail_msg: >-
       Managed-volume transfer runs only from the declared source to the
       declared standalone target with

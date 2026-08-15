@@ -6,7 +6,7 @@
 # caller must name them, so an unset value fails closed instead of silently
 # restoring against whichever node a default happened to name.
 pve_guest_evacuation_restore_enabled: false
-pve_guest_evacuation_restore_evidence_dir: /bulk/evacuation-816/evidence
+pve_guest_evacuation_restore_evidence_dir: ""
 
 # The target's Proxmox NODE name. The *_node vars above are inventory keys
 # (they are hostvars lookups and evidence identifiers); a /nodes/<x>/ API path

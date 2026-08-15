@@ -6,7 +6,7 @@
 # caller must name them, so an unset value fails closed instead of silently
 # transferring against whichever node a default happened to name.
 pve_guest_evacuation_lxc_managed_volumes_enabled: false
-pve_guest_evacuation_lxc_managed_volumes_evidence_dir: /bulk/evacuation-816/evidence
+pve_guest_evacuation_lxc_managed_volumes_evidence_dir: ""
 pve_guest_evacuation_lxc_managed_volumes_archive_run_id: ""
 pve_guest_evacuation_lxc_managed_volumes_restore_run_id: ""
 pve_guest_evacuation_lxc_managed_volumes_run_id: ""

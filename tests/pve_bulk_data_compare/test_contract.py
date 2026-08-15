@@ -19,7 +19,9 @@ def test_snapshot_free_frozen_comparison_contract():
     assert "zfs list -H -t snapshot -o name" in preflight
     assert "zpool list -H -o freeing" in preflight
     assert "scrub repaired 0B" in preflight
-    assert "PASSED.phase" in preflight
+    # The pre-migration integrity-gate marker check is gone with the role that
+    # wrote it; assert it stayed gone rather than coming back as an inert stub.
+    assert "PASSED" not in preflight
     assert "evidence_manifest_dir" in preflight
     assert "manifest_export" in preflight
     assert "703040" in (ROLE / "defaults" / "main.yml").read_text()

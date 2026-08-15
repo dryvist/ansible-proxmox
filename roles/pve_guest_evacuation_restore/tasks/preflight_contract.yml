@@ -22,7 +22,7 @@
       - pve_guest_evacuation_restore_source_node != pve_guest_evacuation_restore_target_node
       - pve_guest_evacuation_restore_target_node in hostvars
       - pve_guest_evacuation_restore_staging_host in hostvars
-      - pve_guest_evacuation_restore_evidence_dir == '/bulk/evacuation-816/evidence'
+      - pve_guest_evacuation_restore_evidence_dir is match('^/[^ ]+$')
       - pve_guest_evacuation_restore_archive_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
       - pve_guest_evacuation_restore_run_id is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
       - pve_guest_evacuation_restore_archive_run_id != pve_guest_evacuation_restore_run_id
@@ -32,8 +32,14 @@
       - pve_guest_evacuation_restore_expected_archive_sha256 is match('^[A-Fa-f0-9]{64}$')
       - pve_guest_evacuation_restore_target_storage is match('^[a-z0-9][a-z0-9_-]{0,39}$')
       - pve_guest_evacuation_restore_lxc_mountpoint_strategy in ['refuse', 'manifested_copy']
-      - pve_guest_evacuation_restore_archive_evidence_path is match('^/bulk/evacuation-816/evidence/[^/ ]+[.]json$')
-      - pve_guest_evacuation_restore_result_evidence_path is match('^/bulk/evacuation-816/evidence/restore-[^/ ]+[.]json$')
+      # Both records must stay directly inside the declared evidence dir: one
+      # path segment, .json, no traversal out of it.
+      - >-
+        pve_guest_evacuation_restore_archive_evidence_path
+        is match('^' ~ (pve_guest_evacuation_restore_evidence_dir | regex_escape) ~ '/[^/ ]+[.]json$')
+      - >-
+        pve_guest_evacuation_restore_result_evidence_path
+        is match('^' ~ (pve_guest_evacuation_restore_evidence_dir | regex_escape) ~ '/restore-[^/ ]+[.]json$')
     fail_msg: >-
       Restore runs only on the declared standalone target with an explicit
       destination storage and exact VMID, type, source-config digest, archive

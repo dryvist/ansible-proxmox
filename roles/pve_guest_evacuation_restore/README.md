@@ -16,8 +16,9 @@ three (`pve_guest_evacuation_restore_source_node`,
 Before it writes to the target, the role requires explicit VMID, guest type,
 source-config digest, archive SHA-256, original archive run id, and a new
 restore run id. It derives the archive evidence path from the original run id
-and VMID under `/bulk/evacuation-816/evidence`, reads that root-only staging
-record, and requires its final `archive_verified` checkpoint.
+and VMID under the caller-supplied
+`pve_guest_evacuation_restore_evidence_dir` (no default), reads that root-only
+staging record, and requires its final `archive_verified` checkpoint.
 
 The evidence must say the archive came from the declared source node and was
 intended for the declared target. The role validates the archive SHA-256,
