@@ -1,0 +1,38 @@
+---
+# git_mirror role defaults — periodic bare-mirror of every configured
+# repository into the generic <pool>/git-mirror archive namespace (see the
+# zfs_pools role), the same shape already proven by
+# sqlite_standby/postgres_standby/pve_config_backup, applied to git history.
+#
+# v1 scope: PUBLIC repositories only, cloned/fetched anonymously over HTTPS.
+# Mirroring private repositories needs a node-side credential path (an
+# AppRole scoped to the github/ engine, minted on this node) that does not
+# exist yet — deliberately not built here to avoid inventing new credential
+# plumbing under converge pressure. Tracked as an explicit follow-up.
+#
+# Inert by default — enable per-host in inventory, on the node that already
+# owns the <pool>/git-mirror dataset, and set git_mirror_owners there.
+
+git_mirror_enabled: false
+
+# Plain list of GitHub owner names whose public repos get mirrored. Works
+# for both organisation and user logins — /users/<name>/repos lists public
+# repos for either, so no owner-kind field is needed.
+#
+# Empty by default, and the values are NEVER written into this repository:
+# an account name is operator-specific identity, and this repo is public.
+# Inventory sources them from the environment (see the archive node's
+# host_vars), the same way private hostnames are handled here.
+git_mirror_owners: []
+
+git_mirror_archive_dir: /bulk/git-mirror
+
+# Daily, matching the sibling archive roles' cadence for the same namespace.
+git_mirror_on_calendar: "*-*-* 05:15:00"
+git_mirror_persistent: true
+
+# Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" on
+# failure. Wired from the play (env-sourced), like the sibling archive roles.
+git_mirror_healthcheck_url: ""
+
+git_mirror_log_dir: /var/log/git-mirror

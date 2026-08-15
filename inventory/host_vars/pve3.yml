@@ -130,7 +130,8 @@ postgres_ai_vmid: >-
 sanoid_datasets: >-
   {{ {
        'rpool/data/subvol-' ~ postgres_ai_vmid ~ '-disk-0': {'use_template': 'critical'},
-       'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24}
+       'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24},
+       'bulk/git-mirror': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24}
      } }}
 
 # Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).
@@ -172,6 +173,18 @@ postgres_standby_jobs: >-
 # node — captures the whole cluster's config from one place with no
 # cross-host pull needed.
 pve_config_backup_enabled: true
+
+# Local git mirror (git_mirror role). Public repos only (v1) -- no
+# credential of any kind. This node already owns bulk/git-mirror
+# (sanoid-protected above), same rationale as the config archive.
+#
+# The owner list is read from the environment, never written here: an
+# account name is operator-specific identity and this repository is public.
+# Same treatment as idrac_power_bmc_host above. Whitespace-separated logins,
+# organisation or user alike. Unset means an empty list, which disables the
+# role outright rather than installing a timer that mirrors nothing.
+git_mirror_owners: "{{ lookup('env', 'GIT_MIRROR_OWNERS') | default('', true) | split }}"
+git_mirror_enabled: "{{ git_mirror_owners | length > 0 }}"
 
 syncoid_jobs:
   - name: "splunk-{{ splunk_vmid }}-disk0"

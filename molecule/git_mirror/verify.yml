@@ -1,0 +1,41 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered mirror script
+      ansible.builtin.slurp:
+        src: /usr/local/bin/git-mirror.sh
+      register: git_mirror_script
+
+    - name: Read the rendered timer unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/git-mirror.timer
+      register: git_mirror_timer
+
+    - name: Decode rendered files
+      ansible.builtin.set_fact:
+        git_mirror_script_text: "{{ git_mirror_script.content | b64decode }}"
+        git_mirror_timer_text: "{{ git_mirror_timer.content | b64decode }}"
+
+    - name: Assert the mirror script renders both owner jobs correctly
+      ansible.builtin.assert:
+        that:
+          - "'DEST=\"/bulk/git-mirror\"' in git_mirror_script_text"
+          - "'api.github.com/users/example-org/repos' in git_mirror_script_text"
+          - "'api.github.com/users/example-user/repos' in git_mirror_script_text"
+          # The update runs as `git -C "$path" remote update --prune`, so
+          # assert the subcommand, not a `git `-prefixed literal that the
+          # script never contains.
+          - "'git clone --mirror' in git_mirror_script_text"
+          - "'remote update --prune' in git_mirror_script_text"
+        fail_msg: "git-mirror script did not render the expected contract"
+
+    - name: Assert the timer is daily and persistent
+      ansible.builtin.assert:
+        that:
+          - "'OnCalendar=*-*-* 05:15:00' in git_mirror_timer_text"
+          - "'Persistent=true' in git_mirror_timer_text"
+        fail_msg: "git-mirror timer did not render the expected schedule"
