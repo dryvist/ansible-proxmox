@@ -32,6 +32,16 @@
 #     every other node.
 pve_ha_enabled: false
 
+# A membership list wrong in EITHER direction (a dead hostname, or a live guest
+# never added) produces no error by itself — a dead entry is skipped as
+# unresolvable, a missing live one is never considered at all, and both read as
+# a clean converge (see pve_ha_ct_hostnames below, corrected 2026-08-15 after
+# exactly this class of drift left the live DNS primary with no HA coverage
+# while its retired predecessor stayed listed). True fails the run loudly on
+# any unresolvable member across tier0_resources/replication_jobs/
+# estate_wide_enrollment; set false to fall back to a non-fatal debug line.
+pve_ha_fail_on_unresolved: true
+
 # Inventory hostname of the SINGLE node the ha-manager commands run on. HA state
 # is cluster-wide, so one node is sufficient and correct. Defaults to
 # pve_cluster_primary_host (the pve_cluster role's own primary, set in
@@ -68,16 +78,23 @@ pve_ha_state: started
 #     peer, so RELOCATION to a replica is their only node-loss story. They also
 #     appear in pve_ha_replication_ct_hostnames, which ships their rootfs to the
 #     always-on partner node so ha-manager can actually start them there.
-# NAMING: technitium-dns/-2 and traefik are legacy names that violate the
-# multi-instance naming law (two-digit suffix, first digit = node ID). They stay
-# here because this list must match the LIVE hostnames or the role skips them —
-# rename flows through IaC first (tofu-proxmox#679), then this list follows.
+# VERIFIED AGAINST LIVE 2026-08-15 (pvesh get /cluster/resources). This list was
+# wrong in BOTH directions at once: it named `traefik`, which resolves to no
+# guest, and `technitium-dns`, which exists but is the STOPPED, retired DNS
+# primary — while OMITTING traefik-10, traefik-30 (both halves of the live
+# ingress pair) and technitium-30 (the LIVE DNS primary). A dead entry is
+# skipped as unresolvable; a missing live guest is never considered at all.
+# Both read as a clean converge, so the guest whose failure mode caused an
+# estate-wide DNS fault had no HA coverage while its retired predecessor was
+# listed. technitium-dns is kept out deliberately — a stopped guest with no
+# viable relocation target is worse than one left outside HA.
 pve_ha_ct_hostnames:
   - openbao-01
   - openbao-02
-  - technitium-dns
+  - technitium-30
   - technitium-dns-2
-  - traefik
+  - traefik-10
+  - traefik-30
   # Data platform + shared-Postgres apps tier (live under HA since 2026-07-16;
   # this records what ha-manager already holds so a converge is idempotent).
   # postgres-apps/nautobot/vikunja are the pvesr-replicated singletons and also
@@ -106,7 +123,7 @@ pve_ha_anti_affinity_groups:
       - openbao-02
   - name: technitium-dns
     hostnames:
-      - technitium-dns
+      - technitium-30
       - technitium-dns-2
   # The Traefik ingress pair — the VRRP VIP peers. Names come from the
   # node_services generator, which builds them as <name_prefix><suffix>, so they

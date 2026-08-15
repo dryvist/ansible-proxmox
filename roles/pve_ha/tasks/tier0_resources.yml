@@ -44,8 +44,13 @@
              | map(attribute='key') | list)
          | list }}
 
+# Fails loud by default (pve_ha_fail_on_unresolved: true) rather than a debug
+# line nobody reads — a silent skip here is how a critical guest went unnoticed
+# outside HA coverage for weeks (see the both-directions pve_ha_ct_hostnames
+# defect, Vikunja #1359). Set pve_ha_fail_on_unresolved: false to fall back to
+# the old warn-only behaviour.
 - name: Refuse to place a replica-less singleton under HA
-  ansible.builtin.debug:
+  ansible.builtin.fail:
     msg: >-
       pve_ha: NOT adding {{ pve_ha_unsafe_singletons }} to HA — each is a
       singleton with no pvesr replica on {{ pve_ha_replication_pair }}, so
@@ -53,7 +58,14 @@
       Give the guest a home node inside the pair (or a working replication
       job), then re-converge. If one is ALREADY under HA, remove it until
       that is true: ha-manager remove ct:<vmid>
-  when: pve_ha_unsafe_singletons | length > 0
+  when: pve_ha_unsafe_singletons | length > 0 and pve_ha_fail_on_unresolved | bool
+
+- name: Warn about a replica-less singleton (non-fatal mode)
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: NOT adding {{ pve_ha_unsafe_singletons }} to HA — each is a
+      singleton with no pvesr replica on {{ pve_ha_replication_pair }}.
+  when: pve_ha_unsafe_singletons | length > 0 and not (pve_ha_fail_on_unresolved | bool)
 
 - name: Resolve managed tier-0 SIDs (present hosts only) + any extra SIDs
   ansible.builtin.set_fact:
@@ -64,14 +76,25 @@
           | map('regex_replace', '^(.+)$', 'ct:\1') | list)
          + (pve_ha_extra_sids | default([])) }}
 
-- name: Warn about tier-0 hostnames missing from the inventory (skipped)
+- name: Refuse tier-0 hostnames missing from the inventory
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: these tier-0 hostnames are not in the tofu inventory and are
+      SKIPPED: {{ pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host)
+      | list }}. A membership list wrong in this direction produces no error
+      by itself — verify each name against pvesh get /cluster/resources
+      before re-converging.
+  when: (pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host) | list)
+    | length > 0 and pve_ha_fail_on_unresolved | bool
+
+- name: Warn about tier-0 hostnames missing from the inventory (non-fatal mode)
   ansible.builtin.debug:
     msg: >-
       pve_ha: these tier-0 hostnames are not in the tofu inventory and are
       SKIPPED: {{ pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host)
       | list }}
   when: (pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host) | list)
-    | length > 0
+    | length > 0 and not (pve_ha_fail_on_unresolved | bool)
 
 - name: Read current HA resources
   ansible.builtin.command: pvesh get /cluster/ha/resources --output-format json

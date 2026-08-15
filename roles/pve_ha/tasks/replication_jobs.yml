@@ -39,15 +39,29 @@
     - item in pve_ha_ct_by_host
     - pve_ha_ct_by_host[item].node in pve_ha_replication_pair
 
-- name: Warn about app guests with no replication job (skipped)
+- name: Refuse an app guest with no replication job
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha replication: no job for {{ item }} — absent from the tofu
+      inventory, or its home node is outside the always-on pair
+      {{ pve_ha_replication_pair }}. A singleton listed under
+      pve_ha_replication_ct_hostnames with no viable replica has nowhere to
+      relocate to on node loss.
+  loop: "{{ pve_ha_replication_ct_hostnames }}"
+  when: (item not in (pve_ha_replication_jobs | default([])
+                      | map(attribute='hostname') | list))
+    and pve_ha_fail_on_unresolved | bool
+
+- name: Warn about an app guest with no replication job (non-fatal mode)
   ansible.builtin.debug:
     msg: >-
       pve_ha replication: no job for {{ item }} — absent from the tofu
       inventory, or its home node is outside the always-on pair
       {{ pve_ha_replication_pair }}.
   loop: "{{ pve_ha_replication_ct_hostnames }}"
-  when: item not in (pve_ha_replication_jobs | default([])
-                     | map(attribute='hostname') | list)
+  when: (item not in (pve_ha_replication_jobs | default([])
+                      | map(attribute='hostname') | list))
+    and not (pve_ha_fail_on_unresolved | bool)
 
 # pvesr replicates a volume to the SAME storage id on the target node. If the
 # target lacks that storage, the job fails asynchronously on first sync and
