@@ -1,0 +1,22 @@
+---
+# nvidia_driver role metadata
+
+galaxy_info:
+  role_name: nvidia_driver
+  author: ansible-proxmox
+  description: Install NVIDIA's host GPU driver on an opted-in Proxmox node
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - gpu
+    - nvidia
+
+dependencies: []

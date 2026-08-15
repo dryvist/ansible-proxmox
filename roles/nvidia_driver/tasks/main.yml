@@ -1,0 +1,145 @@
+---
+# nvidia_driver tasks — install NVIDIA's own host driver on an opted-in Proxmox
+# node so LXC guests can be handed the GPU via device passthrough.
+#
+# Inert unless nvidia_driver_enabled is true, so this is a no-op on every node
+# without a card. Under Docker (molecule) there is no PCI bus and no kernel to
+# build a module for, so the hardware steps are guarded off the same way
+# wol_enable guards its ethtool steps.
+
+- name: Detect NVIDIA PCI devices on this host
+  ansible.builtin.shell:
+    cmd: "set -o pipefail && lspci -nn | grep -i ':{{ nvidia_driver_pci_vendor_id }}:' || true"
+    executable: /bin/bash
+  register: nvidia_driver_lspci
+  changed_when: false
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+# Fail loud rather than silently install a driver for absent hardware: an
+# opt-in on the wrong host would otherwise pull DKMS and a kernel module onto a
+# node that can never use them, and report success doing it.
+- name: Fail loud when the host was opted in but has no NVIDIA GPU
+  ansible.builtin.assert:
+    that:
+      - nvidia_driver_lspci.stdout | trim | length > 0
+    fail_msg: >-
+      nvidia_driver_enabled is true on this host but no PCI device with vendor
+      id {{ nvidia_driver_pci_vendor_id }} is present. Remove the opt-in from
+      this host's host_vars, or check the card is seated and on the bus.
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+- name: Blacklist the nouveau driver
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/blacklist-nouveau.conf
+    content: |
+      # Ansible managed - nvidia_driver role
+      # nouveau binds the card at boot and the NVIDIA kernel module cannot load
+      # while it holds the device. Takes effect on the next reboot.
+      blacklist nouveau
+      options nouveau modeset=0
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Regenerate the initramfs
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_blacklist_nouveau | bool
+  tags:
+    - nvidia_driver
+
+- name: Add NVIDIA's apt repository
+  ansible.builtin.deb822_repository:
+    name: nvidia-cuda
+    types: deb
+    uris: "{{ nvidia_driver_repo_uri | trim }}"
+    # A flat repository: the suite is the literal "/" and there are no
+    # components. See the defaults for why this differs from every other repo
+    # this estate manages.
+    suites: /
+    signed_by: "{{ nvidia_driver_repo_key_url | trim }}"
+    enabled: true
+    state: present
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+- name: Install the kernel headers DKMS builds against
+  ansible.builtin.apt:
+    name: "{{ nvidia_driver_header_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+- name: Install the NVIDIA driver packages
+  ansible.builtin.apt:
+    name: "{{ nvidia_driver_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  notify: Regenerate the initramfs
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+- name: Check whether nouveau is still holding the GPU
+  ansible.builtin.command:
+    cmd: lsmod
+  register: nvidia_driver_lsmod
+  changed_when: false
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+# This is what makes /dev/nvidia* exist from boot onward on a headless host.
+# See the defaults for why the on-demand default is a silent failure here.
+#
+# Enabled unconditionally so the reboot brings it up; only STARTED once nouveau
+# is gone, because until then the NVIDIA module cannot bind the card and the
+# service would fail to start on a converge that is otherwise correct.
+- name: Enable nvidia-persistenced so the device nodes exist from boot
+  ansible.builtin.systemd_service:
+    name: nvidia-persistenced
+    enabled: true
+    state: "{{ 'started' if 'nouveau' not in nvidia_driver_lsmod.stdout else omit }}"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_persistenced_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+# Surfaced, not acted on. Rebooting a hypervisor evacuates or interrupts every
+# guest on it, so that is an operator decision taken inside a maintenance
+# window -- not something a converge does on its own.
+- name: Report that a reboot is required to complete the driver switch
+  ansible.builtin.debug:
+    msg: >-
+      REBOOT REQUIRED on {{ inventory_hostname }}: nouveau is still loaded, so
+      the NVIDIA kernel module cannot bind the GPU yet. Reboot inside a
+      maintenance window, then confirm both `nvidia-smi` and the presence of
+      /dev/nvidia* character devices.
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver

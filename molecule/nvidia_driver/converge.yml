@@ -1,0 +1,28 @@
+---
+# Two plays, two properties.
+#
+# The enabled path cannot be exercised fully here: a container has no PCI bus
+# for the vendor gate to read and no buildable kernel for DKMS, so the repo
+# add, the driver install and the device-node behaviour are all guarded off
+# under Docker. See the role README's "Test coverage limits".
+
+- name: Converge with the role at its default (disabled)
+  hosts: all
+  become: false
+  gather_facts: true
+
+  # This is the state every node in the estate except the GPU host runs in.
+  # The property under test is that the role touches nothing there.
+  roles:
+    - role: nvidia_driver
+
+- name: Converge with the role enabled
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    nvidia_driver_enabled: true
+
+  roles:
+    - role: nvidia_driver

@@ -268,6 +268,14 @@
       tags:
         - wol_enable
 
+    # NVIDIA host GPU driver, so LXC guests can be handed the card via device
+    # passthrough. Inert unless a host sets nvidia_driver_enabled: true, and
+    # fails loud if opted in on a node with no NVIDIA card on the PCI bus.
+    # Reports rather than takes the reboot the driver switch needs.
+    - role: nvidia_driver
+      tags:
+        - nvidia_driver
+
 # Cribl Edge on every host. Imported here rather than left as a standalone
 # playbook so it is enforced by the standard converge — a node without a local
 # Edge agent has no approved route for host signals into Splunk, and would
