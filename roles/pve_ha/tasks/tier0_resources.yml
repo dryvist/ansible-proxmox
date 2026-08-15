@@ -10,12 +10,12 @@
       {{
         dict(
           (containers_from_tofu | default({})) | dict2items
-          | selectattr('value.vmid', 'defined')
+          | selectattr('value.ansible_pct_vmid', 'defined')
           | map(attribute='key') | list
           | zip(
               (containers_from_tofu | default({})) | dict2items
-              | selectattr('value.vmid', 'defined')
-              | map(attribute='value.vmid') | list
+              | selectattr('value.ansible_pct_vmid', 'defined')
+              | map(attribute='value.ansible_pct_vmid') | list
             )
         )
       }}
@@ -38,7 +38,7 @@
       {{ pve_ha_replication_ct_hostnames
          | reject('in',
              (containers_from_tofu | default({})) | dict2items
-             | selectattr('value.vmid', 'defined')
+             | selectattr('value.ansible_pct_vmid', 'defined')
              | selectattr('value.node', 'defined')
              | selectattr('value.node', 'in', pve_ha_replication_pair)
              | map(attribute='key') | list)

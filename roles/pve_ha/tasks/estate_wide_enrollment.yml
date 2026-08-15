@@ -16,7 +16,7 @@
     pve_ha_home_entries: >-
       {{ (containers_from_tofu | default({})) | dict2items
          | rejectattr('key', 'in', pve_ha_ct_hostnames)
-         | selectattr('value.vmid', 'defined')
+         | selectattr('value.ansible_pct_vmid', 'defined')
          | selectattr('value.node', 'defined')
          | list }}
   when: pve_ha_manage_all | bool
@@ -24,7 +24,7 @@
 - name: Resolve the home-pinned SIDs
   ansible.builtin.set_fact:
     pve_ha_home_sids: >-
-      {{ pve_ha_home_entries | map(attribute='value.vmid') | map('string')
+      {{ pve_ha_home_entries | map(attribute='value.ansible_pct_vmid') | map('string')
          | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
   when: pve_ha_manage_all | bool
 
@@ -120,7 +120,7 @@
   ansible.builtin.command: >-
     ha-manager rules add node-affinity
     {{ pve_ha_home_rule_prefix }}-{{ item.0 }}
-    --resources {{ item.1 | map(attribute='value.vmid') | map('string')
+    --resources {{ item.1 | map(attribute='value.ansible_pct_vmid') | map('string')
                    | map('regex_replace', '^(.+)$', 'ct:\1')
                    | join(',') }}
     --nodes {{ item.0 }}
@@ -138,7 +138,7 @@
   ansible.builtin.command: >-
     ha-manager rules set node-affinity
     {{ pve_ha_home_rule_prefix }}-{{ item.0 }}
-    --resources {{ item.1 | map(attribute='value.vmid') | map('string')
+    --resources {{ item.1 | map(attribute='value.ansible_pct_vmid') | map('string')
                    | map('regex_replace', '^(.+)$', 'ct:\1')
                    | join(',') }}
     --nodes {{ item.0 }}
