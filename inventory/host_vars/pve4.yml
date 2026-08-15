@@ -1,0 +1,18 @@
+---
+# Host vars for pve4/pve-w5900 (the always-on AMD desktop, Gigabyte board).
+#
+# No BMC/iDRAC on this hardware, so it can't use idrac_power/node_scheduled_wake
+# for a remote power-on. It is meant to run 24/7; recovery from an AC power
+# loss is a BIOS/UEFI setting ("Restore AC Power Loss" -> On), not something
+# Ansible can configure. Wake-on-LAN is the OS-side fallback for any other
+# path that leaves it powered off (e.g. an OS-level `shutdown -h`, needed for
+# a full PCIe re-enumeration such as a newly seated GPU that a warm reboot
+# would not rescan).
+#
+# Physical NIC: enp5s0 (bridged as vmbr0's uplink). Its MAC is not recorded
+# here (real hardware identifiers stay out of this public repo) -- look it up
+# with `ip -br link show enp5s0` on the host, or from the DHCP/UniFi lease
+# table, then send a wake from another host on the same L2 segment:
+#   wakeonlan <mac-address>
+wol_enable_enabled: true
+wol_enable_interface: enp5s0

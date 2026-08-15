@@ -1,0 +1,20 @@
+---
+# wol_enable role defaults — persist Wake-on-LAN (magic packet) on a host's
+# physical NIC across reboots.
+#
+# Discovered the hard way on pve4/pve-w5900: BIOS Wake-on-LAN was enabled, but
+# `ethtool` still reported `Wake-on: d` (disabled) on every boot -- the NIC
+# driver resets its Wake-on mode to the hardware default on every bring-up, so
+# `ethtool -s <iface> wol g` alone does not survive a reboot. A udev rule that
+# re-applies it on every interface `add` event is the standard fix; this role
+# covers the OS side only. BIOS/UEFI Wake-on-LAN must still be enabled -- this
+# role cannot set BIOS options.
+#
+# Inert by default: opt a host in by setting wol_enable_enabled: true and
+# wol_enable_interface in its host_vars.
+wol_enable_enabled: false
+
+# The physical NIC to enable Wake-on-LAN on, e.g. enp5s0. Not the bridge
+# (vmbr0): a Linux bridge device does not itself support Wake-on-LAN, only the
+# physical interface enslaved to it. Required (fails loud) when enabled.
+wol_enable_interface: ""

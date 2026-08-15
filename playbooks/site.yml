@@ -260,6 +260,14 @@
       tags:
         - node_scheduled_wake
 
+    # Wake-on-LAN persistence for non-power-managed hosts (no BMC/iDRAC) that
+    # are meant to stay always-on. Inert unless a host sets
+    # wol_enable_enabled: true (e.g. pve4). BIOS/UEFI WoL must already be on;
+    # this covers the OS side, which resets to disabled on every boot without it.
+    - role: wol_enable
+      tags:
+        - wol_enable
+
 # Cribl Edge on every host. Imported here rather than left as a standalone
 # playbook so it is enforced by the standard converge — a node without a local
 # Edge agent has no approved route for host signals into Splunk, and would
