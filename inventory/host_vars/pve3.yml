@@ -147,15 +147,23 @@ sanoid_datasets: >-
 # postgres-ai-2, into its own "databases" dataset above, and pve540 pulls
 # this one. Each dump ends up on a pool neither postgres-ai guest runs on.
 #
-# Source guest addressed by FQDN derived from tofu (hostname + domain), never
-# a literal address. Gated on domain_from_tofu so a scoped run without
-# load_tofu.yml stays inert instead of pulling from a bogus host.
+# postgres-apps (Zammad+Nautobot+Vikunja) had NO off-node pull configured
+# anywhere in this inventory — verified live 2026-08-15: its pg-backup timer
+# produces daily dumps correctly, but the node it runs on only pulls
+# `postgres` and `postgres-ai-1` into its own archive, and no other host
+# pulled postgres-apps at all. Its only copy sat on the same guest as the
+# live database it backs up. This node pulls it — a genuine off-node copy,
+# since postgres-apps runs elsewhere.
 postgres_standby_jobs: >-
   {{ [] if (domain_from_tofu | default('') | length == 0) else [
        {'name': 'postgres-ai',
         'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-ai-2'] | default({})).hostname | default('postgres-ai-2')) ~ '.' ~ domain_from_tofu,
         'source_dir': '/var/lib/postgresql/backups',
-        'archive_dir': '/bulk/databases/postgres-ai'}
+        'archive_dir': '/bulk/databases/postgres-ai'},
+       {'name': 'postgres-apps',
+        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-apps'] | default({})).hostname | default('postgres-apps')) ~ '.' ~ domain_from_tofu,
+        'source_dir': '/var/lib/postgresql/backups',
+        'archive_dir': '/bulk/databases/postgres-apps'}
      ] }}
 
 syncoid_jobs:
