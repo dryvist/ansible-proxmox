@@ -2,7 +2,7 @@
 # Part 3 of 4 (see restore.yml). Refuses to replace an existing target
 # VMID, derives the archive's backed-volume contract (and refuses an
 # automatic LXC mountpoint restore), then runs the actual restore command.
-# This is the one phase that changes pve540 state.
+# This is the one phase that changes target-node state.
 - name: Check for an existing target QEMU VMID
   ansible.builtin.command:
     argv:
@@ -27,14 +27,15 @@
   changed_when: false
   failed_when: false
 
-- name: Refuse to replace any existing pve540 guest VMID
+- name: Refuse to replace any existing target guest VMID
   ansible.builtin.assert:
     that:
       - pve_guest_evacuation_restore_existing_qemu.rc != 0
       - pve_guest_evacuation_restore_existing_lxc.rc != 0
     fail_msg: >-
       VMID {{ pve_guest_evacuation_restore_expected_vmid }} already exists on
-      pve540. This restore never overwrites or removes a target guest.
+      the target node. This restore never overwrites or removes a target
+      guest.
     quiet: true
 
 - name: Derive the archive's backed volume-key contract

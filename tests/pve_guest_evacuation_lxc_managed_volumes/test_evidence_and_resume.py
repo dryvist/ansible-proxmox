@@ -1,5 +1,7 @@
 """Evidence immutability and resume contract: bound to the exact failed run."""
 
+import re
+
 from conftest import ROLE, flatten_included_tasks
 
 
@@ -9,6 +11,20 @@ def test_role_is_inert_and_requires_exact_three_record_identity() -> None:
     transfer = flatten_included_tasks(ROLE / "tasks" / "transfer.yml")
 
     assert "pve_guest_evacuation_lxc_managed_volumes_enabled: false" in defaults
+    # The node variables must stay undefaulted and required: a default here is
+    # what pinned this role to one node and made it unusable against any other.
+    for node_var in ("source_node", "target_node", "staging_host"):
+        assert not re.search(
+            rf"^pve_guest_evacuation_lxc_managed_volumes_{node_var}:", defaults, re.M
+        )
+        assert (
+            f"pve_guest_evacuation_lxc_managed_volumes_{node_var} is defined"
+            in contract
+        )
+        assert (
+            f"pve_guest_evacuation_lxc_managed_volumes_{node_var} "
+            "| default('') | length > 0" in contract
+        )
     for value in (
         "archive_run_id",
         "restore_run_id",
@@ -21,10 +37,10 @@ def test_role_is_inert_and_requires_exact_three_record_identity() -> None:
     assert "archive_verified" in transfer
     assert "restore_pending_managed_mount_copy" in transfer
     assert "source_config.digest == pve_guest_evacuation_lxc_managed_volumes_expected_config_digest" in transfer
-    assert "Require a root-only non-symlink pve3 evidence directory" in transfer
+    assert "Require a root-only non-symlink staging evidence directory" in transfer
     assert "pve_guest_evacuation_lxc_managed_volumes_evidence_dir_stat.stat.mode == '0700'" in transfer
     assert transfer.index("Check managed-volume evidence paths before transfer gates") < transfer.index(
-        "Read pve3 archive and pending-restore evidence"
+        "Read staging archive and pending-restore evidence"
     )
     assert "hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host is defined" in contract
 

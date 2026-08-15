@@ -1,11 +1,28 @@
 ---
+- name: Require an explicitly named source, target and staging host
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_lxc_managed_volumes_source_node is defined
+      - pve_guest_evacuation_lxc_managed_volumes_source_node | default('') | length > 0
+      - pve_guest_evacuation_lxc_managed_volumes_target_node is defined
+      - pve_guest_evacuation_lxc_managed_volumes_target_node | default('') | length > 0
+      - pve_guest_evacuation_lxc_managed_volumes_staging_host is defined
+      - pve_guest_evacuation_lxc_managed_volumes_staging_host | default('') | length > 0
+    fail_msg: >-
+      The caller must pass
+      pve_guest_evacuation_lxc_managed_volumes_source_node,
+      pve_guest_evacuation_lxc_managed_volumes_target_node and
+      pve_guest_evacuation_lxc_managed_volumes_staging_host explicitly. These
+      have no defaults so an unset value fails closed instead of transferring
+      against an unintended node.
+
 - name: Validate the exact managed-volume transfer invocation
   ansible.builtin.assert:
     that:
       - inventory_hostname == pve_guest_evacuation_lxc_managed_volumes_source_node
-      - pve_guest_evacuation_lxc_managed_volumes_source_node == 'pve2'
-      - pve_guest_evacuation_lxc_managed_volumes_target_node == 'pve540'
-      - pve_guest_evacuation_lxc_managed_volumes_staging_host == 'pve3'
+      - >-
+        pve_guest_evacuation_lxc_managed_volumes_source_node
+        != pve_guest_evacuation_lxc_managed_volumes_target_node
       - pve_guest_evacuation_lxc_managed_volumes_target_node in hostvars
       - pve_guest_evacuation_lxc_managed_volumes_staging_host in hostvars
       - pve_guest_evacuation_lxc_managed_volumes_evidence_dir == '/bulk/evacuation-816/evidence'
@@ -34,12 +51,13 @@
       - pve_guest_evacuation_lxc_managed_volumes_restore_evidence_path is match('^/bulk/evacuation-816/evidence/restore-[^/ ]+[.]json$')
       - pve_guest_evacuation_lxc_managed_volumes_result_evidence_path is match('^/bulk/evacuation-816/evidence/managed-volumes-[^/ ]+[.]json$')
     fail_msg: >-
-      Managed-volume transfer runs only from pve2 to standalone pve540 with
+      Managed-volume transfer runs only from the declared source to the
+      declared standalone target with
       exact archive and pending-restore evidence, explicit storage, reviewed
       root transport files, and a new immutable evidence run id.
     quiet: true
 
-- name: Resolve the approved pve540 canonical FQDN from pve2
+- name: Resolve the approved target canonical FQDN from the source
   ansible.builtin.command:
     argv:
       - getent
@@ -52,7 +70,7 @@
     pve_guest_evacuation_lxc_managed_volumes_target_rsync_host
     != hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
 
-- name: Resolve the pve540 inventory endpoint from pve2
+- name: Resolve the target inventory endpoint from the source
   ansible.builtin.command:
     argv:
       - getent
@@ -65,7 +83,7 @@
     pve_guest_evacuation_lxc_managed_volumes_target_rsync_host
     != hostvars[pve_guest_evacuation_lxc_managed_volumes_target_node].ansible_host
 
-- name: Derive pve2 IPv4 resolutions for the approved pve540 endpoint
+- name: Derive source IPv4 resolutions for the approved target endpoint
   ansible.builtin.set_fact:
     pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_ipv4s: >-
       {{ pve_guest_evacuation_lxc_managed_volumes_canonical_fqdn_resolution.stdout_lines
@@ -103,9 +121,9 @@
           )
         )
     fail_msg: >-
-      The source-host rsync endpoint must be the literal pve540 inventory
-      endpoint or the explicitly approved canonical FQDN. On pve2, that FQDN
-      and the inventory endpoint must both resolve to a shared IPv4 address;
+      The source-host rsync endpoint must be the literal target inventory
+      endpoint or the explicitly approved canonical FQDN. On the source, that
+      FQDN and the inventory endpoint must both resolve to a shared IPv4;
       unapproved aliases, IP literals, missing DNS results, and mismatches are
       rejected.
     quiet: true

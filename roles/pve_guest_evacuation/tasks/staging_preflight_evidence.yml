@@ -1,6 +1,6 @@
 ---
-# Part 2 of 4 (see archive.yml). Proves pve2 and pve540 independently
-# expose the exact same backup-only pve3 staging endpoint, proves the
+# Part 2 of 4 (see archive.yml). Proves the source and target nodes
+# independently expose the same backup-only staging endpoint, proves the
 # guest fits with headroom, then writes the preflight evidence checkpoint.
 - name: Read each node's independent staging storage view
   ansible.builtin.command:
@@ -31,7 +31,7 @@
          | list }}
   loop: "{{ pve_guest_evacuation_storage_raw.results }}"
 
-- name: Assert each node uses the exact pve3 NFS staging endpoint
+- name: Assert each node uses the exact NFS staging endpoint
   ansible.builtin.assert:
     that:
       - node_staging_config.type == 'nfs'
@@ -42,7 +42,7 @@
       - not (node_staging_config.disable | default(0) | bool)
     fail_msg: >-
       {{ item.item }} must independently use the exact enabled, backup-only
-      pve3 NFS endpoint. pve540 is standalone and is not inferred from pve2's
+      NFS endpoint. A standalone target is never inferred from the source's
       cluster-scoped storage record.
   vars:
     node_staging_config: >-
@@ -51,7 +51,7 @@
          | list)[0] }}
   loop: "{{ pve_guest_evacuation_storage_raw.results }}"
 
-- name: Read staging storage status on pve2 and pve540
+- name: Read staging storage status on both nodes
   ansible.builtin.command:
     argv:
       - pvesh

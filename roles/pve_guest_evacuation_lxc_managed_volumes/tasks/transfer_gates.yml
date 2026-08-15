@@ -47,7 +47,7 @@
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_target_contents.results }}"
   when: pve_guest_evacuation_lxc_managed_volumes_resume_from_run_id | default('') | length > 0
 
-- name: Require metadata manifest tools on pve2 and pve540
+- name: Require metadata manifest tools on both nodes
   ansible.builtin.command:
     argv: ["{{ item.tool }}", --version]
   delegate_to: "{{ item.node }}"
@@ -82,7 +82,7 @@
     quiet: true
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_transport_files.results }}"
 
-- name: Require one reviewed pve540 ED25519 host key
+- name: Require one reviewed target ED25519 host key
   ansible.builtin.command:
     argv:
       - ssh-keygen
@@ -94,7 +94,7 @@
   changed_when: false
   failed_when: false
 
-- name: Verify reviewed pve540 ED25519 host key contract
+- name: Verify reviewed target ED25519 host key contract
   ansible.builtin.assert:
     that:
       - pve_guest_evacuation_lxc_managed_volumes_known_host.rc == 0
@@ -108,7 +108,7 @@
           ~ ' ssh-ed25519 [A-Za-z0-9+/=]+( .*)?$')
     fail_msg: >-
       The dedicated known-hosts file must contain exactly one reviewed ED25519
-      key for the pve540 rsync endpoint.
+      key for the target rsync endpoint.
     quiet: true
 
 - name: Build strict rsync SSH transport

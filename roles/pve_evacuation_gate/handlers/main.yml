@@ -1,5 +1,0 @@
----
-- name: Reload systemd for pve_evacuation_gate
-  ansible.builtin.systemd:
-    daemon_reload: true
-  when: ansible_virtualization_type | default('') != 'docker'

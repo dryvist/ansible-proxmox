@@ -50,7 +50,7 @@
       - pve_guest_evacuation_lxc_managed_volumes_target_config.digest == pve_guest_evacuation_lxc_managed_volumes_restore_evidence.target.config_digest
     fail_msg: >-
       Source configuration changed or either LXC is running. The final capture
-      requires the archived pve2 configuration and both containers stopped.
+      requires the archived source configuration and both containers stopped.
     quiet: true
 
 - name: Record source managed mountpoint keys
@@ -106,7 +106,7 @@
     that:
       - item.normalized_mount_contract == item.target_config | regex_replace('^[^,]+', 'VOLUME')
     fail_msg: >-
-      {{ item.key }} changes mount semantics between pve2 and pve540. Preserve
+      {{ item.key }} changes mount semantics between source and target. Preserve
       the stopped target and correct its configuration before transferring.
     quiet: true
   loop: "{{ pve_guest_evacuation_lxc_managed_volumes_mappings }}"

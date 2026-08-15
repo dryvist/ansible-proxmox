@@ -1,12 +1,25 @@
 ---
-- name: Require the issue 816 destruction-gate invocation
+- name: Require an explicitly named source, target and evidence host
   ansible.builtin.assert:
     that:
-      - pve_bulk_data_compare_issue_816_enabled | bool
+      - pve_bulk_data_compare_source_node is defined
+      - pve_bulk_data_compare_source_node | default('') | length > 0
+      - pve_bulk_data_compare_target_node is defined
+      - pve_bulk_data_compare_target_node | default('') | length > 0
+      - pve_bulk_data_compare_evidence_host is defined
+      - pve_bulk_data_compare_evidence_host | default('') | length > 0
+    fail_msg: >-
+      The caller must pass pve_bulk_data_compare_source_node,
+      pve_bulk_data_compare_target_node and pve_bulk_data_compare_evidence_host
+      explicitly. These have no defaults so an unset value fails closed
+      instead of comparing an unintended node.
+
+- name: Require the destruction-gate invocation
+  ansible.builtin.assert:
+    that:
       - inventory_hostname == pve_bulk_data_compare_source_node
-      - pve_bulk_data_compare_source_node == 'pve2'
-      - pve_bulk_data_compare_target_node == 'pve540'
-      - pve_bulk_data_compare_evidence_host == 'pve3'
+      - pve_bulk_data_compare_source_node != pve_bulk_data_compare_target_node
+      - pve_bulk_data_compare_guard_state_dir | length > 0
       - pve_bulk_data_compare_source_dataset == 'bulk/data'
       - pve_bulk_data_compare_target_dataset == 'bulk/data'
       - pve_bulk_data_compare_source_path == '/bulk/data'
@@ -15,7 +28,7 @@
       - pve_bulk_data_compare_evidence_dir | length > 0
       - pve_bulk_data_compare_source_manifest_dir | length > 0
       - pve_bulk_data_compare_target_manifest_dir | length > 0
-      - pve_bulk_data_compare_pve3_manifest_dir | length > 0
+      - pve_bulk_data_compare_evidence_manifest_dir | length > 0
       - pve_bulk_data_compare_manifest_export | length > 0
       - pve_bulk_data_compare_evidence_dir != '/bulk/data'
       - not pve_bulk_data_compare_evidence_dir.startswith('/bulk/data/')
@@ -23,11 +36,12 @@
       - not pve_bulk_data_compare_source_manifest_dir.startswith('/bulk/data/')
       - pve_bulk_data_compare_target_manifest_dir != '/bulk/data'
       - not pve_bulk_data_compare_target_manifest_dir.startswith('/bulk/data/')
-      - pve_bulk_data_compare_pve3_manifest_dir != '/bulk/data'
-      - not pve_bulk_data_compare_pve3_manifest_dir.startswith('/bulk/data/')
+      - pve_bulk_data_compare_evidence_manifest_dir != '/bulk/data'
+      - not pve_bulk_data_compare_evidence_manifest_dir.startswith('/bulk/data/')
     fail_msg: >-
-      This role only compares the exact issue-816 pve2 and pve540 bulk/data
-      datasets, with explicit enablement, run id, and pve3 evidence staging.
+      This role only compares the exact source and target bulk/data datasets,
+      with explicit enablement, run id, source integrity-gate state directory,
+      and evidence-host staging.
 
 - name: Assert pve client manifest staging is mounted and writable
   ansible.builtin.command:
@@ -38,10 +52,10 @@
     - {name: "{{ pve_bulk_data_compare_target_node }}", path: "{{ pve_bulk_data_compare_target_manifest_dir }}"}
   changed_when: false
 
-- name: Assert pve3 local manifest directory is ready
+- name: Assert the evidence host's local manifest directory is ready
   ansible.builtin.command:
-    argv: [test, -d, "{{ pve_bulk_data_compare_pve3_manifest_dir }}"]
-  delegate_to: pve3
+    argv: [test, -d, "{{ pve_bulk_data_compare_evidence_manifest_dir }}"]
+  delegate_to: "{{ pve_bulk_data_compare_evidence_host }}"
   changed_when: false
 
 - name: Capture pve client manifest mount sources
@@ -54,23 +68,23 @@
   register: pve_bulk_data_compare_manifest_mounts
   changed_when: false
 
-- name: Assert pve clients use the exact pve3 manifest export
+- name: Assert pve clients use the exact declared manifest export
   ansible.builtin.assert:
     that:
       - pve_bulk_data_compare_manifest_mounts.results | map(attribute='stdout') | map('trim') | unique | list == [pve_bulk_data_compare_manifest_export]
-    fail_msg: "pve2 and pve540 must use the declared pve3 NFS manifest export."
+    fail_msg: "Source and target must use the declared NFS manifest export."
 
-- name: Assert pve3-local evidence directory is root-only
+- name: Assert the evidence host's local evidence directory is root-only
   ansible.builtin.command:
     argv: [stat, -c, '%u %a', "{{ pve_bulk_data_compare_evidence_dir }}"]
-  delegate_to: pve3
+  delegate_to: "{{ pve_bulk_data_compare_evidence_host }}"
   register: pve_bulk_data_compare_evidence_stat
   changed_when: false
 
-- name: Require pve3-local evidence directory permissions
+- name: Require evidence-host-local evidence directory permissions
   ansible.builtin.assert:
     that: [pve_bulk_data_compare_evidence_stat.stdout == '0 700']
-    fail_msg: "pve3-local evidence must be a root-owned mode 0700 directory."
+    fail_msg: "Evidence must be a root-owned mode 0700 directory."
 
 - name: Assert no snapshots or deferred freeing exist on either node
   ansible.builtin.shell:
@@ -115,20 +129,20 @@
       reported READ, WRITE, or CKSUM counter.
   loop: "{{ pve_bulk_data_compare_pool_status.results }}"
 
-- name: Assert pve2 completed a clean source scrub
+- name: Assert the source completed a clean scrub
   ansible.builtin.assert:
     that:
       - pve_bulk_data_compare_pool_status.results[0].stdout is search('scrub repaired 0B')
       - pve_bulk_data_compare_pool_status.results[0].stdout is search('errors: No known data errors')
-    fail_msg: "pve2 bulk has not completed a zero-repair, zero-known-error scrub."
+    fail_msg: "Source bulk has no zero-repair, zero-known-error scrub."
 
-- name: Read persisted pve2 integrity guard phase
+- name: Read the persisted source integrity guard phase
   ansible.builtin.command:
     argv: [cat, "{{ pve_bulk_data_compare_guard_state_dir }}/PASSED.phase"]
   register: pve_bulk_data_compare_guard_phase
   changed_when: false
 
-- name: Assert persisted pve2 integrity guard success marker exists
+- name: Assert the persisted source integrity guard success marker exists
   ansible.builtin.command:
     argv: [test, -f, "{{ pve_bulk_data_compare_guard_state_dir }}/PASSED"]
   changed_when: false

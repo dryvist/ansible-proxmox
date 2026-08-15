@@ -1,11 +1,25 @@
 ---
+- name: Require an explicitly named source, target and staging host
+  ansible.builtin.assert:
+    that:
+      - pve_guest_evacuation_restore_source_node is defined
+      - pve_guest_evacuation_restore_source_node | default('') | length > 0
+      - pve_guest_evacuation_restore_target_node is defined
+      - pve_guest_evacuation_restore_target_node | default('') | length > 0
+      - pve_guest_evacuation_restore_staging_host is defined
+      - pve_guest_evacuation_restore_staging_host | default('') | length > 0
+    fail_msg: >-
+      The caller must pass pve_guest_evacuation_restore_source_node,
+      pve_guest_evacuation_restore_target_node and
+      pve_guest_evacuation_restore_staging_host explicitly. These have no
+      defaults so an unset value fails closed instead of restoring onto an
+      unintended node.
+
 - name: Validate the exact restore-only invocation
   ansible.builtin.assert:
     that:
       - inventory_hostname == pve_guest_evacuation_restore_target_node
-      - pve_guest_evacuation_restore_source_node == 'pve2'
-      - pve_guest_evacuation_restore_target_node == 'pve540'
-      - pve_guest_evacuation_restore_staging_host == 'pve3'
+      - pve_guest_evacuation_restore_source_node != pve_guest_evacuation_restore_target_node
       - pve_guest_evacuation_restore_target_node in hostvars
       - pve_guest_evacuation_restore_staging_host in hostvars
       - pve_guest_evacuation_restore_evidence_dir == '/bulk/evacuation-816/evidence'
@@ -21,8 +35,8 @@
       - pve_guest_evacuation_restore_archive_evidence_path is match('^/bulk/evacuation-816/evidence/[^/ ]+[.]json$')
       - pve_guest_evacuation_restore_result_evidence_path is match('^/bulk/evacuation-816/evidence/restore-[^/ ]+[.]json$')
     fail_msg: >-
-      Restore runs only on standalone pve540 with an explicit destination
-      storage and exact VMID, type, source-config digest, archive SHA-256,
-      archive run id, and separate restore run id. Both evidence records must
-      remain in pve3's root-only issue-816 staging evidence directory.
+      Restore runs only on the declared standalone target with an explicit
+      destination storage and exact VMID, type, source-config digest, archive
+      SHA-256, archive run id, and separate restore run id. Both evidence
+      records must remain in the staging host's root-only evidence directory.
     quiet: true

@@ -22,15 +22,15 @@
     pve_guest_evacuation_lxc_managed_volumes_restore_evidence_path: /bulk/evacuation-816/evidence/restore.json
     pve_guest_evacuation_lxc_managed_volumes_restore_run_id: restore-run
     pve_guest_evacuation_lxc_managed_volumes_target_storage: local-zfs
-    pve_guest_evacuation_lxc_managed_volumes_source_node: pve2
-    pve_guest_evacuation_lxc_managed_volumes_target_node: pve540
+    pve_guest_evacuation_lxc_managed_volumes_source_node: evacuation-source-test
+    pve_guest_evacuation_lxc_managed_volumes_target_node: evacuation-target-test
     pve_guest_evacuation_lxc_managed_volumes_source_status: {status: stopped}
     pve_guest_evacuation_lxc_managed_volumes_target_status: {status: stopped}
     pve_guest_evacuation_lxc_managed_volumes_source_config: {digest: source-digest}
     pve_guest_evacuation_lxc_managed_volumes_target_config: {digest: target-digest}
     pve_guest_evacuation_lxc_managed_volumes_dataset_mappings: [{key: mp0}]
   tasks:
-    - name: Assert the inert role created no pve3 evidence directory
+    - name: Assert the inert role created no staging evidence directory
       ansible.builtin.stat:
         path: /bulk/evacuation-816/evidence
       register: pve_guest_evacuation_lxc_managed_volumes_evidence_dir
@@ -47,9 +47,9 @@
             tasks_from: preflight_contract.yml
           vars:
             pve_guest_evacuation_lxc_managed_volumes_enabled: true
-            pve_guest_evacuation_lxc_managed_volumes_source_node: pve2
-            pve_guest_evacuation_lxc_managed_volumes_target_node: pve540
-            pve_guest_evacuation_lxc_managed_volumes_staging_host: pve3
+            pve_guest_evacuation_lxc_managed_volumes_source_node: evacuation-source-test
+            pve_guest_evacuation_lxc_managed_volumes_target_node: evacuation-target-test
+            pve_guest_evacuation_lxc_managed_volumes_staging_host: evacuation-staging-test
             pve_guest_evacuation_lxc_managed_volumes_archive_run_id: archive-1
             pve_guest_evacuation_lxc_managed_volumes_restore_run_id: restore-1
             pve_guest_evacuation_lxc_managed_volumes_run_id: transfer-1
@@ -62,6 +62,26 @@
     - name: Assert incomplete managed-volume inputs fail closed
       ansible.builtin.assert:
         that: [pve_guest_evacuation_lxc_managed_volumes_input_failed | default(false)]
+
+    # The node variables have no defaults, so an unset value must be an error
+    # rather than a transfer against whichever node a default named.
+    - name: Exercise the unset node-variable gate
+      block:
+        - name: Run the managed-volume contract with no staging host
+          ansible.builtin.include_role:
+            name: pve_guest_evacuation_lxc_managed_volumes
+            tasks_from: preflight_contract.yml
+          vars:
+            pve_guest_evacuation_lxc_managed_volumes_enabled: true
+            pve_guest_evacuation_lxc_managed_volumes_staging_host: ''
+      rescue:
+        - name: Record that unset node variables failed
+          ansible.builtin.set_fact:
+            pve_guest_evacuation_lxc_managed_volumes_unset_nodes_failed: true
+
+    - name: Assert unset node variables fail closed
+      ansible.builtin.assert:
+        that: [pve_guest_evacuation_lxc_managed_volumes_unset_nodes_failed | default(false)]
 
     - name: Decode representative post-copy resume evidence
       ansible.builtin.set_fact:

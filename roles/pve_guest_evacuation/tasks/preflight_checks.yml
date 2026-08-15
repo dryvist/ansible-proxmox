@@ -1,9 +1,9 @@
 ---
-# Included from archive.yml, in ORDER — part 1 of 4. Proves the pve3
-# evidence directory, no ZFS snapshots or pending frees, resolves the
+# Included from archive.yml, in ORDER — part 1 of 4. Proves the staging
+# host's evidence directory, no ZFS snapshots or pending frees, resolves the
 # exact guest, and rejects a locked, HA-managed, or replicated guest
 # before anything about staging or the guest's power state is touched.
-- name: Assert pve3 evidence directory is ready
+- name: Assert the staging evidence directory is ready
   ansible.builtin.command:
     argv:
       - test
@@ -12,7 +12,7 @@
   delegate_to: "{{ pve_guest_evacuation_staging_host }}"
   changed_when: false
 
-- name: Assert pve3 evidence directory is writable
+- name: Assert the staging evidence directory is writable
   ansible.builtin.command:
     argv:
       - test

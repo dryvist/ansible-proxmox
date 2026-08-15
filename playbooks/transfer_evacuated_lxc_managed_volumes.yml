@@ -1,8 +1,11 @@
 ---
 # Final stopped-source transfer for managed LXC mpN volumes. This does not
-# create the pve540 CT; restore_evacuated_guest.yml created its empty skeleton.
+# create the target CT; restore_evacuated_guest.yml created its empty skeleton.
+#
+# pve_guest_evacuation_lxc_managed_volumes_source_node has no default: an unset
+# value must be an error, never a silent fall-back to some other node.
 - name: Transfer one verified stopped-source LXC managed-volume payload set
-  hosts: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node | default('pve2') }}"
+  hosts: "{{ pve_guest_evacuation_lxc_managed_volumes_source_node }}"
   become: true
   gather_facts: false
   serial: 1

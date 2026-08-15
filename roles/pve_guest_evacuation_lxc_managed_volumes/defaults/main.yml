@@ -1,10 +1,11 @@
 ---
 # Final, stopped-source transfer for LXC-managed mpN volumes. This role is
 # deliberately inert and never creates, removes, starts, or overwrites a CT.
+#
+# The source, target and staging hosts have NO defaults on purpose: every
+# caller must name them, so an unset value fails closed instead of silently
+# transferring against whichever node a default happened to name.
 pve_guest_evacuation_lxc_managed_volumes_enabled: false
-pve_guest_evacuation_lxc_managed_volumes_source_node: pve2
-pve_guest_evacuation_lxc_managed_volumes_target_node: pve540
-pve_guest_evacuation_lxc_managed_volumes_staging_host: pve3
 pve_guest_evacuation_lxc_managed_volumes_evidence_dir: /bulk/evacuation-816/evidence
 pve_guest_evacuation_lxc_managed_volumes_archive_run_id: ""
 pve_guest_evacuation_lxc_managed_volumes_restore_run_id: ""
@@ -27,9 +28,9 @@ pve_guest_evacuation_lxc_managed_volumes_target_pve_node: >-
      | default(pve_guest_evacuation_lxc_managed_volumes_target_node) }}
 
 # The source host owns the dedicated, reviewed transport material. The role
-# proves it is root-owned and bound to the pve540 inventory endpoint, or the
-# explicitly approved canonical FQDN which resolves on pve2 to that endpoint's
-# IPv4 address, before it invokes rsync.
+# proves it is root-owned and bound to the target's inventory endpoint, or the
+# explicitly approved canonical FQDN which resolves on the source to that
+# endpoint's IPv4 address, before it invokes rsync.
 pve_guest_evacuation_lxc_managed_volumes_target_rsync_host: ""
 # Set only when the inventory endpoint cannot be used literally. This is the
 # sole approved alternate spelling; unapproved aliases and IP literals are

@@ -1,10 +1,11 @@
 ---
-# Restore-only, one verified issue-816 archive onto standalone pve540. This
+# Restore-only, one verified archive onto a standalone target node. This
 # role is deliberately inert unless all archive identity inputs are supplied.
+#
+# The source, target and staging hosts have NO defaults on purpose: every
+# caller must name them, so an unset value fails closed instead of silently
+# restoring against whichever node a default happened to name.
 pve_guest_evacuation_restore_enabled: false
-pve_guest_evacuation_restore_source_node: pve2
-pve_guest_evacuation_restore_target_node: pve540
-pve_guest_evacuation_restore_staging_host: pve3
 pve_guest_evacuation_restore_evidence_dir: /bulk/evacuation-816/evidence
 
 # The target's Proxmox NODE name. The *_node vars above are inventory keys
@@ -15,7 +16,7 @@ pve_guest_evacuation_restore_target_pve_node: >-
   {{ hostvars[pve_guest_evacuation_restore_target_node].proxmox_node_name
      | default(pve_guest_evacuation_restore_target_node) }}
 
-# Both evidence records live only on pve3's root-only staging evidence path.
+# Both evidence records live only on the staging host's root-only evidence path.
 # The archive path is derived from the original archive run id and VMID so a
 # restore cannot silently select an arbitrary archive record.
 pve_guest_evacuation_restore_archive_run_id: ""
@@ -30,7 +31,7 @@ pve_guest_evacuation_restore_result_evidence_path: >-
   {{ pve_guest_evacuation_restore_evidence_dir }}/restore-{{ pve_guest_evacuation_restore_run_id }}-{{ pve_guest_evacuation_restore_expected_vmid }}.json
 
 # Restoration never uses the backup-only staging storage as its destination.
-# This identifier must already exist and be active on standalone pve540.
+# This identifier must already exist and be active on the standalone target.
 pve_guest_evacuation_restore_target_storage: ""
 
 # VZDump can recreate an LXC mpN volume as an empty skeleton.  The default

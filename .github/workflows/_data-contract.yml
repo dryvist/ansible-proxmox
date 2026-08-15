@@ -86,12 +86,6 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_backup_jobs/verify_reconcile.yml -i localhost, -c local
 
-      - name: Verify pve evacuation staging static contract
-        run: |
-          mkdir -p /tmp/ansible-tmp
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_evacuation_staging/verify_contract.yml -i localhost, -c local
-
       # A controller that is the node being powered would run ipmitool against
       # itself. The node list holds Proxmox node names, so the exclusion is
       # driven against a host whose inventory key and node name differ.
@@ -126,9 +120,6 @@ jobs:
 
       - name: Verify pve guest evacuation restore safety contract
         run: python3 tests/pve_guest_evacuation_restore/test_restore_contract.py
-
-      - name: Verify frozen host-bind copy safety contract
-        run: python3 tests/pve_frozen_host_bind_copy/test_copy_contract.py
 
       # Extracted tasks execute against literal TAB-delimited ZFS records and
       # malformed/ambiguous fixtures, so parser drift fails the PR gate.

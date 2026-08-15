@@ -1,6 +1,8 @@
 ---
-- name: Freeze and compare exact pve2 and pve540 bulk/data datasets
-  hosts: "{{ pve_bulk_data_compare_source_node | default('pve2') }}"
+# pve_bulk_data_compare_source_node has no default: an unset value must be an
+# error, never a silent fall-back to some other node.
+- name: Freeze and compare the exact source and target bulk/data datasets
+  hosts: "{{ pve_bulk_data_compare_source_node }}"
   become: true
   gather_facts: false
   serial: 1

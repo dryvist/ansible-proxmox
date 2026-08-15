@@ -1,6 +1,6 @@
 ---
 # This procedure deliberately copies only after archive and restore evidence
-# bind a fresh pve540 skeleton to the stopped pve2 source. It never uses a ZFS
+# bind a fresh target skeleton to the stopped source. It never uses a ZFS
 # snapshot and never creates a destination volume or directory.
 #
 # The phases below are ORDER-DEPENDENT: each proves a precondition the next
