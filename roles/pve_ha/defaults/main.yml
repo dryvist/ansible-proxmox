@@ -147,10 +147,18 @@ pve_ha_anti_affinity_groups:
       - traefik-30
   # The Postgres primary/standby pair: a node loss must never take both the
   # primary and its streaming standby.
+  # postgres-apps deliberately EXCLUDED — verified live 2026-08-15 (converge):
+  # ha-manager rejects a resource-affinity rule referencing a guest that is
+  # not itself an HA-managed resource ("cannot use unmanaged resource(s)"),
+  # and postgres-apps is deliberately excluded from pve_ha_ct_hostnames above
+  # (no viable replica). The "skipped if a member doesn't resolve" guard only
+  # checks tofu-inventory resolution, not HA-management status, so a
+  # since-excluded guest left in a pair here reaches ha-manager and fails
+  # loud rather than skipping quietly. Restore alongside pve_ha_ct_hostnames
+  # once the per-guest replication pair design lands (Vikunja #1359/#1362).
   - name: postgres-pair
     hostnames:
       - postgres
-      - postgres-apps
 
 # --- Storage replication (pvesr) for the SINGLETON app guests ----------------
 # The guests here get a pvesr job that ships their rootfs to the always-on
