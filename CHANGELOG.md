@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.77.0](https://github.com/dryvist/ansible-proxmox/compare/v1.76.0...v1.77.0) (2026-08-15)
+
+
+### Features
+
+* add pve_config_backup role for /etc/pve cluster config ([d660d18](https://github.com/dryvist/ansible-proxmox/commit/d660d18521b173f919a85b7832cc4dda9d6f524c))
+* add sanoid snapshot policy for pve-w5900's OpenBao voters ([a1c2f87](https://github.com/dryvist/ansible-proxmox/commit/a1c2f87eead8839af293cdd4c6f770d6245096f8))
+* **gpu:** bind NVIDIA device nodes into GPU containers ([#632](https://github.com/dryvist/ansible-proxmox/issues/632)) ([63eb3cc](https://github.com/dryvist/ansible-proxmox/commit/63eb3cccf521d055c1f414bd53d2bdc74a9eff22))
+* **gpu:** install the NVIDIA host driver on the opted-in GPU node ([#626](https://github.com/dryvist/ansible-proxmox/issues/626)) ([fb7fc77](https://github.com/dryvist/ansible-proxmox/commit/fb7fc77d0d419f68e0d0d0e87cc32da2b9def858))
+* **postgres_standby:** pull postgres-apps dumps off-node ([4bfc76c](https://github.com/dryvist/ansible-proxmox/commit/4bfc76c6b0558e870019fa0910c00801b13c1809))
+
+
+### Bug Fixes
+
+* **gpu:** create the NVIDIA Unified Memory device nodes at boot ([#629](https://github.com/dryvist/ansible-proxmox/issues/629)) ([c0acd37](https://github.com/dryvist/ansible-proxmox/commit/c0acd377042d91a2dbbf26cd1b63342b31c61c35))
+* **gpu:** drop nvidia-smi from the driver package list -- it conflicts ([#628](https://github.com/dryvist/ansible-proxmox/issues/628)) ([6d947c4](https://github.com/dryvist/ansible-proxmox/commit/6d947c488b7fdcfe760b64d7a003c088a02a25c3))
+* **gpu:** filter lspci on the vendor field instead of its rendered text ([#627](https://github.com/dryvist/ansible-proxmox/issues/627)) ([c74e92a](https://github.com/dryvist/ansible-proxmox/commit/c74e92ace14d00a0643d33abadd241046b445b56))
+* **gpu:** quote the stat format so device enumeration returns paths ([#637](https://github.com/dryvist/ansible-proxmox/issues/637)) ([57958d6](https://github.com/dryvist/ansible-proxmox/commit/57958d61b71b59ed0118bd0d648b0c131d315d4f))
+* **inventory:** select the vmid attribute the published inventory emits ([#635](https://github.com/dryvist/ansible-proxmox/issues/635)) ([4114195](https://github.com/dryvist/ansible-proxmox/commit/4114195a1750c9f6249bd58ad42cfffbc570fc27))
+* **pve_ha:** enable HA from inventory, fail loud on unresolved members ([832a749](https://github.com/dryvist/ansible-proxmox/commit/832a74923229e8b65b725617978b70e75e91d0a9))
+* **pve_ha:** exclude postgres-apps from HA until it has a viable replica ([39cd5f4](https://github.com/dryvist/ansible-proxmox/commit/39cd5f4316bb068ef58e775cd73ce5b5993eafdc))
+* **pve_ha:** select the vmid attribute the published inventory emits ([d97a290](https://github.com/dryvist/ansible-proxmox/commit/d97a290ecde95e3d1a01dcee8f186911fd4ad8fe))
+* **syncoid:** create replication target parents and seed every group ([#630](https://github.com/dryvist/ansible-proxmox/issues/630)) ([d3fc67f](https://github.com/dryvist/ansible-proxmox/commit/d3fc67f540bd9a684169a2ffb168d23878249430))
+* **tests:** carry ansible_pct_vmid in the inventory fixture ([#639](https://github.com/dryvist/ansible-proxmox/issues/639)) ([d698736](https://github.com/dryvist/ansible-proxmox/commit/d698736e936fe26996bf51f2345b156dceac1d72))
+
 ## [1.76.0](https://github.com/dryvist/ansible-proxmox/compare/v1.75.2...v1.76.0) (2026-08-15)
 
 
