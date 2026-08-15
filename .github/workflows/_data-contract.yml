@@ -86,6 +86,12 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_backup_jobs/verify_reconcile.yml -i localhost, -c local
 
+      # An assert conditional containing ": " unquoted parses as a mapping, so
+      # the task errors instead of evaluating. ansible-lint's production
+      # profile passes it, so only this catches the class.
+      - name: Verify every assert conditional is a string
+        run: python3 tests/test_assert_conditionals.py
+
       # A controller that is the node being powered would run ipmitool against
       # itself. The node list holds Proxmox node names, so the exclusion is
       # driven against a host whose inventory key and node name differ.

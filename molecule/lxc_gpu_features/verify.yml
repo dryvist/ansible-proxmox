@@ -63,7 +63,9 @@
     - name: Assert no mount entry has an absolute in-container destination
       ansible.builtin.assert:
         that:
-          - nvidia_lines | select('match', '^lxc\.mount\.entry: \S+ /') | list | length == 0
+          # Quoted: ": " unquoted parses as a mapping and the assert errors
+          # instead of evaluating.
+          - "nvidia_lines | select('match', '^lxc\\.mount\\.entry: \\S+ /') | list | length == 0"
         fail_msg: >-
           A mount entry has an absolute container-side path, which binds the
           wrong thing: {{ nvidia_lines | select('match', '^lxc\.mount\.entry: \S+ /') | list }}
