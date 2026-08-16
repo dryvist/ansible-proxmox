@@ -74,7 +74,9 @@
           - docker_lxc_features_verify_service_vmids['dify'] == '90003'
           - docker_lxc_features_verify_service_vmids['langflow'] == '90004'
           - docker_lxc_features_verify_service_vmids['assistant-01'] == '90005'
-          - analytics not in docker_lxc_features_verify_service_vmids
+          # Quoted: unquoted, Jinja reads `analytics` as a variable name and
+          # the conditional fails as undefined rather than testing membership.
+          - "'analytics' not in docker_lxc_features_verify_service_vmids"
 
     - name: Assert the pct CLI is absent under Docker
       ansible.builtin.command:

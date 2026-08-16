@@ -4,15 +4,12 @@
   become: true
   gather_facts: true
 
+  # No "defaults are defined" assertion here. A verify play does not include
+  # the role, so its defaults/main.yml is never loaded into this play's scope
+  # and such an assertion can only ever fail — it tested the harness, not the
+  # role. That the defaults load is already proven by the converge play, which
+  # runs the role and would fail without them.
   tasks:
-    - name: Assert idrac_power defaults loaded
-      ansible.builtin.assert:
-        that:
-          - idrac_power_enabled is defined
-          - idrac_power_action is defined
-          - idrac_power_controller is defined
-        fail_msg: "idrac_power role defaults did not load"
-
     - name: Assert ipmitool was NOT installed under Docker (tasks skipped)
       ansible.builtin.command: dpkg -s ipmitool
       register: ipmitool_check
