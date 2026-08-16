@@ -8,25 +8,25 @@
   gather_facts: false
 
   tasks:
-    - name: Assert pve1 host received OpenTofu NAS config
+    - name: Assert pve-w1700 host received OpenTofu NAS config
       ansible.builtin.assert:
         that:
-          - hostvars['pve1'] is defined
-          - hostvars['pve1'].nas_storage_from_tofu is defined
-          - hostvars['pve1'].nas_storage_from_tofu.zfs_dataset == "rpool/data/nas"
-          - hostvars['pve1'].nas_storage_from_tofu.group_name == "nas"
-          - hostvars['pve1'].nas_storage_from_tofu.managed_users[0].name == "homeassistant"
-          - hostvars['pve1'].nas_storage_from_tofu.managed_users[0].password_secret_env == "NAS_HOMEASSISTANT_SMB_PASSWORD"
-          - "'ha-backups' in (hostvars['pve1'].nas_storage_from_tofu.shares | map(attribute='name') | list)"
-          - "'ha-media' in (hostvars['pve1'].nas_storage_from_tofu.shares | map(attribute='name') | list)"
-        fail_msg: "load_tofu.yml did not inject the expected NAS contract onto pve1"
+          - hostvars['pve-w1700'] is defined
+          - hostvars['pve-w1700'].nas_storage_from_tofu is defined
+          - hostvars['pve-w1700'].nas_storage_from_tofu.zfs_dataset == "rpool/data/nas"
+          - hostvars['pve-w1700'].nas_storage_from_tofu.group_name == "nas"
+          - hostvars['pve-w1700'].nas_storage_from_tofu.managed_users[0].name == "homeassistant"
+          - hostvars['pve-w1700'].nas_storage_from_tofu.managed_users[0].password_secret_env == "NAS_HOMEASSISTANT_SMB_PASSWORD"
+          - "'ha-backups' in (hostvars['pve-w1700'].nas_storage_from_tofu.shares | map(attribute='name') | list)"
+          - "'ha-media' in (hostvars['pve-w1700'].nas_storage_from_tofu.shares | map(attribute='name') | list)"
+        fail_msg: "load_tofu.yml did not inject the expected NAS contract onto pve-w1700"
 
-    - name: Assert pve1 host received OpenTofu replication identity (containers + splunk_vm)
+    - name: Assert pve-w1700 host received OpenTofu replication identity (containers + splunk_vm)
       ansible.builtin.assert:
         that:
-          - hostvars['pve1'].containers_from_tofu is defined
-          - hostvars['pve1'].containers_from_tofu['s3'].vmid == 902000
-          - hostvars['pve1'].splunk_vm_from_tofu.splunk.vmid == 90200
+          - hostvars['pve-w1700'].containers_from_tofu is defined
+          - hostvars['pve-w1700'].containers_from_tofu['s3'].vmid == 902000
+          - hostvars['pve-w1700'].splunk_vm_from_tofu.splunk.vmid == 90200
         fail_msg: >-
           load_tofu.yml did not inject the container/splunk identity that
           sanoid_datasets and syncoid_jobs derive VMIDs from.
@@ -34,12 +34,12 @@
     - name: Assert the storage node declares a snapshot policy for the state it holds
       ansible.builtin.assert:
         that:
-          - hostvars['pve540'].sanoid_timer_enabled | bool
-          - "'bulk/databases' in hostvars['pve540'].sanoid_datasets"
-          - "'bulk/appdata' in hostvars['pve540'].sanoid_datasets"
-          - hostvars['pve540'].sanoid_datasets['bulk/databases'].hourly | int > 0
-          - hostvars['pve540'].sanoid_datasets['bulk/appdata'].recursive == 'yes'
-          - "'bulk/subvol-902000-disk-1' in hostvars['pve540'].sanoid_datasets"
+          - hostvars['pve-r540'].sanoid_timer_enabled | bool
+          - "'bulk/databases' in hostvars['pve-r540'].sanoid_datasets"
+          - "'bulk/appdata' in hostvars['pve-r540'].sanoid_datasets"
+          - hostvars['pve-r540'].sanoid_datasets['bulk/databases'].hourly | int > 0
+          - hostvars['pve-r540'].sanoid_datasets['bulk/appdata'].recursive == 'yes'
+          - "'bulk/subvol-902000-disk-1' in hostvars['pve-r540'].sanoid_datasets"
         fail_msg: >-
           The storage node holds live application state and the dump archive, so
           it must declare a sanoid policy for both. syncoid runs --no-sync-snap:
