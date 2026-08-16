@@ -8,16 +8,30 @@
 # the exact window a queue overflow matters most is mid-incident, when this
 # mechanism would otherwise be blind to it.
 #
-# --cursor-file both reads from and updates the saved position in one call
-# (systemd >= 254), so a recurring overflow alerts once per new occurrence,
-# not once per timer tick forever. The cursor is seeded to "now" at deploy
-# time (tasks/main.yml) so the first run never replays history.
+# Manually tracks the cursor via --after-cursor/--show-cursor rather than
+# --cursor-file: PVE 8.x (Bookworm) ships systemd 252 and --cursor-file needs
+# >= 254. Stderr is left on the journal (not redirected) so a real failure is
+# debuggable instead of silently swallowed.
 set -uo pipefail
 
 CURSOR_FILE=/var/lib/zfs-fault-alert/missed-events.cursor
 
-hits=$(journalctl -u zfs-zed --cursor-file="$CURSOR_FILE" --no-pager 2>/dev/null \
-  | grep -c "Missed events" || true)
+cursor_arg=""
+if [[ -f "$CURSOR_FILE" ]]; then
+  cursor=$(<"$CURSOR_FILE")
+  [[ -n "$cursor" ]] && cursor_arg="--after-cursor=$cursor"
+fi
+
+tmp_out=$(mktemp)
+# shellcheck disable=SC2086  # cursor_arg is a single well-formed flag or empty
+journalctl -u zfs-zed $cursor_arg --show-cursor --no-pager > "$tmp_out"
+
+hits=$(grep -c "Missed events" "$tmp_out" || true)
+
+new_cursor=$(sed -n 's/^-- cursor: //p' "$tmp_out")
+[[ -n "$new_cursor" ]] && echo "$new_cursor" > "$CURSOR_FILE"
+rm -f "$tmp_out"
+
 if [[ "${hits:-0}" -gt 0 ]]; then
   /usr/local/bin/zfs-fault-alert.sh "zed event-queue overflow (Missed events)" \
     "count=${hits} since_last_check -- monitoring was blind for this window"

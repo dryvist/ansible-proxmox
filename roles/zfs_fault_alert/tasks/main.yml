@@ -117,8 +117,11 @@
         mode: "0700"
 
     - name: Seed the missed-events cursor to now (never replay history on first deploy)
-      ansible.builtin.command:
-        cmd: journalctl -u zfs-zed --cursor-file=/var/lib/zfs-fault-alert/missed-events.cursor -n0
+      # --cursor-file requires systemd >= 254; PVE 8.x (Bookworm) ships 252,
+      # so seed by parsing --show-cursor instead -- works on every version.
+      ansible.builtin.shell:
+        cmd: "set -o pipefail && journalctl -u zfs-zed -n0 --show-cursor | sed -n 's/^-- cursor: //p' > /var/lib/zfs-fault-alert/missed-events.cursor"
+        executable: /bin/bash
         creates: /var/lib/zfs-fault-alert/missed-events.cursor
       changed_when: true
 
@@ -137,12 +140,6 @@
     - name: Flush handlers so units are current before enabling
       ansible.builtin.meta: flush_handlers
 
-    - name: Enable and start the missed-events timer
-      ansible.builtin.systemd:
-        name: zfs-missed-events-check.timer
-        state: started
-        enabled: true
-
     - name: Prove the alert path is actually live -- reaches Zammad with the deployed token
       # Enabling the timer and dropping the zed.d script prove nothing about
       # whether either can actually reach Zammad. --self-check validates the
@@ -157,3 +154,16 @@
     - name: Report the self-check result
       ansible.builtin.debug:
         var: zfs_fault_alert_self_check.stdout
+
+# Runs unconditionally (outside the block above) so turning zfs_fault_alert_enabled
+# off actually stops/disables the timer rather than leaving it running with no
+# owner. failed_when: false tolerates the unit never having been rendered (a host
+# that was never enabled has nothing to stop).
+- name: Set the missed-events timer state to match zfs_fault_alert_enabled
+  ansible.builtin.systemd:
+    name: zfs-missed-events-check.timer
+    state: "{{ 'started' if (zfs_fault_alert_enabled | bool) else 'stopped' }}"
+    enabled: "{{ zfs_fault_alert_enabled | bool }}"
+  failed_when: false
+  tags:
+    - zfs_fault_alert
