@@ -15,9 +15,9 @@
 # AWS S3). Credentials land in a root-only EnvironmentFile — never in the
 # script, never logged.
 #
-# Inert until postgres_standby_jobs is set. Prerequisites (out of band): SSH
-# trust from this host's root to each source guest (cluster_ssh_trust covers
-# PVE node<->node trust, NOT host->guest), and the source role's backup timer.
+# Inert until postgres_standby_jobs is set. Prerequisite (out of band): the
+# source role's backup timer. SSH trust is now owned by this role — see
+# postgres_standby_ssh_key below.
 
 postgres_standby_enabled: true
 
@@ -25,6 +25,25 @@ postgres_standby_enabled: true
 postgres_standby_packages:
   - rsync
 postgres_standby_log_dir: /var/log/postgres-standby
+
+# Purpose-specific pull identity, generated here if absent and used by nothing
+# else. Deliberately NOT the legacy shared key: that key is mid-retirement and
+# absent from rebuilt guests, so authorising it on a source guest would reverse
+# the retirement to fix a backup job.
+#
+# Deliberately NOT an OpenBao SSH certificate either. A cert has to be minted at
+# use time, and this runs unattended at 04:00 — which would mean AppRole
+# credentials sitting on this node, able to mint `ansible`-principal certs that
+# are root on every CA-trusting host in the estate. This key reaches two
+# directories read-only. The CA path is for sessions that can mint; a timer
+# cannot, so the smaller standing credential wins.
+#
+# The guest side already has the receiving mechanism: the apps `postgres` role
+# authorises POSTGRES_STANDBY_SSH_PUBKEYS for root under a forced `rrsync -ro`
+# command. That variable had simply never been populated, and this role had no
+# key to populate it with — which is the whole of the reported failure. The
+# converge prints the public key to export.
+postgres_standby_ssh_key: /root/.ssh/id_postgres_standby
 
 # Daily, after the source pg-backup timer (02:30 + up to 15 min splay) has
 # certainly finished — a warm archive, not a hot replica.

@@ -26,6 +26,57 @@
   tags:
     - postgres_standby
 
+- name: Ensure root .ssh directory exists
+  ansible.builtin.file:
+    path: "{{ postgres_standby_ssh_key | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when:
+    - postgres_standby_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - postgres_standby
+
+# Generate-if-absent, never regenerate: rotating this key on every converge
+# would break every source guest still authorising the previous one.
+- name: Generate the dedicated pull keypair
+  ansible.builtin.command:
+    cmd: >-
+      ssh-keygen -q -t ed25519 -N '' -C postgres-standby-pull
+      -f {{ postgres_standby_ssh_key }}
+    creates: "{{ postgres_standby_ssh_key }}"
+  when:
+    - postgres_standby_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - postgres_standby
+
+# Surfaced so the guest-side authorisation is a copy of a measured value rather
+# than a hand-typed one. Public key material — safe to display.
+- name: Read the pull public key
+  ansible.builtin.slurp:
+    src: "{{ postgres_standby_ssh_key }}.pub"
+  register: postgres_standby_pubkey
+  when:
+    - postgres_standby_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - postgres_standby
+
+- name: Show the public key to authorise on each source guest
+  ansible.builtin.debug:
+    msg: >-
+      Export this on the ansible-proxmox-apps converge as
+      POSTGRES_STANDBY_SSH_PUBKEYS:
+      {{ postgres_standby_pubkey.content | b64decode | trim }}
+  when:
+    - postgres_standby_enabled
+    - postgres_standby_pubkey.content is defined
+  tags:
+    - postgres_standby
+
 - name: Ensure log directory exists
   ansible.builtin.file:
     path: "{{ postgres_standby_log_dir }}"
