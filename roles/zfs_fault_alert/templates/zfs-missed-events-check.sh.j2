@@ -1,0 +1,24 @@
+#!/bin/bash
+{{ ansible_managed | comment }}
+#
+# zed logs "Missed events" to its OWN journal (zfs-zed.service) when its
+# internal event queue overflows -- this is not dispatched to zed.d scripts
+# at all, so zfs-fault-watch.sh can never see it. It already happened once
+# during one of the three real fault bursts on this pool (Zammad #17242):
+# the exact window a queue overflow matters most is mid-incident, when this
+# mechanism would otherwise be blind to it.
+#
+# --cursor-file both reads from and updates the saved position in one call
+# (systemd >= 254), so a recurring overflow alerts once per new occurrence,
+# not once per timer tick forever. The cursor is seeded to "now" at deploy
+# time (tasks/main.yml) so the first run never replays history.
+set -uo pipefail
+
+CURSOR_FILE=/var/lib/zfs-fault-alert/missed-events.cursor
+
+hits=$(journalctl -u zfs-zed --cursor-file="$CURSOR_FILE" --no-pager 2>/dev/null \
+  | grep -c "Missed events" || true)
+if [[ "${hits:-0}" -gt 0 ]]; then
+  /usr/local/bin/zfs-fault-alert.sh "zed event-queue overflow (Missed events)" \
+    "count=${hits} since_last_check -- monitoring was blind for this window"
+fi

@@ -116,6 +116,18 @@
         - syslog
         - monitoring
 
+    # Immediate Zammad alert on a specific, already-proven-real ZFS fault
+    # signature (Zammad #17242) on one host's watched pool. Deliberately
+    # separate from pve_health_telemetry's journal->syslog path above: that
+    # pipe is the general-purpose one, and this one exists because a log
+    # nobody reads is not a control for a fault this severe. Disabled
+    # everywhere by default; opts in per-host via zfs_fault_alert_enabled.
+    - role: zfs_fault_alert
+      tags:
+        - zfs_fault_alert
+        - monitoring
+        - zammad
+
     # Prometheus node_exporter (pinned version, systemd) on :9100, bound to the
     # node's management IP so host metrics stay on the management VLAN.
     - role: pve_node_exporter

@@ -1,0 +1,45 @@
+---
+# Disabled everywhere by default; a host opts in via host_vars, same pattern
+# as wol_enable_enabled / nvidia_driver_enabled.
+zfs_fault_alert_enabled: false
+
+# Which pool this host's zed dispatch watches. Deliberately per-host, not
+# estate-wide -- see the role README for why this does not duplicate
+# pve_health_telemetry's "zpool degradation -> ZED, already journal -> syslog"
+# design note.
+zfs_fault_alert_pool: rpool
+
+# Any zed class=delay event at or above this many milliseconds fires an
+# alert. The observed fault signature on pve-w5900 (Zammad #17242) starts at
+# ~70000ms; 30000 gives margin above normal load without false-firing.
+zfs_fault_alert_delay_threshold_ms: 30000
+
+# How often the companion timer checks zed's own journal for a
+# "Missed events" line (queue overflow -- zed dropped events, meaning this
+# whole mechanism went blind for that window). This already happened once
+# during one of the three real fault bursts this role exists to catch.
+zfs_fault_alert_missed_events_check_interval: 2min
+
+# Zammad ticket routing. Values matched to ticket #17242's own group/customer/
+# priority so a fired alert lands in the same triage lane a human would expect.
+zfs_fault_alert_zammad_group: Homelab Infrastructure
+zfs_fault_alert_zammad_priority_id: 4
+
+# Never hardcoded -- same pattern as hermes_agent_zammad_url (empty default,
+# real value passed as an extra var at converge time, sourced from the vault/
+# OpenBao-backed group_vars rather than committed literal).
+zfs_fault_alert_zammad_url: ""
+zfs_fault_alert_zammad_customer: ""
+
+# OpenBao KV path holding zammad_hermes_api_token, read at converge time the
+# same way roles/zammad/tasks/publish_mcp.yml does -- reuses the existing
+# shared credential rather than minting a second Zammad token for one more
+# consumer.
+zfs_fault_alert_openbao_mount: secret
+zfs_fault_alert_openbao_path: apps/zammad
+zfs_fault_alert_openbao_key: zammad_hermes_api_token
+
+# Passed as extra vars at converge time (BAO_ADDR / a short-lived read token),
+# never committed. Mandatory when the role is enabled.
+zfs_fault_alert_openbao_addr: ""
+zfs_fault_alert_openbao_token: ""

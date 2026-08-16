@@ -1,0 +1,159 @@
+---
+# Wires a specific ZFS fault signature (checksum error, long I/O delay, zed
+# queue overflow) directly to a Zammad ticket. See defaults/main.yml and the
+# templates for why: pve_health_telemetry's journal->syslog pipe is the
+# general-purpose path, and this role deliberately bypasses it for one
+# narrow, already-proven-real trigger, because a log nobody reads is not a
+# control (Zammad #17242 -- the pipe this would otherwise rely on has its
+# own known reliability gap).
+- name: Wire the ZFS fault alert
+  when: zfs_fault_alert_enabled | bool
+  tags:
+    - zfs_fault_alert
+  block:
+    - name: Assert the OpenBao read credentials were passed as extra vars
+      ansible.builtin.assert:
+        that:
+          - zfs_fault_alert_openbao_addr | length > 0
+          - zfs_fault_alert_openbao_token | length > 0
+          - zfs_fault_alert_zammad_customer | length > 0
+        fail_msg: >-
+          zfs_fault_alert is enabled but zfs_fault_alert_openbao_addr /
+          zfs_fault_alert_openbao_token / zfs_fault_alert_zammad_customer
+          were not passed as extra vars. These are never committed -- pass
+          them at converge time the same way roles/zammad/tasks/publish_mcp.yml
+          does.
+
+    - name: Read the shared Zammad token from OpenBao
+      ansible.builtin.uri:
+        url: >-
+          {{ zfs_fault_alert_openbao_addr }}/v1/{{ zfs_fault_alert_openbao_mount }}/data/{{ zfs_fault_alert_openbao_path }}
+        headers:
+          X-Vault-Token: "{{ zfs_fault_alert_openbao_token }}"
+        return_content: true
+      register: zfs_fault_alert_bao_read
+      no_log: true
+
+    - name: Extract the token
+      ansible.builtin.set_fact:
+        zfs_fault_alert_zammad_token: >-
+          {{ (zfs_fault_alert_bao_read.json.data.data[zfs_fault_alert_openbao_key])
+             | mandatory('OpenBao key ' ~ zfs_fault_alert_openbao_key ~ ' not found at '
+                         ~ zfs_fault_alert_openbao_path) }}
+      no_log: true
+
+    # The Zammad base URL is internal topology and is never committed as a
+    # literal (same reason hermes_agent_zammad_url defaults to ""). Read the
+    # same published secret the Hermes agent already reads
+    # (secret/ai/mcp/zammad -> ZAMMAD_MCP_URL) rather than requiring a
+    # second manually-typed extra var for the same fact.
+    - name: Read the published Zammad URL from OpenBao
+      ansible.builtin.uri:
+        url: "{{ zfs_fault_alert_openbao_addr }}/v1/secret/data/ai/mcp/zammad"
+        headers:
+          X-Vault-Token: "{{ zfs_fault_alert_openbao_token }}"
+        return_content: true
+      register: zfs_fault_alert_bao_url_read
+      no_log: true
+      when: zfs_fault_alert_zammad_url | length == 0
+
+    - name: Set the resolved Zammad URL
+      ansible.builtin.set_fact:
+        zfs_fault_alert_zammad_url: >-
+          {{ (zfs_fault_alert_bao_url_read.json.data.data.ZAMMAD_MCP_URL
+              | regex_replace('/api/v1/?$', ''))
+             | mandatory('secret/ai/mcp/zammad has no ZAMMAD_MCP_URL -- Zammad may not be deployed yet') }}
+      when: zfs_fault_alert_zammad_url | length == 0
+      no_log: true
+
+    - name: Create the token directory
+      ansible.builtin.file:
+        path: /etc/zfs-fault-alert
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Write the Zammad token (root-only, never logged)
+      ansible.builtin.copy:
+        content: "{{ zfs_fault_alert_zammad_token }}"
+        dest: /etc/zfs-fault-alert/zammad-token
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Deploy the shared alert script
+      ansible.builtin.template:
+        src: zfs-fault-alert.sh.j2
+        dest: /usr/local/bin/zfs-fault-alert.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Deploy the zed dispatch watcher
+      ansible.builtin.template:
+        src: zfs-fault-watch.sh.j2
+        dest: /etc/zfs/zed.d/zfs-fault-watch.sh
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Restart zed to pick up the new zed.d script
+
+    - name: Deploy the missed-events poller script
+      ansible.builtin.template:
+        src: zfs-missed-events-check.sh.j2
+        dest: /usr/local/bin/zfs-missed-events-check.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create the poller's state directory
+      ansible.builtin.file:
+        path: /var/lib/zfs-fault-alert
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Seed the missed-events cursor to now (never replay history on first deploy)
+      ansible.builtin.command:
+        cmd: journalctl -u zfs-zed --cursor-file=/var/lib/zfs-fault-alert/missed-events.cursor -n0
+        creates: /var/lib/zfs-fault-alert/missed-events.cursor
+      changed_when: true
+
+    - name: Deploy the missed-events poller unit + timer
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - zfs-missed-events-check.service
+        - zfs-missed-events-check.timer
+      notify: Reload systemd for zfs_fault_alert
+
+    - name: Flush handlers so units are current before enabling
+      ansible.builtin.meta: flush_handlers
+
+    - name: Enable and start the missed-events timer
+      ansible.builtin.systemd:
+        name: zfs-missed-events-check.timer
+        state: started
+        enabled: true
+
+    - name: Prove the alert path is actually live -- reaches Zammad with the deployed token
+      # Enabling the timer and dropping the zed.d script prove nothing about
+      # whether either can actually reach Zammad. --self-check validates the
+      # token and connectivity without filing a ticket. A converge that
+      # leaves this broken but "deployed" is worse than no alert at all --
+      # the operator would believe a trigger exists that does not fire.
+      ansible.builtin.command: /usr/local/bin/zfs-fault-alert.sh --self-check
+      register: zfs_fault_alert_self_check
+      changed_when: false
+      failed_when: zfs_fault_alert_self_check.rc != 0
+
+    - name: Report the self-check result
+      ansible.builtin.debug:
+        var: zfs_fault_alert_self_check.stdout

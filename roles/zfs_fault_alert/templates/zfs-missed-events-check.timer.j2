@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Periodic check for zed event-queue overflow
+
+[Timer]
+OnBootSec={{ zfs_fault_alert_missed_events_check_interval }}
+OnUnitActiveSec={{ zfs_fault_alert_missed_events_check_interval }}
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

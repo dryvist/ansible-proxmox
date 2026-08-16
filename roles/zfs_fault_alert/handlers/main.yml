@@ -1,0 +1,9 @@
+---
+- name: Reload systemd for zfs_fault_alert
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart zed to pick up the new zed.d script
+  ansible.builtin.systemd:
+    name: zfs-zed.service
+    state: restarted
