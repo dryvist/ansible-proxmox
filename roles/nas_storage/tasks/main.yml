@@ -247,7 +247,10 @@
       {{ nas_storage_bao_read.json.data.data | default({}, true) }}
   run_once: true
   no_log: true
-  when: nas_storage_managed_users | length > 0
+  when:
+    - nas_storage_managed_users | length > 0
+    - nas_storage_bao_read is defined
+    - not nas_storage_bao_read.skipped | default(false)
   tags:
     - nas_storage
     - nas_storage_samba
