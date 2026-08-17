@@ -182,8 +182,8 @@
         mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target"
         ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source/absolute-link"
         ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target/absolute-link"
-        source_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
-        target_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        source_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r bash "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl" --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        target_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r bash "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl" --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
         test "$source_acl" = "$target_acl"
       args:
         executable: /bin/bash
