@@ -132,12 +132,22 @@
           results: null
         pve_guest_evacuation_lxc_managed_volumes_target_manifests: null
 
+    - name: Read rendered successful resume evidence
+      ansible.builtin.slurp:
+        src: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path }}/success.json"
+      register: pve_guest_evacuation_lxc_managed_volumes_success_render_file
+
+    - name: Read rendered rescued resume evidence
+      ansible.builtin.slurp:
+        src: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path }}/rescue.json"
+      register: pve_guest_evacuation_lxc_managed_volumes_rescue_render_file
+
     - name: Decode rendered resume evidence regressions
       ansible.builtin.set_fact:
         pve_guest_evacuation_lxc_managed_volumes_success_render: >-
-          {{ lookup('ansible.builtin.file', pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path + '/success.json') | from_json }}
+          {{ pve_guest_evacuation_lxc_managed_volumes_success_render_file.content | b64decode | from_json }}
         pve_guest_evacuation_lxc_managed_volumes_rescue_render: >-
-          {{ lookup('ansible.builtin.file', pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path + '/rescue.json') | from_json }}
+          {{ pve_guest_evacuation_lxc_managed_volumes_rescue_render_file.content | b64decode | from_json }}
 
     - name: Assert success and rescue resume evidence remain auditable
       ansible.builtin.assert:
@@ -172,8 +182,8 @@
         mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target"
         ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source/absolute-link"
         ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target/absolute-link"
-        source_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
-        target_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        source_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r bash "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl" --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        target_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r bash "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl" --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
         test "$source_acl" = "$target_acl"
       args:
         executable: /bin/bash
