@@ -15,9 +15,9 @@
 # AWS S3). Credentials land in a root-only EnvironmentFile — never in the
 # script, never logged.
 #
-# Inert until postgres_standby_jobs is set. Prerequisites (out of band): SSH
-# trust from this host's root to each source guest (cluster_ssh_trust covers
-# PVE node<->node trust, NOT host->guest), and the source role's backup timer.
+# Inert until postgres_standby_jobs is set. Prerequisite (out of band): the
+# source role's backup timer. SSH trust is now owned by this role — see
+# postgres_standby_ssh_key below.
 
 postgres_standby_enabled: true
 
@@ -25,6 +25,25 @@ postgres_standby_enabled: true
 postgres_standby_packages:
   - rsync
 postgres_standby_log_dir: /var/log/postgres-standby
+
+# Purpose-specific pull identity, generated here if absent and used by nothing
+# else, so the pull never falls back to whatever key root happens to carry.
+#
+# Not an SSH certificate: certificates are minted at use time and a timer has
+# no way to mint one. A key scoped to a single read-only directory is the
+# narrower credential for this job.
+#
+# `source_dir` is resolved by the guest's forced `rrsync -ro <dir>` command,
+# which prefixes any absolute path with its own root — so a full path would
+# resolve to <dir>/var/lib/postgresql/backups and find nothing. Anchor it at
+# "/", meaning the root of the restricted directory.
+#
+# The guest side already has the receiving mechanism: the apps `postgres` role
+# authorises POSTGRES_STANDBY_SSH_PUBKEYS for root under a forced `rrsync -ro`
+# command. That variable had simply never been populated, and this role had no
+# key to populate it with — which is the whole of the reported failure. The
+# converge prints the public key to export.
+postgres_standby_ssh_key: /root/.ssh/id_postgres_standby
 
 # Daily, after the source pg-backup timer (02:30 + up to 15 min splay) has
 # certainly finished — a warm archive, not a hot replica.
@@ -43,7 +62,7 @@ postgres_standby_run_now: false
 # Pull jobs (empty -> inert). Each job:
 #   - name: "postgres"                            # log label
 #     source_host: "root@<db-guest-fqdn>"         # ssh target holding the dumps
-#     source_dir: "/var/lib/postgresql/backups"   # pg-backup output dir
+#     source_dir: "/"                             # ANCHORED AT THE rrsync ROOT
 #     archive_dir: "/bulk/databases/postgres"     # replicated archive namespace
 postgres_standby_jobs: []
 
