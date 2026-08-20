@@ -33,13 +33,37 @@ A failed job or upload is logged to `/var/log/postgres-standby/` and does
 
 ## Prerequisites (apply-time, out of band)
 
-- SSH trust from this host's `root` to each `source_host`. `cluster_ssh_trust`
-  covers PVE node↔node; a database guest is **not** a PVE node, so add that
-  trust separately (the apps `postgres` role manages the guest side).
+- The public half of this host's pull key authorised on each `source_host` —
+  see [SSH trust](#ssh-trust) below.
 - The target dataset (e.g. `bulk/databases`) created by `zfs_pools` from the
   `tofu-proxmox` declaration; `bulk/databases` recursion covers the
   per-instance child automatically.
 - For Tier-2: the bucket exists and the supplied keys can write it.
+
+## SSH trust
+
+The pull is an unattended 04:00 timer, so it needs a credential already on
+disk. This role generates a **dedicated ed25519 keypair** (default
+`/root/.ssh/id_postgres_standby`, generate-if-absent, never rotated in place)
+and the sync script uses it with `IdentitiesOnly=yes` so nothing else is
+offered.
+
+A certificate from the SSH CA is not usable here: certificates are minted at
+use time, and a timer has no way to mint one. A dedicated key scoped to a
+single read-only directory is the narrower credential for this job.
+
+The guest side (`postgres` role, `ansible-proxmox-apps`) authorises the public
+half under a forced command, so the key cannot open a shell or write:
+
+```text
+restrict,command="rrsync -ro /var/lib/postgresql/backups" ssh-ed25519 AAAA... postgres-standby-pull
+```
+
+`rrsync` ships with the `rsync` package. Prefer it over pinning an exact
+`rsync --server --sender` argv, which breaks silently when flags change.
+
+The converge prints the public key to copy; take it from there rather than
+transcribing it.
 
 ## Variables
 
@@ -52,6 +76,7 @@ A failed job or upload is logged to `/var/log/postgres-standby/` and does
 | `postgres_standby_persistent` | `true` | Run a missed schedule on next boot |
 | `postgres_standby_healthcheck_url` | `""` | healthchecks.io URL (`/fail` on error) |
 | `postgres_standby_run_now` | `false` | Opt-in: run immediately during the play |
+| `postgres_standby_ssh_key` | `/root/.ssh/id_postgres_standby` | Dedicated pull identity (see [SSH trust](#ssh-trust)) |
 
 ### Job shape
 
@@ -59,9 +84,15 @@ A failed job or upload is logged to `/var/log/postgres-standby/` and does
 postgres_standby_jobs:
   - name: "postgres"
     source_host: "root@<db-guest-fqdn>"
-    source_dir: "/var/lib/postgresql/backups"
+    source_dir: "/"                          # see below
     archive_dir: "/bulk/databases/postgres"
 ```
+
+`source_dir` is **anchored at the guest's `rrsync` root**, not at the guest's
+filesystem root. `rrsync` prefixes any absolute path with its own restricted
+directory, so `/var/lib/postgresql/backups` would resolve to
+`<root>/var/lib/postgresql/backups` and match nothing. `/` means "the whole of
+what this key is allowed to see".
 
 ### Tier-2 target shape
 

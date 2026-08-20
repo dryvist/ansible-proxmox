@@ -98,6 +98,7 @@
     - name: Create isolated evidence-render regression directory
       ansible.builtin.tempfile:
         state: directory
+        path: /var/tmp
         prefix: managed-volume-evidence-
       register: pve_guest_evacuation_lxc_managed_volumes_evidence_tmp
 
@@ -132,22 +133,22 @@
           results: null
         pve_guest_evacuation_lxc_managed_volumes_target_manifests: null
 
-    - name: Read rendered successful resume evidence
+    - name: Slurp rendered success evidence regression
       ansible.builtin.slurp:
         src: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path }}/success.json"
-      register: pve_guest_evacuation_lxc_managed_volumes_success_render_file
+      register: pve_guest_evacuation_lxc_managed_volumes_success_slurp
 
-    - name: Read rendered rescued resume evidence
+    - name: Slurp rendered rescue evidence regression
       ansible.builtin.slurp:
         src: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path }}/rescue.json"
-      register: pve_guest_evacuation_lxc_managed_volumes_rescue_render_file
+      register: pve_guest_evacuation_lxc_managed_volumes_rescue_slurp
 
     - name: Decode rendered resume evidence regressions
       ansible.builtin.set_fact:
         pve_guest_evacuation_lxc_managed_volumes_success_render: >-
-          {{ pve_guest_evacuation_lxc_managed_volumes_success_render_file.content | b64decode | from_json }}
+          {{ pve_guest_evacuation_lxc_managed_volumes_success_slurp.content | b64decode | from_json }}
         pve_guest_evacuation_lxc_managed_volumes_rescue_render: >-
-          {{ pve_guest_evacuation_lxc_managed_volumes_rescue_render_file.content | b64decode | from_json }}
+          {{ pve_guest_evacuation_lxc_managed_volumes_rescue_slurp.content | b64decode | from_json }}
 
     - name: Assert success and rescue resume evidence remain auditable
       ansible.builtin.assert:
@@ -169,6 +170,7 @@
     - name: Create isolated absolute-symlink ACL regression directories
       ansible.builtin.tempfile:
         state: directory
+        path: /var/tmp
         prefix: managed-volume-acl-
       register: pve_guest_evacuation_lxc_managed_volumes_acl_tmp
 
@@ -176,14 +178,19 @@
       ansible.builtin.shell: |
         set -euo pipefail
         mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin"
-        printf '%s\n' '#!/bin/bash' 'test "$1" = --physical' 'shift' 'printf "%s\\n" "$@"' >"{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
-        chmod 0700 "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
+        cat << 'EOF' > "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
+        #!/usr/bin/env bash
+        test "$1" = --physical
+        shift
+        printf "%s\n" "$@"
+        EOF
+        chmod 0755 "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
         export PATH="{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin:$PATH"
         mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target"
         ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source/absolute-link"
         ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target/absolute-link"
-        source_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r bash "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl" --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
-        target_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r bash "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl" --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        source_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
+        target_acl=$(cd "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target" && find . -xdev -print0 | LC_ALL=C sort -z | xargs -0 -r getfacl --physical --absolute-names --numeric --skip-base --no-effective | sha256sum)
         test "$source_acl" = "$target_acl"
       args:
         executable: /bin/bash
@@ -197,21 +204,32 @@
     - name: Create isolated checksum dry-run regression directories
       ansible.builtin.tempfile:
         state: directory
+        path: /var/tmp
         prefix: managed-volume-rsync-
       register: pve_guest_evacuation_lxc_managed_volumes_rsync_tmp
 
     - name: Prove delete dry run reports arbitrary extra target content
       ansible.builtin.shell: |
         set -euo pipefail
+        if ! command -v rsync >/dev/null 2>&1; then
+          if command -v apt-get >/dev/null 2>&1; then
+            export DEBIAN_FRONTEND=noninteractive
+            if command -v sudo >/dev/null 2>&1; then
+              sudo apt-get update -qq && sudo apt-get install -y -qq rsync
+            else
+              apt-get update -qq && apt-get install -y -qq rsync
+            fi
+          fi
+        fi
         mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target"
         printf source >"{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload"
         cp "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload" "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/payload"
         printf arbitrary >"{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/extra"
-        output=$(nix shell nixpkgs#rsync -c rsync --archive --checksum --dry-run --delete --itemize-changes \
+        output=$(rsync --archive --checksum --dry-run --delete --itemize-changes \
           "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/" \
           "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/")
         test -n "$output"
-        printf '%s\n' "$output" | grep -F '*deleting   extra'
+        printf '%s\n' "$output" | grep -E '\*deleting[[:space:]]+extra'
       args:
         executable: /bin/bash
       changed_when: false
