@@ -132,12 +132,22 @@
           results: null
         pve_guest_evacuation_lxc_managed_volumes_target_manifests: null
 
+    - name: Slurp rendered success evidence regression
+      ansible.builtin.slurp:
+        src: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path }}/success.json"
+      register: pve_guest_evacuation_lxc_managed_volumes_success_slurp
+
+    - name: Slurp rendered rescue evidence regression
+      ansible.builtin.slurp:
+        src: "{{ pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path }}/rescue.json"
+      register: pve_guest_evacuation_lxc_managed_volumes_rescue_slurp
+
     - name: Decode rendered resume evidence regressions
       ansible.builtin.set_fact:
         pve_guest_evacuation_lxc_managed_volumes_success_render: >-
-          {{ lookup('ansible.builtin.file', pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path + '/success.json') | from_json }}
+          {{ pve_guest_evacuation_lxc_managed_volumes_success_slurp.content | b64decode | from_json }}
         pve_guest_evacuation_lxc_managed_volumes_rescue_render: >-
-          {{ lookup('ansible.builtin.file', pve_guest_evacuation_lxc_managed_volumes_evidence_tmp.path + '/rescue.json') | from_json }}
+          {{ pve_guest_evacuation_lxc_managed_volumes_rescue_slurp.content | b64decode | from_json }}
 
     - name: Assert success and rescue resume evidence remain auditable
       ansible.builtin.assert:
