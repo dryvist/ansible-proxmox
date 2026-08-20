@@ -5,6 +5,9 @@
   gather_facts: true
 
   vars:
+    # No OpenBao in the container, so supply the map the role would read from it.
+    nas_storage_passwords:
+      homeassistant_smb_password: "molecule-pass"
     nas_storage_from_tofu:
       zfs_dataset: "rpool/data/nas"
       zfs_quota: "1T"
