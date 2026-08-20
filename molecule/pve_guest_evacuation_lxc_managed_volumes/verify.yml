@@ -176,8 +176,13 @@
       ansible.builtin.shell: |
         set -euo pipefail
         mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin"
-        printf '%s\n' '#!/bin/bash' 'test "$1" = --physical' 'shift' 'printf "%s\n" "$@"' >"{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
-        chmod -R 0755 "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}"
+        cat << 'EOF' > "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
+        #!/usr/bin/env bash
+        test "$1" = --physical
+        shift
+        printf "%s\n" "$@"
+        EOF
+        chmod 0755 "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin/getfacl"
         export PATH="{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/bin:$PATH"
         mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/target"
         ln -s /var/lib/clickhouse/store/missing "{{ pve_guest_evacuation_lxc_managed_volumes_acl_tmp.path }}/source/absolute-link"
