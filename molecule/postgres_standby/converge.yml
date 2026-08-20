@@ -1,0 +1,21 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    # Package install, dir creation, keypair generation, and timer enable are
+    # Docker-skipped; this proves the sync script + timer render the expected
+    # contract — above all that the pull uses the dedicated identity and no
+    # other.
+    postgres_standby_healthcheck_url: "https://hc-ping.example/postgres-standby"
+    postgres_standby_ssh_key: /root/.ssh/id_postgres_standby
+    postgres_standby_jobs:
+      - name: "apps"
+        source_host: "root@db.example"
+        source_dir: "/"
+        archive_dir: "/bulk/databases/apps"
+
+  roles:
+    - role: postgres_standby
