@@ -211,6 +211,16 @@
     - name: Prove delete dry run reports arbitrary extra target content
       ansible.builtin.shell: |
         set -euo pipefail
+        if ! command -v rsync >/dev/null 2>&1; then
+          if command -v apt-get >/dev/null 2>&1; then
+            export DEBIAN_FRONTEND=noninteractive
+            if command -v sudo >/dev/null 2>&1; then
+              sudo apt-get update -qq && sudo apt-get install -y -qq rsync
+            else
+              apt-get update -qq && apt-get install -y -qq rsync
+            fi
+          fi
+        fi
         mkdir -p "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source" "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target"
         printf source >"{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload"
         cp "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload" "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/payload"
@@ -219,7 +229,7 @@
           "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/" \
           "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/")
         test -n "$output"
-        printf '%s\n' "$output" | grep -F '*deleting   extra'
+        printf '%s\n' "$output" | grep -E '\*deleting[[:space:]]+extra'
       args:
         executable: /bin/bash
       changed_when: false
