@@ -1,0 +1,52 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Read the rendered sync script
+      ansible.builtin.slurp:
+        src: /usr/local/bin/postgres-standby-sync.sh
+      register: postgres_standby_script
+
+    - name: Read the rendered timer unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/postgres-standby.timer
+      register: postgres_standby_timer
+
+    - name: Decode rendered files
+      ansible.builtin.set_fact:
+        postgres_standby_script_text: "{{ postgres_standby_script.content | b64decode }}"
+        postgres_standby_timer_text: "{{ postgres_standby_timer.content | b64decode }}"
+
+    - name: Assert the pull uses the dedicated identity and nothing else
+      ansible.builtin.assert:
+        that:
+          - "'-i \"/root/.ssh/id_postgres_standby\"' in postgres_standby_script_text"
+          # Without IdentitiesOnly, ssh-agent keys are offered ahead of the
+          # dedicated one and the source can reject on MaxAuthTries before it
+          # is ever tried — a failure that reads as "key not authorised".
+          - "'IdentitiesOnly=yes' in postgres_standby_script_text"
+          - "'BatchMode=yes' in postgres_standby_script_text"
+        fail_msg: "postgres-standby sync script does not pin the dedicated pull key"
+
+    - name: Assert the mirror contract renders from the job definition
+      ansible.builtin.assert:
+        that:
+          # source_dir renders as "/" — anchored at the guest's rrsync root,
+          # not its filesystem root. An absolute path here would be prefixed
+          # with that root by rrsync and match nothing.
+          - >-
+            'sync_job "apps" "root@db.example" "/"
+            "/bulk/databases/apps"' in postgres_standby_script_text
+          - "'--delete' in postgres_standby_script_text"
+          - "'one or more jobs FAILED' in postgres_standby_script_text"
+        fail_msg: "postgres-standby sync script did not render the expected contract"
+
+    - name: Assert the timer is daily and persistent
+      ansible.builtin.assert:
+        that:
+          - "'OnCalendar=*-*-* 04:00:00' in postgres_standby_timer_text"
+          - "'Persistent=true' in postgres_standby_timer_text"
+        fail_msg: "postgres-standby timer did not render the expected schedule"

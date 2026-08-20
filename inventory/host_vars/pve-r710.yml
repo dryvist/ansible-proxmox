@@ -159,11 +159,11 @@ postgres_standby_jobs: >-
   {{ [] if (domain_from_tofu | default('') | length == 0) else [
        {'name': 'postgres-ai',
         'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-ai-2'] | default({})).hostname | default('postgres-ai-2')) ~ '.' ~ domain_from_tofu,
-        'source_dir': '/var/lib/postgresql/backups',
+        'source_dir': '/',
         'archive_dir': '/bulk/databases/postgres-ai'},
        {'name': 'postgres-apps',
         'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-apps'] | default({})).hostname | default('postgres-apps')) ~ '.' ~ domain_from_tofu,
-        'source_dir': '/var/lib/postgresql/backups',
+        'source_dir': '/',
         'archive_dir': '/bulk/databases/postgres-apps'}
      ] }}
 
