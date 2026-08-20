@@ -197,7 +197,7 @@
         printf source >"{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload"
         cp "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/payload" "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/payload"
         printf arbitrary >"{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/extra"
-        output=$(nix shell nixpkgs#rsync -c rsync --archive --checksum --dry-run --delete --itemize-changes \
+        output=$(rsync --archive --checksum --dry-run --delete --itemize-changes \
           "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/source/" \
           "{{ pve_guest_evacuation_lxc_managed_volumes_rsync_tmp.path }}/target/")
         test -n "$output"

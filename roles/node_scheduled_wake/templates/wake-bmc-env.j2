@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# Root-only (0600) EnvironmentFile for node-scheduled-wake@{{ item.name }}.
+# ipmitool -E reads IPMITOOL_PASSWORD, so the BMC password never appears on the
+# command line or in `systemctl cat`.
+IPMITOOL_PASSWORD={{ node_scheduled_wake_bmc_password }}

@@ -56,7 +56,7 @@
 
 - name: Write the per-target BMC credentials EnvironmentFile
   ansible.builtin.template:
-    src: wake-credentials.env.j2
+    src: wake-bmc-env.j2
     dest: "/etc/node-scheduled-wake/{{ item.name }}.env"
     owner: root
     group: root

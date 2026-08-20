@@ -244,7 +244,8 @@
 - name: Set the managed-user password map
   ansible.builtin.set_fact:
     nas_storage_passwords: >-
-      {{ nas_storage_bao_read.json.data.data | default({}, true) }}
+      {{ nas_storage_bao_read.json.data.data
+         | default(nas_storage_passwords | default({}, true), true) }}
   run_once: true
   no_log: true
   when: nas_storage_managed_users | length > 0
