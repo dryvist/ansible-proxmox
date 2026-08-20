@@ -98,6 +98,7 @@
     - name: Create isolated evidence-render regression directory
       ansible.builtin.tempfile:
         state: directory
+        path: /var/tmp
         prefix: managed-volume-evidence-
       register: pve_guest_evacuation_lxc_managed_volumes_evidence_tmp
 
@@ -169,6 +170,7 @@
     - name: Create isolated absolute-symlink ACL regression directories
       ansible.builtin.tempfile:
         state: directory
+        path: /var/tmp
         prefix: managed-volume-acl-
       register: pve_guest_evacuation_lxc_managed_volumes_acl_tmp
 
@@ -202,6 +204,7 @@
     - name: Create isolated checksum dry-run regression directories
       ansible.builtin.tempfile:
         state: directory
+        path: /var/tmp
         prefix: managed-volume-rsync-
       register: pve_guest_evacuation_lxc_managed_volumes_rsync_tmp
 
