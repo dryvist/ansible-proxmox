@@ -8,6 +8,26 @@
 # penalty with it. Module parameters are load-time settings, so the file is the
 # source of truth and the runtime value is only a cache of it.
 
+# Values arrive as STRINGS -- tofu declares module_params as map(string), so a
+# JSON `false` is already "false" by the time it gets here and no boolean test
+# would ever match it. The kernel takes 1/0, so a declared "true"/"false" would
+# be written verbatim into modprobe.conf (rejected at module load) and would
+# also mismatch sysfs on every converge, reporting changed forever. Normalize
+# once, here, and let both the template and the runtime comparison consume it.
+- name: Normalize boolean-ish module parameter values to sysfs form
+  ansible.builtin.set_fact:
+    zfs_pools_module_params_norm: >-
+      {{ dict(
+           zfs_pools_module_params.keys() | list
+           | zip(
+               zfs_pools_module_params.values() | list
+               | map('string')
+               | map('regex_replace', '(?i)^true$', '1')
+               | map('regex_replace', '(?i)^false$', '0')
+               | list
+             )
+         ) }}
+
 - name: Render ZFS module parameters
   ansible.builtin.template:
     src: zfs-modprobe.conf.j2
@@ -16,7 +36,7 @@
     group: root
     mode: "0644"
   register: zfs_pools_modprobe_render
-  when: zfs_pools_module_params | length > 0
+  when: zfs_pools_module_params_norm | length > 0
 
 # Applied at module load, so the running kernel keeps the OLD value until the
 # module reloads (i.e. reboot). Reloading zfs on a live hypervisor is not an
@@ -25,7 +45,7 @@
 - name: Read current runtime values
   ansible.builtin.slurp:
     src: "/sys/module/zfs/parameters/{{ item.key }}"
-  loop: "{{ zfs_pools_module_params | dict2items }}"
+  loop: "{{ zfs_pools_module_params_norm | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
   register: zfs_pools_runtime_params

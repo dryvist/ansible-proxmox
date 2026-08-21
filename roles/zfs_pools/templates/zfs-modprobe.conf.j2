@@ -8,7 +8,7 @@
 # be changed at runtime, but a runtime `echo` REVERTS ON REBOOT -- which is why
 # they belong here. Anything tuned live must land in the tofu declaration or it
 # silently disappears at the next boot.
-{% for key, value in zfs_pools_module_params | dictsort %}
+{% for key, value in zfs_pools_module_params_norm | dictsort %}
 {% if zfs_pools_module_param_comments.get(key) %}
 # {{ zfs_pools_module_param_comments[key] }}
 {% endif %}
