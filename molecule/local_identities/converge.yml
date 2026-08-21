@@ -1,0 +1,12 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    local_identities_jevans_ssh_public_key: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGmoleculetestfixturekeyonly test@molecule
+
+  roles:
+    - role: local_identities

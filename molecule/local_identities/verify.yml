@@ -1,0 +1,58 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    # One query for the whole database, deliberately not a loop over keys:
+    # getent replaces ansible_facts.getent_passwd wholesale on each call, so a
+    # loop leaves only the LAST account resolved and every reference to the
+    # first one silently fails.
+    - name: Resolve the passwd database
+      ansible.builtin.getent:
+        database: passwd
+
+    - name: Confirm both accounts exist
+      ansible.builtin.assert:
+        that:
+          - "'jevans' in ansible_facts.getent_passwd"
+          - "'admin' in ansible_facts.getent_passwd"
+        fail_msg: "local_identities did not create both accounts"
+
+    - name: Confirm both sudoers files are present and valid
+      ansible.builtin.command: "visudo -cf /etc/sudoers.d/{{ item }}"
+      loop:
+        - jevans
+        - admin
+      changed_when: false
+
+    # Read rather than grep: a missing file makes grep exit non-zero, which
+    # aborts the play before the assertion below and shows the operator a bare
+    # command failure instead of the message explaining what the contract is.
+    # The home directory comes from passwd, not a hardcoded /home/<user>.
+    - name: Read jevans's authorized_keys
+      ansible.builtin.slurp:
+        src: "{{ ansible_facts.getent_passwd['jevans'][4] }}/.ssh/authorized_keys"
+      register: jevans_keys
+      failed_when: false
+
+    - name: Confirm admin has NO static authorized_keys file (CA-only by design)
+      ansible.builtin.stat:
+        path: "{{ ansible_facts.getent_passwd['admin'][4] }}/.ssh/authorized_keys"
+      register: admin_key_check
+
+    - name: Assert the identity contract holds
+      ansible.builtin.assert:
+        that:
+          - jevans_keys.content is defined
+          - (jevans_keys.content | b64decode) is search('molecule')
+          - not admin_key_check.stat.exists
+        fail_msg: >-
+          Either jevans is missing its declared key
+          (present={{ jevans_keys.content is defined }}), or admin
+          unexpectedly has a static key
+          (exists={{ admin_key_check.stat.exists }}) -- admin must be
+          CA-cert-only by design.
+        success_msg: >-
+          jevans carries its declared key and admin has no standing key.
