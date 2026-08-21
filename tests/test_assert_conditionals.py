@@ -27,7 +27,10 @@ BAD_FIXTURE = """
 
 
 def scan(text):
-    """Return (non-string `that:` elements, count examined) for one document."""
+    """Return (non-string `that:` elements, count examined) across every
+    YAML document in text -- a file with `---`-separated documents has
+    `that:` blocks in later documents too, which safe_load (single-document)
+    silently ignores."""
     bad, seen = [], 0
 
     def walk(node):
@@ -44,7 +47,9 @@ def scan(text):
             for item in node:
                 walk(item)
 
-    walk(yaml.safe_load(text))
+    for doc in yaml.safe_load_all(text):
+        if doc is not None:
+            walk(doc)
     return bad, seen
 
 

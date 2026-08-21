@@ -21,9 +21,36 @@ ping_hc() { [ -n "$HC" ] && curl -fsS -m 10 --retry 3 -o /dev/null "$1" >/dev/nu
 rc=0
 {% for owner in git_mirror_owners %}
 say "enumerating public repos for {{ owner }}"
-repos=$(curl -fsS -m 30 "https://api.github.com/users/{{ owner }}/repos?type=public&per_page=100" \
-  | python3 -c 'import json,sys; print("\n".join(r["name"] for r in json.load(sys.stdin)))' 2>>"$log") \
-  || { say "  FAILED: enumerate {{ owner }}"; rc=1; repos=""; }
+# Paginated -- a single per_page=100 request silently truncates any owner
+# with more than 100 public repos. Follow numbered pages until one returns
+# fewer than per_page results (GitHub's own "last page" signal).
+#
+# "Last page" MUST be a distinct exit code from "this page failed". With
+# pipefail set, a curl timeout or a rate-limit surfaces as curl's own status
+# and a malformed body surfaces as python's 1 -- so a single "non-zero means
+# stop" test cannot tell a finished enumeration from a broken one, and the
+# run would quietly mirror a truncated repo list. Exit 2 means finished;
+# every other non-zero means failed, and a failed enumeration mirrors
+# NOTHING for this owner rather than an arbitrary prefix of it.
+repos=""
+page=1
+enumerated=1
+while :; do
+  batch=$(curl -fsS -m 30 "https://api.github.com/users/{{ owner }}/repos?type=public&per_page=100&page=${page}" \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(r["name"] for r in d)); sys.exit(0 if len(d) == 100 else 2)' 2>>"$log")
+  status=$?
+  case "$status" in
+    0) repos="${repos}${batch:+$'\n'}${batch}"; page=$((page + 1)) ;;
+    2) repos="${repos}${batch:+$'\n'}${batch}"; break ;;
+    *) say "  FAILED: enumerate {{ owner }} (page ${page}, status ${status})"
+       enumerated=0; break ;;
+  esac
+done
+if [ "$enumerated" -eq 0 ] || [ -z "$repos" ]; then
+  [ "$enumerated" -eq 1 ] && say "  FAILED: enumerate {{ owner }}"
+  rc=1
+  repos=""
+fi
 while IFS= read -r name; do
   [ -n "$name" ] || continue
   path="$DEST/{{ owner }}/${name}.git"
