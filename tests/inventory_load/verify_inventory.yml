@@ -34,12 +34,12 @@
     - name: Assert the storage node declares a snapshot policy for the state it holds
       ansible.builtin.assert:
         that:
-          - hostvars['pve540'].sanoid_timer_enabled | bool
-          - "'bulk/databases' in hostvars['pve540'].sanoid_datasets"
-          - "'bulk/appdata' in hostvars['pve540'].sanoid_datasets"
-          - hostvars['pve540'].sanoid_datasets['bulk/databases'].hourly | int > 0
-          - hostvars['pve540'].sanoid_datasets['bulk/appdata'].recursive == 'yes'
-          - "'bulk/subvol-902000-disk-1' in hostvars['pve540'].sanoid_datasets"
+          - hostvars['pve-r540'].sanoid_timer_enabled | bool
+          - "'bulk/databases' in hostvars['pve-r540'].sanoid_datasets"
+          - "'bulk/appdata' in hostvars['pve-r540'].sanoid_datasets"
+          - hostvars['pve-r540'].sanoid_datasets['bulk/databases'].hourly | int > 0
+          - hostvars['pve-r540'].sanoid_datasets['bulk/appdata'].recursive == 'yes'
+          - "'bulk/subvol-902000-disk-1' in hostvars['pve-r540'].sanoid_datasets"
         fail_msg: >-
           The storage node holds live application state and the dump archive, so
           it must declare a sanoid policy for both. syncoid runs --no-sync-snap:

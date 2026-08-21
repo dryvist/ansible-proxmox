@@ -52,6 +52,39 @@
         cluster_nodes_from_tofu: "{{ tofu_data.nodes | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
+    # A node_storage entry is looked up by proxmox_node_name, so a node key
+    # that drifts from tofu's (a rename on one side only) resolves to an empty
+    # map -- and zfs_pools then no-ops at rc=0 with changed=0, which reads as
+    # "already converged". That is exactly what a stale `pve540` key did while
+    # tofu had already moved to `pve-r540`.
+    #
+    # Not asserted per host: a node legitimately absent from node_storage is
+    # allowed. What is never legitimate is a NON-EMPTY node_storage matching
+    # NO host at all, which is the signature of a key-scheme drift.
+    - name: Assert the node_storage lookup matched at least one host
+      ansible.builtin.assert:
+        that:
+          - (tofu_data.node_storage | default({})) | length == 0
+            or (groups['proxmox'] | default([])
+                | map('extract', hostvars, 'zfs_pools_from_tofu')
+                | select('truthy') | list | length) > 0
+        fail_msg: >-
+          The published inventory declares
+          {{ (tofu_data.node_storage | default({})) | length }} node_storage
+          entries ({{ (tofu_data.node_storage | default({})).keys() | list }}),
+          but none matched a host's proxmox_node_name
+          ({{ groups['proxmox'] | default([])
+              | map('extract', hostvars, 'proxmox_node_name') | list }}).
+          Every consuming role would skip silently at rc=0. The two key schemes
+          have drifted -- reconcile the inventory key with the tofu node name.
+        success_msg: >-
+          node_storage matched
+          {{ groups['proxmox'] | default([])
+             | map('extract', hostvars, 'zfs_pools_from_tofu')
+             | select('truthy') | list | length }} of
+          {{ groups['proxmox'] | default([]) | length }} hosts.
+      when: groups['proxmox'] | default([]) | length > 0
+
     # Base LXC appliance template. tofu creates every container from
     # `local:vztmpl/<this>`, so each node must hold it; pve_repositories does the
     # download. Optional on purpose — an inventory published before tofu-proxmox

@@ -111,7 +111,7 @@ object_store_vmid: >-
 # live cluster, not a replicated archive.
 #
 # This node is ALSO now a pull target (see postgres_standby_jobs below), so it
-# needs its own "databases" entry the same way host_vars/pve540.yml does: the
+# needs its own "databases" entry the same way host_vars/pve-r540.yml does: the
 # `database` template with the hourly override, so a nightly dump is captured
 # same-day instead of waiting for the next daily-only snapshot window.
 #
@@ -137,15 +137,15 @@ sanoid_datasets: >-
 # Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).
 #
 # The ai-VLAN Hindsight cluster has two members on two different nodes
-# (postgres-ai-1 here on pve3, postgres-ai-2 on pve540 — see
+# (postgres-ai-1 here on pve3, postgres-ai-2 on pve-r540 — see
 # ansible-proxmox-apps inventory/group_vars/postgres_ai_group.yml), and EACH
-# runs its own local pg-backup timer independently. host_vars/pve540.yml
+# runs its own local pg-backup timer independently. host_vars/pve-r540.yml
 # already pulls postgres-ai-1's dump into its own bulk/databases (off-node
 # from pve3's perspective, which is what makes it a real backup). Left alone,
 # postgres-ai-2's own dump would sit only on the node it was produced on —
-# pve540, the SAME node pve540's archive lives on — which is not an off-node
+# pve-r540, the SAME node pve-r540's archive lives on — which is not an off-node
 # copy at all. So the pull is crossed: this node pulls the OTHER instance,
-# postgres-ai-2, into its own "databases" dataset above, and pve540 pulls
+# postgres-ai-2, into its own "databases" dataset above, and pve-r540 pulls
 # this one. Each dump ends up on a pool neither postgres-ai guest runs on.
 #
 # postgres-apps (Zammad+Nautobot+Vikunja) had NO off-node pull configured
