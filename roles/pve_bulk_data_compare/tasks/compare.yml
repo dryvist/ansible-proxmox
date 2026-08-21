@@ -1,42 +1,42 @@
 ---
 - name: Select evidence manifest paths
   ansible.builtin.set_fact:
-    pve_bulk_data_compare_source_manifest: "{{ pve_bulk_data_compare_source_manifest_dir }}/{{ pve_bulk_data_compare_run_id }}.pve2.jsonl"
-    pve_bulk_data_compare_target_manifest: "{{ pve_bulk_data_compare_target_manifest_dir }}/{{ pve_bulk_data_compare_run_id }}.pve540.jsonl"
-    pve_bulk_data_compare_pve3_source_manifest: "{{ pve_bulk_data_compare_pve3_manifest_dir }}/{{ pve_bulk_data_compare_run_id }}.pve2.jsonl"
-    pve_bulk_data_compare_pve3_target_manifest: "{{ pve_bulk_data_compare_pve3_manifest_dir }}/{{ pve_bulk_data_compare_run_id }}.pve540.jsonl"
+    pve_bulk_data_compare_source_manifest: "{{ pve_bulk_data_compare_source_manifest_dir }}/{{ pve_bulk_data_compare_run_id }}.source.jsonl"
+    pve_bulk_data_compare_target_manifest: "{{ pve_bulk_data_compare_target_manifest_dir }}/{{ pve_bulk_data_compare_run_id }}.target.jsonl"
+    pve_bulk_data_compare_evidence_source_manifest: "{{ pve_bulk_data_compare_evidence_manifest_dir }}/{{ pve_bulk_data_compare_run_id }}.source.jsonl"
+    pve_bulk_data_compare_evidence_target_manifest: "{{ pve_bulk_data_compare_evidence_manifest_dir }}/{{ pve_bulk_data_compare_run_id }}.target.jsonl"
     pve_bulk_data_compare_evidence_prefix: "{{ pve_bulk_data_compare_evidence_dir }}/{{ pve_bulk_data_compare_run_id }}.comparison"
 
 - name: Freeze manifest and compare datasets
   block:
-    - name: Freeze pve2 bulk/data when it was writable
+    - name: Freeze the source dataset when it was writable
       ansible.builtin.command:
-        argv: [zfs, set, readonly=on, bulk/data]
+        argv: [zfs, set, readonly=on, "{{ pve_bulk_data_compare_source_dataset }}"]
       when: pve_bulk_data_compare_readonly_before.results[0].stdout.split()[0] == 'off'
       register: pve_bulk_data_compare_source_freeze
       changed_when: true
 
-    - name: Freeze pve540 bulk/data when it was writable
+    - name: Freeze the target dataset when it was writable
       ansible.builtin.command:
-        argv: [zfs, set, readonly=on, bulk/data]
-      delegate_to: pve540
+        argv: [zfs, set, readonly=on, "{{ pve_bulk_data_compare_target_dataset }}"]
+      delegate_to: "{{ pve_bulk_data_compare_target_node }}"
       when: pve_bulk_data_compare_readonly_before.results[1].stdout.split()[0] == 'off'
       register: pve_bulk_data_compare_target_freeze
       changed_when: true
 
-    - name: Generate deterministic pve2 manifest outside bulk/data
+    - name: Generate the deterministic source manifest outside the dataset
       ansible.builtin.script:
         cmd: "manifest.py {{ pve_bulk_data_compare_source_path | quote }} {{ pve_bulk_data_compare_source_manifest | quote }}"
 
-    - name: Generate deterministic pve540 manifest outside bulk/data
+    - name: Generate the deterministic target manifest outside the dataset
       ansible.builtin.script:
         cmd: "manifest.py {{ pve_bulk_data_compare_target_path | quote }} {{ pve_bulk_data_compare_target_manifest | quote }}"
-      delegate_to: pve540
+      delegate_to: "{{ pve_bulk_data_compare_target_node }}"
 
-    - name: Compare manifests and atomically publish classified evidence on pve3
+    - name: Compare manifests and publish classified evidence atomically
       ansible.builtin.script:
-        cmd: "compare.py {{ pve_bulk_data_compare_pve3_source_manifest | quote }} {{ pve_bulk_data_compare_pve3_target_manifest | quote }} {{ pve_bulk_data_compare_evidence_prefix | quote }}"
-      delegate_to: pve3
+        cmd: "compare.py {{ pve_bulk_data_compare_evidence_source_manifest | quote }} {{ pve_bulk_data_compare_evidence_target_manifest | quote }} {{ pve_bulk_data_compare_evidence_prefix | quote }}"
+      delegate_to: "{{ pve_bulk_data_compare_evidence_host }}"
       register: pve_bulk_data_compare_result
       changed_when: true
       failed_when: false
@@ -44,32 +44,34 @@
     - name: Fail after classified differences are published
       ansible.builtin.assert:
         that: [pve_bulk_data_compare_result.rc == 0]
-        fail_msg: "bulk/data manifests differ; classified atomic evidence is under {{ pve_bulk_data_compare_evidence_prefix }}.*"
+        fail_msg: "Manifests differ; classified atomic evidence is under {{ pve_bulk_data_compare_evidence_prefix }}.*"
   always:
-    - name: Restore pve540 readonly state exactly # noqa no-handler
+    - name: Restore target readonly state exactly # noqa no-handler
       ansible.builtin.command:
         argv: >-
-          {{ ['zfs', 'set', 'readonly=off', 'bulk/data']
+          {{ ['zfs', 'set', 'readonly=off', pve_bulk_data_compare_target_dataset]
              if pve_bulk_data_compare_readonly_before.results[1].stdout.split()[1] == 'local'
-             else ['zfs', 'inherit', 'readonly', 'bulk/data'] }}
-      delegate_to: pve540
+             else ['zfs', 'inherit', 'readonly', pve_bulk_data_compare_target_dataset] }}
+      delegate_to: "{{ pve_bulk_data_compare_target_node }}"
       when: pve_bulk_data_compare_target_freeze.changed | default(false)
       changed_when: true
 
-    - name: Restore pve2 readonly state exactly # noqa no-handler
+    - name: Restore source readonly state exactly # noqa no-handler
       ansible.builtin.command:
         argv: >-
-          {{ ['zfs', 'set', 'readonly=off', 'bulk/data']
+          {{ ['zfs', 'set', 'readonly=off', pve_bulk_data_compare_source_dataset]
              if pve_bulk_data_compare_readonly_before.results[0].stdout.split()[1] == 'local'
-             else ['zfs', 'inherit', 'readonly', 'bulk/data'] }}
+             else ['zfs', 'inherit', 'readonly', pve_bulk_data_compare_source_dataset] }}
       when: pve_bulk_data_compare_source_freeze.changed | default(false)
       changed_when: true
 
     - name: Capture readonly properties after restoration
       ansible.builtin.command:
-        argv: [zfs, get, -H, -o, value,source, readonly, bulk/data] # noqa yaml[commas]
-      delegate_to: "{{ item }}"
-      loop: [pve2, pve540]
+        argv: [zfs, get, -H, -o, 'value,source', readonly, "{{ item.dataset }}"]
+      delegate_to: "{{ item.name }}"
+      loop:
+        - {name: "{{ pve_bulk_data_compare_source_node }}", dataset: "{{ pve_bulk_data_compare_source_dataset }}"}
+        - {name: "{{ pve_bulk_data_compare_target_node }}", dataset: "{{ pve_bulk_data_compare_target_dataset }}"}
       register: pve_bulk_data_compare_readonly_after
       changed_when: false
 
@@ -78,4 +80,4 @@
         that:
           - pve_bulk_data_compare_readonly_after.results[0].stdout == pve_bulk_data_compare_readonly_before.results[0].stdout
           - pve_bulk_data_compare_readonly_after.results[1].stdout == pve_bulk_data_compare_readonly_before.results[1].stdout
-        fail_msg: "A bulk/data readonly property was not restored to its exact value and source."
+        fail_msg: "A readonly property was not restored to its exact value and source."

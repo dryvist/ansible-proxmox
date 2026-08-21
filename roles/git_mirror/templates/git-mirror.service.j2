@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Daily bare-mirror of every configured owner's public repositories
+Documentation=https://github.com/dryvist/ansible-proxmox/tree/main/roles/git_mirror
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/git-mirror.sh

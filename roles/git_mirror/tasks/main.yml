@@ -1,0 +1,94 @@
+---
+# git_mirror tasks — deploy the mirror script + systemd timer.
+# Directory creation and timer enable are Docker-skipped (molecule); the
+# script and unit files always render so the contract is verifiable
+# in-container.
+
+- name: Install git
+  ansible.builtin.apt:
+    name: git
+    state: present
+  when:
+    - git_mirror_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - git_mirror
+
+- name: Ensure the mirror archive directory exists
+  ansible.builtin.file:
+    path: "{{ git_mirror_archive_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when:
+    - git_mirror_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - git_mirror
+
+- name: Deploy the git-mirror script
+  ansible.builtin.template:
+    src: git-mirror.sh.j2
+    dest: /usr/local/bin/git-mirror.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: git_mirror_enabled
+  tags:
+    - git_mirror
+
+- name: Render the git-mirror service unit
+  ansible.builtin.template:
+    src: git-mirror.service.j2
+    dest: /etc/systemd/system/git-mirror.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: git_mirror_enabled
+  notify: Reload systemd daemon
+  tags:
+    - git_mirror
+
+- name: Render the git-mirror timer unit
+  ansible.builtin.template:
+    src: git-mirror.timer.j2
+    dest: /etc/systemd/system/git-mirror.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: git_mirror_enabled
+  notify: Reload systemd daemon
+  tags:
+    - git_mirror
+
+# Apply any pending daemon-reload now so the timer below enables against the
+# freshly written unit (handlers otherwise run only at end of play).
+- name: Reload systemd before enabling the timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the git-mirror timer
+  ansible.builtin.systemd:
+    name: git-mirror.timer
+    enabled: true
+    state: started
+  when:
+    - git_mirror_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - git_mirror
+
+# Mirrors pve_config_backup's disable branch: a host flipped back to
+# disabled must not be left with a stale timer still firing against a
+# removed/outdated script.
+- name: Disable the git-mirror timer when mirroring is not wanted
+  ansible.builtin.systemd:
+    name: git-mirror.timer
+    enabled: false
+    state: stopped
+  when:
+    - not git_mirror_enabled
+    - ansible_virtualization_type != 'docker'
+  failed_when: false
+  tags:
+    - git_mirror

@@ -54,7 +54,8 @@
         | reject('match', '^' ~ (pve_guest_evacuation_restore_target_storage | regex_escape) ~ ':')
         | list | length == 0
     fail_msg: >-
-      pve540 did not restore the expected guest configuration, backed volumes,
+      The target node did not restore the expected guest configuration, backed
+      volumes,
       or stopped state. Preserve this target guest for investigation; no
       automatic rollback or deletion is permitted.
     quiet: true
@@ -81,7 +82,7 @@
       - item.stat.exists | default(false)
     fail_msg: >-
       Restored volume {{ item.item.item }} is not present on the explicit
-      pve540 target storage. Preserve the failed target for investigation.
+      target storage. Preserve the failed target for investigation.
     quiet: true
   loop: "{{ pve_guest_evacuation_restore_target_volume_stats.results }}"
 

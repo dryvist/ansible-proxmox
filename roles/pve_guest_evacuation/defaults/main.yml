@@ -1,11 +1,12 @@
 ---
-# Archive-only, single-guest evacuation from pve2 to a pve3-hosted shared
-# staging storage. This role is deliberately inert unless explicitly enabled.
+# Archive-only, single-guest evacuation to a shared staging storage hosted by
+# a third node. This role is deliberately inert unless explicitly enabled.
+#
+# The source, target and staging hosts have NO defaults on purpose: every
+# caller must name them, so an unset value fails closed instead of silently
+# targeting whichever node a default happened to name.
 pve_guest_evacuation_enabled: false
 pve_guest_evacuation_phase: archive
-pve_guest_evacuation_source_node: pve2
-pve_guest_evacuation_target_node: pve540
-pve_guest_evacuation_staging_host: pve3
 # The source's Proxmox NODE name. The *_node vars above are inventory keys
 # (they are delegate_to targets and hostvars lookups); a /nodes/<x>/ API path
 # and the /cluster/resources `node` field are node names. Resolve one from the

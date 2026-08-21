@@ -6,7 +6,7 @@
   gather_facts: false
 
   tasks:
-    - name: Assert the inert role created no pve3 evidence directory
+    - name: Assert the inert role created no staging evidence directory
       ansible.builtin.stat:
         path: /bulk/evacuation-816/evidence
       register: pve_guest_evacuation_restore_evidence_dir
@@ -25,9 +25,9 @@
             tasks_from: preflight_contract.yml
           vars:
             pve_guest_evacuation_restore_enabled: true
-            pve_guest_evacuation_restore_source_node: pve2
-            pve_guest_evacuation_restore_target_node: pve540
-            pve_guest_evacuation_restore_staging_host: pve3
+            pve_guest_evacuation_restore_source_node: evacuation-source-test
+            pve_guest_evacuation_restore_target_node: evacuation-target-test
+            pve_guest_evacuation_restore_staging_host: evacuation-staging-test
             pve_guest_evacuation_restore_archive_run_id: archive-1
             pve_guest_evacuation_restore_run_id: restore-1
             pve_guest_evacuation_restore_expected_vmid: '101'
@@ -41,3 +41,23 @@
       ansible.builtin.assert:
         that:
           - pve_guest_evacuation_restore_input_failed | default(false)
+
+    # The node variables have no defaults, so an unset value must be an error
+    # rather than a restore onto whichever node a default named.
+    - name: Exercise the unset node-variable gate
+      block:
+        - name: Run the restore contract with no node variables
+          ansible.builtin.include_role:
+            name: pve_guest_evacuation_restore
+            tasks_from: preflight_contract.yml
+          vars:
+            pve_guest_evacuation_restore_enabled: true
+      rescue:
+        - name: Record that unset node variables failed
+          ansible.builtin.set_fact:
+            pve_guest_evacuation_restore_unset_nodes_failed: true
+
+    - name: Assert unset node variables fail closed
+      ansible.builtin.assert:
+        that:
+          - pve_guest_evacuation_restore_unset_nodes_failed | default(false)

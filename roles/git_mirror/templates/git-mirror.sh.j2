@@ -1,0 +1,79 @@
+#!/bin/bash
+# git-mirror — daily bare-mirror of every configured owner's PUBLIC
+# repositories. Managed by Ansible — do not edit manually.
+#
+# v1 scope: public repos only, cloned/fetched anonymously over HTTPS. Each
+# owner's repo list is enumerated at runtime from the GitHub API — never
+# baked into this script — so a new repo is picked up on the next run with
+# no converge needed. A failed clone/update is logged and does NOT abort the
+# rest of the run.
+set -uo pipefail
+
+DEST="{{ git_mirror_archive_dir }}"
+LOG_DIR="{{ git_mirror_log_dir }}"
+HC="{{ git_mirror_healthcheck_url }}"
+mkdir -p "$DEST" "$LOG_DIR"
+log="$LOG_DIR/$(date +%Y-%m-%d).log"
+
+say()     { echo "=== $(date +%H:%M:%S) $* ===" >>"$log"; }
+ping_hc() { [ -n "$HC" ] && curl -fsS -m 10 --retry 3 -o /dev/null "$1" >/dev/null 2>&1 || true; }
+
+rc=0
+{% for owner in git_mirror_owners %}
+say "enumerating public repos for {{ owner }}"
+# Paginated -- a single per_page=100 request silently truncates any owner
+# with more than 100 public repos. Follow numbered pages until one returns
+# fewer than per_page results (GitHub's own "last page" signal).
+#
+# "Last page" MUST be a distinct exit code from "this page failed". With
+# pipefail set, a curl timeout or a rate-limit surfaces as curl's own status
+# and a malformed body surfaces as python's 1 -- so a single "non-zero means
+# stop" test cannot tell a finished enumeration from a broken one, and the
+# run would quietly mirror a truncated repo list. Exit 2 means finished;
+# every other non-zero means failed, and a failed enumeration mirrors
+# NOTHING for this owner rather than an arbitrary prefix of it.
+repos=""
+page=1
+enumerated=1
+while :; do
+  batch=$(curl -fsS -m 30 "https://api.github.com/users/{{ owner }}/repos?type=public&per_page=100&page=${page}" \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(r["name"] for r in d)); sys.exit(0 if len(d) == 100 else 2)' 2>>"$log")
+  status=$?
+  case "$status" in
+    0) repos="${repos}${batch:+$'\n'}${batch}"; page=$((page + 1)) ;;
+    2) repos="${repos}${batch:+$'\n'}${batch}"; break ;;
+    *) say "  FAILED: enumerate {{ owner }} (page ${page}, status ${status})"
+       enumerated=0; break ;;
+  esac
+done
+if [ "$enumerated" -eq 0 ] || [ -z "$repos" ]; then
+  [ "$enumerated" -eq 1 ] && say "  FAILED: enumerate {{ owner }}"
+  rc=1
+  repos=""
+fi
+while IFS= read -r name; do
+  [ -n "$name" ] || continue
+  path="$DEST/{{ owner }}/${name}.git"
+  if [ -d "$path" ]; then
+    if ! git -C "$path" remote update --prune >>"$log" 2>&1; then
+      say "  FAILED: update {{ owner }}/${name}"
+      rc=1
+    fi
+  else
+    mkdir -p "$(dirname "$path")"
+    if ! git clone --mirror "https://github.com/{{ owner }}/${name}.git" "$path" >>"$log" 2>&1; then
+      say "  FAILED: clone {{ owner }}/${name}"
+      rm -rf "$path"
+      rc=1
+    fi
+  fi
+done <<<"$repos"
+{% endfor %}
+
+if [ "$rc" -ne 0 ]; then
+  say "one or more mirrors FAILED"
+  ping_hc "${HC}/fail"
+  exit 1
+fi
+say "all mirrors OK"
+ping_hc "${HC}"

@@ -38,6 +38,19 @@ def test_restore_requires_exact_verified_archive_identity() -> None:
     contract = (ROLE / "tasks" / "preflight_contract.yml").read_text()
     restore = _flattened_restore()
 
+    defaults = (ROLE / "defaults" / "main.yml").read_text()
+    # The node variables must stay undefaulted and required: a default here is
+    # what pinned this role to one node and made it unusable against any other.
+    for var in ("source_node", "target_node", "staging_host"):
+        assert not re.search(
+            rf"^pve_guest_evacuation_restore_{var}:", defaults, re.M
+        )
+        assert f"pve_guest_evacuation_restore_{var} is defined" in contract
+        assert (
+            f"pve_guest_evacuation_restore_{var} | default('') | length > 0"
+            in contract
+        )
+
     assert "pve_guest_evacuation_restore_expected_vmid" in contract
     assert "pve_guest_evacuation_restore_expected_guest_type" in contract
     assert "pve_guest_evacuation_restore_expected_config_digest" in contract

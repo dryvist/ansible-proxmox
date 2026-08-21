@@ -1,0 +1,248 @@
+---
+# Host vars for this node (the R710).
+#
+# This node is always-on:
+#   - node_auto_poweroff_enabled is false: no scheduled poweroff timer.
+#   - syncoid runs on the wall-clock cron trigger, because a boot trigger on an
+#     always-on node only fires when the node happens to reboot. It was left on
+#     `boot` after the always-on change and that turned out to BE the replication
+#     RPO: measured 2026-07-29, this node's copy of the node-2 appdata namespace
+#     was ~9.6 h behind the source (source snapshot 11:05, replica 02:00), with
+#     ~24 h the normal case. Every hour the node stays up past its last boot is
+#     RPO. The cron trigger decouples replication from reboots entirely.
+# pve_power_managed keeps the iDRAC power capability available for a deliberate
+# maintenance power-cycle, invoked with -e idrac_power_autocycle=true.
+#
+# The auto-cycle is OFF here because this node is always-on and the bookends do
+# not respect that: site.yml powers every pve_power_managed host on at the start
+# of a run and off at the end, and idrac_power_autocycle defaults to true, so an
+# ordinary converge ended by powering this node down. That is not a maintenance
+# window — this node carries the ingress every other service is reached through,
+# and OpenBao with it, so the converge that switched it off also removed the
+# credential path the NEXT converge needs. The run then fails before Ansible
+# starts, reporting zero failed tasks because zero tasks ran.
+pve_power_managed: true
+idrac_power_autocycle: false
+idrac_power_bmc_host: "{{ lookup('env', 'PVE3_BMC_HOSTNAME') | default('', true) }}"
+node_auto_poweroff_enabled: false
+syncoid_trigger: cron
+# Every 4 h on the hour. Passed straight through to ansible.builtin.cron, so
+# crontab step syntax works here. 4 h is a deliberate compromise: the pulls are
+# incremental over sanoid snapshots and cheap, but the sources include a pool
+# that has been degraded, so this is not the place to be aggressive. Tighten
+# once the node-2 pool rebuild lands and its redundancy is back.
+syncoid_cron_hour: "*/4"
+syncoid_boot_poweroff_on_complete: false
+
+# The Splunk configuration disk is ~4 GB of text that changes whenever anything
+# is reconfigured, and its incrementals are kilobytes — so a 4 h RPO on it buys
+# nothing and costs a day's worth of config edits in a restore. It gets its own
+# hourly group. The index tiers are NOT here and never will be: they live on a
+# separate pool with no snapshots at all, because Splunk archives its own
+# buckets. Offset off the hour so it does not collide with the */4 run.
+syncoid_extra_schedules:
+  hourly:
+    hour: "*"
+    minute: "37"
+
+# Per-minute healthchecks liveness ping stays off pending its own follow-up
+# (unrelated to the always-on change above).
+proxmox_monitoring_enable_healthchecks: false
+
+# Layer-2 protection (cross-node ZFS replication via syncoid, PULL model): this
+# node is the replica target for the estate. It pulls each source node's
+# snapshots into bulk/replica/<node>, so every dataset named below holds a copy
+# on a pool that is not the one it lives on — which is the whole point, and the
+# reason a dump sitting on a sibling dataset of the same pool does not count.
+# The source NODE NAME is derived from tofu
+# (splunk_vm_from_tofu, injected by load_tofu) — never hard-coded — so this
+# follows the VM if it is ever defined on a different node. bulk is pve3's own
+# local raidz2 pool; the bulk/replica/<node> parent is created by zfs_pools from
+# the terraform-proxmox node_storage declaration, and syncoid creates the
+# per-disk leaves.
+#
+# Prereqs (verified live): root SSH pve3->source works (PVE cluster keys +
+# cluster_ssh_trust known_hosts); each source disk has a sanoid snapshot for
+# --no-sync-snap. Replicate the OS disk (0) and /opt/splunk config+indexes (2);
+# disk-1 was an empty leftover. Whole-disk for now; excluding the volatile index
+# tier is the tracked critical/volatile follow-up.
+# These vars are only rendered when the syncoid role runs, which can happen
+# without load_tofu.yml if an operator scopes a run with --limit excluding
+# localhost (--limit filters hosts, not tags, so `tags: always` on the localhost
+# play does not save it).
+#
+# They used to fall back to a test-fixture vmid/node. They must not. A guessed
+# VMID produces replication jobs whose source dataset does not exist, so the
+# replica the whole protection scheme depends on is never created — while the
+# run itself reports success. Guessing the node is the same class of error.
+# Resolve each once, and fail loudly with the remedy when unresolved.
+splunk_vmid: >-
+  {{ ((splunk_vm_from_tofu | default({})).splunk | default({})).vmid
+     | mandatory('splunk_vm_from_tofu is unset, so the Splunk VMID cannot be
+       resolved. Run playbooks/load_tofu.yml — it targets localhost, so any
+       --limit must include localhost. Refusing to guess a VMID.') }}
+splunk_node: >-
+  {{ ((splunk_vm_from_tofu | default({})).splunk | default({})).node
+     | mandatory('splunk_vm_from_tofu is unset, so the Splunk node cannot be
+       resolved. Run playbooks/load_tofu.yml (see splunk_vmid above).
+       Refusing to guess a node.') }}
+
+# Object store: the pull below needs both the node it currently runs on and its
+# VMID. Both are published in the inventory, and this guest has already been
+# relocated once, so neither is written out here.
+object_store_node: >-
+  {{ ((containers_from_tofu | default({}))['s3'] | default({})).node
+     | mandatory('containers_from_tofu is unset, so the object-store node
+       cannot be resolved. Run playbooks/load_tofu.yml (see splunk_vmid above).
+       Refusing to guess a node.') }}
+
+object_store_vmid: >-
+  {{ ((containers_from_tofu | default({}))['s3'] | default({})).vmid
+     | mandatory('containers_from_tofu is unset, so the object-store VMID
+       cannot be resolved. Run playbooks/load_tofu.yml (see splunk_vmid above).
+       Refusing to guess a VMID.') }}
+
+# Layer-1 protection (local ZFS snapshots via sanoid) for postgres-ai-1's live
+# PGDATA mount (mp0, the ai-VLAN Hindsight memory cluster's primary — see
+# ansible-proxmox-apps inventory/group_vars/postgres_ai_group.yml). `critical`
+# (hourly cadence), not `database`: per the sanoid role's own doc comment,
+# `database` is for warm/standby/backup copies and `critical` is for the
+# hot/primary that needs point-in-time recovery, which this is — it is the
+# live cluster, not a replicated archive.
+#
+# This node is ALSO now a pull target (see postgres_standby_jobs below), so it
+# needs its own "databases" entry the same way host_vars/pve540.yml does: the
+# `database` template with the hourly override, so a nightly dump is captured
+# same-day instead of waiting for the next daily-only snapshot window.
+#
+# Deliberately NOT given a syncoid pull job off THIS node's live disk. The
+# off-node copy for the live cluster is the pg_dump pulled by the job below —
+# a consistent logical backup, the correct restore granularity for a
+# database — never a ZFS snapshot of a running cluster (inconsistent by
+# construction). Every syncoid job in this repo pulls INTO a node; none pull
+# FROM one, and that stays true here.
+postgres_ai_vmid: >-
+  {{ ((containers_from_tofu | default({}))['postgres-ai-1'] | default({})).vmid
+     | mandatory('containers_from_tofu is unset, so the postgres-ai-1 VMID
+       cannot be resolved. Run playbooks/load_tofu.yml — it targets
+       localhost, so any --limit must include localhost. Refusing to guess
+       a VMID.') }}
+sanoid_datasets: >-
+  {{ {
+       'rpool/data/subvol-' ~ postgres_ai_vmid ~ '-disk-0': {'use_template': 'critical'},
+       'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24},
+       'bulk/git-mirror': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24}
+     } }}
+
+# Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).
+#
+# The ai-VLAN Hindsight cluster has two members on two different nodes
+# (postgres-ai-1 here on pve3, postgres-ai-2 on pve540 — see
+# ansible-proxmox-apps inventory/group_vars/postgres_ai_group.yml), and EACH
+# runs its own local pg-backup timer independently. host_vars/pve540.yml
+# already pulls postgres-ai-1's dump into its own bulk/databases (off-node
+# from pve3's perspective, which is what makes it a real backup). Left alone,
+# postgres-ai-2's own dump would sit only on the node it was produced on —
+# pve540, the SAME node pve540's archive lives on — which is not an off-node
+# copy at all. So the pull is crossed: this node pulls the OTHER instance,
+# postgres-ai-2, into its own "databases" dataset above, and pve540 pulls
+# this one. Each dump ends up on a pool neither postgres-ai guest runs on.
+#
+# postgres-apps (Zammad+Nautobot+Vikunja) had NO off-node pull configured
+# anywhere in this inventory — verified live 2026-08-15: its pg-backup timer
+# produces daily dumps correctly, but the node it runs on only pulls
+# `postgres` and `postgres-ai-1` into its own archive, and no other host
+# pulled postgres-apps at all. Its only copy sat on the same guest as the
+# live database it backs up. This node pulls it — a genuine off-node copy,
+# since postgres-apps runs elsewhere.
+postgres_standby_jobs: >-
+  {{ [] if (domain_from_tofu | default('') | length == 0) else [
+       {'name': 'postgres-ai',
+        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-ai-2'] | default({})).hostname | default('postgres-ai-2')) ~ '.' ~ domain_from_tofu,
+        'source_dir': '/',
+        'archive_dir': '/bulk/databases/postgres-ai'},
+       {'name': 'postgres-apps',
+        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-apps'] | default({})).hostname | default('postgres-apps')) ~ '.' ~ domain_from_tofu,
+        'source_dir': '/',
+        'archive_dir': '/bulk/databases/postgres-apps'}
+     ] }}
+
+# Cluster config archive (pve_config_backup role). This node already owns
+# the bulk/databases dataset (sanoid-protected above), and pmxcfs replicates
+# /etc/pve to every member, so enabling this here — rather than on every
+# node — captures the whole cluster's config from one place with no
+# cross-host pull needed.
+pve_config_backup_enabled: true
+
+# Local git mirror (git_mirror role). Public repos only (v1) -- no
+# credential of any kind. This node already owns bulk/git-mirror
+# (sanoid-protected above), same rationale as the config archive.
+#
+# The owner list is read from the environment, never written here: an
+# account name is operator-specific identity and this repository is public.
+# Same treatment as idrac_power_bmc_host above. Whitespace-separated logins,
+# organisation or user alike. Unset means an empty list, which disables the
+# role outright rather than installing a timer that mirrors nothing.
+git_mirror_owners: "{{ lookup('env', 'GIT_MIRROR_OWNERS') | default('', true) | split }}"
+git_mirror_enabled: "{{ git_mirror_owners | length > 0 }}"
+
+syncoid_jobs:
+  - name: "splunk-{{ splunk_vmid }}-disk0"
+    source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-0"
+    target: "bulk/replica/{{ splunk_node }}/vm-{{ splunk_vmid }}-disk-0"
+  # disk-2 is the Splunk configuration + log volume (NOT indexes — those are on
+  # their own pool and are never replicated). Small, text, frequently edited:
+  # hourly, per syncoid_extra_schedules above.
+  - name: "splunk-{{ splunk_vmid }}-disk2"
+    schedule: hourly
+    source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-2"
+    target: "bulk/replica/{{ splunk_node }}/vm-{{ splunk_vmid }}-disk-2"
+  # Object storage IS replicated, because it owns no redundancy of its own.
+  #
+  # This previously read that it was erasure-coded across nodes and therefore
+  # needed no ZFS replica. That was not true of the deployment: the store runs
+  # as a single server process over a single directory, on one guest. There is
+  # no erasure set and no second instance, so nothing underneath it was ever
+  # protecting it — and with this job absent, the replica left behind went
+  # stale where it stood.
+  #
+  # It is also the highest-consequence dataset on the estate: it holds the
+  # remote state, the desired-state object, the published inventory, and the
+  # bucket other backups are written INTO. A backup target with no copy of its
+  # own is the one that turns a disk failure into an unrecoverable one.
+  #
+  # Distributed mode upstream is still under test at the pinned version. When
+  # it is production-ready and actually deployed as an erasure set, revisit
+  # this — but delete the job in the same change that proves the replacement
+  # exists, not on the strength of an assumption about how it is deployed.
+  # Node and VMID both come from the published inventory, like the splunk jobs
+  # above: this guest has already moved once, and a pull job naming a node it no
+  # longer runs on fails every cycle while the replica it left behind ages.
+  - name: "object-store"
+    schedule: hourly
+    source: "root@{{ object_store_node }}:bulk/subvol-{{ object_store_vmid }}-disk-1"
+    target: "bulk/replica/{{ object_store_node }}/subvol-{{ object_store_vmid }}-disk-1"
+  #
+  # Database DR: pull the whole bulk/databases namespace off the storage node
+  # (recursive via default options, so every bulk/databases/<instance> child
+  # comes along). What this carries is the logical dump archive, not a live
+  # database volume — a snapshot of a running cluster is inconsistent by
+  # construction, so the dump is the thing worth having on a second pool.
+  #
+  # The source node moved with the storage role: these two jobs previously named
+  # node 2, whose datasets now live on node 540. A pull job pointed at a node
+  # that no longer serves the dataset does not degrade quietly — it fails every
+  # cycle while the replica it left behind ages, so the source has to follow the
+  # data. The source node is fixed by design (the storage home), unlike the
+  # splunk jobs whose source node is derived from tofu; the prefix comes from
+  # proxmox_node_prefix so the node name is never hard-coded.
+  - name: "databases"
+    source: "root@{{ proxmox_node_prefix }}540:bulk/databases"
+    target: "bulk/replica/{{ proxmox_node_prefix }}540/databases"
+  # App config/state DR: pull the whole bulk/appdata namespace off the same
+  # storage node (recursive via default options, so every bulk/appdata/<app>
+  # child comes along). Same pull pattern and same proxmox_node_prefix
+  # parameterization as the databases job.
+  - name: "appdata"
+    source: "root@{{ proxmox_node_prefix }}540:bulk/appdata"
+    target: "bulk/replica/{{ proxmox_node_prefix }}540/appdata"

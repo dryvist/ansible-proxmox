@@ -1,0 +1,37 @@
+---
+# local_identities — real named Linux accounts to replace shared-root
+# administration. Two accounts:
+#
+#   jevans — the human operator. Passwordless sudo, key-based SSH (both the
+#            static declared key AND the OpenBao SSH CA principal), so a
+#            person never needs to authenticate directly as root.
+#   admin  — break-glass only. Created and sudo-capable, but carries NO
+#            static authorized_key by default (root_authorized_keys already
+#            owns the "must survive a CA outage" static break-glass key on
+#            root; `admin` is the CA-cert-only complement for routine
+#            break-glass work that does not need root itself).
+#
+# Neither account is exclusive of `root` -- root access is not removed here.
+# This role is additive: it creates a better path, it does not close the old
+# one. Retiring direct root login is a deliberate, separate, later step once
+# every consumer (humans, ansible, iac) is confirmed working over these
+# accounts.
+
+local_identities_enabled: true
+
+local_identities_jevans_enabled: true
+local_identities_jevans_user: jevans
+local_identities_jevans_shell: /bin/bash
+# Reuses the same key already declared for VM cloud-init
+# (deployment.json vm_ssh_public_key) -- one identity, not a second key to
+# rotate separately.
+local_identities_jevans_ssh_public_key: "{{ lookup('env', 'VM_SSH_PUBLIC_KEY') | default('', true) }}"
+
+local_identities_admin_enabled: true
+local_identities_admin_user: admin
+local_identities_admin_shell: /bin/bash
+
+# Both accounts get NOPASSWD sudo -- they exist specifically to replace
+# `ssh root@host`, so gating every command behind a password prompt would
+# just reintroduce root-login habits through a side door.
+local_identities_sudoers_dir: /etc/sudoers.d

@@ -6,7 +6,7 @@
     - pve_guest_evacuation_restore
     - migration
 
-- name: Restore one verified archive onto standalone pve540
+- name: Restore one verified archive onto the standalone target
   when: pve_guest_evacuation_restore_enabled | bool
   tags:
     - pve_guest_evacuation_restore
@@ -33,5 +33,5 @@
       ansible.builtin.fail:
         msg: >-
           Restore stopped at {{ pve_guest_evacuation_restore_failure.task }}.
-          Any pve540 target state is intentionally preserved for investigation;
+          Any target state is intentionally preserved for investigation;
           this role performs no automatic rollback or deletion.
