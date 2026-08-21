@@ -21,9 +21,20 @@ ping_hc() { [ -n "$HC" ] && curl -fsS -m 10 --retry 3 -o /dev/null "$1" >/dev/nu
 rc=0
 {% for owner in git_mirror_owners %}
 say "enumerating public repos for {{ owner }}"
-repos=$(curl -fsS -m 30 "https://api.github.com/users/{{ owner }}/repos?type=public&per_page=100" \
-  | python3 -c 'import json,sys; print("\n".join(r["name"] for r in json.load(sys.stdin)))' 2>>"$log") \
-  || { say "  FAILED: enumerate {{ owner }}"; rc=1; repos=""; }
+# Paginated -- a single per_page=100 request silently truncates any owner
+# with more than 100 public repos. Follow numbered pages until one returns
+# fewer than per_page results (GitHub's own "last page" signal).
+repos=""
+page=1
+while :; do
+  batch=$(curl -fsS -m 30 "https://api.github.com/users/{{ owner }}/repos?type=public&per_page=100&page=${page}" \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(r["name"] for r in d)); sys.exit(0 if len(d) == 100 else 1)' 2>>"$log")
+  status=$?
+  repos="${repos}${batch:+$'\n'}${batch}"
+  [ "$status" -eq 0 ] || break
+  page=$((page + 1))
+done
+[ -n "$repos" ] || { say "  FAILED: enumerate {{ owner }}"; rc=1; }
 while IFS= read -r name; do
   [ -n "$name" ] || continue
   path="$DEST/{{ owner }}/${name}.git"

@@ -32,17 +32,23 @@
   failed_when: false
   changed_when: false
 
+# NOTE: ansible.builtin.copy CANNOT target /sys (sysfs) -- its default atomic
+# write does a tempfile-then-rename, which sysfs's virtual filesystem refuses,
+# and its mode/chmod step also fails there. A plain shell redirect is the
+# correct and standard way to write a sysfs parameter.
 - name: Align writable runtime values with the managed file
-  ansible.builtin.copy:
-    content: "{{ item.item.value }}"
-    dest: "/sys/module/zfs/parameters/{{ item.item.key }}"
-    mode: "0644"
-  loop: "{{ zfs_pools_runtime_params.results | default([]) }}"
+  ansible.builtin.shell:
+    cmd: >-
+      echo {{ item.item.value | quote }}
+      > /sys/module/zfs/parameters/{{ item.item.key }}
+    executable: /bin/bash
+  loop: "{{ zfs_pools_runtime_params.results | default([], true) }}"
   loop_control:
     label: "{{ item.item.key }}={{ item.item.value }}"
   when:
     - item.content is defined
     - (item.content | b64decode | trim) != (item.item.value | string)
+  changed_when: true
   failed_when: false
   register: zfs_pools_runtime_align
 
