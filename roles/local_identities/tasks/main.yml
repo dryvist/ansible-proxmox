@@ -30,20 +30,6 @@
   tags:
     - local_identities
 
-- name: Ensure jevans's .ssh directory exists
-  ansible.builtin.file:
-    path: "/home/{{ local_identities_jevans_user }}/.ssh"
-    state: directory
-    owner: "{{ local_identities_jevans_user }}"
-    group: "{{ local_identities_jevans_user }}"
-    mode: "0700"
-  when:
-    - local_identities_enabled | bool
-    - local_identities_jevans_enabled | bool
-    - local_identities_jevans_ssh_public_key | length > 0
-  tags:
-    - local_identities
-
 - name: Authorize jevans's declared SSH key
   ansible.posix.authorized_key:
     user: "{{ local_identities_jevans_user }}"
