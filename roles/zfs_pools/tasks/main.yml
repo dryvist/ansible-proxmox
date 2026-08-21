@@ -7,6 +7,16 @@
 # default the role asserts the pool exists and manages datasets within it.
 # All ZFS / pvesm / systemd tasks are skipped under Docker (molecule testing).
 
+# Host-level ZFS module parameters. import_tasks (not include_tasks) so the
+# inner tasks stay visible to `--tags`; a dynamic include hides them and a
+# scoped run would silently skip this file at rc=0 having done nothing.
+- name: Manage ZFS kernel module parameters
+  ansible.builtin.import_tasks: module_params.yml
+  when: ansible_virtualization_type != 'docker'
+  tags:
+    - zfs_pools
+    - zfs_module_params
+
 - name: Check which declared ZFS pools exist
   ansible.builtin.command:
     cmd: "zpool list -H -o name {{ item.key }}"
@@ -89,6 +99,19 @@
     - item.value.register | default(true) | bool
   tags:
     - zfs_pools
+
+- name: Manage pool-level properties and assert topology
+  ansible.builtin.include_tasks: pool_properties.yml
+  loop: "{{ zfs_pools_map | dict2items }}"
+  loop_control:
+    loop_var: zfs_pool
+    label: "{{ zfs_pool.key }}"
+  when:
+    - ansible_virtualization_type != 'docker'
+    - zfs_pool.key in zfs_pools_present
+  tags:
+    - zfs_pools
+    - zfs_pool_properties
 
 - name: Manage datasets for each present pool
   ansible.builtin.include_tasks: datasets.yml

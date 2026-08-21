@@ -1,0 +1,66 @@
+---
+# ZFS kernel module parameters -> /etc/modprobe.d/zfs.conf
+#
+# WHY THIS EXISTS: tuning written only to /sys/module/zfs/parameters/ reverts on
+# reboot. During the pve540 raidz2 rebuild, zfs_scrub_after_expand=0 was set live
+# to avoid a full scrub after EVERY raidz attach (three attaches x ~12h = ~36h of
+# purely additive work). A reboot would silently restore the default and the
+# penalty with it. Module parameters are load-time settings, so the file is the
+# source of truth and the runtime value is only a cache of it.
+
+- name: Render ZFS module parameters
+  ansible.builtin.template:
+    src: zfs-modprobe.conf.j2
+    dest: /etc/modprobe.d/zfs.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: zfs_pools_modprobe_render
+  when: zfs_pools_module_params | length > 0
+
+# Applied at module load, so the running kernel keeps the OLD value until the
+# module reloads (i.e. reboot). Reloading zfs on a live hypervisor is not an
+# option, so instead we align the runtime values with the file where the
+# parameter is writable, and report any that could not be aligned.
+- name: Read current runtime values
+  ansible.builtin.slurp:
+    src: "/sys/module/zfs/parameters/{{ item.key }}"
+  loop: "{{ zfs_pools_module_params | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: zfs_pools_runtime_params
+  failed_when: false
+  changed_when: false
+
+- name: Align writable runtime values with the managed file
+  ansible.builtin.copy:
+    content: "{{ item.item.value }}"
+    dest: "/sys/module/zfs/parameters/{{ item.item.key }}"
+    mode: "0644"
+  loop: "{{ zfs_pools_runtime_params.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key }}={{ item.item.value }}"
+  when:
+    - item.content is defined
+    - (item.content | b64decode | trim) != (item.item.value | string)
+  failed_when: false
+  register: zfs_pools_runtime_align
+
+# A parameter that is read-only at runtime is NOT an error - it simply needs the
+# reboot. Surfacing it beats silently pretending the value is live.
+- name: Report parameters that need a reboot to take effect
+  ansible.builtin.debug:
+    msg: >-
+      ZFS module parameter(s) written to /etc/modprobe.d/zfs.conf but NOT
+      applied to the running kernel (read-only at runtime or reload required):
+      {{ zfs_pools_runtime_align.results
+         | default([])
+         | selectattr('failed', 'defined')
+         | selectattr('failed')
+         | map(attribute='item.item.key')
+         | list }}
+      These take effect on the next reboot.
+  when:
+    - zfs_pools_runtime_align.results is defined
+    - zfs_pools_runtime_align.results
+      | selectattr('failed', 'defined') | selectattr('failed') | list | length > 0
