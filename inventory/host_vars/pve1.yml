@@ -58,7 +58,7 @@ splunk_vmid: >-
 # taken out the estate's one demonstrated recovery path.
 #
 # `hourly: 24` rather than the template's daily-only cadence, for the reason
-# already recorded against `bulk/databases` on pve540: this is a DUMP ARCHIVE
+# already recorded against `bulk/databases` on pve-r540: this is a DUMP ARCHIVE
 # written once a night, and sanoid's daily snapshot fires at midnight while the
 # dump lands ~02:30, so a daily-only policy captures each dump roughly a day
 # late. Hourly closes that to same-day without changing what `database` means
