@@ -1,0 +1,12 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # Under Docker every task is skipped (ansible_virtualization_type ==
+  # 'docker'), so this proves the role loads and converges cleanly without
+  # touching a real controller. Live drive-mode verification is validated
+  # against real hardware, not in molecule.
+  roles:
+    - role: hba_storcli

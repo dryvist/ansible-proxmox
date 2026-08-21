@@ -1,0 +1,143 @@
+---
+# hba_storcli tasks — install perccli64 (once staged, see defaults) and assert
+# every physical drive is Non-RAID/JBOD passthrough. Skipped in Docker
+# (molecule) where there is no real controller to query.
+
+- name: Check whether a perccli64 binary is already present
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ hba_storcli_binary_search_paths }}"
+  register: hba_storcli_existing_binary
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - hba_storcli
+
+- name: Set the resolved perccli64 path
+  ansible.builtin.set_fact:
+    hba_storcli_resolved_path: >-
+      {{
+        (hba_storcli_existing_binary.results | default([])
+          | selectattr('stat.exists', 'defined')
+          | selectattr('stat.exists')
+          | map(attribute='item') | list | first) | default('', true)
+      }}
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - hba_storcli
+
+- name: Fail loudly if perccli64 is absent and no local package is staged
+  ansible.builtin.fail:
+    msg: >-
+      perccli64 is not installed and hba_storcli_package_path is unset.
+      Stage a .deb (Dell's PERCCLI driver page; `alien -k -d <rpm>` if only an
+      RPM is offered) into the estate's binaries store and set
+      hba_storcli_package_path to its reachable path before converging this
+      role — see roles/hba_storcli/defaults/main.yml for why this cannot be
+      auto-downloaded.
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_resolved_path | default('') | length == 0
+    - hba_storcli_package_path | default('') | length == 0
+  tags:
+    - hba_storcli
+
+- name: Install perccli64 from the staged package
+  ansible.builtin.apt:
+    deb: "{{ hba_storcli_package_path }}"
+    state: present
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_resolved_path | default('') | length == 0
+    - hba_storcli_package_path | default('') | length > 0
+  tags:
+    - hba_storcli
+
+- name: Re-resolve the perccli64 path after install
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ hba_storcli_binary_search_paths }}"
+  register: hba_storcli_post_install_binary
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_resolved_path | default('') | length == 0
+    - hba_storcli_package_path | default('') | length > 0
+  tags:
+    - hba_storcli
+
+- name: Finalize the resolved perccli64 path
+  ansible.builtin.set_fact:
+    hba_storcli_resolved_path: >-
+      {{
+        hba_storcli_resolved_path
+        if (hba_storcli_resolved_path | default('') | length > 0)
+        else ((hba_storcli_post_install_binary.results | default([])
+          | selectattr('stat.exists', 'defined')
+          | selectattr('stat.exists')
+          | map(attribute='item') | list | first) | default('', true))
+      }}
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - hba_storcli
+
+- name: Query all physical drives on the target controller
+  ansible.builtin.command:
+    cmd: >-
+      {{ hba_storcli_resolved_path }} /c{{ hba_storcli_controller_index }}
+      /eall/sall show J
+  register: hba_storcli_drive_query
+  changed_when: false
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_resolved_path | default('') | length > 0
+  tags:
+    - hba_storcli
+
+- name: Parse and assert every drive is Non-RAID/JBOD passthrough
+  ansible.builtin.set_fact:
+    hba_storcli_bad_drives: >-
+      {{
+        (hba_storcli_drive_query.stdout | default('{}') | from_json)
+        | json_query("Controllers[0].\"Response Data\".\"Drive Information\"[?!contains(`" ~ hba_storcli_acceptable_states ~ "`, State)]")
+      }}
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_resolved_path | default('') | length > 0
+    - hba_storcli_drive_query.stdout | default('') | length > 0
+  tags:
+    - hba_storcli
+
+- name: Fail the converge if any drive is not true passthrough
+  ansible.builtin.assert:
+    that:
+      - hba_storcli_bad_drives | default([]) | length == 0
+    fail_msg: >-
+      One or more drives behind controller /c{{ hba_storcli_controller_index }}
+      are NOT Non-RAID/JBOD passthrough (states outside
+      {{ hba_storcli_acceptable_states }}):
+      {{ hba_storcli_bad_drives | default([]) }}.
+      A RAID0-wrapped disk hides SMART/TLER and defeats ZFS error handling —
+      this must be corrected in the controller BIOS/CLI before the array is
+      trusted as the reference standard.
+    success_msg: >-
+      All {{ (hba_storcli_drive_query.stdout | default('{}') | from_json)
+        | json_query('Controllers[0]."Response Data"."Drive Information" | length(@)')
+        | default(0) }} drive(s) on /c{{ hba_storcli_controller_index }}
+      verified Non-RAID/JBOD passthrough.
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_resolved_path | default('') | length > 0
+    - hba_storcli_drive_query.stdout | default('') | length > 0
+  tags:
+    - hba_storcli

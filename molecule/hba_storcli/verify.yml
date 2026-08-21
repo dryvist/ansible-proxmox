@@ -1,0 +1,18 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Assert perccli was NOT installed under Docker (tasks skipped)
+      ansible.builtin.command: dpkg -s perccli
+      register: perccli_check
+      changed_when: false
+      failed_when: false
+
+    - name: Confirm the install/query tasks were inert in-container
+      ansible.builtin.assert:
+        that:
+          - perccli_check.rc != 0
+        fail_msg: "perccli was installed — Docker-skip guard did not hold"
