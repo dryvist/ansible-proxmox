@@ -5,13 +5,20 @@
   gather_facts: false
 
   tasks:
-    - name: Resolve both accounts from passwd
+    # One query for the whole database, deliberately not a loop over keys:
+    # getent replaces ansible_facts.getent_passwd wholesale on each call, so a
+    # loop leaves only the LAST account resolved and every reference to the
+    # first one silently fails.
+    - name: Resolve the passwd database
       ansible.builtin.getent:
         database: passwd
-        key: "{{ item }}"
-      loop:
-        - jevans
-        - admin
+
+    - name: Confirm both accounts exist
+      ansible.builtin.assert:
+        that:
+          - "'jevans' in ansible_facts.getent_passwd"
+          - "'admin' in ansible_facts.getent_passwd"
+        fail_msg: "local_identities did not create both accounts"
 
     - name: Confirm both sudoers files are present and valid
       ansible.builtin.command: "visudo -cf /etc/sudoers.d/{{ item }}"
