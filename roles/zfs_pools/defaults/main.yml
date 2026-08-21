@@ -31,3 +31,27 @@ zfs_pools_map: "{{ zfs_pools_config.pools | default({}) }}"
 #   zfs_pools_devices: { "<pool>": ["/dev/disk/by-id/...", ...] }
 zfs_pools_allow_create: false
 zfs_pools_devices: {}
+
+# ---------------------------------------------------------------------------
+# ZFS kernel module parameters -> /etc/modprobe.d/zfs.conf (module_params.yml).
+# Load-time settings: a runtime `echo` into /sys/module/zfs/parameters/ REVERTS
+# ON REBOOT, so anything tuned live must be declared here or it is lost.
+zfs_pools_module_params: "{{ zfs_pools_config.module_params | default({}) }}"
+
+# Optional per-key explanation rendered as a comment above each option, so the
+# file explains WHY a non-default value was chosen rather than just asserting it.
+zfs_pools_module_param_comments:
+  zfs_scrub_after_expand: >-
+    0 = do NOT auto-scrub after each raidz attach. A multi-disk expansion would
+    otherwise run one full scrub per attach; run a single scrub after the LAST
+    attach instead (same coverage, a fraction of the time).
+  raidz_expand_max_copy_bytes: >-
+    Max copy I/O in flight during raidz expansion. Raised above the default when
+    the source disks are not saturated, to shorten a multi-day reflow.
+  zfs_vdev_async_read_max_active: >-
+    Async read queue depth per vdev. Raised for HDD pools where the reflow is
+    read-bound on a small number of spindles.
+  zfs_arc_max: >-
+    Hard ceiling on ARC. Set deliberately per host - check the ARC hit rate
+    before raising it; a high hit rate means more ARC buys nothing, and on a
+    hypervisor the RAM is usually better left to guests.
