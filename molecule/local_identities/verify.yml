@@ -1,0 +1,41 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Confirm jevans exists
+      ansible.builtin.command: id jevans
+      changed_when: false
+
+    - name: Confirm admin exists
+      ansible.builtin.command: id admin
+      changed_when: false
+
+    - name: Confirm jevans's sudoers file is valid and present
+      ansible.builtin.command: visudo -cf /etc/sudoers.d/jevans
+      changed_when: false
+
+    - name: Confirm admin's sudoers file is valid and present
+      ansible.builtin.command: visudo -cf /etc/sudoers.d/admin
+      changed_when: false
+
+    - name: Confirm jevans's declared key was authorized
+      ansible.builtin.command: grep -c molecule /home/jevans/.ssh/authorized_keys
+      register: jevans_key_check
+      changed_when: false
+
+    - name: Confirm admin has NO static authorized_keys file (CA-only by design)
+      ansible.builtin.stat:
+        path: /home/admin/.ssh/authorized_keys
+      register: admin_key_check
+
+    - name: Assert the identity contract holds
+      ansible.builtin.assert:
+        that:
+          - jevans_key_check.stdout | trim | int >= 1
+          - not admin_key_check.stat.exists
+        fail_msg: >-
+          Either jevans is missing its declared key, or admin unexpectedly
+          has a static key -- admin must be CA-cert-only by design.

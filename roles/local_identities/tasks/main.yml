@@ -1,0 +1,87 @@
+---
+# local_identities tasks — create the named accounts and grant sudo.
+# CA-cert SSH access for these accounts is wired through ssh_ca_trust's
+# principals map (see site.yml), not here -- this role owns account
+# existence and sudo, not certificate trust.
+
+- name: Create the jevans account
+  ansible.builtin.user:
+    name: "{{ local_identities_jevans_user }}"
+    shell: "{{ local_identities_jevans_shell }}"
+    create_home: true
+    state: present
+  when:
+    - local_identities_enabled | bool
+    - local_identities_jevans_enabled | bool
+  tags:
+    - local_identities
+
+- name: Grant jevans passwordless sudo
+  ansible.builtin.copy:
+    content: "{{ local_identities_jevans_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: "{{ local_identities_sudoers_dir }}/{{ local_identities_jevans_user }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+  when:
+    - local_identities_enabled | bool
+    - local_identities_jevans_enabled | bool
+  tags:
+    - local_identities
+
+- name: Ensure jevans's .ssh directory exists
+  ansible.builtin.file:
+    path: "/home/{{ local_identities_jevans_user }}/.ssh"
+    state: directory
+    owner: "{{ local_identities_jevans_user }}"
+    group: "{{ local_identities_jevans_user }}"
+    mode: "0700"
+  when:
+    - local_identities_enabled | bool
+    - local_identities_jevans_enabled | bool
+    - local_identities_jevans_ssh_public_key | length > 0
+  tags:
+    - local_identities
+
+- name: Authorize jevans's declared SSH key
+  ansible.posix.authorized_key:
+    user: "{{ local_identities_jevans_user }}"
+    key: "{{ local_identities_jevans_ssh_public_key }}"
+    state: present
+  when:
+    - local_identities_enabled | bool
+    - local_identities_jevans_enabled | bool
+    - local_identities_jevans_ssh_public_key | length > 0
+  tags:
+    - local_identities
+
+- name: Create the admin (break-glass) account
+  ansible.builtin.user:
+    name: "{{ local_identities_admin_user }}"
+    shell: "{{ local_identities_admin_shell }}"
+    create_home: true
+    state: present
+  when:
+    - local_identities_enabled | bool
+    - local_identities_admin_enabled | bool
+  tags:
+    - local_identities
+
+- name: Grant admin passwordless sudo
+  ansible.builtin.copy:
+    content: "{{ local_identities_admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: "{{ local_identities_sudoers_dir }}/{{ local_identities_admin_user }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+  when:
+    - local_identities_enabled | bool
+    - local_identities_admin_enabled | bool
+  tags:
+    - local_identities
+
+# admin intentionally gets NO static authorized_key here -- it is reached
+# only via the OpenBao SSH CA (ssh_ca_trust_principals), which is the point
+# of a break-glass account that is not a standing, always-open door.
