@@ -36,3 +36,25 @@ hba_storcli_binary_search_paths:
   - /opt/MegaRAID/perccli/perccli64
   - /usr/sbin/perccli64
   - /usr/local/sbin/perccli64
+
+# Parsed view of the controller's drive list. Lazily evaluated, so it costs
+# nothing until referenced and can be exercised in molecule by setting
+# hba_storcli_drive_query to a fixture -- the test then covers the REAL
+# expression rather than a copy of it that can drift.
+#
+# Deliberately plain Jinja rather than json_query: the perccli keys contain
+# spaces so they need quoting, and escaped inner quotes do not survive Jinja's
+# string literal -- the backslashes reach JMESPath verbatim and it rejects the
+# whole expression. A guard whose only job is to fail loudly must not be built
+# on a construct that errors before it can evaluate.
+hba_storcli_drives: >-
+  {{ (((((hba_storcli_drive_query | default({}, true)).stdout
+         | default('{}', true) | from_json).Controllers
+        | default([], true))[0] | default({}, true))['Response Data']
+      | default({}, true))['Drive Information'] | default([], true) }}
+
+# Any drive whose state is outside the accepted passthrough states. Empty list
+# means every drive is true passthrough.
+hba_storcli_bad_drives: >-
+  {{ hba_storcli_drives | default([], true)
+     | rejectattr('State', 'in', hba_storcli_acceptable_states) | list }}
