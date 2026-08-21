@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.78.1](https://github.com/dryvist/ansible-proxmox/compare/v1.78.0...v1.78.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* **inventory:** key the R540 by its live node name so node_storage resolves ([#669](https://github.com/dryvist/ansible-proxmox/issues/669)) ([ac51f1e](https://github.com/dryvist/ansible-proxmox/commit/ac51f1e3fcef05b7185f3e59e0b230ed24980151))
+
 ## [1.78.0](https://github.com/dryvist/ansible-proxmox/compare/v1.77.0...v1.78.0) (2026-08-21)
 
 
