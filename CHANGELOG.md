@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.78.0](https://github.com/dryvist/ansible-proxmox/compare/v1.77.0...v1.78.0) (2026-08-21)
+
+
+### Features
+
+* add git_mirror role for local repository backup ([#649](https://github.com/dryvist/ansible-proxmox/issues/649)) ([4ff594a](https://github.com/dryvist/ansible-proxmox/commit/4ff594ace6037ada9ec06f03718288973d5ad14a))
+* **hba_storcli:** verify PERC-family controllers are true JBOD passthrough ([#664](https://github.com/dryvist/ansible-proxmox/issues/664)) ([9717784](https://github.com/dryvist/ansible-proxmox/commit/97177843aafc50bc042d39945148bba194728654))
+* **local_identities:** add jevans (sudo) and admin (break-glass) accounts ([#665](https://github.com/dryvist/ansible-proxmox/issues/665)) ([1526412](https://github.com/dryvist/ansible-proxmox/commit/1526412e2c29e0a43dcaae091955bda82a44e901))
+* **postgres_standby:** pull with a dedicated, pinned SSH identity ([2d100c7](https://github.com/dryvist/ansible-proxmox/commit/2d100c755d1eb709bc51b2439ab6c365c373ca59))
+* **postgres_standby:** pull with a dedicated, pinned SSH identity ([a3eef92](https://github.com/dryvist/ansible-proxmox/commit/a3eef922ac53a8ca05d7575d9e8f79948f42d2ff))
+* **zfs_pools:** manage ZFS module parameters and pool-level properties ([#661](https://github.com/dryvist/ansible-proxmox/issues/661)) ([81fd24b](https://github.com/dryvist/ansible-proxmox/commit/81fd24bc8a308b234421896b5cda55d767bb4fd7))
+
+
+### Bug Fixes
+
+* **molecule:** ensure rsync is available and match delete output portably ([5af935f](https://github.com/dryvist/ansible-proxmox/commit/5af935f6968e8ede6f8faf06ee2ce44ac22d09eb))
+* **molecule:** give the prepare-less scenarios a Python-bearing image ([#638](https://github.com/dryvist/ansible-proxmox/issues/638)) ([a34b07f](https://github.com/dryvist/ansible-proxmox/commit/a34b07fc626315bdcf6555f3c8d0ae39f76834c0))
+* **molecule:** give the remaining prepare-less scenario a Python-bearing image ([#648](https://github.com/dryvist/ansible-proxmox/issues/648)) ([dc10432](https://github.com/dryvist/ansible-proxmox/commit/dc1043288044d7d5bad37bf1bff6e6c089c49a5e))
+* **molecule:** grant executable permissions to mock getfacl directory ([6c1be35](https://github.com/dryvist/ansible-proxmox/commit/6c1be35b9ac586f18050f64e8fe71f7837e86d45))
+* **molecule:** make the nas_storage, node_scheduled_wake and evacuation scenarios runnable ([8da6ca2](https://github.com/dryvist/ansible-proxmox/commit/8da6ca2558a00b6d260e85ffc7469258149be862))
+* **molecule:** make three scenarios runnable in CI ([14b93a9](https://github.com/dryvist/ansible-proxmox/commit/14b93a9f94d10e1ab124ea6ddb41280d0acac754))
+* **molecule:** quote a membership operand and drop an unloadable assertion ([881e7aa](https://github.com/dryvist/ansible-proxmox/commit/881e7aa92ae4a4ed8d17d1144b990876c5f64cfb))
+* **molecule:** render mock getfacl script via heredoc ([62ccf0d](https://github.com/dryvist/ansible-proxmox/commit/62ccf0d934c886f967b7da4589667cdbafe3c1eb))
+* **molecule:** slurp rendered resume evidence across container connection ([7e54d5d](https://github.com/dryvist/ansible-proxmox/commit/7e54d5d229d3827ca269f129354aa45b8f1da75d))
+* **molecule:** use /var/tmp for temporary verification artifacts ([2ea0669](https://github.com/dryvist/ansible-proxmox/commit/2ea066906317ee30610ecc8cdc8bb9b9cfb03935))
+* **nas_storage:** safely navigate bao read attributes when skipped ([3401bb3](https://github.com/dryvist/ansible-proxmox/commit/3401bb3d857b9b586087a6b5f2e0293c2322bd8e))
+* **pve_config_backup:** avoid the bash array-length Jinja comment trap ([a08d66a](https://github.com/dryvist/ansible-proxmox/commit/a08d66aa80620ec6876ab0ce0e233f57265a6da4))
+* **pve_ha:** scope pve_ha_enabled correctly; drop postgres-apps from postgres-pair ([dee7d07](https://github.com/dryvist/ansible-proxmox/commit/dee7d07ac04c95b6b7b289ba8f19c63f53cac0d2))
+* **zfs_pools,git_mirror,tests:** address review findings from the promotion PR ([#663](https://github.com/dryvist/ansible-proxmox/issues/663)) ([7a903e3](https://github.com/dryvist/ansible-proxmox/commit/7a903e394bae625ec31bb9082987584d72227a82))
+
 ## [1.77.0](https://github.com/dryvist/ansible-proxmox/compare/v1.76.0...v1.77.0) (2026-08-15)
 
 
