@@ -49,6 +49,9 @@ keys.txt
 # Local inventory overrides
 inventory/local/
 inventory/*.local.yml
+# Upstream inventory artifact -- fetched fresh by playbooks/load_tofu.yml, so a
+# committed copy would be a second, stale source of truth
+inventory/tofu_inventory.json
 
 # Logs
 *.log
@@ -63,6 +66,9 @@ tmp/
 
 # Nix/direnv
 .direnv/
+
+# Per-branch git worktrees live at the repo top level
+.worktrees/
 
 # Claude Code local settings (machine-specific permissions - never commit)
 .claude/settings.local.json

@@ -1,0 +1,82 @@
+#!/bin/bash
+{{ ansible_managed | comment }}
+#
+# Shared alert body for zed.d/checksum-notify.sh, zed.d/delay-notify.sh, and
+# the missed-events poller. Fires a Zammad ticket -- not a log line -- because
+# the drive this exists for (Zammad #17242) showed a real, signature-matched
+# corruption-plus-hang event 3 times in 8 days while SMART read PASSED
+# throughout. A stuck monitor or a log nobody reads is not a control.
+#
+# Deliberately creates a NEW ticket per firing rather than appending to a
+# fixed ticket number: the tracking ticket for this drive will eventually
+# close (replacement, or the operator standing down), and a recurrence after
+# that must not go silent into a closed ticket's history.
+set -uo pipefail
+
+TOKEN_FILE=/etc/zfs-fault-alert/zammad-token
+ZAMMAD_URL="{{ zfs_fault_alert_zammad_url }}"
+ZAMMAD_GROUP="{{ zfs_fault_alert_zammad_group }}"
+ZAMMAD_CUSTOMER="{{ zfs_fault_alert_zammad_customer }}"
+ZAMMAD_PRIORITY_ID="{{ zfs_fault_alert_zammad_priority_id }}"
+
+REASON="${1:?usage: zfs-fault-alert.sh <reason> <detail...>}"
+shift
+DETAIL="$*"
+
+if [[ ! -r "$TOKEN_FILE" ]]; then
+  logger -t zfs-fault-alert "FAILED: token file $TOKEN_FILE missing or unreadable -- cannot alert Zammad for: $REASON $DETAIL"
+  exit 1
+fi
+TOKEN=$(<"$TOKEN_FILE")
+
+# --self-check validates wiring (token readable, Zammad API reachable) without
+# creating a ticket. Used by the Ansible converge as end-to-end proof this is
+# actually live, not just "files present."
+if [[ "$REASON" == "--self-check" ]]; then
+  # jq builds the ticket payload below. A self-check that only proves Zammad
+  # is reachable would pass on a host where a real firing dies at payload
+  # time, which is exactly the false "path is live" signal this exists to
+  # prevent.
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "zfs-fault-alert self-check FAILED: jq is not installed -- ticket payload cannot be built" >&2
+    exit 1
+  fi
+  code=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 10 \
+    -H "Authorization: Token token=${TOKEN}" \
+    "${ZAMMAD_URL}/api/v1/users/me")
+  if [[ "$code" == "200" ]]; then
+    echo "zfs-fault-alert self-check OK (Zammad reachable, token valid)"
+    exit 0
+  fi
+  echo "zfs-fault-alert self-check FAILED: Zammad returned HTTP $code" >&2
+  exit 1
+fi
+
+logger -t zfs-fault-alert "FIRING: $REASON $DETAIL"
+
+payload=$(jq -nc \
+  --arg title "$(hostname -f) ${REASON} -- ZFS fault signature, IMMEDIATE REPLACEMENT TRIGGER" \
+  --arg group "$ZAMMAD_GROUP" \
+  --arg customer "$ZAMMAD_CUSTOMER" \
+  --argjson priority_id "$ZAMMAD_PRIORITY_ID" \
+  --arg body "Auto-filed by zed on $(hostname -f) at $(date -u +%FT%TZ).
+
+Reason: ${REASON}
+Detail: ${DETAIL}
+
+This fires on any zed checksum/delay event on this host's watched vdev, or on
+zed reporting a missed-events queue overflow. See Zammad #17242 for the
+originating investigation and the drive-replacement decision this signature
+already triggered once. If that ticket is closed, this is a NEW occurrence on
+a device that should already have been swapped -- treat as immediate." \
+  '{title: $title, group: $group, customer: $customer, priority_id: $priority_id,
+    article: {subject: $title, body: $body, type: "note", internal: false}}')
+
+resp=$(curl -fsS --max-time 15 -X POST \
+  -H "Authorization: Token token=${TOKEN}" -H "Content-Type: application/json" \
+  --data "$payload" \
+  "${ZAMMAD_URL}/api/v1/tickets") || {
+  logger -t zfs-fault-alert "FAILED to reach Zammad for: $REASON $DETAIL"
+  exit 1
+}
+logger -t zfs-fault-alert "filed: $(printf '%s' "$resp" | jq -r '.number // "unknown"')"

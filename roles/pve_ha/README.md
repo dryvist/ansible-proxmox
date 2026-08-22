@@ -131,3 +131,18 @@ No real service is touched.
 | `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
 | `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
 | `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name of the strict node-affinity rule pinning replication guests to the pair. |
+
+## Why `ha.yml` is imported by `site.yml` rather than left standalone
+
+It previously existed only as a standalone playbook driven by a hand-typed
+`-e pve_ha_enabled=true`, and `site.yml` never included it. So a routine
+converge configured no HA at all, and HA silently did nothing on every node
+loss — the failure only became visible at the moment it was needed, which is
+the worst possible time to discover a control was never armed.
+
+Importing it here makes the flag the only switch: the role stays inert unless
+`pve_ha_enabled` is true in inventory group_vars, but the decision is now
+declarative and reviewable instead of depending on whoever ran the playbook
+remembering an extra argument.
+
+`ha.yml` re-imports `load_tofu.yml`; `import_playbook` is safe to repeat.

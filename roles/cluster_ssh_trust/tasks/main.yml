@@ -21,19 +21,55 @@
       set -o pipefail;
       touch /root/.ssh/known_hosts;
       before=$(sort -u /root/.ssh/known_hosts | sha1sum);
-      ssh-keyscan -T 5 {{ cluster_ssh_trust_peers | join(' ') }} 2>/dev/null
-      >> /root/.ssh/known_hosts || true;
+      scanned=$(ssh-keyscan -T 5 {{ cluster_ssh_trust_peers | join(' ') }} 2>/dev/null || true);
+      printf '%s\n' "$scanned" >> /root/.ssh/known_hosts;
       sort -u -o /root/.ssh/known_hosts /root/.ssh/known_hosts;
       after=$(sha1sum /root/.ssh/known_hosts);
+      reachable=$(printf '%s\n' "$scanned" | awk 'NF && $1 !~ /^#/ {print $1}' | sort -u | grep -c . || true);
+      echo "RESOLVED=$reachable/{{ cluster_ssh_trust_peers | length }}";
       [[ "${before%% *}" == "${after%% *}" ]] && echo UNCHANGED || echo CHANGED
   register: cluster_ssh_trust_seed
-  # Exact match, NOT `'CHANGED' in stdout`: "CHANGED" is a substring of
-  # "UNCHANGED", so the `in` test reported changed on every run (the seed step
-  # is otherwise idempotent). stdout is exactly one token, so == is safe.
-  changed_when: cluster_ssh_trust_seed.stdout == "CHANGED"
+  # stdout is now two lines: RESOLVED=<n>/<total> then UNCHANGED|CHANGED.
+  # Match the last line exactly, NOT `'CHANGED' in stdout`: "CHANGED" is a
+  # substring of "UNCHANGED", so the `in` test reported changed on every run.
+  changed_when: cluster_ssh_trust_seed.stdout_lines[-1] == "CHANGED"
   when:
     - cluster_ssh_trust_enabled | bool
     - cluster_ssh_trust_peers | length > 0
     - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
+# ssh-keyscan exits non-zero per unreachable peer and the seed step tolerates
+# that, because one node being down must not fail the play. Tolerating it
+# silently is the problem: when EVERY peer fails to resolve, known_hosts is
+# written unchanged and the step reports ok/changed=0 -- identical to a node
+# whose trust is already correct. Inter-node root SSH then fails at the next
+# syncoid pull with `Host key verification failed`, far from the cause.
+#
+# Zero keys scanned is never a legitimate steady state for a node that has
+# peers, so it fails here rather than being tolerated.
+- name: Assert at least one cluster peer's host keys were scanned
+  ansible.builtin.assert:
+    that:
+      - scanned_count | int > 0
+    fail_msg: >-
+      ssh-keyscan resolved NONE of the {{ cluster_ssh_trust_peers | length }}
+      configured peers ({{ cluster_ssh_trust_peers | join(', ') }}), so
+      known_hosts was not seeded and inter-node root SSH will fail. The usual
+      cause is a peer list that no longer matches live cluster membership --
+      compare it against `pvecm nodes`.
+    success_msg: >-
+      host keys scanned for {{ scanned_count }} of
+      {{ cluster_ssh_trust_peers | length }} peers
+  vars:
+    scanned_count: >-
+      {{ (cluster_ssh_trust_seed.stdout_lines[0] | default('RESOLVED=0/0'))
+         | regex_replace('^RESOLVED=', '') | split('/') | first }}
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - cluster_ssh_trust_peers | length > 0
+    - ansible_virtualization_type != 'docker'
+    - not cluster_ssh_trust_seed.skipped | default(false)
   tags:
     - cluster_ssh_trust

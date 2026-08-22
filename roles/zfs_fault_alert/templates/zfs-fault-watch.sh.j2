@@ -1,0 +1,34 @@
+#!/bin/sh
+{{ ansible_managed | comment }}
+#
+# zed runs a zedlet only when its FILENAME starts with the event class, the
+# subclass, or "all", followed by a non-alphabetic character. This file is
+# installed once per handled subclass (checksum-, delay-) from a single
+# template, and each copy still re-checks ZEVENT_SUBCLASS so both behave
+# identically. It watches for the specific fault signature that produced 3
+# real corruption+hang events on this pool over 8 days (Zammad #17242): a
+# checksum error, or an I/O delay past the threshold.
+#
+# ZEVENT_ZIO_DELAY is documented (zfs-events(5)) as nanoseconds. No live
+# event was available to confirm the exact value at write time -- the alert
+# body includes the raw field so the first real firing is self-verifying.
+set -eu
+
+[ -n "${ZEVENT_POOL:-}" ] || exit 0
+[ "${ZEVENT_POOL}" = "{{ zfs_fault_alert_pool }}" ] || exit 0
+
+THRESHOLD_NS=$(( {{ zfs_fault_alert_delay_threshold_ms }} * 1000000 ))
+
+case "${ZEVENT_SUBCLASS:-}" in
+  checksum)
+    /usr/local/bin/zfs-fault-alert.sh "checksum error" \
+      "pool=${ZEVENT_POOL} vdev=${ZEVENT_VDEV_PATH:-unknown} eid=${ZEVENT_EID:-unknown} zio_err=${ZEVENT_ZIO_ERR:-unknown}"
+    ;;
+  delay)
+    delay_ns="${ZEVENT_ZIO_DELAY:-0}"
+    if [ "${delay_ns}" -ge "${THRESHOLD_NS}" ] 2>/dev/null; then
+      /usr/local/bin/zfs-fault-alert.sh "I/O delay >= {{ zfs_fault_alert_delay_threshold_ms }}ms" \
+        "pool=${ZEVENT_POOL} vdev=${ZEVENT_VDEV_PATH:-unknown} eid=${ZEVENT_EID:-unknown} raw_zio_delay_field=${delay_ns}"
+    fi
+    ;;
+esac

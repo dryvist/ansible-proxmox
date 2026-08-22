@@ -82,9 +82,25 @@ so two groups run concurrently but a group never overlaps itself.
 
 Per-host identity (VMIDs, the source node) is derived at runtime from the S3
 tofu inventory injected by `playbooks/load_tofu.yml` — `splunk_vm_from_tofu` and
-`containers_from_tofu` (see `inventory/host_vars/pve{2,3}.yml`) — never
+`containers_from_tofu` (see the replicating node's file under
+`inventory/host_vars/`) — never
 hard-coded, so a VMID renumber flows through with no edit.
 
 ```bash
 doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags syncoid
 ```
+
+## Why `syncoid_healthcheck_url` is load-bearing
+
+It is not optional decoration. With it empty, a job that failed on one dataset
+was visible only as a non-zero exit code inside a cron run nobody reads — the
+replica kept sitting at the right path with an increasingly old snapshot, which
+looks identical to a healthy dataset on a quiet source.
+
+Wiring it makes a failed replication page. It also makes a run that never
+happens page, because healthchecks.io expects a ping every cycle and alerts on
+its absence — so a wrapper that dies before starting, or a cron line that was
+never installed, is caught by the same mechanism.
+
+Both matter more than they look: replication failures are silent by
+construction. Nothing downstream reads the replica until someone needs it.

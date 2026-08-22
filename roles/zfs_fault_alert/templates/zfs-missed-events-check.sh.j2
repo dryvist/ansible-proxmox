@@ -1,0 +1,48 @@
+#!/bin/bash
+{{ ansible_managed | comment }}
+#
+# zed logs "Missed events" to its OWN journal (zfs-zed.service) when its
+# internal event queue overflows -- this is not dispatched to zed.d scripts
+# at all, so zfs-fault-watch.sh can never see it. It already happened once
+# during one of the three real fault bursts on this pool (Zammad #17242):
+# the exact window a queue overflow matters most is mid-incident, when this
+# mechanism would otherwise be blind to it.
+#
+# Manually tracks the cursor via --after-cursor/--show-cursor rather than
+# --cursor-file: PVE 8.x (Bookworm) ships systemd 252 and --cursor-file needs
+# >= 254. Stderr is left on the journal (not redirected) so a real failure is
+# debuggable instead of silently swallowed.
+set -uo pipefail
+
+CURSOR_FILE=/var/lib/zfs-fault-alert/missed-events.cursor
+
+cursor_arg=""
+if [[ -f "$CURSOR_FILE" ]]; then
+  cursor=$(<"$CURSOR_FILE")
+  [[ -n "$cursor" ]] && cursor_arg="--after-cursor=$cursor"
+fi
+
+tmp_out=$(mktemp)
+# shellcheck disable=SC2086  # cursor_arg is a single well-formed flag or empty
+journalctl -u zfs-zed $cursor_arg --show-cursor --no-pager > "$tmp_out"
+
+hits=$(grep -c "Missed events" "$tmp_out" || true)
+
+new_cursor=$(sed -n 's/^-- cursor: //p' "$tmp_out")
+rm -f "$tmp_out"
+
+# The cursor is only advanced once the overflow is either absent or actually
+# reported. Advancing it first would consume the overflow lines even when the
+# Zammad POST failed, so no later run would retry and the ticket would be lost
+# -- the one window where this mechanism matters most.
+if [[ "${hits:-0}" -gt 0 ]]; then
+  if ! /usr/local/bin/zfs-fault-alert.sh "zed event-queue overflow (Missed events)" \
+      "count=${hits} since_last_check -- monitoring was blind for this window"; then
+    logger -t zfs-missed-events-check \
+      "alert failed; leaving cursor unadvanced so the next run retries ${hits} missed-event line(s)"
+    exit 1
+  fi
+fi
+
+[[ -n "$new_cursor" ]] && echo "$new_cursor" > "$CURSOR_FILE"
+exit 0
