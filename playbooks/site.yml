@@ -231,12 +231,8 @@
           admin: [admin]
 
     # Cross-node ZFS replication (syncoid, layer 2). Pull model — runs on the
-    # backup node; inert until syncoid_jobs is set.
-    # The healthcheck is not optional decoration: syncoid_healthcheck_url was
-    # empty, so a job that failed on one dataset was visible only as a non-zero
-    # exit code inside a cron run nobody reads. Wiring it makes a failed
-    # replication page, and — because healthchecks expects a ping every cycle —
-    # makes a run that never happens page too.
+    # backup node; inert until syncoid_jobs is set. Why the healthcheck is
+    # load-bearing rather than decoration: roles/syncoid/README.md.
     - role: syncoid
       tags:
         - syncoid
@@ -278,13 +274,9 @@
                 'secret_key': lookup('env', 'POSTGRES_DR_AWS_SECRET_KEY')}
              ] | selectattr('access_key', 'ne', '') | list }}
 
-    # Daily tar of the local pmxcfs mount (/etc/pve: cluster.conf,
-    # storage.cfg, firewall/HA/replication config, ACLs) into the generic
-    # <pool>/databases archive namespace — same shape as sqlite_standby /
-    # postgres_standby above, new source. pmxcfs replicates cluster-wide, so
-    # running this on any one member captures the whole cluster; inert unless
-    # a host sets pve_config_backup_enabled: true (the node that already owns
-    # the <pool>/databases dataset).
+    # Daily tar of the local pmxcfs mount into the <pool>/databases archive
+    # namespace. Inert unless a host sets pve_config_backup_enabled: true.
+    # What it captures and why one member suffices: the role's README.
     - role: pve_config_backup
       tags:
         - pve_config_backup
@@ -340,13 +332,9 @@
       tags:
         - nvidia_driver
 
-# Proxmox VE HA (resources + anti-affinity) for the tier-0 guests. Imported here
-# rather than left as a standalone playbook so pve_ha_enabled cannot be forgotten
-# on a routine converge — it previously existed only as a hand-typed -e on this
-# standalone file, which site.yml never included, so HA silently did nothing on
-# every node loss. The role stays INERT unless pve_ha_enabled is true (set in
-# inventory group_vars, not per-run). Re-imports load_tofu.yml; import_playbook
-# is safe to repeat.
+# Proxmox VE HA (resources + anti-affinity) for the tier-0 guests. Inert unless
+# pve_ha_enabled is true (inventory group_vars, not per-run). Why it is imported
+# here rather than left standalone: roles/pve_ha/README.md.
 - name: Configure Proxmox VE HA for tier-0 guests
   import_playbook: ha.yml
 
