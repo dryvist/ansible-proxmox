@@ -1,0 +1,26 @@
+---
+# pve_quorum_guard role metadata
+
+galaxy_info:
+  role_name: pve_quorum_guard
+  author: ansible-proxmox
+  description: >-
+    Read-only corosync quorum headroom check: reports how many voting members
+    the cluster can lose while staying quorate, discounting members declared
+    powered off, and fails the converge when that falls below the minimum.
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - corosync
+    - quorum
+    - monitoring
+
+dependencies: []

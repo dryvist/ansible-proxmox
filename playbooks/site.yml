@@ -95,6 +95,16 @@
       tags:
         - crash_diagnostics
 
+    # Report corosync quorum headroom, and fail the converge when the cluster
+    # can no longer lose a voting member and stay quorate. Read-only: it makes
+    # the vote arithmetic visible on every run rather than only once activity
+    # is already blocked -- at which point no guest starts to help. Remediation
+    # options are all operator actions; see the role README.
+    - role: pve_quorum_guard
+      tags:
+        - pve_quorum_guard
+        - monitoring
+
     # Reset a wedged node instead of leaving it dark. Runs after
     # crash_diagnostics so a panic is still captured before the reset, and
     # before the syslog forwarder so the arming itself is logged off-box.
@@ -294,51 +304,12 @@
       vars:
         git_mirror_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/git-mirror"
 
-    - role: idrac_kiosk
-      tags:
-        - idrac_kiosk
-
-    # Scheduled local power-off (systemd timer) for normally-off nodes so a node
-    # brought up for a window is not left running overnight. Inert unless a host
-    # sets node_auto_poweroff_enabled: true. The OS powers itself
-    # off; idrac_power (IPMI) handles powering a node back on.
-    - role: node_auto_poweroff
-      tags:
-        - node_auto_poweroff
-
-    # Scheduled IPMI power-ON (systemd timer) so a normally-off DR node wakes for
-    # its backup windows with no human and no scheduled ansible run — the wake
-    # half of the autonomous cycle (node_auto_poweroff is the sleep half). Runs on
-    # the always-on controller; inert unless a host sets node_scheduled_wake_
-    # targets. The woken node replicates on boot (syncoid
-    # boot trigger) and powers itself off on completion.
-    - role: node_scheduled_wake
-      tags:
-        - node_scheduled_wake
-
-    # Wake-on-LAN persistence for non-power-managed hosts (no BMC/iDRAC) that
-    # are meant to stay always-on. Inert unless a host sets
-    # wol_enable_enabled: true. BIOS/UEFI WoL must already be on;
-    # this covers the OS side, which resets to disabled on every boot without it.
-    - role: wol_enable
-      tags:
-        - wol_enable
-
-    # Chassis power-restore policy, so AC returning brings a node back with
-    # nobody present. Here, not only in the power plays above: a node this
-    # role never cycles is the one that must come back on its own. Default
-    # `status` action — reconciles the policy, changes no power state.
-    - role: idrac_power
-      tags:
-        - idrac_power
-
-    # NVIDIA host GPU driver, so LXC guests can be handed the card via device
-    # passthrough. Inert unless a host sets nvidia_driver_enabled: true, and
-    # fails loud if opted in on a node with no NVIDIA card on the PCI bus.
-    # Reports rather than takes the reboot the driver switch needs.
-    - role: nvidia_driver
-      tags:
-        - nvidia_driver
+# Node hardware and power policy (BMC console, the power-off/wake cycle,
+# chassis power-restore, host GPU driver). Split out of this file rather than
+# left inline so site.yml stays inside its token budget; imported in the
+# position the block held, so role order is unchanged.
+- name: Configure node hardware and power policy
+  import_playbook: node-hardware.yml
 
 # Proxmox VE HA (resources + anti-affinity) for the tier-0 guests. Inert unless
 # pve_ha_enabled is true (inventory group_vars, not per-run). Why it is imported
