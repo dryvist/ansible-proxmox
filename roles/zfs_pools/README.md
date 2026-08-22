@@ -45,7 +45,7 @@ zfs_pools_devices:
 proxmox host: the `node_storage[<node>]` entry for that host, keyed by the
 host's `proxmox_node_name` (defaults to the inventory hostname). Set
 `proxmox_node_name` in `host_vars` when the inventory name differs from the
-tofu node name (e.g. inventory `node-a` → tofu `pve2`).
+tofu node name (e.g. inventory `node-a` → tofu `node-b`).
 
 Shape (`zfs_pools_map`):
 

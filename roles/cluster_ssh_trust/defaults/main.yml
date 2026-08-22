@@ -10,7 +10,7 @@
 cluster_ssh_trust_enabled: true
 
 # Canonical node list: the PROXMOX_VE_NODES Doppler variable (the single source
-# of truth shared by terraform + ansible), e.g. "pve1,pve2,pve3". regex_findall
+# of truth shared by terraform + ansible), e.g. "node-a,node-b,node-c". regex_findall
 # extracts the hostname tokens, so the value may be plain comma-separated,
 # bracketed, and/or quoted — all are tolerated. Falls back to the
 # pve_cluster_members inventory group when the variable is absent (e.g. molecule).

@@ -22,9 +22,9 @@
           # is deliberate: a looser substring silently passed for a template
           # that had stopped emitting the name at all.
           - >-
-            'replicate "pve1-nas" --recursive --no-sync-snap --quiet
-            root@pve1:rpool/data/nas tank/replica/pve1/nas' in syncoid_wrapper_text
-          - "'root@pve1:nvme1/siem/splunk-hot tank/replica/pve1/splunk-hot' in syncoid_wrapper_text"
+            'replicate "node-a-nas" --recursive --no-sync-snap --quiet
+            root@node-a:rpool/data/nas tank/replica/node-a/nas' in syncoid_wrapper_text
+          - "'root@node-a:nvme1/siem/splunk-hot tank/replica/node-a/splunk-hot' in syncoid_wrapper_text"
           # failure isolation present so an offline source does not abort the run
           - "'FAILED (rc=' in syncoid_wrapper_text"
           # a failed job must be counted and propagate to a non-zero exit — the

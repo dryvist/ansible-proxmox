@@ -2,7 +2,7 @@
 # ZFS kernel module parameters -> /etc/modprobe.d/zfs.conf
 #
 # WHY THIS EXISTS: tuning written only to /sys/module/zfs/parameters/ reverts on
-# reboot. During the pve540 raidz2 rebuild, zfs_scrub_after_expand=0 was set live
+# reboot. During a raidz2 rebuild, zfs_scrub_after_expand=0 was set live
 # to avoid a full scrub after EVERY raidz attach (three attaches x ~12h = ~36h of
 # purely additive work). A reboot would silently restore the default and the
 # penalty with it. Module parameters are load-time settings, so the file is the

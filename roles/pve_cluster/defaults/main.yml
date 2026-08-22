@@ -28,7 +28,7 @@ pve_cluster_name: homelab
 pve_cluster_member_hosts: []
 
 # This host's role in the cluster: "primary" creates, anything else joins.
-# Derive from the tofu `nodes` map (role "pve1" == primary); default
+# Derive from the tofu `nodes` map (the node carrying the primary role); default
 # resolves the primary by name match against pve_cluster_primary_host.
 pve_cluster_role: >-
   {{ (inventory_hostname == pve_cluster_primary_host) | ternary('primary', 'secondary') }}

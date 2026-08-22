@@ -60,7 +60,7 @@ zfs_replication_default_options: "--recursive --no-sync-snap --quiet"
 #       target_dataset: "bulk/replica/proxmox-2/data"
 #       recursive: true
 #       sync_snaps: false
-#     # A pve1 service volume -> the standby's pve1 replica slot
+#     # A node-a service volume -> the standby's node-a replica slot
 #     - name: service-volume
 #       source_dataset: "rpool/data/<service-volume>"
 #       target_dataset: "bulk/replica/proxmox-1/<service-volume>"

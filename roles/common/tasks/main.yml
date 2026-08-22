@@ -90,7 +90,7 @@
 
 # Host DNS: every node resolves via its OWN subnet's gateway (the UniFi
 # VLAN gateway relays DNS), derived from live facts — never a hard-coded
-# cross-VLAN literal. Hand-set 10.0.1.1 entries left pve1/pve3/pve4
+# cross-VLAN literal. Hand-set 10.0.1.1 entries left several nodes
 # resolving across VLANs, which flapped every FQDN-dependent host service
 # (rsyslog forwarding, CRM loops) whenever inter-VLAN policy or the
 # default-VLAN gateway hiccuped.

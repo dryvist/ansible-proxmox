@@ -59,11 +59,11 @@ syncoid_default_options: "--recursive --no-sync-snap --quiet"
 
 # Replication jobs (empty by default). Each pulls source -> local target:
 #   syncoid_jobs:
-#     - name: pve1-nas
-#       source: "root@pve1:rpool/data/nas"
-#       target: "tank/replica/pve1/nas"
-#     - name: pve1-splunk-hot
-#       source: "root@pve1:nvme1/siem/splunk-hot"
-#       target: "tank/replica/pve1/splunk-hot"
+#     - name: node-a-nas
+#       source: "root@node-a:rpool/data/nas"
+#       target: "tank/replica/node-a/nas"
+#     - name: node-a-splunk-hot
+#       source: "root@node-a:nvme1/siem/splunk-hot"
+#       target: "tank/replica/node-a/splunk-hot"
 #       schedule: hourly   # optional; must name a key in syncoid_extra_schedules
 syncoid_jobs: []
