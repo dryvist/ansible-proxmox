@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.79.0](https://github.com/dryvist/ansible-proxmox/compare/v1.78.3...v1.79.0) (2026-08-22)
+
+
+### Features
+
+* **zfs:** wire pve-w5900 rpool fault signature directly to Zammad ([9093918](https://github.com/dryvist/ansible-proxmox/commit/909391811a8794678d8ddec25a3d6ebc7b782d60))
+
+
+### Bug Fixes
+
+* **cluster_ssh_trust:** assert at least one peer's host keys were scanned ([#686](https://github.com/dryvist/ansible-proxmox/issues/686)) ([70c7623](https://github.com/dryvist/ansible-proxmox/commit/70c76235b56b83cb8adc5420424a6d095821f007))
+* **local_identities:** say so when an account has no way to authenticate ([#682](https://github.com/dryvist/ansible-proxmox/issues/682)) ([a5bfec3](https://github.com/dryvist/ansible-proxmox/commit/a5bfec383dace70e976bdba00963af60dfbd1956))
+
 ## [1.78.3](https://github.com/dryvist/ansible-proxmox/compare/v1.78.2...v1.78.3) (2026-08-22)
 
 
