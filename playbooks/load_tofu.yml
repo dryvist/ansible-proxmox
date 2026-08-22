@@ -14,30 +14,56 @@
       ansible.builtin.include_role:
         name: dryvist.homelab.inventory_resolve
       vars:
-        inventory_resolve_required_keys: [host_services]
+        inventory_resolve_required_keys: [node_storage]
 
-    - name: Validate NAS host_services structure
-      ansible.builtin.assert:
-        that:
-          - tofu_data is defined
-          - tofu_data.host_services is defined
-          - tofu_data.host_services.nas is defined
-          - tofu_data.host_services.nas.zfs_dataset is defined
-          - tofu_data.host_services.nas.mount_point is defined
-          - tofu_data.host_services.nas.directories is defined
-        fail_msg: |
-          tofu_data.host_services.nas is missing or incomplete in
-          tofu_inventory.json.
+    # SMB shares are declared ON the dataset they serve, inside
+    # node_storage.<node>.pools.<pool>.datasets.<dataset>.smb, with the
+    # node-level Samba SERVICE settings under node_storage.<node>.smb.
+    #
+    # This replaces the former global host_services.nas, which had no node
+    # selector at all: every node built an identical NAS, with identical share
+    # names at an identical mount point, so "which node is the NAS?" had no
+    # answer. Here the map key IS the selector, and a share cannot reference a
+    # dataset that does not exist because it is declared inside one.
+    #
+    # Built as JSON and decoded rather than emitted directly: a template that
+    # opens with {% set %} is no longer a single expression, so it renders to
+    # TEXT and the structure would arrive as a string.
+    - name: Build the per-node NAS configuration from node_storage
+      ansible.builtin.set_fact:
+        nas_storage_by_node_json: >-
+          {%- set out = {} -%}
+          {%- for node, ns in (tofu_data.node_storage | default({}, true)).items() -%}
+            {%- set shares = [] -%}
+            {%- for pool, pd in (ns.pools | default({}, true)).items() -%}
+              {%- for dsname, ds in (pd.datasets | default({}, true)).items() -%}
+                {%- if ds.smb | default({}, true) -%}
+                  {%- set _ = shares.append(ds.smb | combine({
+                        'name': ds.smb.share_name,
+                        'path': ds.mountpoint | default('/' ~ pool ~ '/' ~ dsname, true)})) -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endfor -%}
+            {%- if shares -%}
+              {%- set _ = out.update({node: (ns.smb | default({}, true))
+                                            | combine({'shares': shares})}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ out | to_json }}
 
-          Expected tofu-proxmox ansible_inventory output to include the
-          NAS contract under host_services.nas.
+    - name: Decode the per-node NAS configuration
+      ansible.builtin.set_fact:
+        nas_storage_by_node: "{{ nas_storage_by_node_json | from_json }}"
 
-          Re-run the tofu-proxmox Terrakube workspace or export ansible_inventory again.
-
+    # A node with no shared dataset gets {} and the nas_storage role skips
+    # entirely. That is the normal case for most nodes, not an error -- which
+    # is why the role no longer asserts that at least one share exists.
     - name: Inject OpenTofu NAS config onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
-        nas_storage_from_tofu: "{{ tofu_data.host_services.nas }}"
+        nas_storage_from_tofu: >-
+          {{ nas_storage_by_node[hostvars[item].proxmox_node_name | default(item)]
+             | default({}, true) }}
       loop: "{{ groups['proxmox'] | default([]) }}"
 
     # Per-node ZFS storage (node_storage) is optional — present only once the

@@ -135,7 +135,11 @@
       tags:
         - lxc_features
 
+    # Only nodes that declare an SMB share on one of their datasets run the
+    # NAS role. Under the per-dataset contract most nodes declare none, so an
+    # unconditional include would fail every one of them on "no shares".
     - role: nas_storage
+      when: (nas_storage_from_tofu | default({}, true)).shares | default([], true) | length > 0
       tags:
         - nas_storage
 

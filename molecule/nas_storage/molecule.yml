@@ -9,5 +9,8 @@ platforms:
       - /tmp
 
 provisioner:
-  env:
-    NAS_HOMEASSISTANT_SMB_PASSWORD: molecule-pass
+  inventory:
+    group_vars:
+      all:
+        nas_storage_passwords:
+          homeassistant_smb_password: molecule-pass

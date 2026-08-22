@@ -1,17 +1,17 @@
 [{{ item.name }}]
-{% if item.comment is defined %}
+{% if item.comment %}
    comment = {{ item.comment }}
 {% endif %}
    path = "{{ item.path }}"
-   valid users = {{ item.valid_users }}
-   read only = {{ (item.read_only | default(false)) | ternary('yes', 'no') }}
-   browsable = {{ (item.browsable | default(true)) | ternary('yes', 'no') }}
-   create mask = {{ item.create_mask | default('0664') }}
-   directory mask = {{ item.directory_mask | default('0775') }}
-   force group = {{ item.force_group | default(nas_storage_group_name) }}
-{% if item.time_machine | default(false) | bool %}
+   valid users = {{ item.valid_users | default('@' ~ nas_storage_group_name, true) }}
+   read only = {{ (item.read_only | default(false, true)) | ternary('yes', 'no') }}
+   browsable = {{ (item.browsable | default(true, true)) | ternary('yes', 'no') }}
+   create mask = {{ item.create_mask | default('0664', true) }}
+   directory mask = {{ item.directory_mask | default('0775', true) }}
+   force group = {{ item.force_group | default(nas_storage_group_name, true) }}
+{% if item.time_machine | default(false, true) | bool %}
    fruit:time machine = yes
-{% if item.time_machine_max_size is defined %}
+{% if item.time_machine_max_size %}
    fruit:time machine max size = {{ item.time_machine_max_size }}
 {% endif %}
 {% endif %}

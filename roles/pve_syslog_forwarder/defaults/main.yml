@@ -7,7 +7,7 @@
 #
 # No literals: the target is the stable `syslog` CNAME (-> haproxy) sized off
 # the PROXMOX_SUBDOMAIN env var (e.g. from Doppler), mirroring how
-# proxmox_node_prefix keeps the real environment value out of the repo.
+# proxmox_node_names keeps the real environment values out of the repo.
 
 # Stable syslog entry point: the `syslog` CNAME (-> the HAProxy VIP). Sized off
 # PROXMOX_SUBDOMAIN, never a committed literal.

@@ -1,0 +1,38 @@
+---
+# Every role-keyed entry in `proxmox_node_names` must render to a live inventory
+# node name. Node names are hardware-keyed, so a name can no longer be composed
+# from a prefix and an ordinal — a reference built that way renders a host that
+# does not resolve, and the consuming task then fails per cycle or no-ops at
+# rc=0 rather than reporting a bad name.
+#
+#   doppler run -- ansible-playbook -i inventory/hosts.yml \
+#     tests/node_names/verify_role_keyed_names.yml
+#
+# Must-fail control (proves the assertion is not vacuous): re-run with
+# `PVE5_NODE_NAME=<a retired ordinal name>` and confirm it exits non-zero.
+- name: Verify the role-keyed Proxmox node names resolve
+  hosts: proxmox
+  connection: local
+  gather_facts: false
+  run_once: true
+  tasks:
+    - name: Show the rendered names
+      ansible.builtin.debug:
+        msg:
+          - "primary={{ proxmox_node_names.primary }}"
+          - "dr={{ proxmox_node_names.dr }}"
+          - "storage={{ proxmox_node_names.storage }}"
+          - "pve_cluster_primary_host={{ pve_cluster_primary_host | default('undefined') }}"
+
+    - name: Every role-keyed name must be a live inventory node name
+      ansible.builtin.assert:
+        that:
+          - proxmox_node_names.primary in (groups['proxmox'] | default([]))
+          - proxmox_node_names.dr in (groups['proxmox'] | default([]))
+          - proxmox_node_names.storage in (groups['proxmox'] | default([]))
+        fail_msg: >-
+          A role-keyed node name does not match any inventory host:
+          {{ proxmox_node_names }} vs {{ groups['proxmox'] | default([]) }}.
+          The PVEn_NODE_NAME environment values have drifted from
+          inventory/hosts.yml.
+        success_msg: "All role-keyed node names resolve to inventory hosts."

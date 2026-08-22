@@ -7,60 +7,52 @@
   vars:
     # No OpenBao in the container, so supply the map the role would read from it.
     nas_storage_passwords:
-      homeassistant_smb_password: "molecule-pass"
+      jevans_smb_password: "molecule-pass"
+    # Shaped exactly as playbooks/load_tofu.yml derives it from
+    # node_storage.<node>: the node-level `smb` service block, plus one entry
+    # per dataset that declared an `smb` block, with `name`/`path` filled in.
+    # The role no longer creates these datasets -- zfs_pools does -- so the
+    # paths here stand in for mountpoints that already exist.
     nas_storage_from_tofu:
-      zfs_dataset: "rpool/data/nas"
-      zfs_quota: "1T"
-      mount_point: "/mnt/nas"
-      smb_share_name: "nas"
       group_name: "nas"
-      directories:
-        - "huggingface/hub"
-        - "ollama/models"
-        - "media"
-        - "backups"
+      workgroup: "WORKGROUP"
+      macos_optimized: true
       managed_users:
-        - name: "homeassistant"
+        - name: "jevans"
           unix_groups:
             - "nas"
           shell: "/usr/sbin/nologin"
           create_home: false
-          password_secret_env: "NAS_HOMEASSISTANT_SMB_PASSWORD"
+          password_secret_env: "NAS_JEVANS_SMB_PASSWORD"
       shares:
-        - name: "nas"
-          path: "/mnt/nas"
+        - name: "jdrive"
+          share_name: "jdrive"
+          path: "/bulk/jdrive"
           valid_users: "@nas"
-          browsable: true
-          read_only: false
-          force_group: "nas"
-          create_mask: "0664"
-          directory_mask: "0775"
-          comment: "Primary NAS root share"
-        - name: "ha-backups"
-          path: "/mnt/nas/backups"
-          valid_users: "homeassistant"
-          browsable: true
-          read_only: false
-          force_group: "nas"
-          create_mask: "0664"
-          directory_mask: "0775"
-          comment: "Home Assistant backup storage"
-        - name: "ha-media"
-          path: "/mnt/nas/media"
-          valid_users: "homeassistant"
-          browsable: true
-          read_only: false
-          force_group: "nas"
-          create_mask: "0664"
-          directory_mask: "0775"
-          comment: "Home Assistant media storage"
+          comment: "General file share"
+        # Every optional attribute left null, exactly as tofu serialises an
+        # undeclared `optional(...)`. Jinja treats null as DEFINED, so this
+        # case is what catches a template that tests `is defined` instead of
+        # truthiness and renders "comment = None" into smb.conf.
+        - name: "models"
+          share_name: "models"
+          path: "/bulk/models"
+          valid_users: null
+          comment: null
+          browsable: null
+          read_only: null
+          force_group: null
+          create_mask: null
+          directory_mask: null
+          time_machine: null
+          time_machine_max_size: null
         - name: "timemachine"
-          path: "/mnt/nas/timemachine"
+          share_name: "timemachine"
+          path: "/bulk/timemachine"
           valid_users: "@nas"
-          browsable: true
-          read_only: false
           force_group: "nas"
           time_machine: true
+          time_machine_max_size: "600G"
           comment: "Mac Time Machine target"
 
   tasks:

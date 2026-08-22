@@ -8,18 +8,39 @@
   gather_facts: false
 
   tasks:
-    - name: Assert pve-w1700 host received OpenTofu NAS config
+    - name: Assert the share-serving node received its NAS contract
       ansible.builtin.assert:
         that:
           - hostvars['pve-w1700'] is defined
           - hostvars['pve-w1700'].nas_storage_from_tofu is defined
-          - hostvars['pve-w1700'].nas_storage_from_tofu.zfs_dataset == "rpool/data/nas"
           - hostvars['pve-w1700'].nas_storage_from_tofu.group_name == "nas"
-          - hostvars['pve-w1700'].nas_storage_from_tofu.managed_users[0].name == "homeassistant"
-          - hostvars['pve-w1700'].nas_storage_from_tofu.managed_users[0].password_secret_env == "NAS_HOMEASSISTANT_SMB_PASSWORD"
-          - "'ha-backups' in (hostvars['pve-w1700'].nas_storage_from_tofu.shares | map(attribute='name') | list)"
-          - "'ha-media' in (hostvars['pve-w1700'].nas_storage_from_tofu.shares | map(attribute='name') | list)"
-        fail_msg: "load_tofu.yml did not inject the expected NAS contract onto pve-w1700"
+          - hostvars['pve-w1700'].nas_storage_from_tofu.managed_users[0].name == "jevans"
+          - hostvars['pve-w1700'].nas_storage_from_tofu.managed_users[0].password_secret_env
+            == "NAS_JEVANS_SMB_PASSWORD"
+          # Exactly the two datasets that declared `smb` -- the third has a
+          # quota and no share, and must NOT appear.
+          - (hostvars['pve-w1700'].nas_storage_from_tofu.shares
+             | map(attribute='name') | sort) == ['jdrive', 'timemachine']
+          # The share's path comes from the dataset's own mountpoint, which is
+          # what makes it impossible to point a share at a dataset that does
+          # not exist.
+          - (hostvars['pve-w1700'].nas_storage_from_tofu.shares
+             | selectattr('name', 'eq', 'jdrive') | first).path == "/bulk/jdrive"
+        fail_msg: >-
+          load_tofu.yml did not derive the NAS contract from
+          node_storage.<node> for the share-serving node.
+
+    # The counterpart assertion, and the one the old global host_services.nas
+    # could not express: a node that declares no share gets nothing, so
+    # playbooks/site.yml skips nas_storage there instead of failing it.
+    - name: Assert a node with no declared share receives no NAS contract
+      ansible.builtin.assert:
+        that:
+          - (hostvars['pve-r540'].nas_storage_from_tofu | default({}, true)) == {}
+        fail_msg: >-
+          A node with no `smb` block still received a NAS contract. Every node
+          would build an identical NAS again, which is the exact shape the
+          per-dataset contract replaced.
 
     - name: Assert pve-w1700 host received OpenTofu replication identity (containers + splunk_vm)
       ansible.builtin.assert:
