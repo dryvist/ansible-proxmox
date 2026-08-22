@@ -120,7 +120,7 @@ media_lxc_features_service_vmids: >-
   }}
 
 # /dev/net/tun device numbers (char major:minor). Stable Linux allocation for
-# the TUN/TAP driver. Verified on pve1: `stat -c %t:%T /dev/net/tun` -> a:c8
+# the TUN/TAP driver. Verified live: `stat -c %t:%T /dev/net/tun` -> a:c8
 # (hex) == 10:200 (decimal).
 media_lxc_features_tun_major: 10
 media_lxc_features_tun_minor: 200

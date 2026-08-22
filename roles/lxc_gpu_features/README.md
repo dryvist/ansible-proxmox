@@ -65,11 +65,11 @@ inventory resolves no GPU services.
 ```bash
 # Dry run
 env -u DOPPLER_PROJECT -u DOPPLER_CONFIG -u DOPPLER_ENVIRONMENT doppler run -- \
-  ./scripts/run-ansible.sh playbooks/site.yml --limit pve1 --tags lxc_gpu_features --check --diff
+  ./scripts/run-ansible.sh playbooks/site.yml --limit <node> --tags lxc_gpu_features --check --diff
 
 # Apply (after tofu creates the LXC shell, before apps converge)
 env -u DOPPLER_PROJECT -u DOPPLER_CONFIG -u DOPPLER_ENVIRONMENT doppler run -- \
-  ./scripts/run-ansible.sh playbooks/site.yml --limit pve1 --tags lxc_gpu_features
+  ./scripts/run-ansible.sh playbooks/site.yml --limit <node> --tags lxc_gpu_features
 ```
 
 Verify the devices landed inside the container (substitute the `llm-fast`

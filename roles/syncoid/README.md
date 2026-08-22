@@ -18,12 +18,12 @@ ansible-galaxy install -r requirements.yml
 
 ## Model
 
-**Pull, from the target.** Run this role on the **backup** node (e.g. pve2); it
-SSHes to each source (e.g. pve1) and pulls. Pull-from-backup is safer than push
+**Pull, from the target.** Run this role on the **backup** node (e.g. node-b); it
+SSHes to each source (e.g. node-a) and pulls. Pull-from-backup is safer than push
 — a compromised source cannot reach the backup. `--no-sync-snap` replicates the
 snapshots `sanoid` already took rather than creating new ones.
 
-A failed job (source offline — expected for the intermittent pve3) is logged to
+A failed job (source offline — expected for the intermittent node-c) is logged to
 `/var/log/syncoid/` and does **not** abort the remaining jobs — but it is
 counted: any failed job makes the wrapper exit non-zero and ping
 `syncoid_healthcheck_url/fail` (if set), so a bad run is never silently
@@ -50,9 +50,9 @@ set up out of band. The role schedules replication; it does not distribute keys.
 
 ```yaml
 syncoid_jobs:
-  - name: pve1-nas
-    source: "root@pve1:rpool/data/nas"
-    target: "tank/replica/pve1/nas"
+  - name: node-a-nas
+    source: "root@node-a:rpool/data/nas"
+    target: "tank/replica/node-a/nas"
 ```
 
 ### Schedule groups
@@ -71,8 +71,8 @@ syncoid_extra_schedules:
 syncoid_jobs:
   - name: app-config
     schedule: hourly          # omit to stay in `default`
-    source: "root@pve1:rpool/data/vm-200-disk-2"
-    target: "bulk/replica/pve1/vm-200-disk-2"
+    source: "root@node-a:rpool/data/vm-200-disk-2"
+    target: "bulk/replica/node-a/vm-200-disk-2"
 ```
 
 The schedule renders as a whole `/etc/cron.d/syncoid` file rather than as

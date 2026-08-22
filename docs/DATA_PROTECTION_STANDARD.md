@@ -152,8 +152,8 @@ scheduling.**
 
 Two hard gates:
 
-- **No new protection job may target or source `pve2`.** It is being
-  retired; its `bulk` pool is a DEGRADED raidz1 with a REMOVED member.
+- **No new protection job may target or source the retired node.** Its
+  `bulk` pool is a DEGRADED raidz1 with a REMOVED member.
   Anything landing there today is building on a pool already down a drive.
 - **A store is not "protected" until its restore drill has passed once** and
   it appears in `data_protection_expected.csv`. A mechanism that has never

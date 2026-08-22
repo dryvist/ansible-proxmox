@@ -43,7 +43,7 @@
     # Per-node ZFS storage (node_storage) is optional — present only once the
     # terraform-proxmox multi-node contract is applied. Keyed by each host's
     # `proxmox_node_name` (the tofu node name; e.g. an inventory host
-    # `node-a` maps to tofu node `pve2`), defaulting to inventory_hostname.
+    # `node-a` maps to tofu node `node-b`), defaulting to inventory_hostname.
     - name: Inject OpenTofu per-node ZFS storage onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
@@ -55,8 +55,8 @@
     # A node_storage entry is looked up by proxmox_node_name, so a node key
     # that drifts from tofu's (a rename on one side only) resolves to an empty
     # map -- and zfs_pools then no-ops at rc=0 with changed=0, which reads as
-    # "already converged". That is exactly what a stale `pve540` key did while
-    # tofu had already moved to `pve-r540`.
+    # "already converged". That is exactly what a stale ordinal-style key did
+    # while tofu had already moved to the hardware-keyed form.
     #
     # Not asserted per host: a node legitimately absent from node_storage is
     # allowed. What is never legitimate is a NON-EMPTY node_storage matching

@@ -66,8 +66,8 @@
 # pvesr replicates a volume to the SAME storage id on the target node. If the
 # target lacks that storage, the job fails asynchronously on first sync and
 # the converge still reports success — no replica ever exists, silently.
-# (Incident 2026-07-26: pve_ha_replication_pair was pve1+pve2, but the
-# guests' storage (local-zfs) is only on pve1/pve3; every job failed and a
+# (Incident 2026-07-26: pve_ha_replication_pair named a node that does not
+# carry the guests' storage (local-zfs); every job failed and a
 # singleton guest sat under HA with nothing to relocate to.) Prefer pvesh
 # over parsing /etc/pve/storage.cfg directly: the API already normalizes the
 # ini-style config into JSON the same way the cluster consumes it, so there

@@ -185,14 +185,15 @@ pve_ha_replication_ct_hostnames:
 #   (remote_prepare_local_job) storage '<id>' is not available on node '<node>'
 #
 # These guests live on `local-zfs`, and per /etc/pve/storage.cfg that storage is
-# defined on **pve1 and pve3** — pve2 carries `bulk`, not `local-zfs`. The pair
-# was pve1+pve2, so every job failed on first sync and no replica ever existed.
+# defined on only two of the nodes — the third carries `bulk`, not `local-zfs`.
+# The pair named a node without `local-zfs`, so every job failed on first sync
+# and no replica ever existed.
 # That is what let a singleton sit under HA with nothing to relocate to; see the
 # guard in "Resolve singleton app guests with no viable replica" above.
 #
-# pve3 was previously excluded here as a sleeping DR node. It is always-on now
-# (it holds the HA master and runs live services), so it is a valid pvesr peer.
-# If pve3 ever returns to sleeping, this pair must change with it — a sleeping
+# The second member was previously excluded here as a sleeping DR node. It is
+# always-on now (it holds the HA master and runs live services), so it is a valid
+# pvesr peer. If it ever returns to sleeping, this pair must change with it — a sleeping
 # target cannot accept a replication run.
 pve_ha_replication_pair:
   - "{{ proxmox_node_prefix }}1"
@@ -211,8 +212,8 @@ pve_ha_replication_jobnum: 0
 
 # STRICT node-affinity rule pinning the replication guests to pve_ha_replication_pair.
 # This is correctness, not preference: a pvesr replica exists ONLY on the pair, so
-# ha-manager must never start one of these guests on any other node (e.g. pve3,
-# which holds no replica). A strict rule = run ONLY on the listed nodes, so a
+# ha-manager must never start one of these guests on any other node, which would
+# hold no replica. A strict rule = run ONLY on the listed nodes, so a
 # relocation onto a replica-less node can't happen and then start-fail/flap.
 pve_ha_replication_affinity_rule: apps-replication-nodes
 
@@ -237,5 +238,5 @@ pve_ha_manage_all: false
 pve_ha_pinned_max_relocate: 0
 
 # Prefix for the per-node strict affinity rules (one rule per home node,
-# e.g. "pve-ha-home-pve1"), so the rule set stays small and readable.
+# e.g. "pve-ha-home-<node>"), so the rule set stays small and readable.
 pve_ha_home_rule_prefix: pve-ha-home

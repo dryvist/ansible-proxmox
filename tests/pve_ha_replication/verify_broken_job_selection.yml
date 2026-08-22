@@ -12,10 +12,9 @@
   become: false
   gather_facts: false
   vars:
-    proxmox_node_prefix: pve
     # Stands in for pve_ha_this_pve_node — the role runs this per node and each
     # node may only delete jobs it is the SOURCE of (pvesr jobs are node-local).
-    pve_ha_test_node: "{{ proxmox_node_prefix }}1"
+    pve_ha_test_node: "node-a"
 
     # Synthetic `pvesh get /nodes/<node>/replication` output, shaped from a live
     # cluster read. Healthy jobs carry no `error` key at all, which is why the
@@ -23,7 +22,7 @@
     pve_ha_replication_status_fixture:
       # Permanently broken AND sourced here -> must be selected.
       - id: "605000-0"
-        source: "{{ proxmox_node_prefix }}1"
+        source: "node-a"
         fail_count: 32
         error: >-
           No common base snapshot on volume(s) local-zfs:subvol-605000-disk-0
@@ -31,18 +30,18 @@
           or delete and re-create the whole job 605000-0
       # Healthy -> no error key -> must be left alone.
       - id: "605010-0"
-        source: "{{ proxmox_node_prefix }}1"
+        source: "node-a"
         fail_count: 0
       # Broken the same way but sourced from ANOTHER node: that node deletes it
       # on its own converge. Acting on it here would be a cross-node write.
       - id: "602000-0"
-        source: "{{ proxmox_node_prefix }}4"
+        source: "node-d"
         fail_count: 9
         error: "No common base snapshot on volume(s) local-zfs:subvol-602000-disk-0"
       # Transient failure (target unreachable). Clears itself once the cause is
       # fixed; deleting it would discard a good replica and force a full resync.
       - id: "601000-0"
-        source: "{{ proxmox_node_prefix }}1"
+        source: "node-a"
         fail_count: 3
         error: "command 'ssh' failed: connection timed out"
 

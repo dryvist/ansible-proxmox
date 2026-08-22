@@ -80,7 +80,7 @@ Splunk. Alerting here would duplicate that and bypass the pipeline of record —
 which is also why this is not modelled on the `zfs-capacity` check above.
 
 ```text
-host=pve2 job_id=602000-0 enabled=Yes target=local/pve3 state="OK" \
+host=node-b job_id=602000-0 enabled=Yes target=local/node-c state="OK" \
   fail_count=0 last_sync=2026-07-26_19:20:13 last_sync_epoch=1785093613 \
   age_seconds=286 duration_seconds=40.017384
 ```
