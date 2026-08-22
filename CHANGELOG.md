@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.78.3](https://github.com/dryvist/ansible-proxmox/compare/v1.78.2...v1.78.3) (2026-08-22)
+
+
+### Bug Fixes
+
+* **inventory:** key node references by role instead of composing a name ([#677](https://github.com/dryvist/ansible-proxmox/issues/677)) ([72d9a6e](https://github.com/dryvist/ansible-proxmox/commit/72d9a6e954c56ea777fcfa3f13612476f2a41c2d))
+* **nas_storage:** restore the OpenBao password-lookup variables ([97b28b1](https://github.com/dryvist/ansible-proxmox/commit/97b28b1cfa427de6879cae03200f349fe67dc519))
+
 ## [1.78.2](https://github.com/dryvist/ansible-proxmox/compare/v1.78.1...v1.78.2) (2026-08-22)
 
 
