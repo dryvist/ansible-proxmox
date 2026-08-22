@@ -14,10 +14,11 @@
 # would not rescan).
 #
 # Physical NIC: enp5s0 (bridged as vmbr0's uplink). Its MAC is not recorded
-# here (real hardware identifiers stay out of this public repo) -- look it up
-# with `ip -br link show enp5s0` on the host, or from the DHCP/UniFi lease
-# table, then send a wake from another host on the same L2 segment:
-#   wakeonlan <mac-address>
+# here -- real hardware identifiers stay out of this public repo, and none has
+# to be: the node reads its own permanent hardware address at converge time
+# and publishes it as its Proxmox `wakeonlan` key, so a wake is addressed by
+# node name from any other node on the same L2 segment:
+#   pvenode wakeonlan <node>
 wol_enable_enabled: true
 wol_enable_interface: enp5s0
 
