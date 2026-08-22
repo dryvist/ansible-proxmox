@@ -29,21 +29,31 @@
     fail_msg: "Invalid Samba share definition: {{ item | to_nice_json }}"
   loop: "{{ nas_storage_shares }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.secret_prefix }}"
   tags:
     - nas_storage
     - nas_storage_samba
 
+# A managed account is declared by ROLE (secret_prefix), never by login name:
+# the name is half of a credential and, once written into desired state or a
+# log, cannot be un-published. Both the username and the password are read from
+# OpenBao below. `item` is deliberately NOT rendered in fail_msg here -- the
+# declaration is name-free today, and echoing it would re-open the hole the
+# moment anyone adds a field.
 - name: Validate managed Samba users
   ansible.builtin.assert:
     that:
-      - (nas_storage_managed_users | map(attribute='name') | list | unique | length) == (nas_storage_managed_users | length)
-      - item.password_secret_env is defined
-      - item.password_secret_env | length > 0
-    fail_msg: "Invalid managed Samba user definition: {{ item | to_nice_json }}"
+      - item.secret_prefix is defined
+      - item.secret_prefix | length > 0
+      - (nas_storage_managed_users | map(attribute='secret_prefix') | list | unique | length) == (nas_storage_managed_users | length)
+    fail_msg: >-
+      Invalid managed Samba user definition. Each entry needs a non-empty
+      `secret_prefix`, unique within the node; it selects the OpenBao fields
+      <secret_prefix>{{ nas_storage_username_field_suffix }} and
+      <secret_prefix>{{ nas_storage_password_field_suffix }}.
   loop: "{{ nas_storage_managed_users }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.secret_prefix | default('<no secret_prefix>') }}"
   when: nas_storage_managed_users | length > 0
   tags:
     - nas_storage
@@ -118,11 +128,11 @@
     - nas_storage
     - nas_storage_samba
 
-- name: Set the managed-user password map
+- name: Set the managed-user identity map
   ansible.builtin.set_fact:
-    nas_storage_passwords: >-
+    nas_storage_secrets: >-
       {{ ((nas_storage_bao_read.json | default({}, true)).data | default({}, true)).data
-         | default(nas_storage_passwords | default({}, true), true) }}
+         | default(nas_storage_secrets | default({}, true), true) }}
   run_once: true
   no_log: true
   when:
@@ -133,18 +143,43 @@
     - nas_storage
     - nas_storage_samba
 
-- name: Verify Samba password secrets are available
+# Both halves of the identity must be present before anything is created. A
+# missing username is reported by its PREFIX, so the failure is actionable
+# without naming the account.
+- name: Verify Samba identity secrets are available
   ansible.builtin.assert:
     that:
-      - nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] | default('', true) | length > 0
+      - nas_storage_secrets[item.secret_prefix ~ nas_storage_username_field_suffix] | default('', true) | length > 0
+      - nas_storage_secrets[item.secret_prefix ~ nas_storage_password_field_suffix] | default('', true) | length > 0
     fail_msg: >-
-      No password for managed Samba user {{ item.name }}. It is read from
-      {{ nas_storage_bao_path }}, field
-      {{ item.name }}{{ nas_storage_password_field_suffix }}. Check that the
-      converge has BAO_ADDR and BAO_TOKEN, and that the field exists.
+      Managed Samba account "{{ item.secret_prefix }}" is missing a username or
+      a password. Both are read from {{ nas_storage_bao_path }}, fields
+      {{ item.secret_prefix }}{{ nas_storage_username_field_suffix }} and
+      {{ item.secret_prefix }}{{ nas_storage_password_field_suffix }}. Check
+      that the converge has BAO_ADDR and BAO_TOKEN, that the AppRole policy
+      grants a read on that path, and that both fields exist.
   loop: "{{ nas_storage_managed_users }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.secret_prefix }}"
+  when: nas_storage_managed_users | length > 0
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
+# One resolved list drives every task below, so the OpenBao lookup happens
+# exactly once per account rather than being repeated in each `when:` and
+# `cmd:`. Entries carry the declaration verbatim plus the resolved `username`.
+- name: Resolve managed Samba identities
+  ansible.builtin.set_fact:
+    nas_storage_resolved_users: >-
+      {{ (nas_storage_resolved_users | default([])) + [
+           item | combine({
+             'username': nas_storage_secrets[item.secret_prefix ~ nas_storage_username_field_suffix]
+           })
+         ] }}
+  loop: "{{ nas_storage_managed_users }}"
+  loop_control:
+    label: "{{ item.secret_prefix }}"
   when: nas_storage_managed_users | length > 0
   no_log: true
   tags:
@@ -153,7 +188,7 @@
 
 - name: Create managed NAS users
   ansible.builtin.user:
-    name: "{{ item.name }}"
+    name: "{{ item.username }}"
     state: present
     group: "{{ nas_storage_group_name }}"
     groups: "{{ item.unix_groups | default([nas_storage_group_name]) }}"
@@ -162,10 +197,10 @@
     create_home: "{{ item.create_home | default(false) }}"
     password_lock: true
     system: true
-  loop: "{{ nas_storage_managed_users }}"
+  loop: "{{ nas_storage_resolved_users }}"
   loop_control:
-    label: "{{ item.name }}"
-  when: nas_storage_managed_users | length > 0
+    label: "{{ item.secret_prefix }}"
+  when: nas_storage_resolved_users | default([]) | length > 0
   tags:
     - nas_storage
     - nas_storage_samba
@@ -175,39 +210,41 @@
     nas_storage_password_hashes: >-
       {{
         (nas_storage_password_hashes | default({}))
-        | combine({item.name: (nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] | hash('sha256'))})
+        | combine({item.secret_prefix: (nas_storage_secrets[item.secret_prefix ~ nas_storage_password_field_suffix] | hash('sha256'))})
       }}
-  loop: "{{ nas_storage_managed_users }}"
+  loop: "{{ nas_storage_resolved_users }}"
   loop_control:
-    label: "{{ item.name }}"
-  when: nas_storage_managed_users | length > 0
+    label: "{{ item.secret_prefix }}"
+  when: nas_storage_resolved_users | default([]) | length > 0
   no_log: true
   tags:
     - nas_storage
     - nas_storage_samba
 
+# no_log because the resolved username is a secret and reaches argv here.
 - name: Check existing Samba users
   ansible.builtin.command:
-    cmd: "pdbedit -L -u {{ item.name }}"
+    cmd: "pdbedit -L -u {{ item.username }}"
   register: nas_storage_samba_user_checks
   changed_when: false
   failed_when: false
-  loop: "{{ nas_storage_managed_users }}"
+  no_log: true
+  loop: "{{ nas_storage_resolved_users }}"
   loop_control:
-    label: "{{ item.name }}"
-  when: nas_storage_managed_users | length > 0
+    label: "{{ item.secret_prefix }}"
+  when: nas_storage_resolved_users | default([]) | length > 0
   tags:
     - nas_storage
     - nas_storage_samba
 
 - name: Check stored password fingerprints
   ansible.builtin.stat:
-    path: "{{ nas_storage_password_fingerprint_dir }}/{{ item.name }}.sha256"
+    path: "{{ nas_storage_password_fingerprint_dir }}/{{ item.secret_prefix }}.sha256"
   register: nas_storage_password_fingerprint_stats
-  loop: "{{ nas_storage_managed_users }}"
+  loop: "{{ nas_storage_resolved_users }}"
   loop_control:
-    label: "{{ item.name }}"
-  when: nas_storage_managed_users | length > 0
+    label: "{{ item.secret_prefix }}"
+  when: nas_storage_resolved_users | default([]) | length > 0
   no_log: true
   tags:
     - nas_storage
@@ -215,14 +252,14 @@
 
 - name: Load stored password fingerprints
   ansible.builtin.slurp:
-    src: "{{ nas_storage_password_fingerprint_dir }}/{{ item.name }}.sha256"
+    src: "{{ nas_storage_password_fingerprint_dir }}/{{ item.secret_prefix }}.sha256"
   register: nas_storage_password_fingerprint_contents
-  loop: "{{ nas_storage_managed_users }}"
+  loop: "{{ nas_storage_resolved_users }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.secret_prefix }}"
     index_var: nas_storage_user_index
   when:
-    - nas_storage_managed_users | length > 0
+    - nas_storage_resolved_users | default([]) | length > 0
     - nas_storage_password_fingerprint_stats.results[nas_storage_user_index].stat.exists
   no_log: true
   tags:
@@ -231,14 +268,14 @@
 
 - name: Add Samba users to passdb
   ansible.builtin.command:
-    cmd: "smbpasswd -s -a {{ item.name }}"
-    stdin: "{{ nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] }}\n{{ nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] }}"
-  loop: "{{ nas_storage_managed_users }}"
+    cmd: "smbpasswd -s -a {{ item.username }}"
+    stdin: "{{ nas_storage_secrets[item.secret_prefix ~ nas_storage_password_field_suffix] }}\n{{ nas_storage_secrets[item.secret_prefix ~ nas_storage_password_field_suffix] }}"
+  loop: "{{ nas_storage_resolved_users }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.secret_prefix }}"
     index_var: nas_storage_user_index
   when:
-    - nas_storage_managed_users | length > 0
+    - nas_storage_resolved_users | default([]) | length > 0
     - nas_storage_samba_user_checks.results[nas_storage_user_index].rc != 0
   changed_when: true
   no_log: true
@@ -248,21 +285,21 @@
 
 - name: Rotate Samba passwords when fingerprints drift
   ansible.builtin.command:
-    cmd: "smbpasswd -s {{ item.name }}"
-    stdin: "{{ nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] }}\n{{ nas_storage_passwords[item.name ~ nas_storage_password_field_suffix] }}"
-  loop: "{{ nas_storage_managed_users }}"
+    cmd: "smbpasswd -s {{ item.username }}"
+    stdin: "{{ nas_storage_secrets[item.secret_prefix ~ nas_storage_password_field_suffix] }}\n{{ nas_storage_secrets[item.secret_prefix ~ nas_storage_password_field_suffix] }}"
+  loop: "{{ nas_storage_resolved_users }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.secret_prefix }}"
     index_var: nas_storage_user_index
   when:
-    - nas_storage_managed_users | length > 0
+    - nas_storage_resolved_users | default([]) | length > 0
     - nas_storage_samba_user_checks.results[nas_storage_user_index].rc == 0
     - >-
       not nas_storage_password_fingerprint_stats.results[nas_storage_user_index].stat.exists
       or (
         (nas_storage_password_fingerprint_contents.results[nas_storage_user_index].content
           | default('') | b64decode | trim)
-        != nas_storage_password_hashes[item.name]
+        != nas_storage_password_hashes[item.secret_prefix]
       )
   changed_when: true
   no_log: true
@@ -272,24 +309,24 @@
 
 - name: Persist Samba password fingerprints
   ansible.builtin.copy:
-    dest: "{{ nas_storage_password_fingerprint_dir }}/{{ item.name }}.sha256"
-    content: "{{ nas_storage_password_hashes[item.name] }}\n"
+    dest: "{{ nas_storage_password_fingerprint_dir }}/{{ item.secret_prefix }}.sha256"
+    content: "{{ nas_storage_password_hashes[item.secret_prefix] }}\n"
     owner: root
     group: root
     mode: "0600"
-  loop: "{{ nas_storage_managed_users }}"
+  loop: "{{ nas_storage_resolved_users }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.secret_prefix }}"
     index_var: nas_storage_user_index
   when:
-    - nas_storage_managed_users | length > 0
+    - nas_storage_resolved_users | default([]) | length > 0
     - >-
       nas_storage_samba_user_checks.results[nas_storage_user_index].rc != 0
       or not nas_storage_password_fingerprint_stats.results[nas_storage_user_index].stat.exists
       or (
         (nas_storage_password_fingerprint_contents.results[nas_storage_user_index].content
           | default('') | b64decode | trim)
-        != nas_storage_password_hashes[item.name]
+        != nas_storage_password_hashes[item.secret_prefix]
       )
   no_log: true
   tags:
@@ -334,7 +371,7 @@
     validate: "{{ nas_storage_smb_validate_cmd }}"
   loop: "{{ nas_storage_shares }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.secret_prefix }}"
   notify: Restart smbd
   tags:
     - nas_storage

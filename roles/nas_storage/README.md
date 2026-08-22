@@ -32,7 +32,7 @@ node_storage = {
       group_name      = "nas"
       workgroup       = "WORKGROUP"
       macos_optimized = true
-      managed_users   = [{ name = "...", password_secret_env = "..." }]
+      managed_users   = [{ secret_prefix = "...", unix_groups = ["nas"] }]
     }
     pools = {
       <pool> = {
@@ -61,7 +61,16 @@ nodes, not an error.
 ## Inputs
 
 - The resolved OpenTofu inventory must contain `node_storage`
-- Each managed user's `password_secret_env` must be readable from OpenBao
+- Each managed account's `secret_prefix` selects two OpenBao fields at
+  `secret/apps/nas`: `<secret_prefix>_username` and `<secret_prefix>_password`.
+  Both are secrets -- a login name is half a credential and is not rotatable
+  once published, so it appears in neither the declaration nor the logs.
+- The converge AppRole needs an explicit read grant on that path. The policy
+  enumerates exact paths and has no `apps/*` wildcard, so a new consumer is a
+  new entry there; without it the read returns 403, which under `no_log` looks
+  exactly like a missing field.
+- Shares authorize by group (`valid_users = "@nas"`). Samba reads a bare word
+  as a username, so naming an account in a share would publish it again.
 
 ## Usage
 

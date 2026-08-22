@@ -66,16 +66,34 @@
         cmd: testparm -s
       changed_when: false
 
-    - name: Verify the managed Samba user exists
+    # The account is created under the name from the SECRET MAP
+    # ("molecule-resolved-user"), not the one from the declaration -- the
+    # declaration has no name at all. A role that skipped resolution would
+    # create nothing, or create an account named after the prefix, and this
+    # lookup would fail either way.
+    - name: Verify the managed Samba account exists under its RESOLVED name
       ansible.builtin.command:
-        cmd: "pdbedit -L -u jevans"
+        cmd: "pdbedit -L -u molecule-resolved-user"
       changed_when: false
 
-    - name: Verify Samba password fingerprint exists
+    - name: Verify the resolved account exists as a unix user
+      ansible.builtin.command:
+        cmd: "getent passwd molecule-resolved-user"
+      changed_when: false
+
+    # The fingerprint is keyed by PREFIX, not by login name: a filename on a
+    # shared host is a publication too.
+    - name: Verify Samba password fingerprint is keyed by prefix
       ansible.builtin.stat:
-        path: /etc/samba/password-fingerprints/jevans.sha256
+        path: /etc/samba/password-fingerprints/smb_user.sha256
       register: samba_fingerprint
       failed_when: not samba_fingerprint.stat.exists
+
+    - name: Assert no fingerprint is keyed by the login name
+      ansible.builtin.stat:
+        path: /etc/samba/password-fingerprints/molecule-resolved-user.sha256
+      register: samba_fingerprint_by_name
+      failed_when: samba_fingerprint_by_name.stat.exists
 
     - name: Read the all-nulls share config
       ansible.builtin.slurp:

@@ -18,6 +18,13 @@
   vars:
     nas_validate_shares: "{{ (nas_storage_from_tofu | default({}, true)).shares | default([], true) }}"
     nas_validate_user: "{{ ((nas_storage_from_tofu | default({}, true)).managed_users | default([], true) | first) | default({}, true) }}"
+    # Same identity source as the role: a login name is a secret, so it is
+    # resolved from OpenBao rather than read out of the declaration.
+    nas_validate_bao_addr: >-
+      {{ lookup('env', 'BAO_ADDR')
+         | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
+    nas_validate_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
+    nas_validate_bao_path: secret/data/apps/nas
 
   tasks:
     - name: Skip nodes that declare no share
@@ -63,21 +70,49 @@
       loop_control:
         label: "{{ item.name }}"
 
+    # Resolve the managed account's credentials from OpenBao. Skipped rather
+    # than failed when the converge has no token, so the config checks above
+    # still run without credentials.
+    - name: Read the managed-account identity from OpenBao
+      ansible.builtin.uri:
+        url: "{{ nas_validate_bao_addr }}/v1/{{ nas_validate_bao_path }}"
+        headers:
+          X-Vault-Token: "{{ nas_validate_bao_token }}"
+        follow_redirects: all
+      register: nas_validate_bao_read
+      delegate_to: localhost
+      run_once: true
+      become: false
+      no_log: true
+      when:
+        - nas_validate_user.secret_prefix is defined
+        - nas_validate_bao_addr | length > 0
+        - nas_validate_bao_token | length > 0
+
+    - name: Set the managed-account identity map
+      ansible.builtin.set_fact:
+        nas_validate_secrets: >-
+          {{ ((nas_validate_bao_read.json | default({}, true)).data
+              | default({}, true)).data | default({}, true) }}
+      run_once: true
+      no_log: true
+      when: not (nas_validate_bao_read.skipped | default(false))
+
     # The only check here that exercises the SERVICE rather than its config.
-    # Needs the managed user's password in the environment, under the name the
-    # declaration itself gives; skipped rather than failed when absent, so the
-    # config checks above still run without credentials.
-    - name: Authenticate to the share list as the managed user
+    - name: Authenticate to the share list as the managed account
       ansible.builtin.command:
         cmd: >-
-          smbclient -L localhost -U {{ nas_validate_user.name }}%{{
-            lookup('env', nas_validate_user.password_secret_env) }}
+          smbclient -L localhost -U {{
+            nas_validate_secrets[nas_validate_user.secret_prefix ~ '_username'] }}%{{
+            nas_validate_secrets[nas_validate_user.secret_prefix ~ '_password'] }}
       register: nas_validate_smbclient
       changed_when: false
       no_log: true
       when:
-        - nas_validate_user.name is defined
-        - lookup('env', nas_validate_user.password_secret_env | default('')) | length > 0
+        - nas_validate_user.secret_prefix is defined
+        - nas_validate_secrets is defined
+        - nas_validate_secrets[nas_validate_user.secret_prefix ~ '_username'] | default('', true) | length > 0
+        - nas_validate_secrets[nas_validate_user.secret_prefix ~ '_password'] | default('', true) | length > 0
 
     - name: Assert the served share list matches the declaration
       ansible.builtin.assert:
