@@ -16,65 +16,58 @@
       "ip": "192.168.0.20",
       "node": "pve-w1700",
       "pool_id": "infrastructure",
-      "tags": ["container", "object-storage", "storage"],
+      "tags": [
+        "container",
+        "object-storage",
+        "storage"
+      ],
       "vmid": 902000,
       "mac": "02:00:00:00:00:01",
       "ansible_pct_vmid": 902000
     }
   },
-  "host_services": {
-    "nas": {
-      "zfs_dataset": "rpool/data/nas",
-      "zfs_quota": "1T",
-      "mount_point": "/mnt/nas",
-      "smb_share_name": "nas",
-      "directories": ["huggingface/hub", "ollama/models", "media", "backups"],
-      "group_name": "nas",
-      "managed_users": [
-        {
-          "name": "homeassistant",
-          "unix_groups": ["nas"],
-          "shell": "/usr/sbin/nologin",
-          "create_home": false,
-          "password_secret_env": "NAS_HOMEASSISTANT_SMB_PASSWORD"
+  "node_storage": {
+    "pve-w1700": {
+      "smb": {
+        "group_name": "nas",
+        "workgroup": "WORKGROUP",
+        "macos_optimized": true,
+        "managed_users": [
+          {
+            "name": "jevans",
+            "unix_groups": [
+              "nas"
+            ],
+            "shell": "/usr/sbin/nologin",
+            "create_home": false,
+            "password_secret_env": "NAS_JEVANS_SMB_PASSWORD"
+          }
+        ]
+      },
+      "pools": {
+        "bulk": {
+          "datasets": {
+            "jdrive": {
+              "mountpoint": "/bulk/jdrive",
+              "smb": {
+                "share_name": "jdrive",
+                "comment": "General file share"
+              }
+            },
+            "timemachine": {
+              "mountpoint": "/bulk/timemachine",
+              "smb": {
+                "share_name": "timemachine",
+                "time_machine": true,
+                "time_machine_max_size": "600G"
+              }
+            },
+            "private": {
+              "quota": "1T"
+            }
+          }
         }
-      ],
-      "shares": [
-        {
-          "name": "nas",
-          "path": "/mnt/nas",
-          "valid_users": "@nas",
-          "browsable": true,
-          "read_only": false,
-          "force_group": "nas",
-          "create_mask": "0664",
-          "directory_mask": "0775",
-          "comment": "Primary NAS root share"
-        },
-        {
-          "name": "ha-backups",
-          "path": "/mnt/nas/backups",
-          "valid_users": "homeassistant",
-          "browsable": true,
-          "read_only": false,
-          "force_group": "nas",
-          "create_mask": "0664",
-          "directory_mask": "0775",
-          "comment": "Home Assistant backup storage"
-        },
-        {
-          "name": "ha-media",
-          "path": "/mnt/nas/media",
-          "valid_users": "homeassistant",
-          "browsable": true,
-          "read_only": false,
-          "force_group": "nas",
-          "create_mask": "0664",
-          "directory_mask": "0775",
-          "comment": "Home Assistant media storage"
-        }
-      ],
-      "description": "Host-level NAS: ZFS dataset on local-zfs served via Samba. Managed by ansible-proxmox."
+      }
     }
   }
 }
