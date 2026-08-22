@@ -1,11 +1,13 @@
 #!/bin/sh
 {{ ansible_managed | comment }}
 #
-# zed runs EVERY script in zed.d/ for EVERY event (zed does not filter by
-# filename -- each script is responsible for checking ZEVENT_SUBCLASS and
-# exiting early). This one watches for the specific fault signature that
-# produced 3 real corruption+hang events on this pool over 8 days
-# (Zammad #17242): a checksum error, or an I/O delay past the threshold.
+# zed runs a zedlet only when its FILENAME starts with the event class, the
+# subclass, or "all", followed by a non-alphabetic character. This file is
+# installed once per handled subclass (checksum-, delay-) from a single
+# template, and each copy still re-checks ZEVENT_SUBCLASS so both behave
+# identically. It watches for the specific fault signature that produced 3
+# real corruption+hang events on this pool over 8 days (Zammad #17242): a
+# checksum error, or an I/O delay past the threshold.
 #
 # ZEVENT_ZIO_DELAY is documented (zfs-events(5)) as nanoseconds. No live
 # event was available to confirm the exact value at write time -- the alert

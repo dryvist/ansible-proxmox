@@ -3,6 +3,14 @@
 # as wol_enable_enabled / nvidia_driver_enabled.
 zfs_fault_alert_enabled: false
 
+# zed dispatches a zedlet only when its filename starts with the event class,
+# the subclass, or "all", followed by a non-alphabetic character. The watcher
+# is therefore installed once per subclass it handles; adding a subclass here
+# also requires a matching arm in templates/zfs-fault-watch.sh.j2.
+zfs_fault_alert_zed_subclasses:
+  - checksum
+  - delay
+
 # Which pool this host's zed dispatch watches. Deliberately per-host, not
 # estate-wide -- see the role README for why this does not duplicate
 # pve_health_telemetry's "zpool degradation -> ZED, already journal -> syslog"

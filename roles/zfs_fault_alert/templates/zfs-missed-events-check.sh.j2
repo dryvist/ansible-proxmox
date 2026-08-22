@@ -29,10 +29,20 @@ journalctl -u zfs-zed $cursor_arg --show-cursor --no-pager > "$tmp_out"
 hits=$(grep -c "Missed events" "$tmp_out" || true)
 
 new_cursor=$(sed -n 's/^-- cursor: //p' "$tmp_out")
-[[ -n "$new_cursor" ]] && echo "$new_cursor" > "$CURSOR_FILE"
 rm -f "$tmp_out"
 
+# The cursor is only advanced once the overflow is either absent or actually
+# reported. Advancing it first would consume the overflow lines even when the
+# Zammad POST failed, so no later run would retry and the ticket would be lost
+# -- the one window where this mechanism matters most.
 if [[ "${hits:-0}" -gt 0 ]]; then
-  /usr/local/bin/zfs-fault-alert.sh "zed event-queue overflow (Missed events)" \
-    "count=${hits} since_last_check -- monitoring was blind for this window"
+  if ! /usr/local/bin/zfs-fault-alert.sh "zed event-queue overflow (Missed events)" \
+      "count=${hits} since_last_check -- monitoring was blind for this window"; then
+    logger -t zfs-missed-events-check \
+      "alert failed; leaving cursor unadvanced so the next run retries ${hits} missed-event line(s)"
+    exit 1
+  fi
 fi
+
+[[ -n "$new_cursor" ]] && echo "$new_cursor" > "$CURSOR_FILE"
+exit 0

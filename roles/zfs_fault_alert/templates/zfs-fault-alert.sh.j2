@@ -33,6 +33,14 @@ TOKEN=$(<"$TOKEN_FILE")
 # creating a ticket. Used by the Ansible converge as end-to-end proof this is
 # actually live, not just "files present."
 if [[ "$REASON" == "--self-check" ]]; then
+  # jq builds the ticket payload below. A self-check that only proves Zammad
+  # is reachable would pass on a host where a real firing dies at payload
+  # time, which is exactly the false "path is live" signal this exists to
+  # prevent.
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "zfs-fault-alert self-check FAILED: jq is not installed -- ticket payload cannot be built" >&2
+    exit 1
+  fi
   code=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 10 \
     -H "Authorization: Token token=${TOKEN}" \
     "${ZAMMAD_URL}/api/v1/users/me")

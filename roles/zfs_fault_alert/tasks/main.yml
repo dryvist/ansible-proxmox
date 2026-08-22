@@ -83,6 +83,14 @@
         mode: "0600"
       no_log: true
 
+    # jq builds the ticket payload in zfs-fault-alert.sh. Without it the
+    # converge self-check still passes (it only calls curl) while a real
+    # firing dies mid-payload -- an alert path that looks armed and is not.
+    - name: Install jq (required to build the Zammad ticket payload)
+      ansible.builtin.package:
+        name: jq
+        state: present
+
     - name: Deploy the shared alert script
       ansible.builtin.template:
         src: zfs-fault-alert.sh.j2
@@ -91,13 +99,19 @@
         group: root
         mode: "0755"
 
-    - name: Deploy the zed dispatch watcher
+    # zed only runs a zedlet whose FILENAME begins with the event class, the
+    # subclass, or "all", followed by a non-alphabetic character
+    # (zed_exec_process in zed_exec.c). A name like zfs-fault-watch.sh matches
+    # nothing and is never invoked, so the watcher is installed once per
+    # subclass it handles rather than under a single neutral name.
+    - name: Deploy the zed dispatch watcher under each subclass it handles
       ansible.builtin.template:
         src: zfs-fault-watch.sh.j2
-        dest: /etc/zfs/zed.d/zfs-fault-watch.sh
+        dest: "/etc/zfs/zed.d/{{ item }}-zfs-fault-watch.sh"
         owner: root
         group: root
         mode: "0755"
+      loop: "{{ zfs_fault_alert_zed_subclasses }}"
       notify: Restart zed to pick up the new zed.d script
 
     - name: Deploy the missed-events poller script
@@ -155,7 +169,32 @@
       ansible.builtin.debug:
         var: zfs_fault_alert_self_check.stdout
 
-# Runs unconditionally (outside the block above) so turning zfs_fault_alert_enabled
+# Opting a host out has to actually disarm it. Without this, disabling the role
+# only skips the block above: the zedlets and the deployed Zammad token stay on
+# disk and keep filing tickets on every checksum/delay event forever.
+- name: Disarm the ZFS fault alert on a host that has opted out
+  when: not (zfs_fault_alert_enabled | bool)
+  tags:
+    - zfs_fault_alert
+  block:
+    - name: Remove the zed dispatch watchers, scripts, units and token
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: >-
+        {{ zfs_fault_alert_zed_subclasses
+           | map('regex_replace', '^(.*)$', '/etc/zfs/zed.d/\\1-zfs-fault-watch.sh')
+           | list
+           + ['/usr/local/bin/zfs-fault-alert.sh',
+              '/usr/local/bin/zfs-missed-events-check.sh',
+              '/etc/systemd/system/zfs-missed-events-check.service',
+              '/etc/systemd/system/zfs-missed-events-check.timer',
+              '/etc/zfs-fault-alert'] }}
+      notify:
+        - Restart zed to pick up the new zed.d script
+        - Reload systemd for zfs_fault_alert
+
+# Runs unconditionally (outside both blocks) so turning zfs_fault_alert_enabled
 # off actually stops/disables the timer rather than leaving it running with no
 # owner. failed_when: false tolerates the unit never having been rendered (a host
 # that was never enabled has nothing to stop).
