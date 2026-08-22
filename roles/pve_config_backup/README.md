@@ -55,3 +55,16 @@ Extract the newest archive under the archive directory
 against a live `/etc/pve` read — never `pct`/`qm` config edits directly from
 the tar. A real restore into a rebuilt cluster's `pmxcfs` is an operator
 action outside this role's scope.
+
+## What it captures, and why running it on one member is enough
+
+The archive is a daily tar of the local pmxcfs mount (`/etc/pve`): cluster
+configuration, storage definitions, firewall, HA and replication config, and
+ACLs. It lands in the generic `<pool>/databases` archive namespace — the same
+shape as `sqlite_standby` and `postgres_standby`, with a different source.
+
+pmxcfs replicates cluster-wide, so the copy on any one member is the whole
+cluster's configuration. Enabling this on a second node would duplicate the
+same content rather than covering anything new, which is why it is inert unless
+a host explicitly sets `pve_config_backup_enabled: true` — in practice the node
+that already owns the `<pool>/databases` dataset.
