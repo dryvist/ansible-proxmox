@@ -1,0 +1,116 @@
+---
+# Reports quorum headroom on every converge and fails when it is short.
+#
+# Headroom is the number of voting members the cluster can lose at once and
+# stay quorate. `Highest expected` counts every configured voter, including one
+# that is powered off and can never cast its vote, so the raw numbers overstate
+# resilience by exactly the number of such voters -- and the overstatement is
+# invisible while the cluster is healthy. Subtracting them is the whole point of
+# this role.
+#
+# Read-only throughout: two query commands and two asserts.
+
+- name: Guard cluster quorum headroom
+  when:
+    - pve_quorum_guard_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_quorum_guard
+    - monitoring
+  block:
+    - name: Read the live quorum state
+      ansible.builtin.command: corosync-quorumtool -s
+      register: pve_quorum_guard_state
+      changed_when: false
+      # Exits non-zero when the cluster is inquorate, which is precisely when
+      # this guard is most worth reading. Judge the output, not the code.
+      failed_when: false
+      check_mode: false
+
+    - name: Read the configured corosync nodelist
+      ansible.builtin.command: corosync-cmapctl -b nodelist.node
+      register: pve_quorum_guard_nodelist
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Derive the vote arithmetic
+      ansible.builtin.set_fact:
+        # `Highest expected` rather than `Expected votes`: the latter is what
+        # votequorum is currently running with and can be lowered at runtime,
+        # so it would hide a shortfall instead of reporting it.
+        pve_quorum_guard_highest_expected: >-
+          {{ (pve_quorum_guard_state.stdout | regex_search('Highest expected:\s+(\d+)', '\1')
+              | default([0], true) | first | int) }}
+        pve_quorum_guard_quorum: >-
+          {{ (pve_quorum_guard_state.stdout | regex_search('Quorum:\s+(\d+)', '\1')
+              | default([0], true) | first | int) }}
+        pve_quorum_guard_configured_names: >-
+          {{ pve_quorum_guard_nodelist.stdout
+             | regex_findall('nodelist\.node\.\d+\.name \([^)]*\) = (\S+)') }}
+
+    - name: Assert the quorum state was readable
+      ansible.builtin.assert:
+        that:
+          - pve_quorum_guard_highest_expected | int > 0
+          - pve_quorum_guard_quorum | int > 0
+        fail_msg: >-
+          Could not read Highest expected / Quorum from corosync-quorumtool on
+          {{ inventory_hostname }}. The guard refuses to pass on unparsed
+          output -- an unreadable quorum state is not a healthy one.
+        quiet: true
+
+    - name: Assert every declared powered-off voter is a configured node
+      ansible.builtin.assert:
+        that:
+          - pve_quorum_guard_powered_off_voters | difference(pve_quorum_guard_configured_names) | length == 0
+        fail_msg: >-
+          pve_quorum_guard_powered_off_voters names
+          {{ pve_quorum_guard_powered_off_voters | difference(pve_quorum_guard_configured_names) }},
+          which corosync does not have in its nodelist
+          ({{ pve_quorum_guard_configured_names }}). A name that matches nothing
+          subtracts nothing, so the headroom below would silently overstate
+          resilience -- the exact blind spot this list removes.
+        quiet: true
+
+    - name: Compute headroom
+      ansible.builtin.set_fact:
+        pve_quorum_guard_castable: >-
+          {{ (pve_quorum_guard_highest_expected | int)
+             - (pve_quorum_guard_powered_off_voters | length) }}
+        pve_quorum_guard_headroom: >-
+          {{ (pve_quorum_guard_highest_expected | int)
+             - (pve_quorum_guard_powered_off_voters | length)
+             - (pve_quorum_guard_quorum | int) }}
+
+    # Always reported, pass or fail: a guard that only speaks when it trips
+    # leaves nobody able to see resilience shrinking toward the threshold.
+    - name: Report quorum headroom
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: highest expected
+          {{ pve_quorum_guard_highest_expected }}, of which
+          {{ pve_quorum_guard_powered_off_voters | length }} declared powered
+          off, leaving {{ pve_quorum_guard_castable }} castable against a quorum
+          of {{ pve_quorum_guard_quorum }} -- headroom
+          {{ pve_quorum_guard_headroom }} (minimum
+          {{ pve_quorum_guard_min_headroom }}).
+
+    - name: Assert quorum headroom meets the declared minimum
+      ansible.builtin.assert:
+        that:
+          - pve_quorum_guard_headroom | int >= pve_quorum_guard_min_headroom | int
+        fail_msg: >-
+          Quorum headroom is {{ pve_quorum_guard_headroom }}, below the required
+          {{ pve_quorum_guard_min_headroom }}:
+          {{ pve_quorum_guard_castable }} castable votes against a quorum of
+          {{ pve_quorum_guard_quorum }}. Losing
+          {{ pve_quorum_guard_headroom | int + 1 }} more voter(s) blocks cluster
+          activity, and every `onboot` guest on the survivors stays stopped.
+          Remediation is a vote-topology change, not an override: give a
+          permanently powered-off member zero votes, or add an external
+          arbiter. Both are operator actions in a maintenance window -- see
+          roles/pve_quorum_guard/README.md. Never clear this with
+          `pvecm expected`, which lowers the bar without adding a vote and
+          leaves the partition able to diverge.
+        quiet: true

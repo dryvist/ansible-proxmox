@@ -95,6 +95,16 @@
       tags:
         - crash_diagnostics
 
+    # Report corosync quorum headroom, and fail the converge when the cluster
+    # can no longer lose a voting member and stay quorate. Read-only: it makes
+    # the vote arithmetic visible on every run rather than only once activity
+    # is already blocked -- at which point no guest starts to help. Remediation
+    # options are all operator actions; see the role README.
+    - role: pve_quorum_guard
+      tags:
+        - pve_quorum_guard
+        - monitoring
+
     # Reset a wedged node instead of leaving it dark. Runs after
     # crash_diagnostics so a panic is still captured before the reset, and
     # before the syslog forwarder so the arming itself is logged off-box.

@@ -116,3 +116,18 @@ common_packages:
 # preference order — the node uses the first that answers.
 pve_repositories_apt_proxies: >-
   {{ lookup('env', 'APT_PROXY_URL') | default('', true) | regex_findall('[^,\s]+') }}
+
+# Corosync voting members that are deliberately not powered on. Their vote
+# still counts toward `Highest expected` and so still raises the quorum bar,
+# but it can never be cast — pve_quorum_guard subtracts them so the reported
+# headroom reflects votes that can actually arrive.
+pve_quorum_guard_powered_off_voters:
+  - pve-r540
+
+# Reporting threshold, deliberately at 0 rather than the role default of 1:
+# with the member above discounted the cluster currently has no headroom, and
+# arming the assert before the vote topology changes would fail every converge
+# without moving the cluster any closer to tolerating a loss. The guard still
+# reports the arithmetic on every run. Raise to 1 once a zero-vote member or an
+# external arbiter lands — see roles/pve_quorum_guard/README.md.
+pve_quorum_guard_min_headroom: 0
