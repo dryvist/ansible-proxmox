@@ -21,3 +21,24 @@
         that:
           - ipmitool_check.rc != 0
         fail_msg: "ipmitool was installed — Docker-skip guard did not hold"
+
+    # The power-restore policy is compared against a value parsed out of
+    # `ipmitool chassis status`, which only runs against a real BMC. Exercise
+    # that parse here instead, including the wider spacing older BMC
+    # generations emit — a parse that silently yields '' would re-issue the
+    # `chassis policy` call on every converge and report a change every time.
+    - name: Assert the power-restore policy parse reads the configured value
+      ansible.builtin.assert:
+        that:
+          - (idrac_sample_tight | regex_search(idrac_policy_re)
+             | default('', true)).split(':') | last | trim == 'always-on'
+          - (idrac_sample_wide | regex_search(idrac_policy_re)
+             | default('', true)).split(':') | last | trim == 'previous'
+          - (idrac_sample_absent | regex_search(idrac_policy_re)
+             | default('', true)).split(':') | last | trim == ''
+        fail_msg: "idrac_power no longer parses the chassis status policy line as expected"
+      vars:
+        idrac_policy_re: 'Power Restore Policy\s*:\s*\S+'
+        idrac_sample_tight: "Power Restore Policy: always-on"
+        idrac_sample_wide: "Power Restore Policy     : previous"
+        idrac_sample_absent: "System Power         : on"

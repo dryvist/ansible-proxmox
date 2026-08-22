@@ -54,3 +54,27 @@ idrac_power_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"
 # insulates this from BMC re-addressing (the golden rule). Set in host_vars/<node>
 # .yml from the environment (Doppler) / SOPS; never committed, no safe default.
 # idrac_power_bmc_host: "node-idrac.<subdomain>"
+
+# What the chassis does when AC returns after a power loss (IPMI "Power
+# Restore Policy", the same firmware setting a Dell PowerEdge BIOS calls "AC
+# Power Recovery"):
+#
+#   always-on   power up unconditionally
+#   previous    restore whatever state the chassis was in when AC was lost
+#   always-off  stay off until told otherwise
+#
+# `always-on` is the default here because the alternatives make an unattended
+# return of AC conditional: `previous` leaves a node that was deliberately
+# powered down still down, and — where the firmware records the state at the
+# moment of loss rather than the last commanded one — can leave a node that
+# was running down as well. A node nobody is present to press a button on
+# needs the unconditional setting.
+#
+# Set via IPMI rather than a vendor BIOS tool: `ipmitool chassis policy` is
+# applied by the BMC immediately with no staged BIOS job and no reboot, works
+# across vendors and BMC generations, and reuses the credentials and
+# controller delegation this role already has.
+#
+# Set to "" to leave the policy alone (e.g. a node that must stay off until an
+# operator decides otherwise).
+idrac_power_restore_policy: always-on

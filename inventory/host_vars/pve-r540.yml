@@ -80,3 +80,14 @@ postgres_standby_jobs: >-
         'source_dir': '/',
         'archive_dir': '/bulk/databases/postgres-ai'}
      ] }}
+
+# BMC address for the idrac_power role. This node has a BMC but carried no
+# address, so the role skipped it entirely -- including the chassis
+# power-restore policy, which is what brings a node back unattended when AC
+# returns. Sourced from the environment (Doppler) like every other node's, and
+# inert until that variable is set, so the role still skips rather than
+# failing if it is absent.
+#
+# Only the address: pve_power_managed is deliberately NOT set here. This node
+# is always-on, and that flag drives site.yml's power-on/power-off bookends.
+idrac_power_bmc_host: "{{ lookup('env', 'PVE5_BMC_HOSTNAME') | default('', true) }}"

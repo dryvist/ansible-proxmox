@@ -324,6 +324,14 @@
       tags:
         - wol_enable
 
+    # Chassis power-restore policy, so AC returning brings a node back with
+    # nobody present. Here, not only in the power plays above: a node this
+    # role never cycles is the one that must come back on its own. Default
+    # `status` action — reconciles the policy, changes no power state.
+    - role: idrac_power
+      tags:
+        - idrac_power
+
     # NVIDIA host GPU driver, so LXC guests can be handed the card via device
     # passthrough. Inert unless a host sets nvidia_driver_enabled: true, and
     # fails loud if opted in on a node with no NVIDIA card on the PCI bus.

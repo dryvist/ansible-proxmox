@@ -168,3 +168,31 @@ genuinely down (avoid split-brain — one writer, always).
 - **The replica is not a backup of last resort** — it tracks the source,
   including accidental deletes. Point-in-time recovery comes from sanoid
   snapshot retention, not from replication.
+
+## 7. Commissioning requirement: unconditional power-on when AC returns
+
+Every node must come back on its own when mains power is restored, without
+anybody present. Nothing in this runbook is reachable while a node is dark,
+and no network method can wake one: a Wake-on-LAN magic packet only reaches a
+NIC that still has standby power, which means AC already present at the PSU.
+Return-from-AC-loss is therefore a firmware setting, and it is the one part of
+DR that has to be right before the node is ever needed.
+
+Set it to power on **unconditionally**, not to restore the previous state. A
+"last state" setting leaves a node that was deliberately powered down still
+down, and — where the firmware records the state at the moment of loss rather
+than the last commanded one — can leave a node that was running down as well.
+
+| Node has | How it is set | Where |
+| --- | --- | --- |
+| A BMC | `ipmitool chassis policy always-on` — applied immediately, no reboot | Converged by [`idrac_power`](../roles/idrac_power/README.md) |
+| No BMC | BIOS/UEFI: "AC Power Recovery" (Dell) or "Restore AC Power Loss" (consumer boards) → **On** | At the console, during commissioning |
+
+Verify on a BMC-bearing node with `ipmitool ... chassis status` and read back
+the `Power Restore Policy` line. On a node with no BMC the setting can only be
+confirmed in the firmware setup screen, so record that it was checked when the
+node is commissioned.
+
+A node whose PSU has no AC at all — the whole rack dark, a tripped feed, a
+pulled cord — is outside every method above, on any hardware. Bringing that
+back is a physical act.
