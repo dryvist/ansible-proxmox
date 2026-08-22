@@ -1,0 +1,107 @@
+---
+# Pool-LEVEL properties (`zpool set`), distinct from DATASET properties
+# (`zfs set`, handled by dataset_properties.yml).
+#
+# Called per-pool with `zfs_pool` = one { key: <pool>, value: {...} } entry.
+# Only pools confirmed present are passed in (see main.yml).
+
+- name: Read current pool properties
+  ansible.builtin.command:
+    argv:
+      - zpool
+      - get
+      - -H
+      - -o
+      - value
+      - "{{ item.key }}"
+      - "{{ zfs_pool.key }}"
+  loop: "{{ (zfs_pool.value.pool_properties | default({})) | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}.{{ item.key }}"
+  register: zfs_pools_prop_current
+  changed_when: false
+  failed_when: false
+
+# Compare before setting so the task is genuinely idempotent and a converge on an
+# already-correct pool reports changed=0 rather than rewriting every property.
+- name: Apply pool properties that differ
+  ansible.builtin.command:
+    argv:
+      - zpool
+      - set
+      - "{{ item.item.key }}={{ item.item.value }}"
+      - "{{ zfs_pool.key }}"
+  loop: "{{ zfs_pools_prop_current.results | default([]) }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}.{{ item.item.key }}={{ item.item.value }}"
+  when:
+    - item.rc is defined and item.rc == 0
+    - (item.stdout | default('') | trim) != (item.item.value | string)
+  changed_when: true
+
+# Topology assertion. Device by-id lists are deliberately NOT in the tofu
+# contract (they are hardware-specific; see zfs_pools_devices in defaults), but
+# the SHAPE is reproducible and belongs in code. This asserts the live pool
+# matches the declared shape, so drift -- or a rebuild that came out wrong --
+# fails the converge instead of being discovered months later.
+- name: Read actual vdev topology
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      zpool status {{ zfs_pool.key | quote }}
+      | awk '/^\t  (raidz[123]|mirror|draid)/ {t=$1}
+             /^\t    / {n++}
+             END {print t "|" n+0}'
+    executable: /bin/bash
+  register: zfs_pools_topology
+  changed_when: false
+  failed_when: false
+  when: zfs_pool.value.topology | default({}, true) | length > 0
+
+# NOTE: an undeclared `topology` arrives as NULL, not absent -- tofu renders
+# `optional(object({...}))` as an explicit null, and Jinja considers null
+# DEFINED. So `topology is defined` is TRUE for every pool that never declared
+# one, and the task below then dereferences `.type` on None. Ansible finalizes
+# `fail_msg` BEFORE evaluating `that:`, so the assert cannot even reach its
+# conditions -- it dies rendering the message for a failure that is not
+# happening. Guard on truthiness instead.
+- name: Assert vdev topology matches the declaration
+  ansible.builtin.assert:
+    that:
+      - zfs_pools_topology.stdout.split('|')[0] is match(zfs_pool.value.topology.type ~ '-[0-9]+')
+      - zfs_pools_topology.stdout.split('|')[1] | int == zfs_pool.value.topology.width | int
+    fail_msg: >-
+      Pool {{ zfs_pool.key }} topology MISMATCH.
+      Declared: {{ zfs_pool.value.topology.type }},
+      width {{ zfs_pool.value.topology.width }}.
+      Actual: {{ zfs_pools_topology.stdout.split('|')[0] | default('?') }},
+      width {{ zfs_pools_topology.stdout.split('|')[1] | default('?') }}.
+    success_msg: >-
+      {{ zfs_pool.key }}: {{ zfs_pool.value.topology.type }}
+      width {{ zfs_pool.value.topology.width }} as declared.
+  when:
+    - zfs_pool.value.topology | default({}, true) | length > 0
+    - zfs_pools_topology.stdout is defined
+    - zfs_pools_topology.stdout | length > 0
+
+- name: Assert ashift matches the declaration
+  when:
+    - zfs_pool.value.topology | default({}, true) | length > 0
+    - zfs_pool.value.topology.ashift is defined
+  block:
+    - name: Read ashift
+      ansible.builtin.command:
+        argv: [zpool, get, -H, -o, value, ashift, "{{ zfs_pool.key }}"]
+      register: zfs_pools_ashift
+      changed_when: false
+
+    - name: Compare ashift
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_ashift.stdout | trim | int == zfs_pool.value.topology.ashift | int
+        fail_msg: >-
+          Pool {{ zfs_pool.key }} ashift is
+          {{ zfs_pools_ashift.stdout | trim }}, declared
+          {{ zfs_pool.value.topology.ashift }}. ashift is IMMUTABLE after
+          creation -- a mismatch means the pool was built wrong and must be
+          rebuilt, not corrected.

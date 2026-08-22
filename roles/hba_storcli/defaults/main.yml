@@ -1,0 +1,60 @@
+---
+# hba_storcli — install Broadcom/Dell perccli (storcli-family CLI) and assert
+# every physical drive behind a MegaRAID-family controller (e.g. Dell PERC
+# H730P) is Non-RAID/JBOD passthrough, not a single-disk RAID0 virtual disk.
+# Fails the converge on mismatch: a RAID0-wrapped disk hides SMART/TLER and
+# defeats ZFS's own error handling, so this must be verified, not inferred
+# from indirect smartctl behavior.
+#
+# NO AUTOMATED DOWNLOAD: Dell does not publish a stable, anonymously-fetchable
+# URL for perccli — it sits behind an interactive driver-details page, and the
+# package name/version changes per refresh. Fabricating a URL here would ship
+# a role that silently 404s on first run. Instead, stage the .deb once
+# (download from Dell's PERCCLI driver page, `alien -k -d <rpm>` if only an
+# RPM is offered) into RustFS's central binaries store, and point this role at
+# it via hba_storcli_package_path.
+
+hba_storcli_enabled: true
+
+# Controller index to query (perccli64 /cN). MegaRAID-family cards are almost
+# always /c0; override per-host if a node has more than one.
+hba_storcli_controller_index: 0
+
+# Drive states perccli64 reports that are acceptable. "JBOD" and "UGood"
+# (Unconfigured Good) both indicate true passthrough; a drive under a RAID0
+# virtual disk instead shows state "Onln" attached to a "DG" (drive group).
+hba_storcli_acceptable_states:
+  - JBOD
+  - UGood
+
+# Locally-reachable .deb path (see note above for how to obtain one). Left
+# unset by default so the role fails loudly with instructions rather than
+# attempting a download that cannot exist.
+hba_storcli_package_path: ""
+hba_storcli_binary_name: perccli64
+hba_storcli_binary_search_paths:
+  - /opt/MegaRAID/perccli/perccli64
+  - /usr/sbin/perccli64
+  - /usr/local/sbin/perccli64
+
+# Parsed view of the controller's drive list. Lazily evaluated, so it costs
+# nothing until referenced and can be exercised in molecule by setting
+# hba_storcli_drive_query to a fixture -- the test then covers the REAL
+# expression rather than a copy of it that can drift.
+#
+# Deliberately plain Jinja rather than json_query: the perccli keys contain
+# spaces so they need quoting, and escaped inner quotes do not survive Jinja's
+# string literal -- the backslashes reach JMESPath verbatim and it rejects the
+# whole expression. A guard whose only job is to fail loudly must not be built
+# on a construct that errors before it can evaluate.
+hba_storcli_drives: >-
+  {{ (((((hba_storcli_drive_query | default({}, true)).stdout
+         | default('{}', true) | from_json).Controllers
+        | default([], true))[0] | default({}, true))['Response Data']
+      | default({}, true))['Drive Information'] | default([], true) }}
+
+# Any drive whose state is outside the accepted passthrough states. Empty list
+# means every drive is true passthrough.
+hba_storcli_bad_drives: >-
+  {{ hba_storcli_drives | default([], true)
+     | rejectattr('State', 'in', hba_storcli_acceptable_states) | list }}

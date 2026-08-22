@@ -1,0 +1,82 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # A verify play does not include the role, so role defaults are NOT in scope
+  # and every expression below would be undefined -- an assertion that can
+  # never pass reads as a broken role. Load the role's real defaults so the
+  # test covers the shipped expressions.
+  vars_files:
+    - ../../roles/hba_storcli/defaults/main.yml
+
+  vars:
+    # Realistic `perccli64 /c0 /eall/sall show J` shapes. Two drives in true
+    # passthrough plus one RAID0-wrapped ("Onln"), and an all-clean control.
+    fixture_mixed:
+      stdout: >-
+        {"Controllers": [{"Response Data": {"Drive Information": [
+          {"EID:Slt": "32:0", "State": "JBOD"},
+          {"EID:Slt": "32:1", "State": "UGood"},
+          {"EID:Slt": "32:2", "State": "Onln"}]}}]}
+    fixture_clean:
+      stdout: >-
+        {"Controllers": [{"Response Data": {"Drive Information": [
+          {"EID:Slt": "32:0", "State": "JBOD"},
+          {"EID:Slt": "32:1", "State": "UGood"}]}}]}
+    fixture_empty:
+      stdout: "{}"
+
+  tasks:
+    - name: Assert perccli was NOT installed under Docker (tasks skipped)
+      ansible.builtin.command: dpkg -s perccli
+      register: perccli_check
+      changed_when: false
+      failed_when: false
+
+    - name: Confirm the install/query tasks were inert in-container
+      ansible.builtin.assert:
+        that:
+          - perccli_check.rc != 0
+        fail_msg: "perccli was installed — Docker-skip guard did not hold"
+
+    # The converge skips every task in Docker, so nothing above exercises the
+    # guard itself. These evaluate the ROLE'S OWN expressions (defined in
+    # defaults/main.yml, referenced here by feeding a fixture into
+    # hba_storcli_drive_query) against known inputs, so a query that cannot
+    # parse — the exact defect this guard shipped with — fails CI instead of
+    # silently reporting every disk as compliant.
+    - name: A RAID0-wrapped drive must be detected
+      ansible.builtin.assert:
+        that:
+          - hba_storcli_drives | length == 3
+          - hba_storcli_bad_drives | length == 1
+          - hba_storcli_bad_drives | map(attribute='State') | list == ['Onln']
+        fail_msg: >-
+          The passthrough guard did not flag a RAID0-wrapped disk.
+          drives={{ hba_storcli_drives }} bad={{ hba_storcli_bad_drives }}
+        success_msg: "must-FAIL case detected the non-passthrough drive"
+      vars:
+        hba_storcli_drive_query: "{{ fixture_mixed }}"
+
+    - name: An all-passthrough controller must flag nothing
+      ansible.builtin.assert:
+        that:
+          - hba_storcli_drives | length == 2
+          - hba_storcli_bad_drives | length == 0
+        fail_msg: >-
+          The guard flagged a compliant controller.
+          bad={{ hba_storcli_bad_drives }}
+        success_msg: "must-PASS case flagged nothing"
+      vars:
+        hba_storcli_drive_query: "{{ fixture_clean }}"
+
+    - name: Malformed or empty controller output must not raise
+      ansible.builtin.assert:
+        that:
+          - hba_storcli_drives | length == 0
+          - hba_storcli_bad_drives | length == 0
+        success_msg: "empty output degrades safely"
+      vars:
+        hba_storcli_drive_query: "{{ fixture_empty }}"

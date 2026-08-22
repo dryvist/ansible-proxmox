@@ -25,15 +25,13 @@ if ! tar czf "$archive" -C "$(dirname "$SRC")" "$(basename "$SRC")"; then
   exit 1
 fi
 
-# Prune to the RETAIN most recent archives; oldest first. Count via `wc -l`
-# rather than bash's dollar-brace-hash array-length expansion -- writing that
-# sequence literally opens an unterminated Jinja comment, so
-# ansible.builtin.template fails the whole role at converge time even though
-# ansible-lint and a non-rendering Molecule run both pass clean. (Yes, this
-# comment must avoid the sequence too.)
+# Prune to the RETAIN most recent archives; oldest first. The array-length
+# expansion below sits in a Jinja raw block: written bare it opens an
+# unterminated Jinja comment and ansible.builtin.template fails the whole role
+# at converge time, even though ansible-lint and a non-rendering Molecule run
+# both pass clean.
 mapfile -t existing < <(find "$DEST" -maxdepth 1 -name 'pve-etc-*.tar.gz' -type f | sort)
-total=$(printf '%s\n' "${existing[@]}" | grep -c .)
-excess=$(( total - RETAIN ))
+excess=$(( {% raw %}${#existing[@]}{% endraw %} - RETAIN ))
 if [ "$excess" -gt 0 ]; then
   printf '%s\0' "${existing[@]:0:$excess}" | xargs -0 -r rm -f
 fi

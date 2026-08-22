@@ -45,6 +45,14 @@
       tags:
         - common
 
+    # Named accounts (jevans w/ sudo, admin break-glass) to replace shared-
+    # root administration. Additive -- root access is untouched here. Runs
+    # early so later roles (notably ssh_ca_trust, which wires their CA
+    # principals) find the accounts already present.
+    - role: local_identities
+      tags:
+        - local_identities
+
     # Host network contract. Detection is read-only and always runs; it catches
     # a management address that has drifted off the untagged bridge, which
     # makes a node unreachable while it is still running. Enforcement is
@@ -131,6 +139,12 @@
       tags:
         - nas_storage
 
+    # Verify the HBA is genuine JBOD/non-RAID passthrough before ZFS trusts
+    # the array built on top of it as the reference standard.
+    - role: hba_storcli
+      tags:
+        - hba_storcli
+
     - role: zfs_pools
       tags:
         - zfs_pools
@@ -189,6 +203,16 @@
     - role: ssh_ca_trust
       tags:
         - ssh_ca_trust
+      vars:
+        # Extend the role's default-deny root:[ansible] map with the named
+        # accounts local_identities just created. jevans and admin reach
+        # THEIR OWN accounts via the CA, never root -- only `ansible` (and,
+        # transitively, iac's use of ansible-proxmox) retains root-level
+        # certificate access.
+        ssh_ca_trust_principals:
+          root: [ansible]
+          jevans: [jevans]
+          admin: [admin]
 
     # Cross-node ZFS replication (syncoid, layer 2). Pull model — runs on the
     # backup node; inert until syncoid_jobs is set.
