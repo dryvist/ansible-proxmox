@@ -324,6 +324,17 @@
       tags:
         - wol_enable
 
+    # Chassis power-restore policy on every node that has a BMC, so AC
+    # returning after a power loss brings the node back up with nobody
+    # present. Deliberately NOT folded into the pve_power_managed power plays
+    # above: those cover only the node this role cycles on purpose, and a node
+    # that is never cycled is exactly the one that has to come back on its
+    # own. Left on the role's default `status` action here, so it reconciles
+    # the policy and changes no power state. Inert without a BMC address.
+    - role: idrac_power
+      tags:
+        - idrac_power
+
     # NVIDIA host GPU driver, so LXC guests can be handed the card via device
     # passthrough. Inert unless a host sets nvidia_driver_enabled: true, and
     # fails loud if opted in on a node with no NVIDIA card on the PCI bus.
