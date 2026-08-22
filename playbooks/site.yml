@@ -231,12 +231,8 @@
           admin: [admin]
 
     # Cross-node ZFS replication (syncoid, layer 2). Pull model — runs on the
-    # backup node; inert until syncoid_jobs is set.
-    # The healthcheck is not optional decoration: syncoid_healthcheck_url was
-    # empty, so a job that failed on one dataset was visible only as a non-zero
-    # exit code inside a cron run nobody reads. Wiring it makes a failed
-    # replication page, and — because healthchecks expects a ping every cycle —
-    # makes a run that never happens page too.
+    # backup node; inert until syncoid_jobs is set. Why the healthcheck is
+    # load-bearing rather than decoration: roles/syncoid/README.md.
     - role: syncoid
       tags:
         - syncoid
