@@ -26,12 +26,26 @@ pve_ha_enabled: true
 # hypervisor root. Stopped containers are reported as blockers, not failures.
 ssh_ca_trust_rollout_enabled: true
 
-# Node naming: every Proxmox node is addressed as <proxmox_node_prefix><N> — a node
-# is just its number with this prefix prepended. Parameterized so node references in
-# roles and host_vars never hard-code the real prefix. The REAL prefix is injected at
-# runtime via the PROXMOX_NODE_PREFIX env var (e.g. from Doppler); the committed
-# default below is a neutral EXAMPLE only and must never carry the real value.
-proxmox_node_prefix: "{{ lookup('env', 'PROXMOX_NODE_PREFIX') | default('proxmox', true) }}"
+# Node naming: node names are hardware-keyed, so a name can no longer be composed
+# from a prefix plus an ordinal — the old `<prefix><N>` scheme could only ever
+# produce the retired ordinal names, and every reference built that way rendered a
+# host that does not resolve. Each node this repo references BY ROLE is injected at
+# runtime from its own env var (e.g. from Doppler); the committed defaults below are
+# neutral EXAMPLES only and must never carry a real name.
+#
+# The env var names keep an ordinal digit — the digit names the VARIABLE, not the
+# node, exactly as the PVEn_VE_HOSTNAME family in inventory/hosts.yml does.
+#
+# Each value MUST equal the node's live Proxmox node name (`proxmox_node_name` in
+# inventory/hosts.yml, what /etc/pve/nodes/ and corosync use). A value that drifts
+# resolves to nothing and the consuming task no-ops or fails silently.
+proxmox_node_names:
+  # Cluster-creating node; also where the cluster-wide ha-manager commands run.
+  primary: "{{ lookup('env', 'PVE1_NODE_NAME') | default('node-a', true) }}"
+  # Always-on DR/replication peer.
+  dr: "{{ lookup('env', 'PVE3_NODE_NAME') | default('node-c', true) }}"
+  # Storage home — the node that serves the bulk datasets pulled off-node.
+  storage: "{{ lookup('env', 'PVE5_NODE_NAME') | default('node-e', true) }}"
 
 # ZFS Swap Configuration
 zfs_swap_size: "96G"

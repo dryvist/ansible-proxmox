@@ -235,14 +235,14 @@ syncoid_jobs:
   # cycle while the replica it left behind ages, so the source has to follow the
   # data. The source node is fixed by design (the storage home), unlike the
   # splunk jobs whose source node is derived from tofu; the prefix comes from
-  # proxmox_node_prefix so the node name is never hard-coded.
+  # proxmox_node_names.storage so the node name is never hard-coded.
   - name: "databases"
-    source: "root@{{ proxmox_node_prefix }}540:bulk/databases"
-    target: "bulk/replica/{{ proxmox_node_prefix }}540/databases"
+    source: "root@{{ proxmox_node_names.storage }}:bulk/databases"
+    target: "bulk/replica/{{ proxmox_node_names.storage }}/databases"
   # App config/state DR: pull the whole bulk/appdata namespace off the same
   # storage node (recursive via default options, so every bulk/appdata/<app>
-  # child comes along). Same pull pattern and same proxmox_node_prefix
+  # child comes along). Same pull pattern and same proxmox_node_names
   # parameterization as the databases job.
   - name: "appdata"
-    source: "root@{{ proxmox_node_prefix }}540:bulk/appdata"
-    target: "bulk/replica/{{ proxmox_node_prefix }}540/appdata"
+    source: "root@{{ proxmox_node_names.storage }}:bulk/appdata"
+    target: "bulk/replica/{{ proxmox_node_names.storage }}/appdata"
