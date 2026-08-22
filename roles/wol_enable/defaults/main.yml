@@ -18,3 +18,17 @@ wol_enable_enabled: false
 # (vmbr0): a Linux bridge device does not itself support Wake-on-LAN, only the
 # physical interface enslaved to it. Required (fails loud) when enabled.
 wol_enable_interface: ""
+
+# Publish the interface's MAC into this Proxmox node's own config as the
+# `wakeonlan` key, so `pvenode wakeonlan <node>` works from any other node in
+# the cluster. Without that key set, the built-in wake command has no address
+# to send to and refuses. The key lives in /etc/pve, so it is replicated to
+# every node and readable by whichever node is still up.
+wol_enable_node_config: true
+
+# MAC address the magic packet is sent to. Left empty on purpose: the node
+# discovers its own NIC's permanent hardware address at converge time
+# (`ethtool -P`, falling back to the runtime address when the NIC reports no
+# permanent one). Real hardware identifiers therefore never enter this
+# repository. Set it in host_vars only to override the discovered value.
+wol_enable_mac: ""

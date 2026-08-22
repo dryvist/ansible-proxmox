@@ -21,3 +21,25 @@
     # The Docker-skip on the ethtool install/read/set is proven by this
     # converge succeeding (those tasks are guarded off, not failed). The
     # rendered-rule contract is verified by the slurp assertion above.
+
+    # MAC resolution and the pvenode call run only on real hardware, so
+    # exercise the parse against fixed `ethtool -P` output here: a real
+    # address is extracted, and the all-zero address some drivers report is
+    # rejected rather than published as a wake target. Both addresses below
+    # are fixtures, not hardware.
+    - name: Assert the permanent-address parse extracts a real MAC
+      ansible.builtin.assert:
+        that:
+          - >-
+            ([wol_sample_real | regex_search(wol_mac_re) | default('', true)]
+             | reject('equalto', '00:00:00:00:00:00') | first | default('', true))
+            == '02:00:00:aa:bb:cc'
+          - >-
+            ([wol_sample_zero | regex_search(wol_mac_re) | default('', true)]
+             | reject('equalto', '00:00:00:00:00:00') | first | default('', true))
+            == ''
+        fail_msg: "wol_enable MAC resolution no longer parses ethtool -P output as expected"
+      vars:
+        wol_mac_re: '(?i)[0-9a-f]{2}(?::[0-9a-f]{2}){5}'
+        wol_sample_real: "Permanent address: 02:00:00:aa:bb:cc"
+        wol_sample_zero: "Permanent address: 00:00:00:00:00:00"
