@@ -60,3 +60,8 @@ nas_storage_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
 nas_storage_bao_path: secret/data/apps/nas
 nas_storage_username_field_suffix: _username
 nas_storage_password_field_suffix: _password
+# Empty rather than undefined: the OpenBao read is skipped when the converge
+# carries no token, which leaves the identity map unset. Indexing an UNDEFINED
+# variable raises before any `default()` on the expression can apply, so the
+# default has to live here.
+nas_storage_secrets: {}

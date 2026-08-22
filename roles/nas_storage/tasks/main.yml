@@ -29,7 +29,7 @@
     fail_msg: "Invalid Samba share definition: {{ item | to_nice_json }}"
   loop: "{{ nas_storage_shares }}"
   loop_control:
-    label: "{{ item.secret_prefix }}"
+    label: "{{ item.name }}"
   tags:
     - nas_storage
     - nas_storage_samba
@@ -371,7 +371,7 @@
     validate: "{{ nas_storage_smb_validate_cmd }}"
   loop: "{{ nas_storage_shares }}"
   loop_control:
-    label: "{{ item.secret_prefix }}"
+    label: "{{ item.name }}"
   notify: Restart smbd
   tags:
     - nas_storage

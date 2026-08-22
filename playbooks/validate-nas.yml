@@ -25,6 +25,9 @@
          | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
     nas_validate_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
     nas_validate_bao_path: secret/data/apps/nas
+    # Empty rather than undefined, for the same reason as the role's default:
+    # indexing an undefined variable raises before `default()` applies.
+    nas_validate_secrets: {}
 
   tasks:
     - name: Skip nodes that declare no share
