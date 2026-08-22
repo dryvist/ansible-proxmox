@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0](https://github.com/dryvist/ansible-proxmox/compare/v1.79.0...v2.0.0) (2026-08-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **nas_storage:** node_storage.<node>.smb.managed_users entries take `secret_prefix` in place of `name` and `password_secret_env`.
+
+### Features
+
+* **nas_storage:** resolve SMB account names from OpenBao, not the declaration ([#691](https://github.com/dryvist/ansible-proxmox/issues/691)) ([1df995c](https://github.com/dryvist/ansible-proxmox/commit/1df995c19cae3985a5b78fc77a7ba5dd06c241b4))
+
 ## [1.79.0](https://github.com/dryvist/ansible-proxmox/compare/v1.78.3...v1.79.0) (2026-08-22)
 
 
