@@ -45,3 +45,11 @@ sanoid_datasets: >-
 # Snapshot-only: no syncoid pull job replicates either dataset off-node yet.
 # Any pull job belongs in another node's host_vars naming this node as the
 # source, never here -- see the no-hardcoded-node-names rule.
+
+# Zammad #17242: this node's single unmirrored consumer NVMe (rpool) showed
+# 3 real corruption+hang events in 8 days (2026-08-08, 08-14, 08-15) with
+# SMART reading PASSED throughout -- SMART is not a valid instrument for
+# this failure mode. Wire the specific fault signature straight to Zammad
+# rather than relying on the journal->syslog path alone. See
+# roles/zfs_fault_alert/README.md.
+zfs_fault_alert_enabled: true

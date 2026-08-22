@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Alert Zammad if zed's event queue overflowed since the last check
+After=zfs-zed.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/zfs-missed-events-check.sh

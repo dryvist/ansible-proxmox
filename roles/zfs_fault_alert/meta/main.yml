@@ -1,0 +1,25 @@
+---
+# ZFS fault alert role metadata
+
+galaxy_info:
+  role_name: zfs_fault_alert
+  author: ansible-proxmox
+  description: >-
+    Immediate Zammad alert on a matched ZFS fault signature (checksum error,
+    long I/O delay, or zed event-queue overflow) on a specific pool/vdev.
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - zfs
+    - alerting
+    - zammad
+
+dependencies: []
