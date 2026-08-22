@@ -2,7 +2,7 @@
 # wol_enable role defaults — persist Wake-on-LAN (magic packet) on a host's
 # physical NIC across reboots.
 #
-# Discovered the hard way on pve4/pve-w5900: BIOS Wake-on-LAN was enabled, but
+# Discovered the hard way on a workstation node: BIOS Wake-on-LAN was enabled, but
 # `ethtool` still reported `Wake-on: d` (disabled) on every boot -- the NIC
 # driver resets its Wake-on mode to the hardware default on every bring-up, so
 # `ethtool -s <iface> wol g` alone does not survive a reboot. A udev rule that

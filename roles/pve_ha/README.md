@@ -73,7 +73,7 @@ the only node-loss story**:
   it from the replica. `max_relocate=1` is enough: one hop to the partner.
 - A **strict `node-affinity` rule** (`pve_ha_replication_affinity_rule`) pins
   these guests to `pve_ha_replication_pair`, so ha-manager can never relocate one
-  onto a node without a replica (e.g. `pve3` when it is awake) and then
+  onto a node without a replica and then
   start-fail/flap. `strict` = run only on the listed nodes.
 - The replica is a **relocation enabler, not the durability layer**: the app
   guests' real data-loss window is covered separately (`postgres-apps` by
@@ -126,7 +126,7 @@ No real service is touched.
 | `pve_ha_anti_affinity_groups` | pairs | Redundant pairs to keep apart. |
 | `pve_ha_max_restart` / `pve_ha_max_relocate` | `3` / `1` | Per-guest bounds. |
 | `pve_ha_replication_ct_hostnames` | app list | Singleton guests that get a `pvesr` replica (relocation-enabled). |
-| `pve_ha_replication_pair` | `[pve1, pve2]` | Always-on nodes; `pvesr` target is the member that is not the guest's home node. |
+| `pve_ha_replication_pair` | `[node-a, node-b]` | Always-on nodes; `pvesr` target is the member that is not the guest's home node. |
 | `pve_ha_replication_schedule` | `*/15` | `pvesr` schedule (systemd-calendar subset). |
 | `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
 | `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |

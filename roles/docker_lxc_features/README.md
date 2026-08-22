@@ -33,5 +33,5 @@ actually changed.
 ## Usage
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --limit pve1,localhost --tags docker_lxc_features
+doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --limit <node>,localhost --tags docker_lxc_features
 ```

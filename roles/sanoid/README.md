@@ -48,7 +48,7 @@ sanoid_datasets:
 
 Where a dataset name embeds a guest VMID, derive it at runtime from the S3 tofu
 inventory injected by `playbooks/load_tofu.yml` — `splunk_vm_from_tofu` and
-`containers_from_tofu` (see `inventory/host_vars/pve1.yml`) — rather than
+`containers_from_tofu` (see the per-node files in `inventory/host_vars/`) — rather than
 hard-coding it, so a VMID renumber flows through with no edit.
 
 ```bash

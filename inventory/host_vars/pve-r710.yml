@@ -56,12 +56,12 @@ proxmox_monitoring_enable_healthchecks: false
 # reason a dump sitting on a sibling dataset of the same pool does not count.
 # The source NODE NAME is derived from tofu
 # (splunk_vm_from_tofu, injected by load_tofu) — never hard-coded — so this
-# follows the VM if it is ever defined on a different node. bulk is pve3's own
+# follows the VM if it is ever defined on a different node. bulk is pve-r710's own
 # local raidz2 pool; the bulk/replica/<node> parent is created by zfs_pools from
 # the terraform-proxmox node_storage declaration, and syncoid creates the
 # per-disk leaves.
 #
-# Prereqs (verified live): root SSH pve3->source works (PVE cluster keys +
+# Prereqs (verified live): root SSH pve-r710->source works (PVE cluster keys +
 # cluster_ssh_trust known_hosts); each source disk has a sanoid snapshot for
 # --no-sync-snap. Replicate the OS disk (0) and /opt/splunk config+indexes (2);
 # disk-1 was an empty leftover. Whole-disk for now; excluding the volatile index
@@ -137,11 +137,11 @@ sanoid_datasets: >-
 # Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).
 #
 # The ai-VLAN Hindsight cluster has two members on two different nodes
-# (postgres-ai-1 here on pve3, postgres-ai-2 on pve-r540 — see
+# (postgres-ai-1 here on pve-r710, postgres-ai-2 on pve-r540 — see
 # ansible-proxmox-apps inventory/group_vars/postgres_ai_group.yml), and EACH
 # runs its own local pg-backup timer independently. host_vars/pve-r540.yml
 # already pulls postgres-ai-1's dump into its own bulk/databases (off-node
-# from pve3's perspective, which is what makes it a real backup). Left alone,
+# from pve-r710's perspective, which is what makes it a real backup). Left alone,
 # postgres-ai-2's own dump would sit only on the node it was produced on —
 # pve-r540, the SAME node pve-r540's archive lives on — which is not an off-node
 # copy at all. So the pull is crossed: this node pulls the OTHER instance,

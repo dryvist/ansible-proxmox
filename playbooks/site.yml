@@ -292,7 +292,7 @@
 
     # Scheduled local power-off (systemd timer) for normally-off nodes so a node
     # brought up for a window is not left running overnight. Inert unless a host
-    # sets node_auto_poweroff_enabled: true (e.g. pve3). The OS powers itself
+    # sets node_auto_poweroff_enabled: true. The OS powers itself
     # off; idrac_power (IPMI) handles powering a node back on.
     - role: node_auto_poweroff
       tags:
@@ -302,7 +302,7 @@
     # its backup windows with no human and no scheduled ansible run — the wake
     # half of the autonomous cycle (node_auto_poweroff is the sleep half). Runs on
     # the always-on controller; inert unless a host sets node_scheduled_wake_
-    # targets (e.g. pve1 -> pve3). The woken node replicates on boot (syncoid
+    # targets. The woken node replicates on boot (syncoid
     # boot trigger) and powers itself off on completion.
     - role: node_scheduled_wake
       tags:
@@ -310,7 +310,7 @@
 
     # Wake-on-LAN persistence for non-power-managed hosts (no BMC/iDRAC) that
     # are meant to stay always-on. Inert unless a host sets
-    # wol_enable_enabled: true (e.g. pve4). BIOS/UEFI WoL must already be on;
+    # wol_enable_enabled: true. BIOS/UEFI WoL must already be on;
     # this covers the OS side, which resets to disabled on every boot without it.
     - role: wol_enable
       tags:

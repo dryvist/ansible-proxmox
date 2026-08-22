@@ -48,8 +48,8 @@ literal in this role:
 ```yaml
 pve_cluster_enabled: false            # master switch — set true to act
 pve_cluster_name: homelab             # cluster name (primary creates it)
-pve_cluster_member_hosts: []          # allow-list, e.g. [pve1, pve2]
-pve_cluster_primary_host: pve1        # which inventory host creates the cluster
+pve_cluster_member_hosts: []          # allow-list, e.g. [node-a, node-b]
+pve_cluster_primary_host: node-a      # which inventory host creates the cluster
 pve_cluster_role: >-                  # auto: 'primary' on the primary, else 'secondary'
   {{ (inventory_hostname == pve_cluster_primary_host) | ternary('primary', 'secondary') }}
 pve_cluster_link0: "{{ ansible_host }}"   # corosync ring 0 (compute VLAN)
@@ -65,9 +65,10 @@ or a SOPS-encrypted var.
 ## Usage
 
 The cluster is formed by `playbooks/cluster.yml`, which targets the primary
-first (creates) then secondaries (join). `pve3` is a cluster member with its
+first (creates) then secondaries (join). A node can be a cluster member with its
 tofu `commissioned` flag `true`: corosync membership is decoupled from storage
-commissioning, so `pve3` joined the cluster and its `bulk` pool is commissioned
+commissioning, so a node joins the cluster independently of whether its `bulk`
+pool is commissioned
 (`zfs_pools` gates pool creation on `pve_node_commissioned`, not on
 cluster-group membership).
 

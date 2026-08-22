@@ -121,7 +121,7 @@
     # DAC_OVERRIDE bypass on this dataset (confirmed on CT 725140 /
     # bulk/appdata/prowlarr: `lxc-usernsexec -m u:0:100000:65536 -m
     # g:0:100000:13000 ... -- tar ...` failed with "tar: Cannot open:
-    # Permission denied" on every one of 12/12 retained runs of pve2's
+    # Permission denied" on every one of 12/12 retained runs of the node's
     # hourly rescue-backup job). A dataset chowned owner-only (rwx------
     # or rwxr-x---) is unreadable to that mapped-root process because it
     # is neither the owning uid nor a member of the owning gid. Nothing

@@ -5,7 +5,7 @@ by seeding each node's `/root/.ssh/known_hosts` with the **current** host keys
 of every cluster peer. Without this, root SSH between nodes (syncoid
 replication, `pvecm`, live migration) fails with *Host key verification failed*
 after a node rename or reinstall — exactly what happened when `pve` was renamed
-to `pve1`.
+to `node-a`.
 
 ## Installation
 
@@ -25,8 +25,8 @@ ansible-galaxy install -r requirements.yml
   keys into `/root/.ssh/known_hosts`, de-duplicated.
 - Peers come from the **`PROXMOX_VE_NODES`** Doppler variable — the single
   source of truth for the cluster node list, shared by terraform and ansible
-  (e.g. `pve1,pve2,pve3`). The value is tokenised with `regex_findall`, so plain
-  comma-separated, bracketed (`[pve1, pve2]`), or quoted forms all work. When the
+  (e.g. `node-a,node-b,node-c`). The value is tokenised with `regex_findall`, so plain
+  comma-separated, bracketed (`[node-a, node-b]`), or quoted forms all work. When the
   variable is absent (e.g. molecule), it falls back to the `pve_cluster_members`
   inventory group.
 - Idempotent: re-runs only report `changed` when a new/rotated key is added.

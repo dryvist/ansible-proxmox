@@ -5,7 +5,7 @@
       "ansible_connection": "ssh",
       "hostname": "splunk-aio",
       "ip": "192.168.0.200",
-      "node": "pve1",
+      "node": "pve-w1700",
       "vmid": 90200
     }
   },
@@ -14,7 +14,7 @@
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "hostname": "s3",
       "ip": "192.168.0.20",
-      "node": "pve1",
+      "node": "pve-w1700",
       "pool_id": "infrastructure",
       "tags": ["container", "object-storage", "storage"],
       "vmid": 902000,

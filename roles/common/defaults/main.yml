@@ -18,7 +18,7 @@ common_dns_search_domain: >-
 # output) relays through the existing Mailpit LXC instead of postfix's out-of-the-box
 # empty relayhost, which tries direct-to-MX delivery on port 25 — permanently
 # blocked outbound on this network. Left unfixed, mail queues forever (observed:
-# 700+ KB / 32 messages stuck on pve2 alone) and nobody is warned, because the
+# 700+ KB / 32 messages stuck on one node alone) and nobody is warned, because the
 # bounce goes back into the same broken pipe.
 #
 # Same internal-relay pattern already used by Zammad (see ansible-proxmox-apps

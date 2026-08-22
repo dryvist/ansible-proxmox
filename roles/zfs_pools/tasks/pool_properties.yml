@@ -56,8 +56,15 @@
   register: zfs_pools_topology
   changed_when: false
   failed_when: false
-  when: zfs_pool.value.topology is defined
+  when: zfs_pool.value.topology | default({}, true) | length > 0
 
+# NOTE: an undeclared `topology` arrives as NULL, not absent -- tofu renders
+# `optional(object({...}))` as an explicit null, and Jinja considers null
+# DEFINED. So `topology is defined` is TRUE for every pool that never declared
+# one, and the task below then dereferences `.type` on None. Ansible finalizes
+# `fail_msg` BEFORE evaluating `that:`, so the assert cannot even reach its
+# conditions -- it dies rendering the message for a failure that is not
+# happening. Guard on truthiness instead.
 - name: Assert vdev topology matches the declaration
   ansible.builtin.assert:
     that:
@@ -73,12 +80,14 @@
       {{ zfs_pool.key }}: {{ zfs_pool.value.topology.type }}
       width {{ zfs_pool.value.topology.width }} as declared.
   when:
-    - zfs_pool.value.topology is defined
+    - zfs_pool.value.topology | default({}, true) | length > 0
     - zfs_pools_topology.stdout is defined
     - zfs_pools_topology.stdout | length > 0
 
 - name: Assert ashift matches the declaration
-  when: zfs_pool.value.topology.ashift is defined
+  when:
+    - zfs_pool.value.topology | default({}, true) | length > 0
+    - zfs_pool.value.topology.ashift is defined
   block:
     - name: Read ashift
       ansible.builtin.command:
