@@ -1,0 +1,62 @@
+---
+# Node hardware and power policy: BMC console, the power-off/power-on/wake
+# cycle, chassis power-restore, and the host GPU driver.
+#
+# Split out of site.yml, which imports it in the position this block held, so
+# role order is unchanged. The split is not cosmetic: site.yml is token-budgeted
+# (.token-limits.yaml) because an agent asked to change one thing should not
+# have to read thirty unrelated roles to find it, and these roles form a
+# self-contained hardware concern that nothing earlier in the converge depends
+# on. Every role here is inert unless a host opts in.
+
+- name: Configure node hardware and power policy
+  hosts: proxmox
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: idrac_kiosk
+      tags:
+        - idrac_kiosk
+
+    # Scheduled local power-off (systemd timer) for normally-off nodes so a node
+    # brought up for a window is not left running overnight. Inert unless a host
+    # sets node_auto_poweroff_enabled: true. The OS powers itself
+    # off; idrac_power (IPMI) handles powering a node back on.
+    - role: node_auto_poweroff
+      tags:
+        - node_auto_poweroff
+
+    # Scheduled IPMI power-ON (systemd timer) so a normally-off DR node wakes for
+    # its backup windows with no human and no scheduled ansible run — the wake
+    # half of the autonomous cycle (node_auto_poweroff is the sleep half). Runs on
+    # the always-on controller; inert unless a host sets node_scheduled_wake_
+    # targets. The woken node replicates on boot (syncoid
+    # boot trigger) and powers itself off on completion.
+    - role: node_scheduled_wake
+      tags:
+        - node_scheduled_wake
+
+    # Wake-on-LAN persistence for non-power-managed hosts (no BMC/iDRAC) that
+    # are meant to stay always-on. Inert unless a host sets
+    # wol_enable_enabled: true. BIOS/UEFI WoL must already be on;
+    # this covers the OS side, which resets to disabled on every boot without it.
+    - role: wol_enable
+      tags:
+        - wol_enable
+
+    # Chassis power-restore policy, so AC returning brings a node back with
+    # nobody present. Here, not only in the power plays above: a node this
+    # role never cycles is the one that must come back on its own. Default
+    # `status` action — reconciles the policy, changes no power state.
+    - role: idrac_power
+      tags:
+        - idrac_power
+
+    # NVIDIA host GPU driver, so LXC guests can be handed the card via device
+    # passthrough. Inert unless a host sets nvidia_driver_enabled: true, and
+    # fails loud if opted in on a node with no NVIDIA card on the PCI bus.
+    # Reports rather than takes the reboot the driver switch needs.
+    - role: nvidia_driver
+      tags:
+        - nvidia_driver
