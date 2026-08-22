@@ -324,13 +324,10 @@
       tags:
         - wol_enable
 
-    # Chassis power-restore policy on every node that has a BMC, so AC
-    # returning after a power loss brings the node back up with nobody
-    # present. Deliberately NOT folded into the pve_power_managed power plays
-    # above: those cover only the node this role cycles on purpose, and a node
-    # that is never cycled is exactly the one that has to come back on its
-    # own. Left on the role's default `status` action here, so it reconciles
-    # the policy and changes no power state. Inert without a BMC address.
+    # Chassis power-restore policy, so AC returning brings a node back with
+    # nobody present. Here, not only in the power plays above: a node this
+    # role never cycles is the one that must come back on its own. Default
+    # `status` action — reconciles the policy, changes no power state.
     - role: idrac_power
       tags:
         - idrac_power
