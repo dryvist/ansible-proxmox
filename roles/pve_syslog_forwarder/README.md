@@ -56,7 +56,7 @@ doppler run -- ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 | `pve_syslog_forwarder_queue_max_disk_space` | `256m` | Disk-queue cap so a receiver outage buffers instead of dropping. |
 
 The role asserts `PROXMOX_SUBDOMAIN` is set (injected via Doppler, like
-`PROXMOX_NODE_PREFIX`) so the real domain is never committed.
+`PVEn_NODE_NAME`) so the real domain is never committed.
 
 ## Verification
 

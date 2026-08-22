@@ -10,10 +10,10 @@
 
 pve_cluster_member_hosts: "{{ groups['pve_cluster_members'] | default([]) }}"
 
-# The primary (cluster-creating) node — node 1, control-plane on compute .10.
-# Built from proxmox_node_prefix so the node name is never hard-coded; renders to
-# the inventory host key for node 1.
-pve_cluster_primary_host: "{{ proxmox_node_prefix }}1"
+# The primary (cluster-creating) node — control-plane on compute .10. Taken from
+# proxmox_node_names so the name is never hard-coded; renders to that node's
+# inventory host key.
+pve_cluster_primary_host: "{{ proxmox_node_names.primary }}"
 
 # Cluster name. Non-secret structural value; override per environment if needed.
 pve_cluster_name: homelab

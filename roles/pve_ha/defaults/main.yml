@@ -45,11 +45,11 @@ pve_ha_fail_on_unresolved: true
 # Inventory hostname of the SINGLE node the ha-manager commands run on. HA state
 # is cluster-wide, so one node is sufficient and correct. Defaults to
 # pve_cluster_primary_host (the pve_cluster role's own primary, set in
-# inventory/group_vars/pve_cluster_members.yml as "{{ proxmox_node_prefix }}1")
-# so the two roles always agree on which node is primary. Falls back to the
-# same "{{ proxmox_node_prefix }}1" expression directly when pve_cluster_primary_host
-# is undefined (e.g. a playbook run without the pve_cluster group vars loaded).
-pve_ha_config_host: "{{ pve_cluster_primary_host | default(proxmox_node_prefix ~ '1', true) }}"
+# inventory/group_vars/pve_cluster_members.yml from proxmox_node_names.primary)
+# so the two roles always agree on which node is primary. Falls back to
+# proxmox_node_names.primary directly when pve_cluster_primary_host is undefined
+# (e.g. a playbook run without the pve_cluster group vars loaded).
+pve_ha_config_host: "{{ pve_cluster_primary_host | default(proxmox_node_names.primary, true) }}"
 
 # This host's Proxmox NODE name, which is not necessarily its inventory key.
 # Everything the replication tasks compare against — a /nodes/<x>/ API path,
@@ -196,8 +196,8 @@ pve_ha_replication_ct_hostnames:
 # pvesr peer. If it ever returns to sleeping, this pair must change with it — a sleeping
 # target cannot accept a replication run.
 pve_ha_replication_pair:
-  - "{{ proxmox_node_prefix }}1"
-  - "{{ proxmox_node_prefix }}3"
+  - "{{ proxmox_node_names.primary }}"
+  - "{{ proxmox_node_names.dr }}"
 
 # pvesr schedule (systemd-calendar subset) and optional rate limit (MB/s; empty
 # = unlimited). */15 matches Proxmox's default; the app guests' real data-loss
