@@ -5,9 +5,14 @@
   gather_facts: true
 
   vars:
-    # No OpenBao in the container, so supply the map the role would read from it.
-    nas_storage_passwords:
-      jevans_smb_password: "molecule-pass"
+    # No OpenBao in the container, so supply the map the role would read from
+    # it. BOTH halves of the identity live here: the login name is deliberately
+    # different from the secret_prefix below, so a role that took the name from
+    # the declaration instead of resolving it would create the wrong account
+    # and verify.yml's pdbedit lookup would miss.
+    nas_storage_secrets:
+      smb_user_username: "molecule-resolved-user"
+      smb_user_password: "molecule-pass"
     # Shaped exactly as playbooks/load_tofu.yml derives it from
     # node_storage.<node>: the node-level `smb` service block, plus one entry
     # per dataset that declared an `smb` block, with `name`/`path` filled in.
@@ -18,12 +23,11 @@
       workgroup: "WORKGROUP"
       macos_optimized: true
       managed_users:
-        - name: "jevans"
+        - secret_prefix: "smb_user"
           unix_groups:
             - "nas"
           shell: "/usr/sbin/nologin"
           create_home: false
-          password_secret_env: "NAS_JEVANS_SMB_PASSWORD"
       shares:
         - name: "jdrive"
           share_name: "jdrive"

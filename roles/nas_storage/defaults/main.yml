@@ -38,14 +38,30 @@ nas_storage_managed_users: "{{ nas_storage_config.managed_users | default([], tr
 # and playbooks/site.yml already skips this role when the list is empty.
 nas_storage_shares: "{{ nas_storage_config.shares | default([], true) }}"
 
-# Managed-user Samba passwords come from OpenBao, not the process environment.
+# Managed-account identities come from OpenBao, not the process environment.
 # The converge runner exports BAO_ADDR and a short-lived BAO_TOKEN for exactly
-# this kind of controller-side read (scripts/run-ansible.sh), and the ansible
-# AppRole policy already covers `secret/data/apps/*` — so this needs no new
-# grant. A user's password is the field `<name>_smb_password`.
+# this kind of controller-side read (scripts/run-ansible.sh).
+#
+# Both halves of the identity are secrets: an account is selected by its ROLE
+# and resolves to the fields `<secret_prefix>_username` and
+# `<secret_prefix>_password`. The login name is never written into the
+# declaration, into a field name, or into converge output.
+#
+# THE POLICY GRANT IS NOT IMPLICIT. An earlier revision of this comment claimed
+# the ansible AppRole "already covers secret/data/apps/*". It does not, and by
+# design: ansible-converge-policy.hcl.j2 enumerates exact paths and states that
+# there is deliberately no apps/* wildcard. Adding a consumer here means adding
+# its path there. Without the grant this read returns 403, which under `no_log`
+# is indistinguishable from a missing field.
 nas_storage_bao_addr: >-
   {{ lookup('env', 'BAO_ADDR')
      | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
 nas_storage_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
 nas_storage_bao_path: secret/data/apps/nas
-nas_storage_password_field_suffix: _smb_password
+nas_storage_username_field_suffix: _username
+nas_storage_password_field_suffix: _password
+# Empty rather than undefined: the OpenBao read is skipped when the converge
+# carries no token, which leaves the identity map unset. Indexing an UNDEFINED
+# variable raises before any `default()` on the expression can apply, so the
+# default has to live here.
+nas_storage_secrets: {}
