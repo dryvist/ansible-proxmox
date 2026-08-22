@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.78.2](https://github.com/dryvist/ansible-proxmox/compare/v1.78.1...v1.78.2) (2026-08-22)
+
+
+### Bug Fixes
+
+* **zfs_pools:** an undeclared topology is null, not absent ([f122b3f](https://github.com/dryvist/ansible-proxmox/commit/f122b3f23fbd13762e6ea09fd970e7f5ee848374))
+* **zfs_pools:** treat an undeclared topology as absent rather than defined ([6a75ef5](https://github.com/dryvist/ansible-proxmox/commit/6a75ef5c8ff0c35a1bbbfb55ff82f66013046c9e))
+
 ## [1.78.1](https://github.com/dryvist/ansible-proxmox/compare/v1.78.0...v1.78.1) (2026-08-21)
 
 
