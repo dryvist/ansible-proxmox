@@ -42,6 +42,40 @@
   tags:
     - local_identities
 
+# A skipped key task leaves an account that exists, has sudo, and cannot be
+# logged into -- while the recap still reads changed/ok with failed=0. Say so
+# out loud, because "no static key" is only correct when ssh_ca_trust has
+# actually placed a principals file for this user on this host; otherwise the
+# account has NO authentication path at all and the converge looks clean.
+- name: Check whether the CA grants this account a principal on this host
+  ansible.builtin.stat:
+    path: "/etc/ssh/principals/{{ local_identities_jevans_user }}"
+  register: local_identities_jevans_principal
+  when:
+    - local_identities_enabled | bool
+    - local_identities_jevans_enabled | bool
+    - local_identities_jevans_ssh_public_key | length == 0
+  tags:
+    - local_identities
+
+- name: Warn that the account has no way to authenticate
+  ansible.builtin.debug:
+    msg: >-
+      {{ local_identities_jevans_user }} was created with sudo but has NEITHER
+      a static SSH key NOR a CA principal on this host, so nobody can log into
+      it. The key task was skipped because
+      local_identities_jevans_ssh_public_key is empty -- it reads the
+      VM_SSH_PUBLIC_KEY environment variable, which this converge did not
+      export. Either export it, or run ssh_ca_trust so
+      /etc/ssh/principals/{{ local_identities_jevans_user }} exists.
+  when:
+    - local_identities_enabled | bool
+    - local_identities_jevans_enabled | bool
+    - local_identities_jevans_ssh_public_key | length == 0
+    - not (local_identities_jevans_principal.stat.exists | default(false))
+  tags:
+    - local_identities
+
 - name: Create the admin (break-glass) account
   ansible.builtin.user:
     name: "{{ local_identities_admin_user }}"
