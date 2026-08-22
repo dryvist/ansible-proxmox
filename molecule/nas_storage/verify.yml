@@ -5,43 +5,48 @@
   gather_facts: true
 
   tasks:
-    - name: Verify NAS root directory exists
-      ansible.builtin.stat:
-        path: /mnt/nas
-      register: nas_root
-      failed_when: not nas_root.stat.exists
-
-    - name: Assert NAS root ownership and mode
-      ansible.builtin.assert:
-        that:
-          - nas_root.stat.gr_name == "nas"
-          - nas_root.stat.mode == "0775"
-
-    - name: Verify NAS subdirectories exist
+    # The role creates the SHARE directory for each declared share. It no
+    # longer creates a NAS root or a fixed subdirectory list -- those were
+    # dataset mountpoints, and zfs_pools owns datasets now.
+    - name: Verify share directories exist
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
-        - /mnt/nas/backups
-        - /mnt/nas/media
+        - /bulk/jdrive
+        - /bulk/models
+        - /bulk/timemachine
       register: nas_dirs
 
-    - name: Assert NAS subdirectories exist
+    - name: Assert share directories exist with the NAS group
       ansible.builtin.assert:
         that:
           - item.stat.exists
-        fail_msg: "Missing NAS subdirectory {{ item.item }}"
+          - item.stat.gr_name == "nas"
+        fail_msg: "Missing or mis-grouped share directory {{ item.item }}"
       loop: "{{ nas_dirs.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    - name: Assert the role did NOT create a dataset mountpoint of its own
+      ansible.builtin.stat:
+        path: /mnt/nas
+      register: nas_legacy_root
+
+    - name: The old global NAS root must be gone
+      ansible.builtin.assert:
+        that:
+          - not nas_legacy_root.stat.exists
+        fail_msg: >-
+          /mnt/nas still exists, so the role is still building the old global
+          per-node NAS. Shares must live on their declared dataset instead.
 
     - name: Verify Samba config files exist
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
         - /etc/samba/smb.conf
-        - /etc/samba/smb.conf.d/nas.conf
-        - /etc/samba/smb.conf.d/ha-backups.conf
-        - /etc/samba/smb.conf.d/ha-media.conf
+        - /etc/samba/smb.conf.d/jdrive.conf
+        - /etc/samba/smb.conf.d/models.conf
         - /etc/samba/smb.conf.d/timemachine.conf
       register: samba_config_files
 
@@ -54,32 +59,59 @@
       loop_control:
         label: "{{ item.item }}"
 
+    # testparm parses the rendered result. It is the check that would catch a
+    # share whose null attribute rendered as the literal "None".
     - name: Validate effective Samba configuration
       ansible.builtin.command:
         cmd: testparm -s
       changed_when: false
 
-    - name: Verify Home Assistant Samba user exists
+    - name: Verify the managed Samba user exists
       ansible.builtin.command:
-        cmd: "pdbedit -L -u homeassistant"
+        cmd: "pdbedit -L -u jevans"
       changed_when: false
 
     - name: Verify Samba password fingerprint exists
       ansible.builtin.stat:
-        path: /etc/samba/password-fingerprints/homeassistant.sha256
+        path: /etc/samba/password-fingerprints/jevans.sha256
       register: samba_fingerprint
       failed_when: not samba_fingerprint.stat.exists
 
-    - name: Read backup share config
+    - name: Read the all-nulls share config
       ansible.builtin.slurp:
-        src: /etc/samba/smb.conf.d/ha-backups.conf
-      register: ha_backup_share
+        src: /etc/samba/smb.conf.d/models.conf
+      register: nas_models_share
 
-    - name: Assert backup share config contains expected stanza
+    # This is the assertion the whole fixture exists for. tofu serialises an
+    # undeclared optional() as explicit null, and Jinja's `is defined` is TRUE
+    # for null -- so a template testing definedness emits "comment = None" and
+    # "valid users = None", which is a silently WRONG share rather than a
+    # missing one.
+    - name: Assert null attributes fell back instead of rendering "None"
       ansible.builtin.assert:
         that:
-          - "'[ha-backups]' in (ha_backup_share.content | b64decode)"
-          - "'valid users = homeassistant' in (ha_backup_share.content | b64decode)"
+          - "'[models]' in (nas_models_share.content | b64decode)"
+          - "'None' not in (nas_models_share.content | b64decode)"
+          - "'comment' not in (nas_models_share.content | b64decode)"
+          - "'valid users = @nas' in (nas_models_share.content | b64decode)"
+          - "'create mask = 0664' in (nas_models_share.content | b64decode)"
+          - "'force group = nas' in (nas_models_share.content | b64decode)"
+          - "'fruit:time machine' not in (nas_models_share.content | b64decode)"
+        fail_msg: >-
+          A null share attribute leaked into smb.conf.d/models.conf:
+          {{ nas_models_share.content | b64decode }}
+
+    - name: Read the explicitly-configured share config
+      ansible.builtin.slurp:
+        src: /etc/samba/smb.conf.d/jdrive.conf
+      register: nas_jdrive_share
+
+    - name: Assert declared attributes are honoured
+      ansible.builtin.assert:
+        that:
+          - "'[jdrive]' in (nas_jdrive_share.content | b64decode)"
+          - "'path = \"/bulk/jdrive\"' in (nas_jdrive_share.content | b64decode)"
+          - "'comment = General file share' in (nas_jdrive_share.content | b64decode)"
 
     - name: Read global smb.conf
       ansible.builtin.slurp:
@@ -98,9 +130,12 @@
         src: /etc/samba/smb.conf.d/timemachine.conf
       register: nas_tm_share
 
-    - name: Assert Time Machine share enables fruit time machine
+    - name: Assert the Time Machine share is enabled AND capped
       ansible.builtin.assert:
         that:
           - "'[timemachine]' in (nas_tm_share.content | b64decode)"
           - "'fruit:time machine = yes' in (nas_tm_share.content | b64decode)"
-        fail_msg: "timemachine share did not render fruit:time machine = yes"
+          - "'fruit:time machine max size = 600G' in (nas_tm_share.content | b64decode)"
+        fail_msg: >-
+          The Time Machine share must render both the flag and its size cap.
+          An uncapped Time Machine target grows until the pool is full.

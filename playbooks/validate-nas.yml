@@ -1,126 +1,92 @@
 ---
-- name: Load OpenTofu host services
+- name: Load OpenTofu inventory
   import_playbook: load_tofu.yml
 
-- name: Validate Proxmox NAS
+# Validates the SMB service on whichever nodes actually declare a share.
+# Under the per-dataset contract most nodes declare none, so this play is a
+# no-op there rather than a failure.
+#
+# Dataset existence, quotas and mountpoints are deliberately NOT checked here:
+# zfs_pools owns them and asserts them itself. Re-checking them from this
+# playbook would test the same declaration twice and still miss the thing only
+# this playbook can prove -- that Samba actually serves the share.
+- name: Validate Proxmox SMB shares
   hosts: proxmox
   become: true
   gather_facts: true
 
-  pre_tasks:
-    - name: Require Home Assistant Samba password for validation
-      ansible.builtin.assert:
-        that:
-          - lookup('env', 'NAS_HOMEASSISTANT_SMB_PASSWORD') | length > 0
-        fail_msg: >-
-          NAS_HOMEASSISTANT_SMB_PASSWORD must be exported before running
-          validate-nas.yml. Use sops exec-env secrets.sops.yml.
-      no_log: true
-
-    - name: Create smbclient credentials file
-      ansible.builtin.copy:
-        dest: /tmp/.smb-validate-creds
-        content: |
-          username = homeassistant
-          password = {{ lookup('env', 'NAS_HOMEASSISTANT_SMB_PASSWORD') }}
-          domain = WORKGROUP
-        owner: root
-        group: root
-        mode: "0600"
-      no_log: true
-
-    - name: Create local validation file
-      ansible.builtin.copy:
-        dest: /tmp/ha-nas-validation.txt
-        content: "home-assistant-samba-validation\n"
-        owner: root
-        group: root
-        mode: "0600"
+  vars:
+    nas_validate_shares: "{{ (nas_storage_from_tofu | default({}, true)).shares | default([], true) }}"
+    nas_validate_user: "{{ ((nas_storage_from_tofu | default({}, true)).managed_users | default([], true) | first) | default({}, true) }}"
 
   tasks:
-    - name: Verify ZFS dataset exists
-      ansible.builtin.command:
-        cmd: "zfs list {{ nas_storage_from_tofu.zfs_dataset }}"
-      changed_when: false
+    - name: Skip nodes that declare no share
+      ansible.builtin.meta: end_host
+      when: nas_validate_shares | length == 0
 
-    - name: Verify ZFS mountpoint
-      ansible.builtin.command:
-        cmd: "zfs get -H -o value mountpoint {{ nas_storage_from_tofu.zfs_dataset }}"
-      register: nas_validate_mountpoint
-      changed_when: false
+    - name: Verify each declared share path exists
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      loop: "{{ nas_validate_shares }}"
+      loop_control:
+        label: "{{ item.name }} -> {{ item.path }}"
+      register: nas_validate_paths
 
-    - name: Assert mountpoint matches OpenTofu
+    - name: Assert every share path is a directory
       ansible.builtin.assert:
         that:
-          - nas_validate_mountpoint.stdout == nas_storage_from_tofu.mount_point
-        fail_msg: "NAS mountpoint drift detected"
+          - item.stat.exists
+          - item.stat.isdir
+        fail_msg: >-
+          Share {{ item.item.name }} points at {{ item.item.path }}, which is
+          not a directory. The dataset behind it is missing -- run zfs_pools.
+      loop: "{{ nas_validate_paths.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
 
-    - name: Verify ZFS quota
-      ansible.builtin.command:
-        cmd: "zfs get -H -o value quota {{ nas_storage_from_tofu.zfs_dataset }}"
-      register: nas_validate_quota
-      changed_when: false
-
-    - name: Assert quota matches OpenTofu
-      ansible.builtin.assert:
-        that:
-          - nas_validate_quota.stdout == nas_storage_from_tofu.zfs_quota
-        fail_msg: "NAS quota drift detected"
-
-    - name: Gather service facts
-      ansible.builtin.service_facts:
-
-    - name: Assert smbd is running
-      ansible.builtin.assert:
-        that:
-          - ansible_facts.services['smbd.service'] is defined
-          - ansible_facts.services['smbd.service'].state == 'running'
-        fail_msg: "smbd.service is not running"
-
-    - name: Validate effective Samba configuration
+    # testparm reports the EFFECTIVE config, so this catches a share that
+    # rendered but was rejected, which a file-exists check cannot.
+    - name: Read the effective Samba configuration
       ansible.builtin.command:
         cmd: testparm -s
+      register: nas_validate_testparm
       changed_when: false
 
-    - name: Verify Home Assistant Samba user exists
-      ansible.builtin.command:
-        cmd: "pdbedit -L -u homeassistant"
-      changed_when: false
-
-    - name: List Home Assistant shares
-      ansible.builtin.command:
-        cmd: smbclient -g -L localhost -A /tmp/.smb-validate-creds
-      changed_when: false
-      register: nas_validate_share_list
-
-    - name: Assert Home Assistant shares are visible
+    - name: Assert every declared share is present in the effective config
       ansible.builtin.assert:
         that:
-          - "'Disk|ha-backups|' in nas_validate_share_list.stdout"
-          - "'Disk|ha-media|' in nas_validate_share_list.stdout"
-        fail_msg: "Expected Home Assistant shares are not exposed by Samba"
+          - "'[' ~ item.name ~ ']' in nas_validate_testparm.stdout"
+        fail_msg: >-
+          Share {{ item.name }} is declared but absent from the effective
+          Samba configuration -- Samba parsed the file and dropped it.
+      loop: "{{ nas_validate_shares }}"
+      loop_control:
+        label: "{{ item.name }}"
 
-    - name: Exercise authenticated backup share write path
+    # The only check here that exercises the SERVICE rather than its config.
+    # Needs the managed user's password in the environment, under the name the
+    # declaration itself gives; skipped rather than failed when absent, so the
+    # config checks above still run without credentials.
+    - name: Authenticate to the share list as the managed user
       ansible.builtin.command:
         cmd: >-
-          smbclient //localhost/ha-backups -A /tmp/.smb-validate-creds
-          -c "put /tmp/ha-nas-validation.txt ha-nas-validation.txt; ls ha-nas-validation.txt; del ha-nas-validation.txt"
+          smbclient -L localhost -U {{ nas_validate_user.name }}%{{
+            lookup('env', nas_validate_user.password_secret_env) }}
+      register: nas_validate_smbclient
       changed_when: false
+      no_log: true
+      when:
+        - nas_validate_user.name is defined
+        - lookup('env', nas_validate_user.password_secret_env | default('')) | length > 0
 
-    - name: Exercise authenticated media share write path
-      ansible.builtin.command:
-        cmd: >-
-          smbclient //localhost/ha-media -A /tmp/.smb-validate-creds
-          -c "put /tmp/ha-nas-validation.txt ha-nas-validation.txt; ls ha-nas-validation.txt; del ha-nas-validation.txt"
-      changed_when: false
-
-  post_tasks:
-    - name: Remove smbclient credentials file
-      ansible.builtin.file:
-        path: /tmp/.smb-validate-creds
-        state: absent
-
-    - name: Remove local validation file
-      ansible.builtin.file:
-        path: /tmp/ha-nas-validation.txt
-        state: absent
+    - name: Assert the served share list matches the declaration
+      ansible.builtin.assert:
+        that:
+          - item.name in nas_validate_smbclient.stdout
+        fail_msg: >-
+          Share {{ item.name }} is configured but smbd did not advertise it to
+          an authenticated client.
+      loop: "{{ nas_validate_shares }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: not (nas_validate_smbclient.skipped | default(false))

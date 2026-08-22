@@ -1,131 +1,31 @@
 ---
 # NAS Storage role tasks
-# Provisions a ZFS dataset and Samba share on the Proxmox host.
-# ZFS and systemd tasks are skipped in Docker containers (molecule testing).
-
-# ============================================================
-# ZFS Dataset
-# ============================================================
-
-# A missing POOL and a missing DATASET both make the `zfs list` below exit
-# non-zero, so checking only the dataset makes the create fire on a node whose
-# pool does not exist at all, where it can only fail ("cannot open 'rpool': no
-# such pool"). Nodes installed on LVM/ext4 have no ZFS root pool.
-- name: Check if the ZFS pool exists
-  ansible.builtin.command:
-    cmd: "zpool list {{ nas_storage_zfs_dataset | split('/') | first }}"
-  register: nas_storage_zpool_check
-  changed_when: false
-  failed_when: false
-  when: ansible_virtualization_type != 'docker'
-  tags:
-    - nas_storage
-    - nas_storage_zfs
-
-- name: Check if ZFS dataset exists
-  ansible.builtin.command:
-    cmd: "zfs list {{ nas_storage_zfs_dataset }}"
-  register: nas_storage_zfs_check
-  changed_when: false
-  failed_when: false
-  when:
-    - ansible_virtualization_type != 'docker'
-    - nas_storage_zpool_check.rc | default(1) == 0
-  tags:
-    - nas_storage
-    - nas_storage_zfs
-
-- name: Create ZFS dataset
-  ansible.builtin.command:
-    cmd: >-
-      zfs create -o mountpoint={{ nas_storage_mount_point }}
-      {{ nas_storage_zfs_dataset }}
-  when:
-    - ansible_virtualization_type != 'docker'
-    - nas_storage_zpool_check.rc | default(1) == 0
-    - nas_storage_zfs_check.rc | default(1) != 0
-  changed_when: true
-  tags:
-    - nas_storage
-    - nas_storage_zfs
-
-- name: Get current ZFS mountpoint
-  ansible.builtin.command:
-    cmd: "zfs get -H -o value mountpoint {{ nas_storage_zfs_dataset }}"
-  register: nas_storage_zfs_current_mountpoint
-  changed_when: false
-  when:
-    - ansible_virtualization_type != 'docker'
-    - nas_storage_zfs_check.rc | default(1) == 0
-  tags:
-    - nas_storage
-    - nas_storage_zfs
-
-- name: Fix ZFS mountpoint drift
-  ansible.builtin.command:
-    cmd: "zfs set mountpoint={{ nas_storage_mount_point }} {{ nas_storage_zfs_dataset }}"
-  when:
-    - ansible_virtualization_type != 'docker'
-    - nas_storage_zfs_check.rc | default(1) == 0
-    - nas_storage_zfs_current_mountpoint.stdout | default('') != nas_storage_mount_point
-  changed_when: true
-  tags:
-    - nas_storage
-    - nas_storage_zfs
-
-# Quota values must use ZFS canonical format (e.g., 1T not 1024G)
-- name: Get current ZFS quota
-  ansible.builtin.command:
-    cmd: "zfs get -Hp -o value quota {{ nas_storage_zfs_dataset }}"
-  register: nas_storage_zfs_current_quota
-  changed_when: false
-  when:
-    - ansible_virtualization_type != 'docker'
-    - nas_storage_zpool_check.rc | default(1) == 0
-  tags:
-    - nas_storage
-    - nas_storage_zfs
-
-- name: Set ZFS quota
-  ansible.builtin.command:
-    cmd: "zfs set quota={{ nas_storage_zfs_quota }} {{ nas_storage_zfs_dataset }}"
-  when:
-    - ansible_virtualization_type != 'docker'
-    - nas_storage_zpool_check.rc | default(1) == 0
-    # Compare BYTES on both sides. `zfs get -Hp` is the parsable form, so it
-    # answers 1099511627776, while the configured value is written the way a
-    # human sets a quota ("1T"). Comparing those two strings is never equal, so
-    # the guard never held and every converge re-set a quota that was already
-    # correct — the single largest source of false "changed" in this role.
-    - nas_storage_zfs_current_quota.stdout | default('0') | int
-      != (nas_storage_zfs_quota | human_to_bytes)
-  changed_when: true
-  tags:
-    - nas_storage
-    - nas_storage_zfs
+# Serves already-existing ZFS datasets over Samba.
+#
+# This role does NOT create datasets, set quotas or manage mountpoints. Those
+# belong to zfs_pools, which provisions them from the same per-node
+# node_storage declaration that the shares are derived from -- so a share can
+# only ever name a dataset that zfs_pools has already made. Two roles both
+# creating datasets is how the old global NAS ended up with an identical
+# rpool/data/nas on every node.
+#
+# playbooks/site.yml skips this role entirely on a node that declares no
+# share, so reaching here means nas_storage_shares is non-empty.
+# systemd tasks are skipped in Docker containers (molecule testing).
 
 # ============================================================
 # Input validation
 # ============================================================
-
-- name: Require at least one Samba share
-  ansible.builtin.assert:
-    that:
-      - nas_storage_shares | length > 0
-    fail_msg: "nas_storage_shares must contain at least one share definition"
-  tags:
-    - nas_storage
-    - nas_storage_samba
 
 - name: Validate Samba share definitions
   ansible.builtin.assert:
     that:
       - (nas_storage_shares | map(attribute='name') | list | unique | length) == (nas_storage_shares | length)
       - (nas_storage_shares | map(attribute='path') | list | unique | length) == (nas_storage_shares | length)
-      - item.valid_users is defined and item.valid_users | length > 0
+      - item.name is defined and item.name | length > 0
       - item.path is defined
+      - item.path.startswith('/')
       - "'..' not in item.path"
-      - item.path == nas_storage_mount_point or item.path.startswith(nas_storage_mount_point ~ "/")
     fail_msg: "Invalid Samba share definition: {{ item | to_nice_json }}"
   loop: "{{ nas_storage_shares }}"
   loop_control:
@@ -161,36 +61,13 @@
     - nas_storage
     - nas_storage_samba
 
-- name: Create NAS root directory
-  ansible.builtin.file:
-    path: "{{ nas_storage_mount_point }}"
-    state: directory
-    owner: root
-    group: "{{ nas_storage_group_name }}"
-    mode: "0775"
-  tags:
-    - nas_storage
-
-- name: Create NAS subdirectories
-  ansible.builtin.file:
-    path: "{{ nas_storage_mount_point }}/{{ item }}"
-    state: directory
-    owner: root
-    group: "{{ nas_storage_group_name }}"
-    mode: "0775"
-  loop: "{{ nas_storage_directories }}"
-  loop_control:
-    label: "{{ nas_storage_mount_point }}/{{ item }}"
-  tags:
-    - nas_storage
-
 - name: Create share directories
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: directory
     owner: root
-    group: "{{ item.force_group | default(nas_storage_group_name) }}"
-    mode: "{{ item.directory_mask | default('0775') }}"
+    group: "{{ item.force_group | default(nas_storage_group_name, true) }}"
+    mode: "{{ item.directory_mask | default('0775', true) }}"
   loop: "{{ nas_storage_shares }}"
   loop_control:
     label: "{{ item.path }}"
