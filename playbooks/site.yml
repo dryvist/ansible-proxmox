@@ -175,6 +175,13 @@
       tags:
         - zfs_pools
 
+    # Record which physical drive sits in which machine, for Nautobot. Placed
+    # after zfs_pools so the `used` field reports the pool membership this run
+    # established rather than the state that preceded it. Read-only.
+    - role: pve_disk_inventory
+      tags:
+        - pve_disk_inventory
+
     # Local ZFS snapshot retention (sanoid) for the datasets zfs_pools manages.
     # Layer 1 protection (rollback); cross-node replication is a separate role.
     - role: sanoid
