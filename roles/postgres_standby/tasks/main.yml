@@ -76,8 +76,10 @@
 - name: Show the public key to authorise on each source guest
   ansible.builtin.debug:
     msg: >-
-      Export this on the ansible-proxmox-apps converge as
-      POSTGRES_STANDBY_SSH_PUBKEYS:
+      Export this on the ansible-proxmox-apps converge as an extra var
+      (--tags postgres_standby_trust -e postgres_standby_pull_pubkeys=...);
+      the POSTGRES_STANDBY_SSH_PUBKEYS env binding there was removed after it
+      kept re-authorising the decommissioned pve2 puller's key:
       {{ postgres_standby_pubkey.content | b64decode | trim }}
   when:
     - postgres_standby_enabled
