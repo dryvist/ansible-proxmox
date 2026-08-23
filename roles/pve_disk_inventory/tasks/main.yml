@@ -61,6 +61,39 @@
     # pattern) means the artifact is rewritten whole every run: a drive that left
     # a machine disappears from the file instead of lingering because nothing
     # removed it.
+    #
+    # THAT is exactly why a PARTIAL play must not write it. `--limit one-node`
+    # rewrites the whole artifact from one node's disks, silently deleting every
+    # other node's drives from it -- and the consumer removes what it stops
+    # seeing, so the deletion propagates into Nautobot. The zero-drive guard
+    # above cannot catch this: one node's disks is a non-empty, entirely
+    # plausible-looking result. Observed for real: a stray `--limit` run cut a
+    # 19-drive artifact to 8 with every task reporting ok.
+    #
+    # ansible_play_hosts_all, not ansible_play_hosts: the former is who the play
+    # TARGETED, the latter is who survived it. Comparing survivors would make an
+    # unreachable node look like a limit and block a legitimate full run -- the
+    # estate has a decommissioned node that is exactly that case.
+    - name: Refuse to write a partial artifact
+      ansible.builtin.assert:
+        that:
+          - (ansible_play_hosts_all | length) >= (groups[pve_disk_inventory_group] | default([]) | length)
+        fail_msg: >-
+          This play targeted {{ ansible_play_hosts_all | length }} of
+          {{ groups[pve_disk_inventory_group] | default([]) | length }} hosts in
+          '{{ pve_disk_inventory_group }}' -- a limited run. The artifact is
+          rewritten WHOLE, so writing it now would drop every untargeted node's
+          drives, and the consumer deletes what it stops seeing. Re-run without
+          --limit, or set pve_disk_inventory_allow_partial=true if you genuinely
+          intend a single-node artifact.
+        quiet: true
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_become: false
+      run_once: true
+      when: not (pve_disk_inventory_allow_partial | bool)
+
     - name: Ensure the controller artifact directory exists
       ansible.builtin.file:
         path: "{{ pve_disk_inventory_artifact | dirname }}"

@@ -67,6 +67,39 @@ def render(expression, **context):
     )
 
 
+def check_partial_run_guard() -> None:
+    """A limited play must be refused before the artifact is rewritten.
+
+    The artifact is written WHOLE, so `--limit one-node` drops every untargeted
+    node's drives and the consumer then deletes them downstream. This happened
+    for real: a stray --limit run cut a 19-drive artifact to 8, with every task
+    reporting ok. The zero-drive guard cannot catch it -- one node's disks is a
+    non-empty, plausible result.
+
+    The variable choice is the fragile part. `ansible_play_hosts` is who
+    SURVIVED the play; `ansible_play_hosts_all` is who it TARGETED. Using the
+    former makes an unreachable host look like a limit, which would block a
+    legitimate full run on any estate with a decommissioned node still listed.
+    """
+    tasks = yaml.safe_load(TASKS.read_text())
+    guard = next(
+        (t for t in _walk(tasks) if "assert" in str(t.get("name", "")).lower()
+         or "refuse" in str(t.get("name", "")).lower()),
+        None,
+    )
+    assert guard is not None, (
+        f"no partial-run guard in {TASKS} -- a --limit run would silently "
+        "publish a truncated artifact and delete the missing nodes' drives."
+    )
+    condition = str(guard.get("ansible.builtin.assert", {}).get("that", ""))
+    assert "ansible_play_hosts_all" in condition, (
+        "the guard does not use ansible_play_hosts_all. ansible_play_hosts is "
+        "survivors, not targets, so an unreachable node would read as a limit "
+        f"and block a legitimate full run: {condition}"
+    )
+    assert "run_once" in guard, "the guard must run once, not per host"
+
+
 def main() -> int:
     expression = extract_transform()
     excluded = yaml.safe_load(DEFAULTS.read_text())["pve_disk_inventory_exclude_types"]
@@ -105,8 +138,10 @@ def main() -> int:
         f"rather than driven by pve_disk_inventory_exclude_types: {unfiltered}"
     )
 
+    check_partial_run_guard()
+
     print(
-        f"pve_disk_inventory transform: OK "
+        f"pve_disk_inventory transform + partial-run guard: OK "
         f"({len(result)}/3 kept, excluded={excluded}, node stamp applied)"
     )
     return 0
