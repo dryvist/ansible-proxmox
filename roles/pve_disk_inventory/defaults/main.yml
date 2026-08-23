@@ -1,0 +1,25 @@
+---
+# Physical-drive inventory, gathered from each node for Nautobot.
+#
+# Nautobot is the system of record for physical hardware, and `dcim.InventoryItem`
+# is its native home for a component inside a device. Nothing populated it, so the
+# estate had no record of which drive sits in which machine. This role produces
+# that record; the nautobot role in ansible-proxmox-apps ingests it.
+pve_disk_inventory_enabled: true
+
+# Where the aggregated artifact lands on the CONTROLLER. The consumer reads it
+# through its own env var (ANSIBLE_PROXMOX_DRIVES), exactly as it already reads
+# hosts.yml through ANSIBLE_PROXMOX_HOSTS — same pattern, same direction, no new
+# credential and no new network path.
+#
+# A file rather than an API call is deliberate: this repo already holds SSH
+# certificate access to every node, so `pvesh` runs locally as root and needs no
+# Proxmox API token at all. Reaching the same data from Nautobot would have meant
+# minting a second Proxmox credential for a read-only job.
+pve_disk_inventory_artifact: "{{ playbook_dir }}/../.artifacts/drives.json"
+
+# Removable media enumerates as an ordinary serial-bearing disk. It is not estate
+# storage, and the consumer deletes what it stops seeing, so a USB stick left
+# plugged in would otherwise churn the inventory on every converge.
+pve_disk_inventory_exclude_types:
+  - usb

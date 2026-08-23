@@ -99,6 +99,14 @@ jobs:
       - name: Verify pve_quorum_guard parsing and arithmetic
         run: python3 tests/test_pve_quorum_guard_arithmetic.py
 
+      # The drive artifact feeds a Nautobot sync that DELETES what it stops
+      # seeing, so every failure here is silent and destructive: a filter that
+      # stops excluding removable media churns the inventory every converge, and
+      # a transform that drops the node stamp orphans every drive from its
+      # machine. Exercised offline against the role's own expression.
+      - name: Verify pve_disk_inventory shapes drives for Nautobot
+        run: python3 tests/test_pve_disk_inventory_transform.py
+
       # A controller that is the node being powered would run ipmitool against
       # itself. The node list holds Proxmox node names, so the exclusion is
       # driven against a host whose inventory key and node name differ.

@@ -72,3 +72,8 @@ tmp/
 
 # Claude Code local settings (machine-specific permissions - never commit)
 .claude/settings.local.json
+
+# Controller-side run artifacts (pve_disk_inventory writes drives.json here).
+# Derived from the live nodes on every converge and consumed by the Nautobot
+# seed bundle, so committing a copy would be a second home for the same facts.
+.artifacts/
