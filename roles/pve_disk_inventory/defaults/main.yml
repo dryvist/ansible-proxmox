@@ -23,3 +23,14 @@ pve_disk_inventory_artifact: "{{ playbook_dir }}/../.artifacts/drives.json"
 # plugged in would otherwise churn the inventory on every converge.
 pve_disk_inventory_exclude_types:
   - usb
+
+# The inventory group the artifact is expected to cover. Used only to detect a
+# limited run: the artifact is rewritten whole, so a `--limit` play would drop
+# every untargeted node's drives from it and the consumer would then delete them
+# downstream.
+pve_disk_inventory_group: proxmox
+
+# Escape hatch for a deliberate single-node artifact. Off by default because the
+# dangerous case looks exactly like the safe one -- a partial artifact is
+# non-empty and entirely plausible.
+pve_disk_inventory_allow_partial: false
