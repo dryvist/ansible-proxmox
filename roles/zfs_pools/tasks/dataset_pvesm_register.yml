@@ -10,10 +10,16 @@
 # path is already Docker-skipped via the datasets.yml include gate in main.yml,
 # so no per-task docker guard is needed. Non-destructive against an existing
 # pool, so it is NOT gated by zfs_pools_allow_create (that guards zpool create).
+#
+# `sparse` decides whether a new disk reserves its full declared size the moment
+# it is created. Without it a 450G disk takes a 450G refreservation out of the
+# dataset quota before a single block is written, so a 500G quota holds exactly
+# one such disk. It is reconciled rather than set only at creation, because the
+# storage ID usually already exists by the time anyone notices.
 
-- name: "Check Proxmox storage registration for {{ zfs_dataset.value.pvesm_id }}"
+- name: "Read Proxmox storage registration for {{ zfs_dataset.value.pvesm_id }}"
   ansible.builtin.command:
-    cmd: "pvesm status --storage {{ zfs_dataset.value.pvesm_id }}"
+    cmd: "pvesh get /storage/{{ zfs_dataset.value.pvesm_id }} --output-format json"
   register: zfs_pools_dataset_pvesm_check
   changed_when: false
   failed_when: false
@@ -27,7 +33,29 @@
       -pool {{ zfs_pool.key }}/{{ zfs_dataset.key }}
       -content {{ zfs_dataset.value.content | default(['images', 'rootdir']) | join(',') }}
       -nodes {{ proxmox_node_name | default(inventory_hostname) }}
+      -sparse {{ 1 if zfs_dataset.value.sparse | default(false) else 0 }}
   when: zfs_pools_dataset_pvesm_check.rc != 0
+  changed_when: true
+  tags:
+    - zfs_pools
+
+# Reconcile an ALREADY-registered storage. `pvesm add` above never runs for one
+# that exists, so without this a declared `sparse` stays inert forever and the
+# read-back looks correct while every new disk is still created thick.
+- name: "Reconcile sparse on existing Proxmox storage {{ zfs_dataset.value.pvesm_id }}"
+  ansible.builtin.command:
+    cmd: >-
+      pvesm set {{ zfs_dataset.value.pvesm_id }}
+      -sparse {{ 1 if zfs_dataset.value.sparse | default(false) else 0 }}
+  vars:
+    # pvesh omits `sparse` entirely when it is off, so absent means 0.
+    zfs_pools_pvesm_live_sparse: >-
+      {{ (zfs_pools_dataset_pvesm_check.stdout | from_json).sparse | default(0) | int }}
+    zfs_pools_pvesm_want_sparse: "{{ 1 if zfs_dataset.value.sparse | default(false) else 0 }}"
+  when:
+    - zfs_pools_dataset_pvesm_check.rc == 0
+    - zfs_dataset.value.sparse is defined
+    - zfs_pools_pvesm_live_sparse | int != zfs_pools_pvesm_want_sparse | int
   changed_when: true
   tags:
     - zfs_pools
