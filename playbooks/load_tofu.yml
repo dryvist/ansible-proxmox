@@ -216,6 +216,25 @@
         containers_from_tofu: "{{ tofu_data.containers | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
+    # The same pass-through for VMs. Absent before this, which is why a
+    # host_vars expression could reach a container's dataset but never a VM's:
+    # docker VM 250 had NO snapshot coverage because nothing downstream could
+    # resolve where its disks live, and on another node the sanoid policy names
+    # Splunk's VM disks literally for the same reason.
+    #
+    # Each entry carries a `disks` list — every disk with its own datastore and
+    # the volume name PROXMOX assigned (read back from the provider). Consumers
+    # must iterate that list rather than reading the boot-disk `datastore`: a
+    # VM's data usually is not on its boot disk. They must also never DERIVE the
+    # volume name by counting disks — indices are allocated per (vmid, storage)
+    # as next-free, so counting names a retained pre-move copy wherever a volume
+    # was ever moved.
+    - name: Inject OpenTofu VM identity onto proxmox hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        vms_from_tofu: "{{ tofu_data.vms | default({}) }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"
+
     # Estate domain, so host_vars can build guest FQDNs (e.g. the
     # postgres_standby source_host) instead of hard-coding an IP or domain.
     # Empty when absent (test fixture) — consumers gate on non-empty.

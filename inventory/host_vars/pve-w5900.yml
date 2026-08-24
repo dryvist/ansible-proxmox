@@ -74,6 +74,10 @@ sanoid_tier_by_container:
   openbao-41: critical
   openbao-42: critical
 
+# VMs are tiered the same way, in their own map: a VM key and a container key
+# could otherwise collide silently and one would win at random.
+sanoid_tier_by_vm: {}
+
 # Every container tofu places on this node, so a guest added later is covered
 # without editing this file. A hand-listed set fails by omission -- three of the
 # guests moved on 2026-08-24 (squid, ai-runner-pool-01, llm-4080) had never had
@@ -98,6 +102,30 @@ sanoid_datasets_json: >-
       {{ ns.sep }}{{ (root ~ '/subvol-' ~ c.vmid ~ '-disk-0') | to_json }}:
       {{- {'use_template': sanoid_tier_by_container[name] | default(sanoid_tier_default)} | to_json }}
       {%- set ns.sep = ',' -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {#- VMs. A container has exactly one rootfs, so 'subvol-<vmid>-disk-0' is
+      derivable. A VM does NOT: it can have several disks, and Proxmox — not
+      this repo — assigns each volume's name. So iterate the published `disks`
+      list and use the name it carries. NEVER build 'vm-<vmid>-disk-<n>' by
+      counting: indices are allocated per (vmid, storage) as next-free, so on a
+      guest whose volume was ever moved, disk-0 is the RETAINED pre-move copy
+      and counting would snapshot a frozen dataset that looks perfectly healthy.
+      Covering only the boot disk is the same failure in miniature — a VM's data
+      usually is not on its boot disk. -#}
+  {%- for name, m in (vms_from_tofu | default({})).items() -%}
+    {%- if m.node | default('') == (proxmox_node_name | default(inventory_hostname)) -%}
+      {%- for d in m.disks | mandatory(
+            'VM ' ~ name ~ ' publishes no .disks -- the published inventory '
+            ~ 'predates that field; apply tofu before converging') -%}
+        {%- set root = pve_dataset_root_by_storage[d.datastore] | mandatory(
+              'VM ' ~ name ~ ' has a disk on storage "' ~ d.datastore ~ '", '
+              ~ 'which resolves to no ZFS dataset root. A dir-type storage has '
+              ~ 'no per-guest dataset and cannot be snapshotted') -%}
+        {{ ns.sep }}{{ (root ~ '/' ~ d.path) | to_json }}:
+        {{- {'use_template': sanoid_tier_by_vm[name] | default(sanoid_tier_default)} | to_json }}
+        {%- set ns.sep = ',' -%}
+      {%- endfor -%}
     {%- endif -%}
   {%- endfor -%}
   }
