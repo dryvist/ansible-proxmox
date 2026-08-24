@@ -28,20 +28,80 @@ wol_enable_interface: enp5s0
 # non-free packaging, and for the reboot the driver switch requires.
 nvidia_driver_enabled: true
 
-# sanoid snapshot policy for the two OpenBao voters on this node -- it had
-# none before this. critical/hourly: continuously-written primary state.
-openbao_41_vmid: >-
-  {{ ((containers_from_tofu | default({}))['openbao-41'] | default({})).vmid
-     | mandatory('containers_from_tofu is unset; run load_tofu.yml') }}
-openbao_42_vmid: >-
-  {{ ((containers_from_tofu | default({}))['openbao-42'] | default({})).vmid
-     | mandatory('containers_from_tofu is unset; run load_tofu.yml') }}
+# sanoid snapshot policy for this node's guests.
+#
+# The dataset PATHS are derived, never written down. An earlier revision named
+# 'rpool/data/subvol-<vmid>-disk-0' literally, which hardcoded the POOL into a
+# snapshot policy. On 2026-08-24 the guests moved from rpool to ssd and the
+# policy kept snapshotting the frozen rpool copies: hourly snapshots continued,
+# counts and timestamps stayed healthy, and none of it captured live data -- on
+# two OpenBao raft voters. A snapshot policy that cannot follow its guest is a
+# false green by construction, so the pool is now resolved, not asserted.
 
-sanoid_datasets: >-
-  {{ {
-       'rpool/data/subvol-' ~ openbao_41_vmid ~ '-disk-0': {'use_template': 'critical'},
-       'rpool/data/subvol-' ~ openbao_42_vmid ~ '-disk-0': {'use_template': 'critical'}
-     } }}
+# Storage id -> ZFS dataset root, built from this node's OWN declared storage
+# rather than from a second copy of it. Two shapes produce a PVE storage:
+#   - a registered POOL puts guest volumes at the pool root  (ssd -> ssd)
+#   - a dataset with pvesm_id puts them under it  (nvme-splunk -> nvme/splunk)
+# 'local-zfs' is Proxmox's install-time default zfspool and is not declared in
+# node_storage, so it is the one entry that must be stated.
+#
+# Rendered as JSON then parsed -- the same pattern load_tofu.yml uses for
+# nas_storage_by_node, because Jinja has no dict comprehension.
+pve_dataset_root_by_storage_json: >-
+  {
+  {%- set ns = namespace(sep='') -%}
+  {%- for pool_key, pool in ((zfs_pools_from_tofu | default({})).pools | default({})).items() -%}
+    {%- if pool.register | default(true) -%}
+      {{ ns.sep }}{{ pool_key | to_json }}: {{ pool_key | to_json }}
+      {%- set ns.sep = ',' -%}
+    {%- endif -%}
+    {%- for ds_key, ds in (pool.datasets | default({})).items() -%}
+      {%- if ds.pvesm_id | default('') -%}
+        {{ ns.sep }}{{ ds.pvesm_id | to_json }}: {{ (pool_key ~ '/' ~ ds_key) | to_json }}
+        {%- set ns.sep = ',' -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endfor -%}
+  {{ ns.sep }}"local-zfs": "rpool/data"
+  }
+pve_dataset_root_by_storage: "{{ pve_dataset_root_by_storage_json | from_json }}"
+
+# Retention tier. Everything on this node gets a daily-cadence floor; the raft
+# voters are continuously-written primary state and are pinned to hourly.
+# Naming an EXCEPTION is a policy declaration; naming a PATH was the bug.
+sanoid_tier_default: database
+sanoid_tier_by_container:
+  openbao-41: critical
+  openbao-42: critical
+
+# Every container tofu places on this node, so a guest added later is covered
+# without editing this file. A hand-listed set fails by omission -- three of the
+# guests moved on 2026-08-24 (squid, ai-runner-pool-01, llm-4080) had never had
+# any coverage at all, because nothing listed them.
+#
+# .datastore and .vmid carry no default(): if the published inventory predates
+# the datastore field, this must fail loudly at converge rather than fall back
+# to a pool guess. A default here would rebuild the exact bug above.
+sanoid_datasets_json: >-
+  {
+  {%- set ns = namespace(sep='') -%}
+  {%- for name, c in (containers_from_tofu | default({})).items() -%}
+    {%- if c.node | default('') == (proxmox_node_name | default(inventory_hostname)) -%}
+      {%- set ds = c.datastore | mandatory(
+            'container ' ~ name ~ ' publishes no .datastore -- the published '
+            ~ 'inventory predates that field; apply tofu before converging') -%}
+      {%- set root = pve_dataset_root_by_storage[ds] | mandatory(
+            'container ' ~ name ~ ' is on storage "' ~ ds ~ '", which resolves '
+            ~ 'to no ZFS dataset root. A dir-type storage (e.g. local) has no '
+            ~ 'per-guest dataset and cannot be snapshotted; move the guest to a '
+            ~ 'zfspool storage or declare that storage in node_storage') -%}
+      {{ ns.sep }}{{ (root ~ '/subvol-' ~ c.vmid ~ '-disk-0') | to_json }}:
+      {{- {'use_template': sanoid_tier_by_container[name] | default(sanoid_tier_default)} | to_json }}
+      {%- set ns.sep = ',' -%}
+    {%- endif -%}
+  {%- endfor -%}
+  }
+sanoid_datasets: "{{ sanoid_datasets_json | from_json }}"
 
 # Snapshot-only: no syncoid pull job replicates either dataset off-node yet.
 # Any pull job belongs in another node's host_vars naming this node as the
