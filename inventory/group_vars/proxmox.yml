@@ -150,15 +150,22 @@ pve_quorum_guard_min_headroom: 0
 #
 # Rendered as JSON then parsed -- the same pattern load_tofu.yml uses for
 # nas_storage_by_node, because Jinja has no dict comprehension.
+#
+# Every default() below is the BOOLEAN-AWARE two-argument form. The one-argument
+# form substitutes for UNDEFINED only, so a key published as an explicit null
+# passes straight through and the .items() beneath it renders garbage: the
+# failure surfaces as a from_json parse error about column 2, naming neither the
+# key nor the node. Fired both ways against a null `pools` and a null `datasets`
+# before and after; the one-argument form produced exactly that.
 pve_dataset_root_by_storage_json: >-
   {
   {%- set ns = namespace(sep='') -%}
-  {%- for pool_key, pool in ((zfs_pools_from_tofu | default({})).pools | default({})).items() -%}
+  {%- for pool_key, pool in ((zfs_pools_from_tofu | default({}, true)).pools | default({}, true)).items() -%}
     {%- if pool.register | default(true) -%}
       {{ ns.sep }}{{ pool_key | to_json }}: {{ pool_key | to_json }}
       {%- set ns.sep = ',' -%}
     {%- endif -%}
-    {%- for ds_key, ds in (pool.datasets | default({})).items() -%}
+    {%- for ds_key, ds in (pool.datasets | default({}, true)).items() -%}
       {%- if ds.pvesm_id | default('') -%}
         {{ ns.sep }}{{ ds.pvesm_id | to_json }}: {{ (pool_key ~ '/' ~ ds_key) | to_json }}
         {%- set ns.sep = ',' -%}

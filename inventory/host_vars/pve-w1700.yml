@@ -39,6 +39,13 @@
 # So: resolve, and fail loudly with the actual remedy when unresolved. Every
 # `| mandatory(...)` below is bare — a `default()` to its left would satisfy it
 # unconditionally, because mandatory rejects only UNDEFINED.
+#
+# The default() calls that DO appear sit on the enclosing container, never on
+# the value being asserted, and use the boolean-aware two-argument form so an
+# explicitly-null container is replaced rather than passed through. Attribute
+# access on the replacement still yields Undefined, so the guard still fires —
+# verified by rendering with each container set to null and confirming the run
+# fails with the message below rather than a Jinja traceback.
 
 # The `postgres` guest's mp0 (`/var/lib/postgresql`) carries BOTH the cluster's
 # PGDATA and `/var/lib/postgresql/backups`, the nightly per-database pg_dump
@@ -58,7 +65,7 @@
 # late. Hourly closes that to same-day without changing what `database` means
 # for warm standbys.
 postgres_vmid: >-
-  {{ ((containers_from_tofu | default({}))['postgres'] | default({})).vmid
+  {{ ((containers_from_tofu | default({}, true))['postgres'] | default({}, true)).vmid
      | mandatory('containers_from_tofu is unset, so the postgres VMID cannot be
        resolved. Run playbooks/load_tofu.yml — it targets localhost, so any
        --limit must include localhost. Refusing to guess a VMID.') }}
@@ -107,7 +114,7 @@ postgres_protected_volume_index: 1
 sanoid_datasets_json: >-
   {
   {%- set ns = namespace(sep='') -%}
-  {%- set splunk = ((splunk_vm_from_tofu | default({})).splunk | default({})).disks
+  {%- set splunk = ((splunk_vm_from_tofu | default({}, true)).splunk | default({}, true)).disks
         | mandatory('pve-w1700: the Splunk VM publishes no .disks, so its dataset
           paths cannot be resolved. Run playbooks/load_tofu.yml (it targets
           localhost, so any --limit must include localhost); if the published
@@ -129,7 +136,7 @@ sanoid_datasets_json: >-
     {{- {'use_template': 'critical'} | to_json }}
     {%- set ns.sep = ',' -%}
   {%- endfor -%}
-  {%- set pg = (containers_from_tofu | default({}))['postgres'] | default({}) -%}
+  {%- set pg = (containers_from_tofu | default({}, true))['postgres'] | default({}, true) -%}
   {%- set pg_ds = pg.datastore
         | mandatory('pve-w1700: the postgres container publishes no .datastore,
           so its dataset pool cannot be resolved. Run playbooks/load_tofu.yml

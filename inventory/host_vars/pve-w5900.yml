@@ -67,7 +67,7 @@ sanoid_tier_by_vm: {}
 sanoid_datasets_json: >-
   {
   {%- set ns = namespace(sep='') -%}
-  {%- for name, c in (containers_from_tofu | default({})).items() -%}
+  {%- for name, c in (containers_from_tofu | default({}, true)).items() -%}
     {%- if c.node | default('') == (proxmox_node_name | default(inventory_hostname)) -%}
       {%- set ds = c.datastore | mandatory(
             'container ' ~ name ~ ' publishes no .datastore -- the published '
@@ -91,7 +91,7 @@ sanoid_datasets_json: >-
       and counting would snapshot a frozen dataset that looks perfectly healthy.
       Covering only the boot disk is the same failure in miniature — a VM's data
       usually is not on its boot disk. -#}
-  {%- for name, m in (vms_from_tofu | default({})).items() -%}
+  {%- for name, m in (vms_from_tofu | default({}, true)).items() -%}
     {%- if m.node | default('') == (proxmox_node_name | default(inventory_hostname)) -%}
       {%- for d in m.disks | mandatory(
             'VM ' ~ name ~ ' publishes no .disks -- the published inventory '
