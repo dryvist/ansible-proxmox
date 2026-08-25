@@ -1,0 +1,37 @@
+---
+# Pure derivation of the home-pin scope: which containers must be confined to
+# the single node holding their rootfs, and which of those cannot be (no `node`
+# in the inventory). No CLI, no cluster read — so tests/pve_ha_replication/
+# verify_home_pin_scope.yml includes THIS file rather than restating the
+# expressions, and a drift in the role fails the test instead of passing it.
+#
+# Excluded from the pin: the pvesr-replicated singletons, which are pinned to
+# the replication pair instead (pve_ha_replication_affinity_rule, in
+# affinity_rules.yml), and the replica-less singletons tier0_resources.yml
+# already refused to place under HA at all.
+- name: Resolve the hostnames that must be pinned to their home node
+  ansible.builtin.set_fact:
+    pve_ha_pinned_hostnames: >-
+      {{ ((containers_from_tofu | default({})) | dict2items
+          | map(attribute='key') | list
+          if pve_ha_manage_all | bool else pve_ha_ct_hostnames)
+         | reject('in', pve_ha_replication_ct_hostnames)
+         | reject('in', pve_ha_unsafe_singletons | default([]))
+         | list }}
+
+- name: Resolve the home-pinned guests, grouped by their home node
+  ansible.builtin.set_fact:
+    pve_ha_home_entries: >-
+      {{ (containers_from_tofu | default({})) | dict2items
+         | selectattr('key', 'in', pve_ha_pinned_hostnames)
+         | selectattr('value.ansible_pct_vmid', 'defined')
+         | selectattr('value.node', 'defined')
+         | list }}
+
+- name: Resolve pinnable guests that carry no home node
+  ansible.builtin.set_fact:
+    pve_ha_unpinnable_hosts: >-
+      {{ (containers_from_tofu | default({})) | dict2items
+         | selectattr('key', 'in', pve_ha_pinned_hostnames)
+         | rejectattr('value.node', 'defined')
+         | map(attribute='key') | list }}

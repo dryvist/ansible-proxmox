@@ -1,30 +1,57 @@
 ---
-# Part 3 of 3 (see main.yml). pve_ha_manage_all estate-wide enrollment:
-# every remaining container joins HA pinned to the single node holding its
-# rootfs (see defaults for why the pin is the safety property).
-# --- Estate-wide enrollment (pve_ha_manage_all) -------------------------
-# Every remaining container joins HA pinned to the single node holding its
-# rootfs. See the defaults for why the pin is the safety property: without
-# it, ha-manager relocates a local-ZFS guest onto a node that cannot start
-# it, after the source node has already self-fenced to get there.
+# Part 3 of 3 (see main.yml). Strict per-node "home pin" rules: an HA-managed
+# container with no pvesr replica may only ever be started on the single node
+# that holds its rootfs.
 #
-# Containers only: containers_from_tofu is the container map. A VM that
-# should be HA-managed goes in pve_ha_extra_sids, which is not pinned and so
-# must only carry VMs on storage every node can reach.
-- name: Resolve the home-pinned guests, grouped by their home node
-  ansible.builtin.set_fact:
-    pve_ha_home_entries: >-
-      {{ (containers_from_tofu | default({})) | dict2items
-         | rejectattr('key', 'in', pve_ha_ct_hostnames)
-         | selectattr('value.ansible_pct_vmid', 'defined')
-         | selectattr('value.node', 'defined')
-         | list }}
-  when: pve_ha_manage_all | bool
+# The pin is not optional, and it is not the same control as anti-affinity.
+# These guests live on node-local ZFS. HA-managed with no node-affinity rule, a
+# fence relocates one onto a node where its dataset does not exist; it cannot
+# start, HA burns max_restart/max_relocate, and parks it in `error` — a LATCH,
+# not a retry, so it stays down until an operator clears it by hand. A negative
+# resource-affinity rule keeps a redundant pair apart but says nothing about
+# WHERE either half may run, so it does not prevent any of that.
+#
+# Two scopes, deliberately different:
+#   * PINNING (always): every HA-managed container except the pvesr-replicated
+#     singletons, which are pinned to the replication pair instead by
+#     pve_ha_replication_affinity_rule (affinity_rules.yml).
+#   * ENROLLMENT (pve_ha_manage_all only): pulling the REST of the estate into
+#     HA. The tier-0 set is enrolled by tier0_resources.yml either way.
+#
+# Containers only: containers_from_tofu is the container map. A VM that should
+# be HA-managed goes in pve_ha_extra_sids, which is not pinned and so must only
+# carry VMs on storage every node can reach.
+- name: Resolve the home-pin scope
+  ansible.builtin.include_tasks: home_pin_scope.yml
 
-- name: Resolve the home-pinned SIDs
+- name: Refuse containers with no home node (cannot be pinned)
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: these containers have no `node` in the tofu inventory and cannot
+      be pinned — an unpinned guest under HA can be relocated onto a node
+      without its storage: {{ pve_ha_unpinnable_hosts }}
+  when:
+    - pve_ha_fail_on_unresolved | bool
+    - pve_ha_unpinnable_hosts | length > 0
+
+- name: Warn about containers with no home node (non-fatal mode)
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: these containers have no `node` in the tofu inventory and cannot
+      be pinned — an unpinned guest under HA can be relocated onto a node
+      without its storage: {{ pve_ha_unpinnable_hosts }}
+  when:
+    - not (pve_ha_fail_on_unresolved | bool)
+    - pve_ha_unpinnable_hosts | length > 0
+
+# Enrollment scope only: the tier-0 guests are already added (and their params
+# enforced) by tier0_resources.yml, so re-adding them here would only overwrite
+# their bounds with the pinned ones.
+- name: Resolve the SIDs to enroll estate-wide
   ansible.builtin.set_fact:
     pve_ha_home_sids: >-
-      {{ pve_ha_home_entries | map(attribute='value.ansible_pct_vmid') | map('string')
+      {{ pve_ha_home_entries | rejectattr('key', 'in', pve_ha_ct_hostnames)
+         | map(attribute='value.ansible_pct_vmid') | map('string')
          | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
   when: pve_ha_manage_all | bool
 
@@ -53,37 +80,6 @@
              )
          ) }}
   when: pve_ha_manage_all | bool
-
-
-- name: Refuse containers with no home node (cannot be pinned)
-  ansible.builtin.fail:
-    msg: >-
-      pve_ha: these containers have no `node` in the tofu inventory and would
-      be left OUT of HA — an unpinned guest under HA can be relocated onto a
-      node without its storage:
-      {{ (containers_from_tofu | default({})) | dict2items
-         | rejectattr('value.node', 'defined')
-         | map(attribute='key') | list }}
-  when:
-    - pve_ha_manage_all | bool
-    - pve_ha_fail_on_unresolved | bool
-    - ((containers_from_tofu | default({})) | dict2items
-       | rejectattr('value.node', 'defined') | list) | length > 0
-
-- name: Warn about containers with no home node (non-fatal mode)
-  ansible.builtin.debug:
-    msg: >-
-      pve_ha: these containers have no `node` in the tofu inventory and are
-      left OUT of HA — an unpinned guest under HA can be relocated onto a
-      node without its storage:
-      {{ (containers_from_tofu | default({})) | dict2items
-         | rejectattr('value.node', 'defined')
-         | map(attribute='key') | list }}
-  when:
-    - pve_ha_manage_all | bool
-    - not (pve_ha_fail_on_unresolved | bool)
-    - ((containers_from_tofu | default({})) | dict2items
-       | rejectattr('value.node', 'defined') | list) | length > 0
 
 - name: Add the home-pinned guests to HA (only those not yet managed)
   ansible.builtin.command: >-
@@ -129,9 +125,7 @@
   loop: "{{ pve_ha_home_entries | default([]) | groupby('value.node') }}"
   loop_control:
     label: "{{ item.0 }}"
-  when:
-    - pve_ha_manage_all | bool
-    - (pve_ha_home_rule_prefix ~ '-' ~ item.0) not in pve_ha_existing_rules
+  when: (pve_ha_home_rule_prefix ~ '-' ~ item.0) not in pve_ha_existing_rules
   changed_when: true
 
 - name: Enforce membership on the existing home-node pins
@@ -146,8 +140,6 @@
   loop: "{{ pve_ha_home_entries | default([]) | groupby('value.node') }}"
   loop_control:
     label: "{{ item.0 }}"
-  when:
-    - pve_ha_manage_all | bool
-    - (pve_ha_home_rule_prefix ~ '-' ~ item.0) in pve_ha_existing_rules
+  when: (pve_ha_home_rule_prefix ~ '-' ~ item.0) in pve_ha_existing_rules
   # ponytail: idempotent enforce, same rationale as the rules above.
   changed_when: false
