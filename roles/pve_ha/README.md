@@ -35,7 +35,10 @@ When enabled it:
    hostname, so a renumber flows through with no edit.
 2. Adds `resource-affinity` **negative** rules so the two halves of each
    redundant pair never share a node.
-3. For the **singleton app guests** (`pve_ha_replication_ct_hostnames`), creates
+3. Adds a **strict `node-affinity` rule per home node**
+   (`<pve_ha_home_rule_prefix>-<node>`) confining every HA-managed guest with no
+   pvesr replica to the single node holding its rootfs.
+4. For the **singleton app guests** (`pve_ha_replication_ct_hostnames`), creates
    a `pvesr` job shipping each one's rootfs to the always-on partner node, so
    ha-manager has a replica to relocate onto.
 
@@ -61,6 +64,12 @@ instance, the keepalived VRRP VIP):
   returns when its node heals. No replicated storage needed.
 - **Anti-affinity** keeps the redundancy real: it stops HA (or a manual migrate)
   from ever collapsing both peers onto one node.
+- A **strict home-node pin** keeps HA from trying to relocate one at all. These
+  guests have no replica, so a relocation lands on a node that cannot start
+  them; HA then exhausts `max_restart`/`max_relocate` and parks the guest in
+  `error`, which is a LATCH an operator must clear by hand — after the source
+  node has already self-fenced to get there. Anti-affinity does not cover this:
+  it keeps a pair apart, it never says where either half may run.
 
 **Singleton app guests** (`postgres-apps`, `nautobot`, `vikunja` —
 `pve_ha_replication_ct_hostnames`) — one instance, no peer, so **relocation is
@@ -131,6 +140,8 @@ No real service is touched.
 | `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
 | `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
 | `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name of the strict node-affinity rule pinning replication guests to the pair. |
+| `pve_ha_home_rule_prefix` | `pve-ha-home` | Prefix of the per-home-node strict pins applied to every replica-less HA guest. |
+| `pve_ha_manage_all` | `false` | Also enroll the rest of the estate in HA. Widens enrollment only — the home pin applies either way. |
 
 ## Why `ha.yml` is imported by `site.yml` rather than left standalone
 
