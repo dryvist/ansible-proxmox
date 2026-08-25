@@ -131,3 +131,40 @@ pve_quorum_guard_powered_off_voters:
 # reports the arithmetic on every run. Raise to 1 once a zero-vote member or an
 # external arbiter lands — see roles/pve_quorum_guard/README.md.
 pve_quorum_guard_min_headroom: 0
+
+# Storage id -> ZFS dataset root, built from each node's OWN declared storage
+# (zfs_pools_from_tofu, injected per host by load_tofu.yml) rather than from a
+# second copy of it. Two shapes produce a PVE storage:
+#   - a registered POOL puts guest volumes at the pool root  (ssd -> ssd)
+#   - a dataset with pvesm_id puts them under it  (nvme-splunk -> nvme/splunk)
+# 'local-zfs' is Proxmox's install-time default zfspool and is not declared in
+# node_storage, so it is the one entry that must be stated.
+#
+# Group-level, not per host: every node resolves its own storage through the
+# same expression, so a snapshot policy anywhere can name a STORAGE and let the
+# pool follow. A pool name written into a snapshot policy is the false green
+# this exists to prevent -- once the guest's volume moves tier the policy keeps
+# snapshotting the frozen copy, and counts and timestamps stay healthy while
+# capturing nothing. Copying this map into a second host_vars file would
+# reintroduce the same drift one level up.
+#
+# Rendered as JSON then parsed -- the same pattern load_tofu.yml uses for
+# nas_storage_by_node, because Jinja has no dict comprehension.
+pve_dataset_root_by_storage_json: >-
+  {
+  {%- set ns = namespace(sep='') -%}
+  {%- for pool_key, pool in ((zfs_pools_from_tofu | default({})).pools | default({})).items() -%}
+    {%- if pool.register | default(true) -%}
+      {{ ns.sep }}{{ pool_key | to_json }}: {{ pool_key | to_json }}
+      {%- set ns.sep = ',' -%}
+    {%- endif -%}
+    {%- for ds_key, ds in (pool.datasets | default({})).items() -%}
+      {%- if ds.pvesm_id | default('') -%}
+        {{ ns.sep }}{{ ds.pvesm_id | to_json }}: {{ (pool_key ~ '/' ~ ds_key) | to_json }}
+        {%- set ns.sep = ',' -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endfor -%}
+  {{ ns.sep }}"local-zfs": "rpool/data"
+  }
+pve_dataset_root_by_storage: "{{ pve_dataset_root_by_storage_json | from_json }}"

@@ -38,33 +38,11 @@ nvidia_driver_enabled: true
 # two OpenBao raft voters. A snapshot policy that cannot follow its guest is a
 # false green by construction, so the pool is now resolved, not asserted.
 
-# Storage id -> ZFS dataset root, built from this node's OWN declared storage
-# rather than from a second copy of it. Two shapes produce a PVE storage:
-#   - a registered POOL puts guest volumes at the pool root  (ssd -> ssd)
-#   - a dataset with pvesm_id puts them under it  (nvme-splunk -> nvme/splunk)
-# 'local-zfs' is Proxmox's install-time default zfspool and is not declared in
-# node_storage, so it is the one entry that must be stated.
-#
-# Rendered as JSON then parsed -- the same pattern load_tofu.yml uses for
-# nas_storage_by_node, because Jinja has no dict comprehension.
-pve_dataset_root_by_storage_json: >-
-  {
-  {%- set ns = namespace(sep='') -%}
-  {%- for pool_key, pool in ((zfs_pools_from_tofu | default({})).pools | default({})).items() -%}
-    {%- if pool.register | default(true) -%}
-      {{ ns.sep }}{{ pool_key | to_json }}: {{ pool_key | to_json }}
-      {%- set ns.sep = ',' -%}
-    {%- endif -%}
-    {%- for ds_key, ds in (pool.datasets | default({})).items() -%}
-      {%- if ds.pvesm_id | default('') -%}
-        {{ ns.sep }}{{ ds.pvesm_id | to_json }}: {{ (pool_key ~ '/' ~ ds_key) | to_json }}
-        {%- set ns.sep = ',' -%}
-      {%- endif -%}
-    {%- endfor -%}
-  {%- endfor -%}
-  {{ ns.sep }}"local-zfs": "rpool/data"
-  }
-pve_dataset_root_by_storage: "{{ pve_dataset_root_by_storage_json | from_json }}"
+# The storage id -> ZFS dataset root map used below is
+# `pve_dataset_root_by_storage`, defined once in inventory/group_vars/proxmox.yml
+# and resolved per host from that node's own zfs_pools_from_tofu. It used to be
+# defined here; a second node needed the same map, and a copy would have been a
+# second definition of the very thing that must not drift.
 
 # Retention tier. Everything on this node gets a daily-cadence floor; the raft
 # voters are continuously-written primary state and are pinned to hourly.
