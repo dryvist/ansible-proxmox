@@ -127,7 +127,7 @@
 
 - name: Check existing Proxmox storage registrations
   ansible.builtin.command:
-    cmd: "pvesm status --storage {{ item.key }}"
+    cmd: "pvesh get /storage/{{ item.key }} --output-format json"
   register: zfs_pools_pvesm_check
   changed_when: false
   failed_when: false
@@ -147,6 +147,7 @@
       pvesm add zfspool {{ item.item.key }} -pool {{ item.item.key }}
       -content {{ item.item.content | default(['images', 'rootdir']) | join(',') }}
       -nodes {{ proxmox_node_name | default(inventory_hostname) }}
+      -sparse {{ 1 if item.item.value.sparse | default(false) else 0 }}
   loop: "{{ zfs_pools_pvesm_check.results | default([]) }}"
   loop_control:
     label: "{{ item.item.key | default('') }}"
@@ -154,6 +155,35 @@
     - ansible_virtualization_type != 'docker'
     - item.rc is defined
     - item.rc != 0
+  changed_when: true
+  tags:
+    - zfs_pools
+
+# Reconcile an ALREADY-registered pool storage. `pvesm add` above never runs for
+# one that exists, so without this a newly-declared `sparse` stays inert forever
+# and the declaration reads back as correct while every new disk on the pool is
+# still created with a full refreservation. Same shape as the dataset-level
+# reconcile in dataset_pvesm_register.yml — the bug class is identical, and it
+# was fixed one level down first.
+- name: Reconcile sparse on existing pool storage registrations
+  ansible.builtin.command:
+    cmd: >-
+      pvesm set {{ item.item.key }}
+      -sparse {{ 1 if item.item.value.sparse | default(false) else 0 }}
+  loop: "{{ zfs_pools_pvesm_check.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key | default('') }}"
+  vars:
+    # pvesh omits `sparse` entirely when it is off, so absent means 0.
+    zfs_pools_pool_live_sparse: >-
+      {{ (item.stdout | default('{}') | from_json).sparse | default(0) | int }}
+    zfs_pools_pool_want_sparse: "{{ 1 if item.item.value.sparse | default(false) else 0 }}"
+  when:
+    - ansible_virtualization_type != 'docker'
+    - item.rc is defined
+    - item.rc == 0
+    - item.item.value.sparse is defined
+    - zfs_pools_pool_live_sparse | int != zfs_pools_pool_want_sparse | int
   changed_when: true
   tags:
     - zfs_pools

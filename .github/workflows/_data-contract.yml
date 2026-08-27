@@ -69,6 +69,8 @@ jobs:
           ansible-playbook tests/pve_ha_replication/verify_replication_targets.yml -i localhost, -c local
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_ha_replication/verify_broken_job_selection.yml -i localhost, -c local
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_ha_replication/verify_home_pin_scope.yml -i localhost, -c local
 
       # A backup job's declaration guard is only worth having if it fires. Both
       # playbooks run the role's OWN task files — the guard against fixtures it
@@ -91,6 +93,21 @@ jobs:
       # profile passes it, so only this catches the class.
       - name: Verify every assert conditional is a string
         run: python3 tests/test_assert_conditionals.py
+
+      # The quorum guard is only worth having if it parses the output a blocked
+      # cluster prints and subtracts voters that cannot vote. Neither is
+      # checkable without a cluster, so the patterns are exercised offline —
+      # pulled from the role itself, so they cannot drift from what it runs.
+      - name: Verify pve_quorum_guard parsing and arithmetic
+        run: python3 tests/test_pve_quorum_guard_arithmetic.py
+
+      # The drive artifact feeds a Nautobot sync that DELETES what it stops
+      # seeing, so every failure here is silent and destructive: a filter that
+      # stops excluding removable media churns the inventory every converge, and
+      # a transform that drops the node stamp orphans every drive from its
+      # machine. Exercised offline against the role's own expression.
+      - name: Verify pve_disk_inventory shapes drives for Nautobot
+        run: python3 tests/test_pve_disk_inventory_transform.py
 
       # A controller that is the node being powered would run ipmitool against
       # itself. The node list holds Proxmox node names, so the exclusion is

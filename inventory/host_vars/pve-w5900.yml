@@ -14,10 +14,11 @@
 # would not rescan).
 #
 # Physical NIC: enp5s0 (bridged as vmbr0's uplink). Its MAC is not recorded
-# here (real hardware identifiers stay out of this public repo) -- look it up
-# with `ip -br link show enp5s0` on the host, or from the DHCP/UniFi lease
-# table, then send a wake from another host on the same L2 segment:
-#   wakeonlan <mac-address>
+# here -- real hardware identifiers stay out of this public repo, and none has
+# to be: the node reads its own permanent hardware address at converge time
+# and publishes it as its Proxmox `wakeonlan` key, so a wake is addressed by
+# node name from any other node on the same L2 segment:
+#   pvenode wakeonlan <node>
 wol_enable_enabled: true
 wol_enable_interface: enp5s0
 
@@ -27,20 +28,86 @@ wol_enable_interface: enp5s0
 # non-free packaging, and for the reboot the driver switch requires.
 nvidia_driver_enabled: true
 
-# sanoid snapshot policy for the two OpenBao voters on this node -- it had
-# none before this. critical/hourly: continuously-written primary state.
-openbao_41_vmid: >-
-  {{ ((containers_from_tofu | default({}))['openbao-41'] | default({})).vmid
-     | mandatory('containers_from_tofu is unset; run load_tofu.yml') }}
-openbao_42_vmid: >-
-  {{ ((containers_from_tofu | default({}))['openbao-42'] | default({})).vmid
-     | mandatory('containers_from_tofu is unset; run load_tofu.yml') }}
+# sanoid snapshot policy for this node's guests.
+#
+# The dataset PATHS are derived, never written down. An earlier revision named
+# 'rpool/data/subvol-<vmid>-disk-0' literally, which hardcoded the POOL into a
+# snapshot policy. On 2026-08-24 the guests moved from rpool to ssd and the
+# policy kept snapshotting the frozen rpool copies: hourly snapshots continued,
+# counts and timestamps stayed healthy, and none of it captured live data -- on
+# two OpenBao raft voters. A snapshot policy that cannot follow its guest is a
+# false green by construction, so the pool is now resolved, not asserted.
 
-sanoid_datasets: >-
-  {{ {
-       'rpool/data/subvol-' ~ openbao_41_vmid ~ '-disk-0': {'use_template': 'critical'},
-       'rpool/data/subvol-' ~ openbao_42_vmid ~ '-disk-0': {'use_template': 'critical'}
-     } }}
+# The storage id -> ZFS dataset root map used below is
+# `pve_dataset_root_by_storage`, defined once in inventory/group_vars/proxmox.yml
+# and resolved per host from that node's own zfs_pools_from_tofu. It used to be
+# defined here; a second node needed the same map, and a copy would have been a
+# second definition of the very thing that must not drift.
+
+# Retention tier. Everything on this node gets a daily-cadence floor; the raft
+# voters are continuously-written primary state and are pinned to hourly.
+# Naming an EXCEPTION is a policy declaration; naming a PATH was the bug.
+sanoid_tier_default: database
+sanoid_tier_by_container:
+  openbao-41: critical
+  openbao-42: critical
+
+# VMs are tiered the same way, in their own map: a VM key and a container key
+# could otherwise collide silently and one would win at random.
+sanoid_tier_by_vm: {}
+
+# Every container tofu places on this node, so a guest added later is covered
+# without editing this file. A hand-listed set fails by omission -- three of the
+# guests moved on 2026-08-24 (squid, ai-runner-pool-01, llm-4080) had never had
+# any coverage at all, because nothing listed them.
+#
+# .datastore and .vmid carry no default(): if the published inventory predates
+# the datastore field, this must fail loudly at converge rather than fall back
+# to a pool guess. A default here would rebuild the exact bug above.
+sanoid_datasets_json: >-
+  {
+  {%- set ns = namespace(sep='') -%}
+  {%- for name, c in (containers_from_tofu | default({}, true)).items() -%}
+    {%- if c.node | default('') == (proxmox_node_name | default(inventory_hostname)) -%}
+      {%- set ds = c.datastore | mandatory(
+            'container ' ~ name ~ ' publishes no .datastore -- the published '
+            ~ 'inventory predates that field; apply tofu before converging') -%}
+      {%- set root = pve_dataset_root_by_storage[ds] | mandatory(
+            'container ' ~ name ~ ' is on storage "' ~ ds ~ '", which resolves '
+            ~ 'to no ZFS dataset root. A dir-type storage (e.g. local) has no '
+            ~ 'per-guest dataset and cannot be snapshotted; move the guest to a '
+            ~ 'zfspool storage or declare that storage in node_storage') -%}
+      {{ ns.sep }}{{ (root ~ '/subvol-' ~ c.vmid ~ '-disk-0') | to_json }}:
+      {{- {'use_template': sanoid_tier_by_container[name] | default(sanoid_tier_default)} | to_json }}
+      {%- set ns.sep = ',' -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {#- VMs. A container has exactly one rootfs, so 'subvol-<vmid>-disk-0' is
+      derivable. A VM does NOT: it can have several disks, and Proxmox — not
+      this repo — assigns each volume's name. So iterate the published `disks`
+      list and use the name it carries. NEVER build 'vm-<vmid>-disk-<n>' by
+      counting: indices are allocated per (vmid, storage) as next-free, so on a
+      guest whose volume was ever moved, disk-0 is the RETAINED pre-move copy
+      and counting would snapshot a frozen dataset that looks perfectly healthy.
+      Covering only the boot disk is the same failure in miniature — a VM's data
+      usually is not on its boot disk. -#}
+  {%- for name, m in (vms_from_tofu | default({}, true)).items() -%}
+    {%- if m.node | default('') == (proxmox_node_name | default(inventory_hostname)) -%}
+      {%- for d in m.disks | mandatory(
+            'VM ' ~ name ~ ' publishes no .disks -- the published inventory '
+            ~ 'predates that field; apply tofu before converging') -%}
+        {%- set root = pve_dataset_root_by_storage[d.datastore] | mandatory(
+              'VM ' ~ name ~ ' has a disk on storage "' ~ d.datastore ~ '", '
+              ~ 'which resolves to no ZFS dataset root. A dir-type storage has '
+              ~ 'no per-guest dataset and cannot be snapshotted') -%}
+        {{ ns.sep }}{{ (root ~ '/' ~ d.path) | to_json }}:
+        {{- {'use_template': sanoid_tier_by_vm[name] | default(sanoid_tier_default)} | to_json }}
+        {%- set ns.sep = ',' -%}
+      {%- endfor -%}
+    {%- endif -%}
+  {%- endfor -%}
+  }
+sanoid_datasets: "{{ sanoid_datasets_json | from_json }}"
 
 # Snapshot-only: no syncoid pull job replicates either dataset off-node yet.
 # Any pull job belongs in another node's host_vars naming this node as the

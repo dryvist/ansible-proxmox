@@ -1,0 +1,121 @@
+---
+# Gathers every node's physical drives and writes ONE controller-side artifact.
+#
+# Read-only on the nodes: a single `pvesh get` per host, then an assembly step
+# that runs once on the controller. Nothing here mutates a hypervisor.
+#
+# Why `pvesh` and not lsblk: the API returns serial, vendor, model, wwn, type
+# (nvme/ssd/hdd/usb), health, wearout and `used` as first-class fields. A parser
+# over lsblk has to re-derive the last few and gets them wrong in ways that look
+# right -- NVMe partitions are `nvme0n1p3`, so digit-stripping yields `nvme0n1p`
+# and every NVMe silently reads as "not in a pool"; a BMC's virtual media
+# enumerates as a real disk sharing one serial across hosts; removable media is
+# indistinguishable without the removable flag. None of those failure modes
+# exist here, because the API answers the question directly.
+
+- name: Gather the physical drive inventory
+  when:
+    - pve_disk_inventory_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_disk_inventory
+    - nautobot
+  block:
+    # `ansible_hostname` is the short hostname, which IS the PVE node name --
+    # Proxmox derives one from the other, so they cannot disagree on a healthy
+    # node. check_mode: false because a read that skips leaves the register
+    # empty and the parse below dies on it; the pve_ha role shipped exactly that
+    # defect and made its own dry run impossible.
+    - name: Read this node's disk list from the Proxmox API
+      ansible.builtin.command:
+        cmd: "pvesh get /nodes/{{ ansible_hostname }}/disks/list --output-format json"
+      register: pve_disk_inventory_raw
+      changed_when: false
+      check_mode: false
+
+    - name: Keep this node's drives, minus the excluded media types
+      ansible.builtin.set_fact:
+        pve_disk_inventory_node_drives: >-
+          {{ pve_disk_inventory_raw.stdout | from_json
+             | rejectattr('type', 'in', pve_disk_inventory_exclude_types)
+             | map('combine', {'node': ansible_hostname})
+             | list }}
+
+    # A node that reports nothing is far more likely to be a broken read than a
+    # diskless hypervisor, and the consumer DELETES drives it stops seeing -- so
+    # an unnoticed empty result would silently wipe that node's inventory. Say so
+    # loudly here rather than let it look like a clean run.
+    - name: Fail when a node reports no drives at all
+      ansible.builtin.assert:
+        that:
+          - (pve_disk_inventory_node_drives | length) > 0
+        fail_msg: >-
+          {{ ansible_hostname }} reported zero usable drives. A hypervisor with
+          no disks is not a real state -- treat this as an unreadable API, not an
+          empty inventory. Refusing to publish, because the consumer removes
+          drives it no longer sees.
+        quiet: true
+
+    # Assembly runs ONCE, on the controller, across every host that reached the
+    # step above. run_once with a hostvars sweep (rather than an append-per-host
+    # pattern) means the artifact is rewritten whole every run: a drive that left
+    # a machine disappears from the file instead of lingering because nothing
+    # removed it.
+    #
+    # THAT is exactly why a PARTIAL play must not write it. `--limit one-node`
+    # rewrites the whole artifact from one node's disks, silently deleting every
+    # other node's drives from it -- and the consumer removes what it stops
+    # seeing, so the deletion propagates into Nautobot. The zero-drive guard
+    # above cannot catch this: one node's disks is a non-empty, entirely
+    # plausible-looking result. Observed for real: a stray `--limit` run cut a
+    # 19-drive artifact to 8 with every task reporting ok.
+    #
+    # ansible_play_hosts_all, not ansible_play_hosts: the former is who the play
+    # TARGETED, the latter is who survived it. Comparing survivors would make an
+    # unreachable node look like a limit and block a legitimate full run -- the
+    # estate has a decommissioned node that is exactly that case.
+    - name: Refuse to write a partial artifact
+      ansible.builtin.assert:
+        that:
+          - (ansible_play_hosts_all | length) >= (groups[pve_disk_inventory_group] | default([]) | length)
+        fail_msg: >-
+          This play targeted {{ ansible_play_hosts_all | length }} of
+          {{ groups[pve_disk_inventory_group] | default([]) | length }} hosts in
+          '{{ pve_disk_inventory_group }}' -- a limited run. The artifact is
+          rewritten WHOLE, so writing it now would drop every untargeted node's
+          drives, and the consumer deletes what it stops seeing. Re-run without
+          --limit, or set pve_disk_inventory_allow_partial=true if you genuinely
+          intend a single-node artifact.
+        quiet: true
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_become: false
+      run_once: true
+      when: not (pve_disk_inventory_allow_partial | bool)
+
+    - name: Ensure the controller artifact directory exists
+      ansible.builtin.file:
+        path: "{{ pve_disk_inventory_artifact | dirname }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_become: false
+      run_once: true
+
+    - name: Write the aggregated drive inventory artifact
+      ansible.builtin.copy:
+        content: >-
+          {{ {'drives': ansible_play_hosts
+                         | map('extract', hostvars, 'pve_disk_inventory_node_drives')
+                         | select('defined') | flatten}
+             | to_nice_json }}
+        dest: "{{ pve_disk_inventory_artifact }}"
+        mode: "0644"
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_become: false
+      run_once: true

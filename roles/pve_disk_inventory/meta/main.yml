@@ -1,0 +1,26 @@
+---
+# pve_disk_inventory role metadata
+
+galaxy_info:
+  role_name: pve_disk_inventory
+  author: ansible-proxmox
+  description: >-
+    Read-only physical-drive inventory: reads each node's disk list from the
+    local Proxmox API and writes one aggregated controller-side artifact for
+    Nautobot to ingest as dcim.InventoryItem records.
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - storage
+    - inventory
+    - nautobot
+
+dependencies: []

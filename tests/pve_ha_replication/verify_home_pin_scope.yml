@@ -1,0 +1,91 @@
+---
+# ---------------------------------------------------------------------------
+# Home-pin scope. Every guest here sits on node-local ZFS. HA-managed with no
+# node-affinity rule, a fence relocates one onto a node where its dataset does
+# not exist, it cannot start, and HA parks it in `error` — a latch, not a
+# retry. A negative resource-affinity rule keeps a pair apart but never says
+# where either half may run, so it does not cover this.
+#
+# This includes the ROLE's own derivation (roles/pve_ha/tasks/home_pin_scope.yml)
+# rather than restating its expressions, so a drift in the role fails here
+# instead of passing against a stale copy.
+# ---------------------------------------------------------------------------
+- name: Verify pve_ha home-pin scope
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    # Shaped like the tofu inventory's container map.
+    containers_from_tofu:
+      # Tier-0, peer-redundant: no replica, so it MUST be home-pinned.
+      openbao-01: {ansible_pct_vmid: 110040, node: node-a}
+      openbao-02: {ansible_pct_vmid: 110140, node: node-b}
+      # Tier-0, pvesr-replicated singleton: pinned to the PAIR elsewhere, so it
+      # must NOT appear in a single-node home pin.
+      vikunja: {ansible_pct_vmid: 605010, node: node-a}
+      # Tier-0 but refused entry to HA (no viable replica) — nothing to pin.
+      postgres-apps: {ansible_pct_vmid: 605020, node: node-c}
+      # Not tier-0: pinned only under estate-wide enrollment.
+      some-app: {ansible_pct_vmid: 703040, node: node-b}
+      # Pinnable by name but carries no home node — must be reported, not
+      # silently dropped into HA unpinned.
+      homeless: {ansible_pct_vmid: 703050}
+
+    pve_ha_ct_hostnames: [openbao-01, openbao-02, vikunja, postgres-apps, homeless]
+    pve_ha_replication_ct_hostnames: [vikunja]
+    pve_ha_unsafe_singletons: [postgres-apps]
+
+  tasks:
+    - name: Derive the scope with estate-wide enrollment OFF
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/home_pin_scope.yml
+      vars:
+        pve_ha_manage_all: false
+
+    - name: Assert the default scope pins the replica-less tier-0 guests only
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_home_entries | map(attribute='key') | sort)
+            == ['openbao-01', 'openbao-02']
+          - pve_ha_unpinnable_hosts == ['homeless']
+          - "'vikunja' not in pve_ha_pinned_hostnames"
+          - "'postgres-apps' not in pve_ha_pinned_hostnames"
+          - "'some-app' not in pve_ha_pinned_hostnames"
+        fail_msg: >-
+          default home-pin scope is wrong: entries=
+          {{ pve_ha_home_entries | map(attribute='key') | list }}
+          unpinnable={{ pve_ha_unpinnable_hosts }}
+        success_msg: >-
+          pins both replica-less tier-0 guests, excludes the pvesr singleton and
+          the HA-refused guest, leaves the rest of the estate alone, and reports
+          the guest with no home node.
+
+    - name: Assert each pinned guest groups onto its own home node
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_home_entries | groupby('value.node') | map(attribute=0) | sort)
+            == ['node-a', 'node-b']
+        fail_msg: >-
+          home-node grouping is wrong:
+          {{ pve_ha_home_entries | groupby('value.node') | map(attribute=0) | list }}
+        success_msg: >-
+          one strict rule per home node — the two anti-affinity peers stay on
+          separate nodes by construction.
+
+    - name: Derive the scope with estate-wide enrollment ON
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/home_pin_scope.yml
+      vars:
+        pve_ha_manage_all: true
+
+    - name: Assert estate-wide enrollment widens the pin to the rest of the estate
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_home_entries | map(attribute='key') | sort)
+            == ['openbao-01', 'openbao-02', 'some-app']
+          - "'vikunja' not in pve_ha_pinned_hostnames"
+          - "'postgres-apps' not in pve_ha_pinned_hostnames"
+        fail_msg: >-
+          estate-wide home-pin scope is wrong:
+          {{ pve_ha_home_entries | map(attribute='key') | list }}
+        success_msg: >-
+          adds the non-tier-0 guest while still excluding the pvesr singleton
+          and the HA-refused guest.

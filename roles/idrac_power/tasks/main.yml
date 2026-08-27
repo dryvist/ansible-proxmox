@@ -103,3 +103,53 @@
     - idrac_power_action == 'off'
   tags:
     - idrac_power
+
+# The power-restore policy is a property of the chassis, not of this
+# invocation, so it is reconciled on every run regardless of
+# idrac_power_action — including plain `status` runs, which is how a node that
+# is never power-cycled by this role still gets the setting.
+- name: Query the chassis power restore policy
+  ansible.builtin.command:
+    cmd: >-
+      ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
+      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      chassis status
+  delegate_to: "{{ idrac_power_controller }}"
+  register: idrac_power_chassis_status
+  changed_when: false
+  no_log: true
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_host | default('') | length > 0
+    - idrac_power_restore_policy | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - idrac_power
+
+# `chassis status` prints e.g. "Power Restore Policy : always-on"; the spacing
+# around the colon varies by BMC generation, hence the regex rather than a
+# substring match. The whole line is matched and then split on the colon
+# rather than captured with a group: a policy value carries no colon of its
+# own, and this form reads the same wherever it is evaluated.
+- name: Set the chassis power restore policy
+  ansible.builtin.command:
+    cmd: >-
+      ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
+      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      chassis policy {{ idrac_power_restore_policy }}
+  delegate_to: "{{ idrac_power_controller }}"
+  changed_when: true
+  no_log: true
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_host | default('') | length > 0
+    - idrac_power_restore_policy | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+    - idrac_power_restore_policy != idrac_power_current_policy
+  vars:
+    idrac_power_current_policy: >-
+      {{ (idrac_power_chassis_status.stdout | default('', true)
+          | regex_search('Power Restore Policy\s*:\s*\S+') | default('', true))
+         .split(':') | last | trim }}
+  tags:
+    - idrac_power

@@ -90,3 +90,87 @@
     - wol_enable_enabled | bool
   tags:
     - wol_enable
+
+# Publishing the MAC into this node's own Proxmox config is what makes
+# `pvenode wakeonlan <node>` usable from another node: the command reads the
+# target's `wakeonlan` key out of /etc/pve and refuses when it is unset. The
+# node reads its own address here rather than carrying it in inventory, so no
+# real hardware identifier is committed.
+- name: Read the interface's permanent hardware address
+  ansible.builtin.command:
+    cmd: "ethtool -P {{ wol_enable_interface }}"
+  register: wol_enable_permaddr
+  changed_when: false
+  when:
+    - wol_enable_enabled | bool
+    - wol_enable_node_config | bool
+    - wol_enable_mac | trim | length == 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+# Prefer the permanent address: the runtime MAC of a bridge-enslaved port can
+# be rewritten, and the magic packet has to name the address the NIC listens
+# for while the host is off. Some drivers report an all-zero permanent
+# address, which is not one -- fall back to the runtime address there.
+- name: Resolve the Wake-on-LAN MAC address
+  ansible.builtin.set_fact:
+    wol_enable_mac_resolved: >-
+      {{ wol_enable_mac | trim
+         | default(wol_enable_permaddr_found, true)
+         | default(ansible_facts[wol_enable_interface].macaddress | default('', true), true) }}
+  vars:
+    # regex_search returns the match or None; the single-item list lets reject
+    # drop an all-zero permanent address without iterating the string itself.
+    wol_enable_permaddr_found: >-
+      {{ [wol_enable_permaddr.stdout | default('', true)
+          | regex_search('(?i)[0-9a-f]{2}(?::[0-9a-f]{2}){5}') | default('', true)]
+         | reject('equalto', '00:00:00:00:00:00') | first | default('', true) }}
+  when:
+    - wol_enable_enabled | bool
+    - wol_enable_node_config | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+- name: Assert a Wake-on-LAN MAC address was resolved
+  ansible.builtin.assert:
+    that:
+      - wol_enable_mac_resolved | trim | length > 0
+    fail_msg: >-
+      Could not determine a MAC address for {{ wol_enable_interface }} --
+      `ethtool -P` reported none and the interface has no runtime address.
+      Set wol_enable_mac in this host's host_vars, or wol_enable_node_config
+      to false to skip publishing the node's wakeonlan key.
+  when:
+    - wol_enable_enabled | bool
+    - wol_enable_node_config | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+- name: Read this node's currently configured wakeonlan address
+  ansible.builtin.command:
+    cmd: "pvenode config get"
+  register: wol_enable_node_cfg
+  changed_when: false
+  when:
+    - wol_enable_enabled | bool
+    - wol_enable_node_config | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+# A bare MAC, not `mac=<addr>`: it is the property string's default key, so the
+# bare form parses on both the current and the previous major release.
+- name: Publish the wakeonlan address into this node's Proxmox config
+  ansible.builtin.command:
+    cmd: "pvenode config set --wakeonlan {{ wol_enable_mac_resolved }}"
+  changed_when: true
+  when:
+    - wol_enable_enabled | bool
+    - wol_enable_node_config | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - wol_enable_mac_resolved | lower not in (wol_enable_node_cfg.stdout | default('') | lower)
+  tags:
+    - wol_enable

@@ -23,7 +23,7 @@ lxc_gpu_features_map:
   llm-fast:  # llama.cpp + llama-swap + ROCm on the AMD card (privileged LXC)
     dri: true
     kfd: true
-  llm-4080:  # llama.cpp + llama-swap + CUDA on the NVIDIA card (privileged LXC)
+  llm-4080:  # llama.cpp + llama-swap + Vulkan on the NVIDIA card (privileged LXC)
     dri: false
     kfd: false
     nvidia: true

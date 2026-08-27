@@ -1,0 +1,30 @@
+---
+# pve_quorum_guard role defaults
+#
+# Read-only. The role runs `corosync-quorumtool` and asserts; it never writes
+# corosync configuration, never calls `pvecm expected`, and never starts or
+# stops a guest. Changing the vote topology is a separate, deliberate operator
+# action -- see README.md.
+
+# The guard reports on every run and fails only when headroom is short. Set
+# false only to silence it during a known, in-progress vote-topology change.
+pve_quorum_guard_enabled: true
+
+# How many voting members the cluster must be able to lose simultaneously while
+# staying quorate. 1 is the floor worth having: at 0, the loss of any single
+# voter blocks cluster activity, which stops every `onboot` guest on the
+# survivors from starting -- including the ones the recovery itself needs.
+pve_quorum_guard_min_headroom: 1
+
+# Voting members that are deliberately not powered on. Their vote still counts
+# toward `Highest expected` and therefore still raises the quorum bar, but the
+# vote can never be cast -- so headroom must be computed with them already
+# subtracted. Leaving a powered-off node out of this list is what makes the
+# shortfall invisible: the arithmetic looks healthy while the cluster is one
+# failure from blocked.
+#
+# Populate from inventory with the node names as corosync knows them. An entry
+# that does not match a live nodelist name fails the guard rather than being
+# silently ignored, because a typo here would restore exactly the blind spot
+# this list exists to remove.
+pve_quorum_guard_powered_off_voters: []

@@ -31,7 +31,7 @@
     - name: Resolve and enforce anti-affinity and replication-pin rules
       ansible.builtin.include_tasks: affinity_rules.yml
 
-    - name: Resolve and enforce estate-wide home-node pins (pve_ha_manage_all)
+    - name: Resolve and enforce strict home-node pins for the replica-less guests
       ansible.builtin.include_tasks: estate_wide_enrollment.yml
 
 # Storage replication (pvesr) for the SINGLETON app guests, so ha-manager can
