@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1](https://github.com/dryvist/ansible-proxmox/compare/v2.1.0...v2.1.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **ci:** retry the registry pull so a bad minute is not a failed role ([#712](https://github.com/dryvist/ansible-proxmox/issues/712)) ([a940b0d](https://github.com/dryvist/ansible-proxmox/commit/a940b0dff39053cebc8d5488d04a2520643f4784))
+
 ## [2.1.0](https://github.com/dryvist/ansible-proxmox/compare/v2.0.0...v2.1.0) (2026-08-27)
 
 
