@@ -137,6 +137,16 @@ jobs:
       # interpolation into the shell. The value is a repository directory name
       # and this workflow now runs on pull_request, so it is untrusted input;
       # `discover` additionally allow-lists it to [a-z0-9_].
+      # Fetch the platform image before molecule needs it, retrying transient
+      # registry errors. Molecule's own create step retries twice and then fails
+      # the scenario, which reads as a broken role rather than a bad minute at
+      # the registry. See the script header for why this is not a retry of
+      # `molecule test`.
+      - name: Pre-pull the ${{ matrix.scenario }} scenario image
+        run: .github/scripts/pull-molecule-image.sh "$SCENARIO"
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+
       - name: Run the ${{ matrix.scenario }} molecule scenario
         run: molecule test -s "$SCENARIO"
         env:
