@@ -167,6 +167,17 @@ media_lxc_features_data_directories:
   # deletes are atomic moves; the *arrs validate it exists and is writable
   # by the media user before accepting it, so the skeleton owns creating it.
   - media/.recycle
+  # Ratio-only grabs, kept off the library entirely: nothing here is imported
+  # by an *arr, so these files stay at link count 1 and are the only content
+  # on this filesystem that deleting actually reclaims.
+  #
+  # It is a separate DATASET (declared in node_storage, realized by zfs_pools)
+  # carrying its own quota, so churn here can never consume the library's space
+  # and the library can never starve it. `zfs create` leaves the mountpoint
+  # root:root 0755, which in an unprivileged container reads as nobody:nogroup
+  # and is unwritable by the app — listing it here is what gives it the same
+  # group-owned, setgid layer as every other directory under the data root.
+  - seed
 
 # ---------------------------------------------------------------------------
 # Unprivileged-container GID passthrough for the shared data root
