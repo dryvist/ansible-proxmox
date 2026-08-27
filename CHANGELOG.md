@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0](https://github.com/dryvist/ansible-proxmox/compare/v2.0.0...v2.1.0) (2026-08-27)
+
+
+### Features
+
+* **idrac_power:** converge the chassis power-restore policy on every BMC node ([#697](https://github.com/dryvist/ansible-proxmox/issues/697)) ([e6d18f0](https://github.com/dryvist/ansible-proxmox/commit/e6d18f07ab19d59b53a779125db00276b2dc9556))
+* **pve_disk_inventory:** record which physical drive sits in which machine ([#699](https://github.com/dryvist/ansible-proxmox/issues/699)) ([9383679](https://github.com/dryvist/ansible-proxmox/commit/9383679c4f5b3544376346b7671e6a670ef8f6af))
+* **pve_quorum_guard:** report corosync quorum headroom on every converge ([#698](https://github.com/dryvist/ansible-proxmox/issues/698)) ([d90b435](https://github.com/dryvist/ansible-proxmox/commit/d90b435b37fb57fd80f6e253d53b95ca43b41367))
+* **wol_enable:** publish each node's wakeonlan key for pvenode wakeonlan ([#696](https://github.com/dryvist/ansible-proxmox/issues/696)) ([4e130b1](https://github.com/dryvist/ansible-proxmox/commit/4e130b12fb79bd74a6524d394303d6ec19d8bb11))
+* **zfs_pools:** honour a declared sparse on pool-level storage too ([#702](https://github.com/dryvist/ansible-proxmox/issues/702)) ([fe9ecfb](https://github.com/dryvist/ansible-proxmox/commit/fe9ecfbe3473277b1da83d4e2a7ca19e33b7cd9e))
+* **zfs_pools:** honour a declared sparse on Proxmox zfspool storage ([#701](https://github.com/dryvist/ansible-proxmox/issues/701)) ([6947c68](https://github.com/dryvist/ansible-proxmox/commit/6947c68d42a05c75227c2e85c6aa41ea1893fbc4))
+
+
+### Bug Fixes
+
+* **media_lxc_features:** give the ratio dataset the shared POSIX layer ([#708](https://github.com/dryvist/ansible-proxmox/issues/708)) ([3d771dd](https://github.com/dryvist/ansible-proxmox/commit/3d771dda8a94257e7c67c2db97883e903df63937))
+* **postgres_standby:** falsy-aware default on pubkey debug render ([b761f1d](https://github.com/dryvist/ansible-proxmox/commit/b761f1d5578d1d422c175a05557985f5f832c613))
+* **pve_disk_inventory:** refuse to write the artifact from a limited run ([#700](https://github.com/dryvist/ansible-proxmox/issues/700)) ([8c161b4](https://github.com/dryvist/ansible-proxmox/commit/8c161b42542e2b1e42084a90c709c20b77a553dd))
+* **pve_ha:** pin every replica-less HA guest to its home node ([#707](https://github.com/dryvist/ansible-proxmox/issues/707)) ([f5a502c](https://github.com/dryvist/ansible-proxmox/commit/f5a502c2dee7d966d83fef72ea833022cfe5c756))
+* **sanoid:** cover VM disks too, iterating the published list ([#705](https://github.com/dryvist/ansible-proxmox/issues/705)) ([6372eeb](https://github.com/dryvist/ansible-proxmox/commit/6372eeb6c384afcf516bf94143496cadbba35590))
+* **sanoid:** derive Splunk's dataset roots from published state ([#706](https://github.com/dryvist/ansible-proxmox/issues/706)) ([63b51a4](https://github.com/dryvist/ansible-proxmox/commit/63b51a497d9c882098b1a17bd5821cc704d65713))
+* **sanoid:** resolve a guest's dataset from its storage, never a literal pool ([#704](https://github.com/dryvist/ansible-proxmox/issues/704)) ([70cdbc0](https://github.com/dryvist/ansible-proxmox/commit/70cdbc0e7bb75ae7549e4a2964895ef2e4f7ac4b))
+
 ## [2.0.0](https://github.com/dryvist/ansible-proxmox/compare/v1.79.0...v2.0.0) (2026-08-22)
 
 
