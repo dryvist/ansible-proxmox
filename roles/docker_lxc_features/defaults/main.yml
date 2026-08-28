@@ -6,8 +6,9 @@
 # so this role applies the host-side `pct set --features` step after create.
 #
 # The role targets containers whose tofu inventory tags include `docker` plus
-# `ai-orchestration`, `agentgateway`, or `hindsight` (the memory-plane API
-# replicas — same Docker-in-LXC fuse-overlayfs need as the orchestration tier).
+# `ai-orchestration`, `agentgateway`, `hindsight` (the memory-plane API
+# replicas) or `dashboard` — every one of them runs Docker on an unprivileged
+# ZFS-backed LXC and so needs the same fuse-overlayfs features.
 # `n8n` and `langgraph` remain explicit fallbacks so they stay covered even if
 # the tags have not landed in inventory yet.
 
@@ -17,6 +18,15 @@ docker_lxc_features_desired_tokens:
   - fuse=1
 
 docker_lxc_features_desired_features: "{{ docker_lxc_features_desired_tokens | join(',') }}"
+
+# Guest tiers that run Docker in an unprivileged LXC. A guest joins by carrying
+# `docker` plus one of these; widening the role is a data change here, not an
+# edit to the selection task.
+docker_lxc_features_target_tags:
+  - ai-orchestration
+  - agentgateway
+  - hindsight
+  - dashboard
 
 docker_lxc_features_fallback_services:
   - n8n
