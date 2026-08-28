@@ -6,8 +6,9 @@
 # so this role applies the host-side `pct set --features` step after create.
 #
 # The role targets containers whose tofu inventory tags include `docker` plus
-# `ai-orchestration`, `agentgateway`, or `hindsight` (the memory-plane API
-# replicas — same Docker-in-LXC fuse-overlayfs need as the orchestration tier).
+# `ai-orchestration`, `agentgateway`, `hindsight` (the memory-plane API
+# replicas) or `dashboard` — every one of them runs Docker on an unprivileged
+# ZFS-backed LXC and so needs the same fuse-overlayfs features.
 # `n8n` and `langgraph` remain explicit fallbacks so they stay covered even if
 # the tags have not landed in inventory yet.
 

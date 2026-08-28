@@ -3,9 +3,9 @@
 #
 # Applies root-only Docker-in-LXC features on the Proxmox host. Selection is
 # driven by the tofu inventory: containers tagged `docker` plus either
-# `ai-orchestration` or `agentgateway` are targeted automatically, with `n8n`
-# and `langgraph` kept as fallbacks for the live guests already called out in
-# the problem report.
+# `ai-orchestration`, `agentgateway`, `hindsight` or `dashboard` are targeted
+# automatically, with `n8n` and `langgraph` kept as fallbacks for the live
+# guests already called out in the problem report.
 
 - name: Reset the AI Docker service accumulator
   ansible.builtin.set_fact:
@@ -22,7 +22,7 @@
   when:
     - item.value.vmid is defined
     - "'docker' in (item.value.tags | default([]))"
-    - "(item.value.tags | default([])) | intersect(['ai-orchestration', 'agentgateway', 'hindsight']) | length > 0"
+    - "(item.value.tags | default([])) | intersect(['ai-orchestration', 'agentgateway', 'hindsight', 'dashboard']) | length > 0"
   tags:
     - docker_lxc_features
 
