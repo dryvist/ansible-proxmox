@@ -22,7 +22,7 @@
   when:
     - item.value.vmid is defined
     - "'docker' in (item.value.tags | default([]))"
-    - "(item.value.tags | default([])) | intersect(['ai-orchestration', 'agentgateway', 'hindsight', 'dashboard']) | length > 0"
+    - "(item.value.tags | default([])) | intersect(docker_lxc_features_target_tags) | length > 0"
   tags:
     - docker_lxc_features
 

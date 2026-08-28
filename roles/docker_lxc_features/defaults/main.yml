@@ -19,6 +19,15 @@ docker_lxc_features_desired_tokens:
 
 docker_lxc_features_desired_features: "{{ docker_lxc_features_desired_tokens | join(',') }}"
 
+# Guest tiers that run Docker in an unprivileged LXC. A guest joins by carrying
+# `docker` plus one of these; widening the role is a data change here, not an
+# edit to the selection task.
+docker_lxc_features_target_tags:
+  - ai-orchestration
+  - agentgateway
+  - hindsight
+  - dashboard
+
 docker_lxc_features_fallback_services:
   - n8n
   - langgraph
