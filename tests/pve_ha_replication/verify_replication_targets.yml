@@ -9,48 +9,39 @@
 # Run: ansible-playbook tests/pve_ha_replication/verify_replication_targets.yml -i localhost,
 #
 # The fixture is a code-path model, NOT a snapshot of live inventory, but it
-# tracks reality where it matters: nautobot/vikunja use the GLOBAL pair
-# (pve_ha_replication_pair, the fallback case); postgres-apps and iac-platform
-# each use their OWN pair (pve_ha_replication_pairs, the override case) — a
-# home node outside the global pair but inside the guest's OWN pair; a
-# made-up out-of-pair-node-c guest (fake vmid, no own-pair override) exercises
-# the "outside its resolved pair" exclusion; a VM (iac-platform) exercises
-# vm:<id> SID resolution; missing-vm exercises the absent-VM exclusion.
+# tracks reality where it matters: each guest's replication partner is its
+# OWN declared `ha_replication_target` attribute (set alongside `node` in the
+# tofu desired state) — postgres-apps and iac-platform each publish their
+# own; nautobot/vikunja/shared-app happen to share one; missing-target-ct is
+# present but publishes no attribute at all (a desired-state gap); missing-vm
+# is absent from vms_from_tofu entirely.
 - name: Verify pve_ha replication scope + node-affinity resolution
   hosts: localhost
   become: false
   gather_facts: false
   vars:
     pve_ha_replication_jobnum: 0
-    pve_ha_replication_pair:
-      - node-a
-      - node-b
-    pve_ha_replication_pairs:
-      postgres-apps:
-        - node-c
-        - node-d
-      iac-platform:
-        - node-b
-        - node-e
+    pve_ha_replication_affinity_rule: apps-replication-nodes
     pve_ha_replication_ct_hostnames:
-      - postgres-apps        # present, node-c, OWN pair [node-c, node-d] -> viable, target node-d
-      - nautobot              # present, node-b, GLOBAL pair -> viable, target node-a
-      - vikunja               # present, node-a, GLOBAL pair -> viable, target node-b
-      - out-of-pair-node-c    # present, node-c, NO own pair -> falls back to global, node-c not in it -> unsafe
-      - shared-app            # present, node-a, GLOBAL pair, storage on ALL nodes
+      - postgres-apps         # present, node-c, target node-d
+      - nautobot              # present, node-b, target node-a
+      - vikunja               # present, node-a, target node-b
+      - missing-target-ct     # present, node-c, NO ha_replication_target -> unsafe
+      - shared-app            # present, node-a, target node-b, storage on ALL nodes
     pve_ha_replication_vm_names:
-      - iac-platform          # present, node-b, OWN pair [node-b, node-e] -> viable, target node-e
+      - iac-platform          # present, node-b, target node-e
       - missing-vm            # absent from vms_from_tofu -> unsafe
     containers_from_tofu:
-      postgres-apps: {ansible_pct_vmid: 602000, node: node-c}
-      nautobot: {ansible_pct_vmid: 605000, node: node-b}
-      vikunja: {ansible_pct_vmid: 605010, node: node-a}
-      out-of-pair-node-c: {ansible_pct_vmid: 699000, node: node-c}
-      shared-app: {ansible_pct_vmid: 606000, node: node-a}
+      postgres-apps: {ansible_pct_vmid: 602000, node: node-c, ha_replication_target: node-d}
+      nautobot: {ansible_pct_vmid: 605000, node: node-b, ha_replication_target: node-a}
+      vikunja: {ansible_pct_vmid: 605010, node: node-a, ha_replication_target: node-b}
+      missing-target-ct: {ansible_pct_vmid: 699000, node: node-c}
+      shared-app: {ansible_pct_vmid: 606000, node: node-a, ha_replication_target: node-b}
     vms_from_tofu:
       iac-platform:
         vmid: 110130
         node: node-b
+        ha_replication_target: node-e
         disks:
           - {datastore: local-zfs, path: vm-110130-disk-0}
       # missing-vm deliberately absent.
@@ -72,7 +63,7 @@
 
     # Synthetic per-guest LXC config (what `pvesh get /nodes/<n>/lxc/<v>/config`
     # returns), keyed by hostname. postgres-apps' target (node-d) HAS bulk, so
-    # it passes; out-of-pair-node-c is unsafe and never reaches this check.
+    # it passes; missing-target-ct is unsafe and never reaches this check.
     pve_ha_guest_configs_fixture:
       vikunja:
         rootfs: "local-zfs:subvol-605010-disk-0,size=8G"
@@ -88,7 +79,7 @@
     - name: Include the real replication-scope derivation
       ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_scope.yml
 
-    - name: Assert every present, in-pair guest resolved (own pair + global fallback)
+    - name: Assert every guest with a declared ha_replication_target resolved
       ansible.builtin.assert:
         that:
           - (pve_ha_replication_guests | selectattr('viable') | map(attribute='hostname') | sort)
@@ -97,14 +88,15 @@
           - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'nautobot') | first).target == 'node-a'
           - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'postgres-apps') | first).target == 'node-d'
           - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'postgres-apps') | first).pair == ['node-c', 'node-d']
-          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'nautobot') | first).pair == ['node-a', 'node-b']
+          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'nautobot') | first).pair == ['node-b', 'node-a']
         fail_msg: >-
           pve_ha replication target derivation is wrong:
           {{ pve_ha_replication_guests }}
         success_msg: >-
-          postgres-apps and iac-platform resolve via their OWN pair
-          (pve_ha_replication_pairs); nautobot/vikunja/shared-app fall back to
-          the global pair.
+          each guest's target comes from its OWN declared ha_replication_target
+          attribute — postgres-apps and iac-platform each have theirs;
+          nautobot/vikunja/shared-app happen to share the same partner but
+          each still resolves from its own attribute, not a shared default.
 
     - name: Assert the VM resolves to a vm:<id> SID
       ansible.builtin.assert:
@@ -115,18 +107,73 @@
         fail_msg: >-
           VM SID resolution is wrong:
           {{ pve_ha_replication_guests | selectattr('hostname', 'eq', 'iac-platform') | list }}
-        success_msg: "iac-platform (a VM) resolves to sid=vm:110130, target=node-e (its own pair)."
+        success_msg: "iac-platform (a VM) resolves to sid=vm:110130, target=node-e (its declared ha_replication_target)."
 
-    - name: Assert unsafe singletons are exactly the out-of-pair and absent guests
+    - name: Assert unsafe singletons are exactly the target-less and absent guests
       ansible.builtin.assert:
         that:
-          - (pve_ha_unsafe_singletons | sort) == ['missing-vm', 'out-of-pair-node-c']
+          - (pve_ha_unsafe_singletons | sort) == ['missing-target-ct', 'missing-vm']
         fail_msg: >-
           unsafe-singleton selection is wrong: {{ pve_ha_unsafe_singletons }}
         success_msg: >-
-          out-of-pair-node-c (no own pair, home node outside the global pair)
+          missing-target-ct (present, but no ha_replication_target attribute)
           and missing-vm (absent from vms_from_tofu) are both refused; every
-          guest with a viable pair (own or global) is not.
+          guest with a declared target is not.
+
+    # --- rule-naming (mirrors affinity_rules.yml's "keep the live rule name
+    # for whichever pair currently carries it" logic, since it reads from the
+    # cluster rather than a hardcoded pair) ---
+    - name: Group viable replication guests by their [node, target] pair
+      ansible.builtin.set_fact:
+        pve_ha_replication_pair_groups: >-
+          {{ pve_ha_replication_guests | default([]) | selectattr('viable') | groupby('pair_key') }}
+
+    - name: Fixture a live rule named apps-replication-nodes over node-a,node-b (nautobot/vikunja's pair)
+      ansible.builtin.set_fact:
+        pve_ha_rules_raw:
+          stdout: '[{"rule": "apps-replication-nodes", "nodes": "node-a,node-b"}]'
+
+    - name: Resolve the current node set of the legacy-named replication rule
+      ansible.builtin.set_fact:
+        pve_ha_legacy_replication_rule_pair_key: >-
+          {{ ((pve_ha_rules_raw.stdout | from_json)
+              | selectattr('rule', 'equalto', pve_ha_replication_affinity_rule) | list
+              | map(attribute='nodes') | first | default('', true))
+             | split(',') | reject('equalto', '') | sort | join(',') }}
+
+    - name: Name each pair group's node-affinity rule
+      ansible.builtin.set_fact:
+        pve_ha_replication_rules: >-
+          {{ pve_ha_replication_rules | default([]) + [ {
+               'name': (pve_ha_replication_affinity_rule
+                        if item.0 == pve_ha_legacy_replication_rule_pair_key
+                        else pve_ha_replication_affinity_rule ~ '-' ~ (item.0 | regex_replace(',', '-'))),
+               'nodes': item.1[0].pair,
+               'sids': item.1 | map(attribute='sid') | list
+             } ] }}
+      loop: "{{ pve_ha_replication_pair_groups }}"
+      loop_control:
+        label: "{{ item.0 }}"
+
+    - name: Assert the pair matching the live rule's nodes keeps that name; others get derived names
+      ansible.builtin.assert:
+        that:
+          # nautobot+vikunja share pair node-a,node-b, which matches the live
+          # rule's nodes -> keeps the name apps-replication-nodes
+          - (pve_ha_replication_rules | selectattr('name', 'eq', pve_ha_replication_affinity_rule) | first).sids
+            | sort == ['ct:605000', 'ct:605010', 'ct:606000']
+          # postgres-apps' pair (node-c,node-d) does NOT match the live rule
+          # -> gets its own derived name, never renaming the live rule
+          - (pve_ha_replication_rules | rejectattr('name', 'eq', pve_ha_replication_affinity_rule)
+             | selectattr('sids', 'contains', 'ct:602000') | list | length) == 1
+          - (pve_ha_replication_rules | length) == 3
+        fail_msg: >-
+          rule naming is wrong: {{ pve_ha_replication_rules }}
+        success_msg: >-
+          the pair matching the live apps-replication-nodes rule's nodes
+          (nautobot/vikunja/shared-app, all on node-a/node-b) keeps that
+          name; postgres-apps (node-c/node-d) and iac-platform (node-b/node-e)
+          each get their own derived rule name instead of renaming the live one.
 
     # --- pvesr target-storage validation (mirrors replication_jobs.yml, fed
     # from the pve_ha_storage_cfg_fixture / pve_ha_guest_configs_fixture vars

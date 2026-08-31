@@ -65,20 +65,20 @@
 - name: Refuse to place a replica-less singleton under HA
   ansible.builtin.fail:
     msg: >-
-      pve_ha: NOT adding {{ pve_ha_unsafe_singletons }} to HA — each is a
-      singleton with no pvesr replica on its resolved replication pair
-      (pve_ha_replication_pairs, falling back to pve_ha_replication_pair), so
-      ha-manager could only relocate it to a node that cannot start it.
-      Give the guest a home node inside its pair (or a working replication
-      job), then re-converge. If one is ALREADY under HA, remove it until
-      that is true: ha-manager remove ct:<vmid> (or vm:<vmid>)
+      pve_ha: NOT adding {{ pve_ha_unsafe_singletons }} to HA — each is either
+      absent from the tofu inventory, or present but publishes no
+      `ha_replication_target` (a desired-state gap: add it to the guest's
+      container/VM entry alongside `node`), so ha-manager could only
+      relocate it to a node that cannot start it. If one is ALREADY under HA,
+      remove it until that is true: ha-manager remove ct:<vmid> (or vm:<vmid>)
   when: pve_ha_unsafe_singletons | length > 0 and pve_ha_fail_on_unresolved | bool
 
 - name: Warn about a replica-less singleton (non-fatal mode)
   ansible.builtin.debug:
     msg: >-
-      pve_ha: NOT adding {{ pve_ha_unsafe_singletons }} to HA — each is a
-      singleton with no pvesr replica on its resolved replication pair.
+      pve_ha: NOT adding {{ pve_ha_unsafe_singletons }} to HA — each is either
+      absent from the tofu inventory, or present but publishes no
+      `ha_replication_target`.
   when: pve_ha_unsafe_singletons | length > 0 and not (pve_ha_fail_on_unresolved | bool)
 
 - name: Resolve managed tier-0 SIDs (present hosts only) + any extra SIDs

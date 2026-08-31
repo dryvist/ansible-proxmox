@@ -4,31 +4,32 @@
 # replication job and fails fast if a job's target node lacks a required
 # storage id (see comment below — incident 2026-07-26, a job that silently
 # never replicates).
-- name: Resolve the replication scope (containers + VMs, per-guest pairs)
+- name: Resolve the replication scope (containers + VMs, per-guest targets)
   ansible.builtin.include_tasks: replication_scope.yml
 
 - name: Refuse an app guest with no replication job
   ansible.builtin.fail:
     msg: >-
-      pve_ha replication: no job for {{ item }} — absent from the tofu
-      inventory, or its home node is outside its resolved replication pair
-      {{ pve_ha_replication_pairs.get(item, pve_ha_replication_pair) }}. A
-      singleton listed under pve_ha_replication_ct_hostnames/
-      pve_ha_replication_vm_names with no viable replica has nowhere to
-      relocate to on node loss.
+      pve_ha replication: no job for {{ item }} —
+      {{ 'present in the tofu inventory but publishes no ha_replication_target'
+         if (item in pve_ha_replication_ct_by_host or item in pve_ha_replication_vm_by_host)
+         else 'absent from the tofu inventory' }}. A singleton listed under
+      pve_ha_replication_ct_hostnames/pve_ha_replication_vm_names with no
+      viable replica has nowhere to relocate to on node loss.
   loop: "{{ pve_ha_replication_ct_hostnames + pve_ha_replication_vm_names }}"
   when: item in pve_ha_unsafe_singletons and pve_ha_fail_on_unresolved | bool
 
 - name: Warn about an app guest with no replication job (non-fatal mode)
   ansible.builtin.debug:
     msg: >-
-      pve_ha replication: no job for {{ item }} — absent from the tofu
-      inventory, or its home node is outside its resolved replication pair
-      {{ pve_ha_replication_pairs.get(item, pve_ha_replication_pair) }}.
+      pve_ha replication: no job for {{ item }} —
+      {{ 'present in the tofu inventory but publishes no ha_replication_target'
+         if (item in pve_ha_replication_ct_by_host or item in pve_ha_replication_vm_by_host)
+         else 'absent from the tofu inventory' }}.
   loop: "{{ pve_ha_replication_ct_hostnames + pve_ha_replication_vm_names }}"
   when: item in pve_ha_unsafe_singletons and not (pve_ha_fail_on_unresolved | bool)
 
-# Only the VIABLE guests (home node inside their resolved pair) get a job.
+# Only the VIABLE guests (those with a declared ha_replication_target) get a job.
 - name: Restrict to viable replication jobs
   ansible.builtin.set_fact:
     pve_ha_replication_jobs: "{{ pve_ha_replication_guests | default([]) | selectattr('viable') | list }}"
@@ -36,7 +37,7 @@
 # pvesr replicates a volume to the SAME storage id on the target node. If the
 # target lacks that storage, the job fails asynchronously on first sync and
 # the converge still reports success — no replica ever exists, silently.
-# (Incident 2026-07-26: pve_ha_replication_pair named a node that does not
+# (Incident 2026-07-26: the replication target named a node that did not
 # carry the guests' storage (local-zfs); every job failed and a
 # singleton guest sat under HA with nothing to relocate to.) Prefer pvesh
 # over parsing /etc/pve/storage.cfg directly: the API already normalizes the
@@ -122,8 +123,8 @@
          | ternary('ALL (no nodes restriction)',
                    pve_ha_storage_nodes[item.1] | join(', ')) }}.
       Fix by adding '{{ item.1 }}' to '{{ item.0.target }}' in
-      /etc/pve/storage.cfg, or changing this guest's replication pair to one
-      that shares this storage.
+      /etc/pve/storage.cfg, or changing this guest's declared
+      ha_replication_target to a node that shares this storage.
   loop: "{{ pve_ha_replication_job_storages | default([]) | subelements('storages') }}"
   loop_control:
     label: "{{ item.0.hostname }} / {{ item.1 }}"

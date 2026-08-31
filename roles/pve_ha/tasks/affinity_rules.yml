@@ -54,21 +54,33 @@
   # ponytail: idempotent enforce, same rationale as the resource set above.
   changed_when: false
 
-# Viable replication guests (present + home node inside their OWN resolved
-# pair — see replication_scope.yml, included by tier0_resources.yml earlier
-# in this same play) grouped by that pair. A guest outside its pair has no
-# replica, so it must NOT go in a strict rule (a strict rule with no
+# Viable replication guests (present + a declared ha_replication_target —
+# see replication_scope.yml, included by tier0_resources.yml earlier in this
+# same play) grouped by their [node, target] pair. A guest with no target has
+# no replica, so it must NOT go in a strict rule (a strict rule with no
 # available node would STOP it) — pve_ha_unsafe_singletons already excludes
 # those from pve_ha_managed_sids, so grouping only the viable ones here can
 # never rule-pin a guest that isn't even under HA.
 #
-# ONE rule per DISTINCT pair, not one global rule: a guest homed on a node
-# outside pve_ha_replication_pair (e.g. postgres-apps) needs a strict rule
-# over ITS OWN pair, and a strict rule naming a node with no replica for that
-# guest is worse than no rule. The pair equal to pve_ha_replication_pair keeps
-# the existing rule NAME (pve_ha_replication_affinity_rule) so the live rule
-# is enforced in place rather than renamed and re-created.
-- name: Group viable replication guests by their resolved pair
+# ONE rule per DISTINCT pair, not one global rule: each guest's target is its
+# own declared attribute, so two guests can easily need two different pairs
+# (e.g. postgres-apps vs. nautobot/vikunja), and a strict rule naming a node
+# with no replica for a guest is worse than no rule.
+#
+# Rule naming is data-driven, not guessed: whichever pair matches the CURRENT
+# live nodes of the rule named pve_ha_replication_affinity_rule (default
+# apps-replication-nodes) keeps that name, so the live rule is enforced in
+# place rather than renamed and re-created just because the pair grouping
+# changed shape. Every other pair gets a derived name.
+- name: Resolve the current node set of the legacy-named replication rule (if any)
+  ansible.builtin.set_fact:
+    pve_ha_legacy_replication_rule_pair_key: >-
+      {{ ((pve_ha_rules_raw.stdout | from_json)
+          | selectattr('rule', 'equalto', pve_ha_replication_affinity_rule) | list
+          | map(attribute='nodes') | first | default('', true))
+         | split(',') | reject('equalto', '') | sort | join(',') }}
+
+- name: Group viable replication guests by their [node, target] pair
   ansible.builtin.set_fact:
     pve_ha_replication_pair_groups: >-
       {{ pve_ha_replication_guests | default([]) | selectattr('viable') | groupby('pair_key') }}
@@ -78,7 +90,7 @@
     pve_ha_replication_rules: >-
       {{ pve_ha_replication_rules | default([]) + [ {
            'name': (pve_ha_replication_affinity_rule
-                    if item.0 == (pve_ha_replication_pair | sort | join(','))
+                    if item.0 == pve_ha_legacy_replication_rule_pair_key
                     else pve_ha_replication_affinity_rule ~ '-' ~ (item.0 | regex_replace(',', '-'))),
            'nodes': item.1[0].pair,
            'sids': item.1 | map(attribute='sid') | list

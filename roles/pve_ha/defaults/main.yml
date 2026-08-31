@@ -25,11 +25,13 @@
 #     the payload is anti-affinity + in-place auto-restart + orderly return-home.
 #   * SINGLETON app guests (pve_ha_replication_ct_hostnames): one instance, no
 #     peer, so RELOCATION is the only node-loss story. The replication block
-#     below runs pvesr to ship each one's rootfs to the always-on PARTNER node,
-#     so ha-manager can start it there. max_relocate=1 is enough — one hop to
-#     the partner that holds the replica. Only nodes in pve_ha_replication_pair
-#     hold a replica, and the strict node-affinity rule keeps ha-manager off
-#     every other node.
+#     below runs pvesr to ship each one's rootfs to its declared
+#     `ha_replication_target` (a per-guest attribute in the tofu desired
+#     state, alongside `node`), so ha-manager can start it there.
+#     max_relocate=1 is enough — one hop to the partner that holds the
+#     replica. Only the guest's own [node, ha_replication_target] pair holds
+#     a replica, and its strict node-affinity rule keeps ha-manager off every
+#     other node.
 pve_ha_enabled: false
 
 # A membership list wrong in EITHER direction (a dead hostname, or a live guest
@@ -103,12 +105,13 @@ pve_ha_ct_hostnames:
   - vikunja
   - nautobot
   - zammad
-  # postgres-apps: restored here now that pve_ha_replication_pairs (below)
-  # gives it its OWN replication pair instead of forcing it onto the single
-  # global pve_ha_replication_pair it never homed in. It went un-recovered in
-  # the outage that first surfaced this gap, and it holds the database behind
-  # the tracker and the system of record — see pve_ha_replication_pairs and
-  # the postgres-pair anti-affinity group below.
+  # postgres-apps: restored here now that its own ha_replication_target is
+  # declared in the tofu desired state (it was never actually replica-less —
+  # nothing here previously read that per-guest attribute). It went
+  # un-recovered in the outage that first surfaced this gap, and it holds the
+  # database behind the tracker and the system of record — see
+  # pve_ha_replication_ct_hostnames and the postgres-pair anti-affinity group
+  # below.
   - postgres-apps
   # Media tier: in-place crash auto-restart only (no redundant peer, so no
   # anti-affinity entry; node placement is enforced in the IaC layer — see
@@ -174,61 +177,22 @@ pve_ha_anti_affinity_groups:
 # replica. Hostname-keyed like pve_ha_ct_hostnames; a guest absent from the tofu
 # inventory (e.g. not provisioned yet) is skipped with a warning, not a failure.
 pve_ha_replication_ct_hostnames:
-  # postgres-apps: restored — it is homed on proxmox_node_names.storage, not
-  # a member of the global pve_ha_replication_pair below, so it needs its OWN
-  # pair (pve_ha_replication_pairs). It was never actually replica-less; the
-  # replica just lived on a different pair than the global one.
+  # postgres-apps: restored — it publishes its own ha_replication_target
+  # (declared in the tofu desired state, alongside its `node`), so it was
+  # never actually replica-less; nothing here forced it onto a shared pair
+  # it did not belong to.
   - postgres-apps
   - nautobot
   - vikunja
 
 # VMs that get a pvesr replica + strict pair pin, parallel to
 # pve_ha_replication_ct_hostnames above.
+#
+# CAPACITY NOTE (iac-platform): its declared ha_replication_target has
+# roughly 10.5 GB free RAM against this VM's 8 GB reservation, and ~127 GB
+# free on the replica's storage. It fits, with little headroom.
 pve_ha_replication_vm_names:
   - iac-platform
-
-# The two nodes that form the DEFAULT replication pair, used by any guest not
-# named in pve_ha_replication_pairs below. A guest's pvesr target is the pair
-# member that is NOT its current home node. A guest whose home node is
-# outside its pair (default or per-guest) is skipped.
-#
-# The pair MUST be two nodes that share the guests' storage id. pvesr replicates
-# a volume to the SAME storage name on the target, so a target lacking that
-# storage fails every run with:
-#   (remote_prepare_local_job) storage '<id>' is not available on node '<node>'
-#
-# These guests live on `local-zfs`, and per /etc/pve/storage.cfg that storage is
-# defined on only two of the nodes — the third carries `bulk`, not `local-zfs`.
-# The pair named a node without `local-zfs`, so every job failed on first sync
-# and no replica ever existed.
-# That is what let a singleton sit under HA with nothing to relocate to; see the
-# guard in "Resolve singleton app guests with no viable replica" above.
-#
-# The second member was previously excluded here as a sleeping DR node. It is
-# always-on now (it holds the HA master and runs live services), so it is a valid
-# pvesr peer. If it ever returns to sleeping, this pair must change with it — a sleeping
-# target cannot accept a replication run.
-pve_ha_replication_pair:
-  - "{{ proxmox_node_names.primary }}"
-  - "{{ proxmox_node_names.dr }}"
-
-# Per-guest replication pair OVERRIDE, keyed by hostname (container) or vms-map
-# key (VM). A guest named here uses its OWN [home, target] pair instead of
-# pve_ha_replication_pair above — a guest homed on a node outside the global
-# pair is not "replica-less", it just needs a different partner. Falls back
-# to the global pair for any guest absent here (see replication_scope.yml).
-#
-# CAPACITY NOTE (iac-platform): the failover target
-# (proxmox_node_names.secondary) has roughly 10.5 GB free RAM against this
-# VM's 8 GB reservation, and ~127 GB free on the replica's storage. It fits,
-# with little headroom.
-pve_ha_replication_pairs:
-  iac-platform:
-    - "{{ proxmox_node_names.dr }}"
-    - "{{ proxmox_node_names.secondary }}"
-  postgres-apps:
-    - "{{ proxmox_node_names.storage }}"
-    - "{{ proxmox_node_names.dr }}"
 
 # pvesr schedule (systemd-calendar subset) and optional rate limit (MB/s; empty
 # = unlimited). */15 matches Proxmox's default; the app guests' real data-loss
@@ -241,11 +205,14 @@ pve_ha_replication_rate: ""
 # Job-number suffix for the pvesr job id (<vmid>-<jobnum>). One job per guest.
 pve_ha_replication_jobnum: 0
 
-# STRICT node-affinity rule pinning the replication guests to pve_ha_replication_pair.
-# This is correctness, not preference: a pvesr replica exists ONLY on the pair, so
-# ha-manager must never start one of these guests on any other node, which would
-# hold no replica. A strict rule = run ONLY on the listed nodes, so a
-# relocation onto a replica-less node can't happen and then start-fail/flap.
+# Name kept for the strict node-affinity rule over whichever pair currently
+# carries it live (see affinity_rules.yml, which resolves this from the
+# cluster rather than a hardcoded pair) — every other distinct
+# [node, ha_replication_target] pair gets its own derived rule name. A
+# replica exists ONLY where ha_replication_target says, so ha-manager must
+# never start one of these guests anywhere else. A strict rule = run ONLY on
+# the listed nodes, so a relocation onto a replica-less node can't happen and
+# then start-fail/flap.
 pve_ha_replication_affinity_rule: apps-replication-nodes
 
 # --- Estate-wide HA enrollment ----------------------------------------------
