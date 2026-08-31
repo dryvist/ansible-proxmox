@@ -1,0 +1,113 @@
+---
+# Pure derivation, no CLI: the full "singleton app guest" replication scope,
+# covering BOTH containers (pve_ha_replication_ct_hostnames) and VMs
+# (pve_ha_replication_vm_names). Included by tier0_resources.yml (the
+# HA-membership safety gate) and replication_jobs.yml (the pvesr job
+# builder), so the two can never drift onto different definitions of "safe".
+#
+# Each guest resolves against its OWN replication pair
+# (pve_ha_replication_pairs[hostname], falling back to the global
+# pve_ha_replication_pair) rather than one pair for everyone — a guest homed
+# on a node outside the global pair is not unsafe by definition, it just
+# needs a different partner (see the postgres-apps history in defaults).
+#
+# A guest is "viable" only if it is present in its own inventory (ct or vm)
+# AND its home node is a member of its resolved pair. Anything else — absent
+# from the inventory, or homed outside its pair — is unsafe: there is nowhere
+# for ha-manager to relocate it to.
+- name: Map replicated container hostname -> {vmid, node}
+  ansible.builtin.set_fact:
+    pve_ha_replication_ct_by_host: >-
+      {{
+        dict(
+          (containers_from_tofu | default({})) | dict2items
+          | selectattr('value.ansible_pct_vmid', 'defined')
+          | selectattr('value.node', 'defined')
+          | map(attribute='key') | list
+          | zip(
+              (containers_from_tofu | default({})) | dict2items
+              | selectattr('value.ansible_pct_vmid', 'defined')
+              | selectattr('value.node', 'defined')
+              | map(attribute='value') | list
+            )
+        )
+      }}
+
+- name: Map replicated VM key -> {vmid, node, disks}
+  ansible.builtin.set_fact:
+    pve_ha_replication_vm_by_host: >-
+      {{
+        dict(
+          (vms_from_tofu | default({})) | dict2items
+          | selectattr('value.vmid', 'defined')
+          | selectattr('value.node', 'defined')
+          | map(attribute='key') | list
+          | zip(
+              (vms_from_tofu | default({})) | dict2items
+              | selectattr('value.vmid', 'defined')
+              | selectattr('value.node', 'defined')
+              | map(attribute='value') | list
+            )
+        )
+      }}
+
+# One spec per present replication guest: hostname, kind, vmid, sid
+# ("ct:<vmid>"/"vm:<vmid>"), home node, its resolved [home, target] pair
+# (per-guest override, else the global default), the pvesr target (the pair
+# member that is NOT its home node), and whether its home node is actually IN
+# that pair ("viable" — i.e. a replica can exist at all).
+- name: Resolve replication guest specs (containers)
+  ansible.builtin.set_fact:
+    pve_ha_replication_guests: >-
+      {{ pve_ha_replication_guests | default([]) + [ {
+           'hostname': item,
+           'kind': 'ct',
+           'vmid': pve_ha_replication_ct_by_host[item].ansible_pct_vmid,
+           'sid': 'ct:' ~ (pve_ha_replication_ct_by_host[item].ansible_pct_vmid | string),
+           'node': pve_ha_replication_ct_by_host[item].node,
+           'id': (pve_ha_replication_ct_by_host[item].ansible_pct_vmid | string)
+                 ~ '-' ~ (pve_ha_replication_jobnum | string),
+           'pair': pve_ha_replication_pairs.get(item, pve_ha_replication_pair),
+           'pair_key': pve_ha_replication_pairs.get(item, pve_ha_replication_pair) | sort | join(','),
+           'target': (pve_ha_replication_pairs.get(item, pve_ha_replication_pair)
+                      | difference([pve_ha_replication_ct_by_host[item].node]) | first),
+           'viable': pve_ha_replication_ct_by_host[item].node
+                     in pve_ha_replication_pairs.get(item, pve_ha_replication_pair)
+         } ] }}
+  loop: "{{ pve_ha_replication_ct_hostnames }}"
+  loop_control:
+    label: "{{ item }}"
+  when: item in pve_ha_replication_ct_by_host
+
+- name: Resolve replication guest specs (VMs)
+  ansible.builtin.set_fact:
+    pve_ha_replication_guests: >-
+      {{ pve_ha_replication_guests | default([]) + [ {
+           'hostname': item,
+           'kind': 'vm',
+           'vmid': pve_ha_replication_vm_by_host[item].vmid,
+           'sid': 'vm:' ~ (pve_ha_replication_vm_by_host[item].vmid | string),
+           'node': pve_ha_replication_vm_by_host[item].node,
+           'id': (pve_ha_replication_vm_by_host[item].vmid | string)
+                 ~ '-' ~ (pve_ha_replication_jobnum | string),
+           'disks': pve_ha_replication_vm_by_host[item].disks | default([]),
+           'pair': pve_ha_replication_pairs.get(item, pve_ha_replication_pair),
+           'pair_key': pve_ha_replication_pairs.get(item, pve_ha_replication_pair) | sort | join(','),
+           'target': (pve_ha_replication_pairs.get(item, pve_ha_replication_pair)
+                      | difference([pve_ha_replication_vm_by_host[item].node]) | first),
+           'viable': pve_ha_replication_vm_by_host[item].node
+                     in pve_ha_replication_pairs.get(item, pve_ha_replication_pair)
+         } ] }}
+  loop: "{{ pve_ha_replication_vm_names }}"
+  loop_control:
+    label: "{{ item }}"
+  when: item in pve_ha_replication_vm_by_host
+
+- name: Resolve singleton app guests (containers + VMs) with no viable replica
+  ansible.builtin.set_fact:
+    pve_ha_unsafe_singletons: >-
+      {{ (pve_ha_replication_ct_hostnames + pve_ha_replication_vm_names)
+         | reject('in', pve_ha_replication_guests | default([])
+                         | selectattr('viable')
+                         | map(attribute='hostname') | list)
+         | list }}

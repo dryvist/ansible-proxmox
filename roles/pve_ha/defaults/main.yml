@@ -103,23 +103,34 @@ pve_ha_ct_hostnames:
   - vikunja
   - nautobot
   - zammad
-  # postgres-apps deliberately EXCLUDED — verified live 2026-08-15: it has no
-  # viable pvesr replica within pve_ha_replication_pair (it runs on the node
-  # holding the shared-postgres-apps guest, which is not in that pair). This
-  # guard fails loud on exactly that condition (pve_ha_fail_on_unresolved),
-  # and it is right to — that is not this guest's home. The honest fix is a
-  # per-guest replication pair (postgres-apps needs a different pair than
-  # nautobot/vikunja), not shipped here to avoid rushing a modelling change
-  # under converge pressure. postgres-apps has NO viable replica TODAY either
-  # way; excluding it here only changes whether that fact is visible. Restore
-  # it once the per-guest pair design lands (Vikunja #1359/#1362).
+  # postgres-apps: restored here now that pve_ha_replication_pairs (below)
+  # gives it its OWN replication pair instead of forcing it onto the single
+  # global pve_ha_replication_pair it never homed in. It went un-recovered in
+  # the outage that first surfaced this gap, and it holds the database behind
+  # the tracker and the system of record — see pve_ha_replication_pairs and
+  # the postgres-pair anti-affinity group below.
+  - postgres-apps
   # Media tier: in-place crash auto-restart only (no redundant peer, so no
   # anti-affinity entry; node placement is enforced in the IaC layer — see
   # terraform-proxmox#615). Issue #396.
   - plex
-# Extra HA SIDs to manage verbatim (e.g. a VM the tofu container map does not
-# cover: "vm:110130"). Merged with the resolved CT SIDs. Empty by default.
+# Extra HA SIDs to manage verbatim for a guest the tofu container/VM maps
+# do not cover. NEVER a VM the tofu vms map DOES cover — an extra SID gets no
+# home pin and no affinity rule, which is exactly the defect that stranded
+# guests with no node-affinity rule during a prior outage. A tofu-known VM
+# belongs in pve_ha_vm_names below, which resolves/enrols/pins it the same
+# way a container is. Empty by default.
 pve_ha_extra_sids: []
+
+# VMs to place under HA, identified by their KEY in the tofu vms map (parallel
+# to pve_ha_ct_hostnames for containers, stable across a VMID renumber). Each
+# resolves through the SAME enrol -> pin/affinity path as a container (see
+# tier0_resources.yml, home_pin_scope.yml, estate_wide_enrollment.yml) —
+# never pve_ha_extra_sids, which carries no node-affinity rule at all.
+pve_ha_vm_names:
+  # The IaC/OpenTofu platform VM: a singleton with a pvesr replica (see
+  # pve_ha_replication_vm_names below), so relocation is its node-loss story.
+  - iac-platform
 
 # Anti-affinity groups: guests that must NEVER share a node (redundant pairs).
 # Each: {name, hostnames:[...]}. Rendered as ha-manager resource-affinity rules
@@ -146,19 +157,14 @@ pve_ha_anti_affinity_groups:
       - traefik-10
       - traefik-30
   # The Postgres primary/standby pair: a node loss must never take both the
-  # primary and its streaming standby.
-  # postgres-apps deliberately EXCLUDED — verified live 2026-08-15 (converge):
-  # ha-manager rejects a resource-affinity rule referencing a guest that is
-  # not itself an HA-managed resource ("cannot use unmanaged resource(s)"),
-  # and postgres-apps is deliberately excluded from pve_ha_ct_hostnames above
-  # (no viable replica). The "skipped if a member doesn't resolve" guard only
-  # checks tofu-inventory resolution, not HA-management status, so a
-  # since-excluded guest left in a pair here reaches ha-manager and fails
-  # loud rather than skipping quietly. Restore alongside pve_ha_ct_hostnames
-  # once the per-guest replication pair design lands (Vikunja #1359/#1362).
+  # primary and its streaming standby. postgres-apps is restored here now
+  # that it is HA-managed again (pve_ha_ct_hostnames above) — ha-manager
+  # rejects a resource-affinity rule referencing a guest that is not itself
+  # an HA-managed resource, so the two memberships must move together.
   - name: postgres-pair
     hostnames:
       - postgres
+      - postgres-apps
 
 # --- Storage replication (pvesr) for the SINGLETON app guests ----------------
 # The guests here get a pvesr job that ships their rootfs to the always-on
@@ -168,16 +174,23 @@ pve_ha_anti_affinity_groups:
 # replica. Hostname-keyed like pve_ha_ct_hostnames; a guest absent from the tofu
 # inventory (e.g. not provisioned yet) is skipped with a warning, not a failure.
 pve_ha_replication_ct_hostnames:
-  # postgres-apps deliberately excluded here too — see the comment above
-  # pve_ha_ct_hostnames. A pvesr job targeting a pair it is not homed in
-  # would just fail on first sync; membership in this list is a no-op
-  # without a viable pair member.
+  # postgres-apps: restored — it is homed on proxmox_node_names.storage, not
+  # a member of the global pve_ha_replication_pair below, so it needs its OWN
+  # pair (pve_ha_replication_pairs). It was never actually replica-less; the
+  # replica just lived on a different pair than the global one.
+  - postgres-apps
   - nautobot
   - vikunja
 
-# The two nodes that form the replication pair. A guest's pvesr target is the
-# pair member that is NOT its current home node. A guest whose home node is
-# outside this pair is skipped.
+# VMs that get a pvesr replica + strict pair pin, parallel to
+# pve_ha_replication_ct_hostnames above.
+pve_ha_replication_vm_names:
+  - iac-platform
+
+# The two nodes that form the DEFAULT replication pair, used by any guest not
+# named in pve_ha_replication_pairs below. A guest's pvesr target is the pair
+# member that is NOT its current home node. A guest whose home node is
+# outside its pair (default or per-guest) is skipped.
 #
 # The pair MUST be two nodes that share the guests' storage id. pvesr replicates
 # a volume to the SAME storage name on the target, so a target lacking that
@@ -198,6 +211,24 @@ pve_ha_replication_ct_hostnames:
 pve_ha_replication_pair:
   - "{{ proxmox_node_names.primary }}"
   - "{{ proxmox_node_names.dr }}"
+
+# Per-guest replication pair OVERRIDE, keyed by hostname (container) or vms-map
+# key (VM). A guest named here uses its OWN [home, target] pair instead of
+# pve_ha_replication_pair above — a guest homed on a node outside the global
+# pair is not "replica-less", it just needs a different partner. Falls back
+# to the global pair for any guest absent here (see replication_scope.yml).
+#
+# CAPACITY NOTE (iac-platform): the failover target
+# (proxmox_node_names.secondary) has roughly 10.5 GB free RAM against this
+# VM's 8 GB reservation, and ~127 GB free on the replica's storage. It fits,
+# with little headroom.
+pve_ha_replication_pairs:
+  iac-platform:
+    - "{{ proxmox_node_names.dr }}"
+    - "{{ proxmox_node_names.secondary }}"
+  postgres-apps:
+    - "{{ proxmox_node_names.storage }}"
+    - "{{ proxmox_node_names.dr }}"
 
 # pvesr schedule (systemd-calendar subset) and optional rate limit (MB/s; empty
 # = unlimited). */15 matches Proxmox's default; the app guests' real data-loss

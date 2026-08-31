@@ -22,6 +22,7 @@
           - "primary={{ proxmox_node_names.primary }}"
           - "dr={{ proxmox_node_names.dr }}"
           - "storage={{ proxmox_node_names.storage }}"
+          - "secondary={{ proxmox_node_names.secondary }}"
           - "pve_cluster_primary_host={{ pve_cluster_primary_host | default('undefined') }}"
 
     - name: Every role-keyed name must be a live inventory node name
@@ -30,6 +31,7 @@
           - proxmox_node_names.primary in (groups['proxmox'] | default([]))
           - proxmox_node_names.dr in (groups['proxmox'] | default([]))
           - proxmox_node_names.storage in (groups['proxmox'] | default([]))
+          - proxmox_node_names.secondary in (groups['proxmox'] | default([]))
         fail_msg: >-
           A role-keyed node name does not match any inventory host:
           {{ proxmox_node_names }} vs {{ groups['proxmox'] | default([]) }}.

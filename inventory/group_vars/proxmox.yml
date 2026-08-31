@@ -46,6 +46,10 @@ proxmox_node_names:
   dr: "{{ lookup('env', 'PVE3_NODE_NAME') | default('node-c', true) }}"
   # Storage home — the node that serves the bulk datasets pulled off-node.
   storage: "{{ lookup('env', 'PVE5_NODE_NAME') | default('node-e', true) }}"
+  # Second always-on node. Used as a pve_ha per-guest replication partner for
+  # a guest whose home node is not `primary` or `storage` (e.g. the IaC
+  # platform, homed on `dr`), so it needs a partner other than `dr` itself.
+  secondary: "{{ lookup('env', 'PVE4_NODE_NAME') | default('node-d', true) }}"
 
 # ZFS Swap Configuration
 zfs_swap_size: "96G"

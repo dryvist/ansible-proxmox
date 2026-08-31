@@ -54,39 +54,65 @@
   # ponytail: idempotent enforce, same rationale as the resource set above.
   changed_when: false
 
-# SIDs of replication guests that actually have a replica: present in the
-# inventory AND homed in the pair (same scope as the pvesr jobs). A guest
-# outside the pair has no replica, so it must NOT go in the strict rule (a
-# strict rule with no available node would STOP it).
-- name: Resolve replication guest SIDs (present, homed in the always-on pair)
+# Viable replication guests (present + home node inside their OWN resolved
+# pair — see replication_scope.yml, included by tier0_resources.yml earlier
+# in this same play) grouped by that pair. A guest outside its pair has no
+# replica, so it must NOT go in a strict rule (a strict rule with no
+# available node would STOP it) — pve_ha_unsafe_singletons already excludes
+# those from pve_ha_managed_sids, so grouping only the viable ones here can
+# never rule-pin a guest that isn't even under HA.
+#
+# ONE rule per DISTINCT pair, not one global rule: a guest homed on a node
+# outside pve_ha_replication_pair (e.g. postgres-apps) needs a strict rule
+# over ITS OWN pair, and a strict rule naming a node with no replica for that
+# guest is worse than no rule. The pair equal to pve_ha_replication_pair keeps
+# the existing rule NAME (pve_ha_replication_affinity_rule) so the live rule
+# is enforced in place rather than renamed and re-created.
+- name: Group viable replication guests by their resolved pair
   ansible.builtin.set_fact:
-    pve_ha_replication_sids: >-
-      {{ pve_ha_replication_ct_hostnames | select('in', pve_ha_vmid_by_host)
-         | map('extract', containers_from_tofu | default({}))
-         | selectattr('node', 'in', pve_ha_replication_pair)
-         | map(attribute='vmid') | map('string')
-         | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
+    pve_ha_replication_pair_groups: >-
+      {{ pve_ha_replication_guests | default([]) | selectattr('viable') | groupby('pair_key') }}
 
-- name: Pin replication guests to the always-on pair (strict; add if absent)
+- name: Name each pair group's node-affinity rule
+  ansible.builtin.set_fact:
+    pve_ha_replication_rules: >-
+      {{ pve_ha_replication_rules | default([]) + [ {
+           'name': (pve_ha_replication_affinity_rule
+                    if item.0 == (pve_ha_replication_pair | sort | join(','))
+                    else pve_ha_replication_affinity_rule ~ '-' ~ (item.0 | regex_replace(',', '-'))),
+           'nodes': item.1[0].pair,
+           'sids': item.1 | map(attribute='sid') | list
+         } ] }}
+  loop: "{{ pve_ha_replication_pair_groups }}"
+  loop_control:
+    label: "{{ item.0 }}"
+
+- name: Pin each replication pair's viable guests (strict; add if absent)
   ansible.builtin.command: >-
-    ha-manager rules add node-affinity {{ pve_ha_replication_affinity_rule }}
-    --resources {{ pve_ha_replication_sids | join(',') }}
-    --nodes {{ pve_ha_replication_pair | join(',') }}
+    ha-manager rules add node-affinity {{ item.name }}
+    --resources {{ item.sids | join(',') }}
+    --nodes {{ item.nodes | join(',') }}
     --strict 1
     --comment 'pve_ha: keep singleton app guests on nodes holding their pvesr replica'
+  loop: "{{ pve_ha_replication_rules | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
   when:
-    - pve_ha_replication_sids | length > 0
-    - pve_ha_replication_affinity_rule not in pve_ha_existing_rules
+    - item.sids | length > 0
+    - item.name not in pve_ha_existing_rules
   changed_when: true
 
-- name: Enforce the replication node-affinity rule (nodes + strict)
+- name: Enforce each replication pair's node-affinity rule (nodes + strict)
   ansible.builtin.command: >-
-    ha-manager rules set node-affinity {{ pve_ha_replication_affinity_rule }}
-    --resources {{ pve_ha_replication_sids | join(',') }}
-    --nodes {{ pve_ha_replication_pair | join(',') }}
+    ha-manager rules set node-affinity {{ item.name }}
+    --resources {{ item.sids | join(',') }}
+    --nodes {{ item.nodes | join(',') }}
     --strict 1
+  loop: "{{ pve_ha_replication_rules | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
   when:
-    - pve_ha_replication_sids | length > 0
-    - pve_ha_replication_affinity_rule in pve_ha_existing_rules
+    - item.sids | length > 0
+    - item.name in pve_ha_existing_rules
   # ponytail: idempotent enforce, same rationale as the resource-affinity set.
   changed_when: false
