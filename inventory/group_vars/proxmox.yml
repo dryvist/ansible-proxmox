@@ -33,19 +33,39 @@ ssh_ca_trust_rollout_enabled: true
 # runtime from its own env var (e.g. from Doppler); the committed defaults below are
 # neutral EXAMPLES only and must never carry a real name.
 #
-# The env var names keep an ordinal digit — the digit names the VARIABLE, not the
-# node, exactly as the PVEn_VE_HOSTNAME family in inventory/hosts.yml does.
+# Node identity, resolved from the OpenTofu desired state (deployment.json) via
+# playbooks/load_tofu.yml. These were previously environment variables naming
+# each node by a positional ordinal. That had two failure modes and hit both:
+# an ordinal that drifted resolved to a placeholder and the consuming task
+# no-opped in silence, and the ordinals outlived the node naming scheme they
+# were derived from. Placement is declared once, in the desired state.
 #
-# Each value MUST equal the node's live Proxmox node name (`proxmox_node_name` in
-# inventory/hosts.yml, what /etc/pve/nodes/ and corosync use). A value that drifts
-# resolves to nothing and the consuming task no-ops or fails silently.
+# Deliberately NO defaults here. An unresolvable name must fail the run loudly:
+# a placeholder that reaches ha-manager or a syncoid source is worse than a
+# stopped converge, because it looks like success. Both names go through
+# `reject('equalto','') | first`, which raises on an empty match — see the
+# note on `primary` for why `mandatory` is the wrong tool here.
+#
+# There is no `dr` key any more. Its only consumer was a cluster-wide
+# replication pair, which per-guest `ha_replication_target` replaces — a pair
+# is a property of a guest's storage, not of the cluster.
+proxmox_node_storage_candidates: >-
+  {{ cluster_nodes_from_tofu | default({}, true) | dict2items
+     | selectattr('value.cluster_roles', 'defined')
+     | selectattr('value.cluster_roles', 'contains', 'storage')
+     | map(attribute='key') | list }}
+
 proxmox_node_names:
   # Cluster-creating node; also where the cluster-wide ha-manager commands run.
-  primary: "{{ lookup('env', 'PVE1_NODE_NAME') | default('node-a', true) }}"
-  # Always-on DR/replication peer.
-  dr: "{{ lookup('env', 'PVE3_NODE_NAME') | default('node-c', true) }}"
+  # `reject('equalto','') | first`, deliberately, and NOT `| mandatory(...)`:
+  # mandatory only fires on an UNDEFINED value, so it sails straight past the
+  # empty string an absent key produces — the guard would look present and
+  # never fire. `first` on an empty sequence raises for both cases.
+  primary: "{{ [primary_node_from_tofu | default('')] | reject('equalto', '') | list | first }}"
   # Storage home — the node that serves the bulk datasets pulled off-node.
-  storage: "{{ lookup('env', 'PVE5_NODE_NAME') | default('node-e', true) }}"
+  # Exactly one node carries the role; the desired state enforces that at plan
+  # time, so more or fewer than one here means the inventory artifact is stale.
+  storage: "{{ proxmox_node_storage_candidates | reject('equalto', '') | list | first }}"
 
 # ZFS Swap Configuration
 zfs_swap_size: "96G"

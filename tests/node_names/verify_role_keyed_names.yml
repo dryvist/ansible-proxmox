@@ -1,15 +1,23 @@
 ---
-# Every role-keyed entry in `proxmox_node_names` must render to a live inventory
-# node name. Node names are hardware-keyed, so a name can no longer be composed
-# from a prefix and an ordinal — a reference built that way renders a host that
-# does not resolve, and the consuming task then fails per cycle or no-ops at
-# rc=0 rather than reporting a bad name.
+# `proxmox_node_names` is derived from the OpenTofu desired state, not from the
+# environment. This proves three things a converge depends on:
 #
-#   doppler run -- ansible-playbook -i inventory/hosts.yml \
+#   1. each role-keyed name renders to a LIVE inventory node name;
+#   2. `storage` is claimed by exactly one node, so the lookup is unambiguous;
+#   3. an unresolvable name FAILS rather than yielding a placeholder.
+#
+# (3) is the one that matters. The previous scheme read environment variables
+# naming each node by a positional ordinal, and every unresolved value fell
+# through to a default — so a drifted name produced a syntactically fine
+# converge that addressed a node which does not exist, and the consuming task
+# no-opped at rc=0. A test that only checks the happy path would have passed
+# throughout.
+#
+#   ansible-playbook -i inventory/hosts.yml \
 #     tests/node_names/verify_role_keyed_names.yml
 #
-# Must-fail control (proves the assertion is not vacuous): re-run with
-# `PVE5_NODE_NAME=<a retired ordinal name>` and confirm it exits non-zero.
+# Run it AFTER playbooks/load_tofu.yml (or in the same run), since the values
+# come from the published inventory artifact.
 - name: Verify the role-keyed Proxmox node names resolve
   hosts: proxmox
   connection: local
@@ -20,19 +28,62 @@
       ansible.builtin.debug:
         msg:
           - "primary={{ proxmox_node_names.primary }}"
-          - "dr={{ proxmox_node_names.dr }}"
           - "storage={{ proxmox_node_names.storage }}"
+          - "storage candidates={{ proxmox_node_storage_candidates }}"
           - "pve_cluster_primary_host={{ pve_cluster_primary_host | default('undefined') }}"
 
     - name: Every role-keyed name must be a live inventory node name
       ansible.builtin.assert:
         that:
           - proxmox_node_names.primary in (groups['proxmox'] | default([]))
-          - proxmox_node_names.dr in (groups['proxmox'] | default([]))
           - proxmox_node_names.storage in (groups['proxmox'] | default([]))
         fail_msg: >-
           A role-keyed node name does not match any inventory host:
           {{ proxmox_node_names }} vs {{ groups['proxmox'] | default([]) }}.
-          The PVEn_NODE_NAME environment values have drifted from
-          inventory/hosts.yml.
+          The desired state has drifted from inventory/hosts.yml.
         success_msg: "All role-keyed node names resolve to inventory hosts."
+
+    - name: Exactly one node must claim the storage role
+      ansible.builtin.assert:
+        that:
+          - proxmox_node_storage_candidates | length == 1
+        fail_msg: >-
+          {{ proxmox_node_storage_candidates | length }} nodes claim the
+          `storage` cluster role ({{ proxmox_node_storage_candidates }}).
+          Exactly one must. Zero makes the lookup raise; more than one makes it
+          pick arbitrarily and stay quiet about it.
+        success_msg: "Exactly one node claims the storage role."
+
+    # The must-fail control, run in-band rather than left as a comment telling a
+    # human to try it: an assertion that only ever sees the good state cannot
+    # distinguish "resolves correctly" from "resolves to anything at all".
+    # NB the control uses the same expression the group_vars uses. An earlier
+    # version asserted `'' | mandatory(...)` and PASSED VACUOUSLY: mandatory
+    # fires only on an undefined value, never on the empty string an absent key
+    # actually produces.
+    - name: An absent primary must raise, not yield a placeholder
+      ansible.builtin.debug:
+        msg: "{{ [primary_node_from_tofu | default('')] | reject('equalto', '') | list | first }}"
+      vars:
+        primary_node_from_tofu: ""
+      register: _absent_primary
+      ignore_errors: true
+
+    - name: An empty storage-role match must raise, not yield a placeholder
+      ansible.builtin.debug:
+        msg: "{{ [] | first }}"
+      register: _absent_storage
+      ignore_errors: true
+
+    - name: The unresolvable cases must both have failed
+      ansible.builtin.assert:
+        that:
+          - _absent_primary is failed
+          - _absent_storage is failed
+        fail_msg: >-
+          An unresolvable node name did NOT fail
+          (primary failed={{ _absent_primary is failed }},
+          storage failed={{ _absent_storage is failed }}).
+          Something reintroduced a default, which turns a drifted name into a
+          silent no-op against a node that does not exist.
+        success_msg: "Unresolvable node names fail loudly, as required."

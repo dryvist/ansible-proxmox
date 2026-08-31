@@ -235,6 +235,19 @@
         vms_from_tofu: "{{ tofu_data.vms | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
+    # The cluster's primary node, by name. Node identity used to come from
+    # environment variables that named each node by a positional ordinal; a
+    # value that drifted resolved to a placeholder and the consuming task
+    # silently no-opped, and the ordinals outlived the naming scheme they came
+    # from. The desired state already names this node, so it is the only
+    # sensible source. Empty when absent (test fixture) — group_vars asserts on
+    # it rather than substituting a default.
+    - name: Inject the OpenTofu primary node name onto proxmox hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        primary_node_from_tofu: "{{ tofu_data.proxmox_node | default('') }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"
+
     # Estate domain, so host_vars can build guest FQDNs (e.g. the
     # postgres_standby source_host) instead of hard-coding an IP or domain.
     # Empty when absent (test fixture) — consumers gate on non-empty.

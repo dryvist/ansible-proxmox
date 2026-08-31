@@ -31,8 +31,18 @@
       # silently dropped into HA unpinned.
       homeless: {ansible_pct_vmid: 703050}
 
+    # Shaped like the tofu inventory's VM map.
+    vms_from_tofu:
+      # Tier-0 VM, pvesr-replicated singleton (own pair, not the global one):
+      # pinned to its pair elsewhere, so it must NOT appear in the home pin.
+      iac-platform: {vmid: 110130, node: node-b}
+      # Tier-0 VM, no replica — must be home-pinned like a container is.
+      gpu-worker: {vmid: 703060, node: node-a}
+
     pve_ha_ct_hostnames: [openbao-01, openbao-02, vikunja, postgres-apps, homeless]
     pve_ha_replication_ct_hostnames: [vikunja]
+    pve_ha_vm_names: [iac-platform, gpu-worker]
+    pve_ha_replication_vm_names: [iac-platform]
     pve_ha_unsafe_singletons: [postgres-apps]
 
   tasks:
@@ -59,6 +69,20 @@
           the HA-refused guest, leaves the rest of the estate alone, and reports
           the guest with no home node.
 
+    - name: Assert the VM scope pins the replica-less VM only
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_home_vm_entries | map(attribute='key') | list) == ['gpu-worker']
+          - "'iac-platform' not in pve_ha_pinned_vm_names"
+        fail_msg: >-
+          VM home-pin scope is wrong:
+          {{ pve_ha_home_vm_entries | map(attribute='key') | list }}
+        success_msg: >-
+          pins the replica-less VM (gpu-worker) and excludes the pvesr-replicated
+          singleton VM (iac-platform) — the regression this covers is a
+          replicated VM landing in BOTH its pair's strict rule and a home pin,
+          which would conflict.
+
     - name: Assert each pinned guest groups onto its own home node
       ansible.builtin.assert:
         that:
@@ -83,9 +107,15 @@
             == ['openbao-01', 'openbao-02', 'some-app']
           - "'vikunja' not in pve_ha_pinned_hostnames"
           - "'postgres-apps' not in pve_ha_pinned_hostnames"
+          - (pve_ha_home_vm_entries | map(attribute='key') | sort)
+            == ['gpu-worker']
+          - "'iac-platform' not in pve_ha_pinned_vm_names"
         fail_msg: >-
           estate-wide home-pin scope is wrong:
           {{ pve_ha_home_entries | map(attribute='key') | list }}
+          vms={{ pve_ha_home_vm_entries | map(attribute='key') | list }}
         success_msg: >-
           adds the non-tier-0 guest while still excluding the pvesr singleton
-          and the HA-refused guest.
+          and the HA-refused guest; the replicated VM is excluded here too
+          (estate-wide enrollment widens scope to "every guest", not "every
+          guest ignoring the replicated-singleton exclusion").

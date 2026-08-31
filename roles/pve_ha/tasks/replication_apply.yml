@@ -64,8 +64,8 @@
     --comment 'pve_ha relocation replica for {{ item.hostname }} -> {{ item.target }}'
   loop: "{{ pve_ha_replication_jobs | default([]) }}"
   loop_control:
-    label: "{{ item.id }} ({{ item.source }} -> {{ item.target }})"
+    label: "{{ item.id }} ({{ item.node }} -> {{ item.target }})"
   when:
-    - pve_ha_this_pve_node == item.source
+    - pve_ha_this_pve_node == item.node
     - item.id not in pve_ha_existing_replication_ids
   changed_when: true

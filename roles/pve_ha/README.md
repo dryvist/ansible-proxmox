@@ -30,24 +30,29 @@ doppler run -- ansible-playbook -i inventory playbooks/ha.yml -e pve_ha_enabled=
 
 When enabled it:
 
-1. Places each managed LXC under HA (`ha-manager add ct:VMID --state started
-   --max_restart 3 --max_relocate 1`). VMIDs resolve from the tofu inventory by
-   hostname, so a renumber flows through with no edit.
+1. Places each managed guest under HA (`ha-manager add ct:VMID` or `vm:VMID
+   --state started --max_restart 3 --max_relocate 1`). VMIDs resolve from the
+   tofu inventory by hostname (containers, `pve_ha_ct_hostnames`) or by tofu
+   vms-map key (VMs, `pve_ha_vm_names`), so a renumber flows through with no
+   edit.
 2. Adds `resource-affinity` **negative** rules so the two halves of each
    redundant pair never share a node.
 3. Adds a **strict `node-affinity` rule per home node**
    (`<pve_ha_home_rule_prefix>-<node>`) confining every HA-managed guest with no
-   pvesr replica to the single node holding its rootfs.
-4. For the **singleton app guests** (`pve_ha_replication_ct_hostnames`), creates
-   a `pvesr` job shipping each one's rootfs to the always-on partner node, so
+   pvesr replica to the single node holding its rootfs/disks.
+4. For the **singleton app guests** (`pve_ha_replication_ct_hostnames` for
+   containers, `pve_ha_replication_vm_names` for VMs), creates a `pvesr` job
+   shipping each one's storage to its declared `ha_replication_target` — a
+   per-guest attribute in the tofu desired state, alongside `node` — so
    ha-manager has a replica to relocate onto.
 
 Guests (default `pve_ha_ct_hostnames`): `openbao-01`, `openbao-02`,
 `technitium-dns`, `technitium-dns-2`, `traefik`, plus the singleton app guests
-`postgres-apps`, `nautobot`, `vikunja`. Anti-affinity pairs
-(`pve_ha_anti_affinity_groups`): the two OpenBao Raft voters, the two Technitium
-DNS instances, and the Traefik ingress pair (the last auto-activates once
-`traefik-2` exists). A pair whose members do not all resolve is skipped.
+`postgres-apps`, `nautobot`, `vikunja`, and the singleton VM `pve_ha_vm_names`:
+`iac-platform`. Anti-affinity pairs (`pve_ha_anti_affinity_groups`): the two
+OpenBao Raft voters, the two Technitium DNS instances, the Traefik ingress pair
+(auto-activates once `traefik-2` exists), and the Postgres primary/standby
+pair. A pair whose members do not all resolve is skipped.
 
 ## Two guest classes: peer-redundant vs singleton
 
@@ -72,26 +77,37 @@ instance, the keepalived VRRP VIP):
   it keeps a pair apart, it never says where either half may run.
 
 **Singleton app guests** (`postgres-apps`, `nautobot`, `vikunja` —
-`pve_ha_replication_ct_hostnames`) — one instance, no peer, so **relocation is
+`pve_ha_replication_ct_hostnames` — plus the VM `iac-platform` —
+`pve_ha_replication_vm_names`) — one instance, no peer, so **relocation is
 the only node-loss story**:
 
-- `pvesr` ships each guest's rootfs to the always-on PARTNER node on a schedule
-  (`pve_ha_replication_schedule`, default `*/15`), so a current-enough replica
-  exists to relocate onto.
-- On a **node loss**, ha-manager relocates the guest to the partner and starts
-  it from the replica. `max_relocate=1` is enough: one hop to the partner.
-- A **strict `node-affinity` rule** (`pve_ha_replication_affinity_rule`) pins
-  these guests to `pve_ha_replication_pair`, so ha-manager can never relocate one
-  onto a node without a replica and then
-  start-fail/flap. `strict` = run only on the listed nodes.
+- `pvesr` ships each guest's storage to its declared `ha_replication_target`
+  on a schedule (`pve_ha_replication_schedule`, default `*/15`), so a
+  current-enough replica exists to relocate onto. The target is a per-guest
+  attribute in the tofu desired state — this role only reads it, it has no
+  opinion on node placement. A guest listed in
+  `pve_ha_replication_ct_hostnames`/`pve_ha_replication_vm_names` whose
+  inventory entry publishes no `ha_replication_target` fails the converge
+  loud (`pve_ha_fail_on_unresolved`), naming the guest and the missing
+  attribute.
+- On a **node loss**, ha-manager relocates the guest to the target and starts
+  it from the replica. `max_relocate=1` is enough: one hop to the target.
+- A **strict `node-affinity` rule per distinct `[node, target]` pair** pins
+  each guest to its own pair, so ha-manager can never relocate one onto a
+  node without a replica and then start-fail/flap. `strict` = run only on
+  the listed nodes. Whichever pair currently matches the LIVE nodes of the
+  rule named `pve_ha_replication_affinity_rule` keeps that name — resolved
+  from the cluster, not a hardcoded pair — so the live rule is enforced in
+  place rather than renamed and re-created.
 - The replica is a **relocation enabler, not the durability layer**: the app
   guests' real data-loss window is covered separately (`postgres-apps` by
   streaming replication + WAL archiving; `nautobot`/`vikunja` are near-stateless
   — their state lives in `postgres-apps`).
 
-Membership in `pve_ha_replication_ct_hostnames` is the per-guest "relocation is
-viable" knob. A guest in `pve_ha_ct_hostnames` but not in the replication list
-is treated as peer-redundant and gets no `pvesr` job.
+Membership in `pve_ha_replication_ct_hostnames`/`pve_ha_replication_vm_names`
+is the per-guest "relocation is viable" knob. A guest in `pve_ha_ct_hostnames`/
+`pve_ha_vm_names` but not in the matching replication list is treated as
+peer-redundant and gets no `pvesr` job.
 
 With 4 quorate nodes, HA fencing is safe — losing one node keeps quorum, so no
 surviving node self-fences.
@@ -105,10 +121,12 @@ Before any `pvesr` job is created, the role hard-fails the converge if a job's
 target node lacks a storage id used by the guest's volumes. `pvesr` replicates
 to the SAME storage id on the target, so a mismatch would otherwise fail
 silently on first sync — Ansible reports success, but no replica ever exists.
-This is read from `pvesh get /storage` (not a hand-rolled parse of
-`/etc/pve/storage.cfg`), against each guest's volumes from
-`pvesh get /nodes/<node>/lxc/<vmid>/config`. A storage entry with no `nodes`
-restriction is treated as available on every node.
+For a container this is read from `pvesh get /storage` (not a hand-rolled
+parse of `/etc/pve/storage.cfg`) against its volumes from
+`pvesh get /nodes/<node>/lxc/<vmid>/config`. For a VM it uses the storage ids
+already published in the tofu inventory's `disks` list — a VM can have
+several disks, unlike a container's single rootfs. A storage entry with no
+`nodes` restriction is treated as available on every node.
 
 ## Safety
 
@@ -131,15 +149,16 @@ No real service is touched.
 | `pve_ha_enabled` | `false` | Master switch (inert until true). |
 | `pve_ha_config_host` | `pve` | Single node the ha-manager commands run on. |
 | `pve_ha_ct_hostnames` | tier-0 list | LXC guests to HA-manage (by hostname). |
-| `pve_ha_extra_sids` | `[]` | Verbatim extra SIDs (e.g. `vm:NNN`). |
+| `pve_ha_vm_names` | `[iac-platform]` | VMs to HA-manage (by tofu vms-map key), resolved/enrolled/pinned the same way as a container. |
+| `pve_ha_extra_sids` | `[]` | Verbatim extra SIDs for a guest the tofu maps don't cover. Never a tofu-known VM — those go in `pve_ha_vm_names`, which gets a node-affinity rule; an extra SID gets none. |
 | `pve_ha_anti_affinity_groups` | pairs | Redundant pairs to keep apart. |
 | `pve_ha_max_restart` / `pve_ha_max_relocate` | `3` / `1` | Per-guest bounds. |
-| `pve_ha_replication_ct_hostnames` | app list | Singleton guests that get a `pvesr` replica (relocation-enabled). |
-| `pve_ha_replication_pair` | `[node-a, node-b]` | Always-on nodes; `pvesr` target is the member that is not the guest's home node. |
+| `pve_ha_replication_ct_hostnames` | app list | Singleton containers that get a `pvesr` replica (relocation-enabled). |
+| `pve_ha_replication_vm_names` | `[iac-platform]` | Singleton VMs that get a `pvesr` replica, parallel to `pve_ha_replication_ct_hostnames`. |
 | `pve_ha_replication_schedule` | `*/15` | `pvesr` schedule (systemd-calendar subset). |
 | `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
 | `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
-| `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name of the strict node-affinity rule pinning replication guests to the pair. |
+| `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name kept for the strict node-affinity rule over whichever `[node, ha_replication_target]` pair currently carries it live; every other distinct pair gets its own derived rule name. |
 | `pve_ha_home_rule_prefix` | `pve-ha-home` | Prefix of the per-home-node strict pins applied to every replica-less HA guest. |
 | `pve_ha_manage_all` | `false` | Also enroll the rest of the estate in HA. Widens enrollment only — the home pin applies either way. |
 
