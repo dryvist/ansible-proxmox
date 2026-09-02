@@ -1,0 +1,115 @@
+---
+# ---------------------------------------------------------------------------
+# Every HA-managed guest must carry a DECLARED node-loss story. The defect this
+# covers: "has a live peer" used to be inferred from an ABSENCE — in
+# pve_ha_ct_hostnames but not in pve_ha_replication_ct_hostnames — so a
+# singleton forgotten from the replication list was silently given an in-place
+# restart and no relocation target (Zammad #17172).
+#
+# Includes the ROLE's own derivation rather than restating its expressions, so
+# a drift in the role fails here instead of passing against a stale copy.
+# ---------------------------------------------------------------------------
+- name: Verify pve_ha node-loss-story classification
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    pve_ha_anti_affinity_groups:
+      - name: peers
+        hostnames: [peer-a, peer-b]
+    pve_ha_replication_ct_hostnames: [replicated-app]
+    pve_ha_replication_vm_names: [replicated-vm]
+    pve_ha_singleton_ct_hostnames: [lone-app]
+    pve_ha_singleton_vm_names: []
+
+  tasks:
+    - name: Classify a fully declared set
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/classification.yml
+      vars:
+        pve_ha_ct_hostnames: [peer-a, peer-b, replicated-app, lone-app]
+        pve_ha_vm_names: [replicated-vm]
+        pve_ha_fail_on_unresolved: true
+
+    - name: Assert a fully declared set leaves nothing unclassified
+      ansible.builtin.assert:
+        that:
+          - pve_ha_unclassified == []
+          - (pve_ha_peer_members | sort) == ['peer-a', 'peer-b']
+        fail_msg: >-
+          a declared set was reported unclassified: {{ pve_ha_unclassified }}
+        success_msg: >-
+          each of the three classes — anti-affinity peer, replicated singleton,
+          pinned singleton — satisfies the requirement on its own.
+
+    # The regression itself: a guest present under HA and in NO class. Before
+    # the singleton list existed this read as peer-redundant and passed.
+    - name: Classify a set containing an undeclared guest
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/classification.yml
+      vars:
+        pve_ha_ct_hostnames: [peer-a, peer-b, replicated-app, lone-app, forgotten]
+        pve_ha_vm_names: [replicated-vm]
+        pve_ha_fail_on_unresolved: false
+
+    - name: Assert the undeclared guest is named, not silently assumed peered
+      ansible.builtin.assert:
+        that:
+          - pve_ha_unclassified == ['forgotten']
+        fail_msg: >-
+          an HA guest with no declared node-loss story was not reported:
+          {{ pve_ha_unclassified }}
+        success_msg: >-
+          a guest in no declared class is named — the list-difference version
+          of this treated exactly that guest as though a peer covered it.
+
+    - name: Assert an undeclared guest FAILS the run in the default (loud) mode
+      block:
+        - name: Classify with fail_on_unresolved on
+          ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/classification.yml
+          vars:
+            pve_ha_ct_hostnames: [peer-a, peer-b, replicated-app, lone-app, forgotten]
+            pve_ha_vm_names: [replicated-vm]
+            pve_ha_fail_on_unresolved: true
+
+        - name: Report that the loud mode did not fail
+          ansible.builtin.fail:
+            msg: >-
+              classification.yml accepted an unclassified guest with
+              pve_ha_fail_on_unresolved=true — the guard is inert.
+      rescue:
+        - name: Confirm the failure named the undeclared guest
+          ansible.builtin.assert:
+            that:
+              - "'forgotten' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              the run failed, but not with the classification message:
+              {{ ansible_failed_result.msg | default('') }}
+            success_msg: >-
+              an unclassified HA guest is fatal by default and the message
+              names it.
+
+    - name: Assert a guest declared both replicated and a pinned singleton is refused
+      block:
+        - name: Classify a contradictory declaration
+          ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/classification.yml
+          vars:
+            pve_ha_ct_hostnames: [peer-a, peer-b, replicated-app]
+            pve_ha_vm_names: []
+            pve_ha_singleton_ct_hostnames: [replicated-app]
+            pve_ha_fail_on_unresolved: true
+
+        - name: Report that the contradiction was accepted
+          ansible.builtin.fail:
+            msg: >-
+              a guest declared BOTH replicated and a pinned singleton was
+              accepted; the two produce conflicting strict rules over one SID.
+      rescue:
+        - name: Confirm the contradiction was the reason
+          ansible.builtin.assert:
+            that:
+              - "'opposite node-loss stories' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              failed for a different reason:
+              {{ ansible_failed_result.msg | default('') }}
+            success_msg: >-
+              opposite node-loss stories on one guest are refused before either
+              rule builder runs.

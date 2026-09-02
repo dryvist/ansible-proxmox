@@ -93,11 +93,49 @@
                     if item.0 == pve_ha_legacy_replication_rule_pair_key
                     else pve_ha_replication_affinity_rule ~ '-' ~ (item.0 | regex_replace(',', '-'))),
            'nodes': item.1[0].pair,
+           'ineligible': (item.1[0].pair | reject('in',
+                          (pve_ha_guest_eligible_nodes | default({}))[item.1[0].hostname]
+                          | default([])) | list),
            'sids': item.1 | map(attribute='sid') | list
          } ] }}
   loop: "{{ pve_ha_replication_pair_groups }}"
   loop_control:
     label: "{{ item.0 }}"
+
+# A replication pair may only name nodes that can actually start the guest.
+# The target is a declared attribute, so a typo or a decommissioned node puts a
+# node in the strict rule that holds no replica and often no datastore at all —
+# ha-manager relocates there, the guest cannot start, and it parks in `error`,
+# a latch. Loud rather than trimmed: silently dropping the target would leave a
+# "replicated" guest pinned to one node with no relocation story and nothing
+# saying so.
+- name: Refuse a replication pair naming a node that cannot start the guest
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: replication rule(s)
+      {{ pve_ha_replication_rules | default([]) | selectattr('ineligible')
+         | map(attribute='name') | list }}
+      name a node that is not commissioned, or does not carry the guest's
+      datastore:
+      {{ pve_ha_replication_rules | default([])
+         | selectattr('ineligible')
+         | map(attribute='ineligible') | flatten | unique | list }}.
+      A strict rule naming a node that cannot start the guest is how a fence
+      turns into a latched `error`. Fix the guest's `ha_replication_target`, or
+      declare/register the datastore on that node.
+  when:
+    - (pve_ha_replication_rules | default([]) | selectattr('ineligible') | list) | length > 0
+    - pve_ha_fail_on_unresolved | bool
+
+- name: Warn about a replication pair naming an ineligible node (non-fatal mode)
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: replication rule(s) name a node that cannot start the guest:
+      {{ pve_ha_replication_rules | default([]) | selectattr('ineligible')
+         | map(attribute='ineligible') | flatten | unique | list }}
+  when:
+    - (pve_ha_replication_rules | default([]) | selectattr('ineligible') | list) | length > 0
+    - not (pve_ha_fail_on_unresolved | bool)
 
 - name: Pin each replication pair's viable guests (strict; add if absent)
   ansible.builtin.command: >-

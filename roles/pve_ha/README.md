@@ -54,11 +54,19 @@ OpenBao Raft voters, the two Technitium DNS instances, the Traefik ingress pair
 (auto-activates once `traefik-2` exists), and the Postgres primary/standby
 pair. A pair whose members do not all resolve is skipped.
 
-## Two guest classes: peer-redundant vs singleton
+## Three guest classes, each one DECLARED
 
 Every guest here sits on **local ZFS**, not shared storage, so ha-manager can
 only start a guest on another node if its rootfs already exists there (`pvesr`).
-The guests split on how they survive a node loss:
+The guests split on how they survive a node loss. Which class a guest is in is
+**declared**, never inferred: an HA-managed guest that matches none of the three
+lists below fails the converge (`roles/pve_ha/tasks/classification.yml`).
+
+That guard exists because "has a live peer" used to be read as an ABSENCE — in
+`pve_ha_ct_hostnames` but not in `pve_ha_replication_ct_hostnames` — so a
+singleton simply forgotten from the replication list was silently treated as
+though a peer covered its outage, and got an in-place restart with no
+relocation target. An absence is not a declaration.
 
 **Peer-redundant** (`openbao-*`, `technitium-dns*`, `traefik`) — each has a
 redundant PEER on another node (OpenBao Raft quorum, the second Technitium
@@ -90,6 +98,11 @@ the only node-loss story**:
   inventory entry publishes no `ha_replication_target` fails the converge
   loud (`pve_ha_fail_on_unresolved`), naming the guest and the missing
   attribute.
+- The pair's node list is checked against the inventory before the rule is
+  written: a `ha_replication_target` naming a node that is not commissioned, or
+  that does not carry the guest's datastore, fails the converge. A strict rule
+  naming a node that cannot start the guest is the exact shape of the outage
+  this role exists to prevent.
 - On a **node loss**, ha-manager relocates the guest to the target and starts
   it from the replica. `max_relocate=1` is enough: one hop to the target.
 - A **strict `node-affinity` rule per distinct `[node, target]` pair** pins
@@ -127,6 +140,28 @@ parse of `/etc/pve/storage.cfg`) against its volumes from
 already published in the tofu inventory's `disks` list — a VM can have
 several disks, unlike a container's single rootfs. A storage entry with no
 `nodes` restriction is treated as available on every node.
+
+**Pinned singletons** (`zammad`, `plex` — `pve_ha_singleton_ct_hostnames`,
+`pve_ha_singleton_vm_names`) — no peer and no replica, **by decision**. Their
+node-loss story is an in-place restart on their home node, enforced by that
+node's strict pin; they never relocate. Listing one here is what makes that a
+decision an operator wrote down rather than an omission. Giving one a real
+relocation story means declaring an `ha_replication_target` on its entry in the
+desired state and moving it to `pve_ha_replication_ct_hostnames`.
+
+### Which nodes a rule may name
+
+Every strict rule this role writes is checked against the published inventory's
+own `nodes` and `node_storage` maps
+(`roles/pve_ha/tasks/storage_eligibility.yml`). A node may appear in a guest's
+rule only when it is commissioned **and** its usable datastores include that
+guest's `datastore` — the two stores every PVE node ships with, plus each
+declared pool REGISTERED with `pvesm`. An unregistered pool is a real ZFS pool
+PVE does not expose as storage, so no guest disk can live on it.
+
+A guest whose own home node fails that test, or whose inventory entry publishes
+no `datastore` at all, stops the converge rather than receiving a rule built on
+a guess.
 
 ## Safety
 
