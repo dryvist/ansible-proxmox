@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0](https://github.com/dryvist/ansible-proxmox/compare/v2.2.0...v2.3.0) (2026-09-02)
+
+
+### Features
+
+* **pve_ha:** per-guest replication targets and VM enrolment ([#722](https://github.com/dryvist/ansible-proxmox/issues/722)) ([8baa8f6](https://github.com/dryvist/ansible-proxmox/commit/8baa8f62a5f0eef91c790ed817fed08236b0b873))
+* **sanoid:** snapshot the workstation backup dataset ([#723](https://github.com/dryvist/ansible-proxmox/issues/723)) ([26cf48e](https://github.com/dryvist/ansible-proxmox/commit/26cf48e05b0869e42cb5a64bff0ee7502566b560))
+
 ## [2.2.0](https://github.com/dryvist/ansible-proxmox/compare/v2.1.1...v2.2.0) (2026-08-28)
 
 
