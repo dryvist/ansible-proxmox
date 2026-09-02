@@ -71,6 +71,10 @@ jobs:
           ansible-playbook tests/pve_ha_replication/verify_broken_job_selection.yml -i localhost, -c local
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_ha_replication/verify_home_pin_scope.yml -i localhost, -c local
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_ha_replication/verify_ha_classification.yml -i localhost, -c local
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_ha_replication/verify_storage_eligibility.yml -i localhost, -c local
 
       # A backup job's declaration guard is only worth having if it fires. Both
       # playbooks run the role's OWN task files — the guard against fixtures it

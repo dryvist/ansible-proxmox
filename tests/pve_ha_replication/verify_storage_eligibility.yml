@@ -1,0 +1,161 @@
+---
+# ---------------------------------------------------------------------------
+# Which nodes may appear in a strict node-affinity rule. A rule naming a node
+# that does not carry the guest's datastore, or a node declared but not
+# installed, is worse than no rule: ha-manager relocates there, the guest
+# cannot start, and it parks in `error` — a latch, not a retry — after the
+# source node has already self-fenced to get there (Vikunja 1756, 938;
+# Zammad #17168).
+#
+# Includes the ROLE's own derivation rather than restating its expressions.
+# ---------------------------------------------------------------------------
+- name: Verify pve_ha per-guest node eligibility
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    pve_ha_builtin_datastores: [local, local-zfs]
+
+    # Shaped like the published inventory's `nodes` map. node-a omits
+    # `commissioned` entirely, which the publisher treats as true — the case a
+    # single selectattr would silently drop.
+    cluster_nodes_from_tofu:
+      node-a: {hardware: desktop}
+      node-b: {commissioned: true}
+      node-c: {commissioned: true}
+      node-dead: {commissioned: false}
+
+    # Shaped like the published inventory's `node_storage` map. node-c declares
+    # no pools at all and is absent here, so it carries only the builtin
+    # stores — a real case, not an error.
+    node_storage_from_tofu:
+      node-a:
+        pools:
+          fast: {register: true}
+          rpool: {register: false}
+      node-b:
+        pools:
+          bulk: {register: true}
+      node-dead:
+        pools:
+          bulk: {register: true}
+
+    containers_from_tofu:
+      # On the registered pool only node-b carries.
+      bulk-app: {ansible_pct_vmid: 1001, node: node-b, datastore: bulk}
+      # On a builtin store, so every commissioned node can start it.
+      default-app: {ansible_pct_vmid: 1002, node: node-a, datastore: local-zfs}
+      # On a pool declared but NOT registered with pvesm: PVE exposes no such
+      # storage, so no node is eligible and its own home node is not either.
+      unregistered-app: {ansible_pct_vmid: 1003, node: node-a, datastore: rpool}
+    vms_from_tofu:
+      fast-vm: {vmid: 2001, node: node-a, datastore: fast}
+
+    pve_ha_ct_hostnames: [bulk-app, default-app]
+    pve_ha_vm_names: [fast-vm]
+
+  tasks:
+    - name: Derive eligibility for a coherent declaration
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/storage_eligibility.yml
+      vars:
+        pve_ha_fail_on_unresolved: true
+
+    - name: Assert a node with commissioned omitted still counts as commissioned
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_commissioned_nodes | sort) == ['node-a', 'node-b', 'node-c']
+          - "'node-dead' not in pve_ha_commissioned_nodes"
+        fail_msg: >-
+          commissioned set is wrong: {{ pve_ha_commissioned_nodes }}
+        success_msg: >-
+          commissioned defaults to true when the key is absent, and the
+          uncommissioned node is excluded from every rule this feeds.
+
+    - name: Assert eligibility follows the registered pools, not the declared ones
+      ansible.builtin.assert:
+        that:
+          # Only node-b registers `bulk`. node-dead registers it too but is not
+          # commissioned, which is the whole point of excluding it here.
+          - pve_ha_guest_eligible_nodes['bulk-app'] == ['node-b']
+          # A builtin store exists on every node, including the one absent
+          # from node_storage.
+          - (pve_ha_guest_eligible_nodes['default-app'] | sort)
+            == ['node-a', 'node-b', 'node-c']
+          - pve_ha_guest_eligible_nodes['fast-vm'] == ['node-a']
+          - pve_ha_homeless_by_storage | default([]) == []
+        fail_msg: >-
+          eligibility is wrong: {{ pve_ha_guest_eligible_nodes }}
+          homeless={{ pve_ha_homeless_by_storage | default([]) }}
+        success_msg: >-
+          each guest's eligible set is exactly the commissioned nodes that
+          register its datastore; an uncommissioned node registering the same
+          pool never appears.
+
+    # An unregistered pool is a real ZFS pool PVE does not expose as storage.
+    # A guest declared on one has nowhere to run at all, including at home.
+    - name: Assert a guest on an unregistered pool is refused, not pinned
+      block:
+        - name: Reset the accumulators before re-deriving
+          ansible.builtin.set_fact:
+            pve_ha_guest_specs: []
+            pve_ha_node_stores: []
+            pve_ha_homeless_by_storage: []
+
+        - name: Derive eligibility with a guest on an unregistered pool
+          ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/storage_eligibility.yml
+          vars:
+            pve_ha_ct_hostnames: [unregistered-app]
+            pve_ha_vm_names: []
+            pve_ha_fail_on_unresolved: true
+
+        - name: Report that an unrunnable guest was accepted
+          ansible.builtin.fail:
+            msg: >-
+              a guest whose datastore is registered on no node was accepted; its
+              strict rule would name no node, which STOPS it.
+      rescue:
+        - name: Confirm the guest was named as unrunnable at home
+          ansible.builtin.assert:
+            that:
+              - "'unregistered-app' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              failed for a different reason:
+              {{ ansible_failed_result.msg | default('') }}
+            success_msg: >-
+              a guest homed where it cannot start is fatal and named, rather
+              than silently receiving an empty strict rule.
+
+    - name: Assert a guest publishing no datastore is refused, not widened
+      block:
+        - name: Reset the accumulators before re-deriving
+          ansible.builtin.set_fact:
+            pve_ha_guest_specs: []
+            pve_ha_node_stores: []
+            pve_ha_homeless_by_storage: []
+
+        - name: Derive eligibility from an inventory predating the datastore field
+          ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/storage_eligibility.yml
+          vars:
+            containers_from_tofu:
+              legacy-app: {ansible_pct_vmid: 1004, node: node-a}
+            vms_from_tofu: {}
+            pve_ha_ct_hostnames: [legacy-app]
+            pve_ha_vm_names: []
+            pve_ha_fail_on_unresolved: true
+
+        - name: Report that a datastore-less guest was accepted
+          ansible.builtin.fail:
+            msg: >-
+              a guest publishing no `datastore` was accepted; every eligibility
+              answer for it would be a guess.
+      rescue:
+        - name: Confirm the stale-artifact case is named
+          ansible.builtin.assert:
+            that:
+              - "'legacy-app' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              failed for a different reason:
+              {{ ansible_failed_result.msg | default('') }}
+            success_msg: >-
+              a consumed inventory predating the datastore field stops the
+              converge instead of widening a strict rule to every node.
