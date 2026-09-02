@@ -150,6 +150,17 @@ sanoid_datasets_json: >-
   {{ ns.sep }}{{ (pg_root ~ '/subvol-' ~ postgres_vmid ~ '-disk-'
                   ~ postgres_protected_volume_index) | to_json }}:
   {{- {'use_template': 'database', 'hourly': 24} | to_json }}
+  {%- set ns.sep = ',' -%}
+  {#- Workstation backup archive. Written by an append-only push (the sender
+      runs without --delete), so snapshots cost almost nothing: they only pin
+      blocks that would otherwise be freed, and nothing here is rewritten.
+      Snapshots are what actually makes the archive undeletable — the absence
+      of a delete flag on the sender is a client-side convention, not an
+      enforced property. hourly is off because the push is nightly. This is a
+      literal dataset, not tofu-derived: it is node-local storage, not a
+      guest volume, so there is no published VMID to resolve. -#}
+  {{ ns.sep }}{{ 'rpool/data/nas' | to_json }}:
+  {{- {'use_template': 'critical', 'hourly': 0} | to_json }}
   }
 sanoid_datasets: "{{ sanoid_datasets_json | from_json }}"
 
