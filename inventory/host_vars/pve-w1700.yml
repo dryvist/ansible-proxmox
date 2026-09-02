@@ -228,3 +228,25 @@ kernel_tuning_tsc_mode: nowatchdog
 # cannot start and a restart loop can power the node off through the console
 # power button.
 idrac_kiosk_enabled: true
+
+# --- Workstation backup ingress key ---
+# This node receives the workstation's off-box media push. The key that push
+# authenticates with carries a forced command: it confines the session to one
+# directory and strips delete flags, so the archive is append-only as an
+# enforced property rather than a sender-side convention. Snapshots on
+# rpool/data/nas cover the other case, a client that overwrites in place.
+#
+# The line is not committed. It is a public key, but the role's contract is
+# that real keys come from the secret store, and keeping it there means the
+# forced command can be corrected without a repo round-trip.
+#
+# root_authorized_keys is non-exclusive: it adds and removes only what is
+# declared, leaving this node's other keys untouched, and its lockout guard
+# refuses to finish if root would end up with no static key.
+root_authorized_keys_enabled: true
+root_authorized_keys_present:
+  - "{{ lookup('community.hashi_vault.vault_kv2_get',
+    'workstation-backup-key',
+    engine_mount_point='config',
+    url=lookup('env', 'BAO_ADDR'),
+    token=lookup('env', 'BAO_TOKEN')).secret.authorized_key_line }}"
