@@ -1,7 +1,7 @@
 ---
 # Part 3 of 3 (see main.yml). Strict per-node "home pin" rules: an HA-managed
-# container with no pvesr replica may only ever be started on the single node
-# that holds its rootfs.
+# guest (container OR VM) with no pvesr replica may only ever be started on
+# the single node that holds its rootfs/disks.
 #
 # The pin is not optional, and it is not the same control as anti-affinity.
 # These guests live on node-local ZFS. HA-managed with no node-affinity rule, a
@@ -12,37 +12,63 @@
 # WHERE either half may run, so it does not prevent any of that.
 #
 # Two scopes, deliberately different:
-#   * PINNING (always): every HA-managed container except the pvesr-replicated
-#     singletons, which are pinned to the replication pair instead by
-#     pve_ha_replication_affinity_rule (affinity_rules.yml).
+#   * PINNING (always): every HA-managed guest except the pvesr-replicated
+#     singletons, which are pinned to their own replication pair instead
+#     (affinity_rules.yml).
 #   * ENROLLMENT (pve_ha_manage_all only): pulling the REST of the estate into
-#     HA. The tier-0 set is enrolled by tier0_resources.yml either way.
-#
-# Containers only: containers_from_tofu is the container map. A VM that should
-# be HA-managed goes in pve_ha_extra_sids, which is not pinned and so must only
-# carry VMs on storage every node can reach.
+#     HA. The tier-0 set (containers + VMs) is enrolled by tier0_resources.yml
+#     either way.
 - name: Resolve the home-pin scope
   ansible.builtin.include_tasks: home_pin_scope.yml
 
-- name: Refuse containers with no home node (cannot be pinned)
+# Container and VM home entries are projected here to one common {hostname,
+# node, sid} shape, so the enrolment/rule-building tasks below need no
+# per-kind branching.
+- name: Project container home-pinned entries to {hostname, node, sid}
+  ansible.builtin.set_fact:
+    pve_ha_home_pin_entries: >-
+      {{ (pve_ha_home_pin_entries | default([])) + [ {
+           'hostname': item.key,
+           'node': item.value.node,
+           'sid': 'ct:' ~ (item.value.ansible_pct_vmid | string)
+         } ] }}
+  loop: "{{ pve_ha_home_entries | default([]) }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Project VM home-pinned entries to {hostname, node, sid}
+  ansible.builtin.set_fact:
+    pve_ha_home_pin_entries: >-
+      {{ (pve_ha_home_pin_entries | default([])) + [ {
+           'hostname': item.key,
+           'node': item.value.node,
+           'sid': 'vm:' ~ (item.value.vmid | string)
+         } ] }}
+  loop: "{{ pve_ha_home_vm_entries | default([]) }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Refuse guests with no home node (cannot be pinned)
   ansible.builtin.fail:
     msg: >-
-      pve_ha: these containers have no `node` in the tofu inventory and cannot
+      pve_ha: these guests have no `node` in the tofu inventory and cannot
       be pinned — an unpinned guest under HA can be relocated onto a node
-      without its storage: {{ pve_ha_unpinnable_hosts }}
+      without its storage:
+      {{ (pve_ha_unpinnable_hosts | default([])) + (pve_ha_unpinnable_vm_hosts | default([])) }}
   when:
     - pve_ha_fail_on_unresolved | bool
-    - pve_ha_unpinnable_hosts | length > 0
+    - ((pve_ha_unpinnable_hosts | default([])) + (pve_ha_unpinnable_vm_hosts | default([]))) | length > 0
 
-- name: Warn about containers with no home node (non-fatal mode)
+- name: Warn about guests with no home node (non-fatal mode)
   ansible.builtin.debug:
     msg: >-
-      pve_ha: these containers have no `node` in the tofu inventory and cannot
+      pve_ha: these guests have no `node` in the tofu inventory and cannot
       be pinned — an unpinned guest under HA can be relocated onto a node
-      without its storage: {{ pve_ha_unpinnable_hosts }}
+      without its storage:
+      {{ (pve_ha_unpinnable_hosts | default([])) + (pve_ha_unpinnable_vm_hosts | default([])) }}
   when:
     - not (pve_ha_fail_on_unresolved | bool)
-    - pve_ha_unpinnable_hosts | length > 0
+    - ((pve_ha_unpinnable_hosts | default([])) + (pve_ha_unpinnable_vm_hosts | default([]))) | length > 0
 
 # Enrollment scope only: the tier-0 guests are already added (and their params
 # enforced) by tier0_resources.yml, so re-adding them here would only overwrite
@@ -50,9 +76,9 @@
 - name: Resolve the SIDs to enroll estate-wide
   ansible.builtin.set_fact:
     pve_ha_home_sids: >-
-      {{ pve_ha_home_entries | rejectattr('key', 'in', pve_ha_ct_hostnames)
-         | map(attribute='value.ansible_pct_vmid') | map('string')
-         | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
+      {{ pve_ha_home_pin_entries | default([])
+         | rejectattr('hostname', 'in', pve_ha_ct_hostnames + (pve_ha_vm_names | default([])))
+         | map(attribute='sid') | list }}
   when: pve_ha_manage_all | bool
 
 # HA state must follow the guest's CURRENT power state, not a blanket
@@ -66,6 +92,9 @@
   changed_when: false
   when: pve_ha_manage_all | bool
 
+# `--type vm` covers BOTH qemu VMs and lxc containers (Proxmox's cluster
+# resources API groups every guest under that type, as opposed to
+# node/storage/etc.), so one map keyed by vmid serves both ct: and vm: SIDs.
 - name: Map vmid -> current power status
   ansible.builtin.set_fact:
     pve_ha_status_by_vmid: >-
@@ -85,7 +114,7 @@
   ansible.builtin.command: >-
     ha-manager add {{ item }}
     --state {{ 'started'
-               if pve_ha_status_by_vmid[item | regex_replace('^ct:', '')]
+               if pve_ha_status_by_vmid[item | regex_replace('^(ct|vm):', '')]
                   | default('') == 'running'
                else 'stopped' }}
     --max_restart {{ pve_ha_max_restart }}
@@ -116,13 +145,11 @@
   ansible.builtin.command: >-
     ha-manager rules add node-affinity
     {{ pve_ha_home_rule_prefix }}-{{ item.0 }}
-    --resources {{ item.1 | map(attribute='value.ansible_pct_vmid') | map('string')
-                   | map('regex_replace', '^(.+)$', 'ct:\1')
-                   | join(',') }}
+    --resources {{ item.1 | map(attribute='sid') | join(',') }}
     --nodes {{ item.0 }}
     --strict 1
-    --comment 'pve_ha: {{ item.0 }} holds these guests rootfs; HA may only restart them here'
-  loop: "{{ pve_ha_home_entries | default([]) | groupby('value.node') }}"
+    --comment 'pve_ha: {{ item.0 }} holds these guests rootfs/disks; HA may only restart them here'
+  loop: "{{ pve_ha_home_pin_entries | default([]) | groupby('node') }}"
   loop_control:
     label: "{{ item.0 }}"
   when: (pve_ha_home_rule_prefix ~ '-' ~ item.0) not in pve_ha_existing_rules
@@ -132,12 +159,10 @@
   ansible.builtin.command: >-
     ha-manager rules set node-affinity
     {{ pve_ha_home_rule_prefix }}-{{ item.0 }}
-    --resources {{ item.1 | map(attribute='value.ansible_pct_vmid') | map('string')
-                   | map('regex_replace', '^(.+)$', 'ct:\1')
-                   | join(',') }}
+    --resources {{ item.1 | map(attribute='sid') | join(',') }}
     --nodes {{ item.0 }}
     --strict 1
-  loop: "{{ pve_ha_home_entries | default([]) | groupby('value.node') }}"
+  loop: "{{ pve_ha_home_pin_entries | default([]) | groupby('node') }}"
   loop_control:
     label: "{{ item.0 }}"
   when: (pve_ha_home_rule_prefix ~ '-' ~ item.0) in pve_ha_existing_rules

@@ -1,51 +1,69 @@
 ---
 # Pin the pve_ha replication derivation without a live cluster or the S3
-# inventory pipeline: feed a SYNTHETIC containers_from_tofu and run the SAME
-# expressions tasks/main.yml uses, then assert targets + the strict-pin SID set.
+# inventory pipeline: feed synthetic containers_from_tofu/vms_from_tofu and
+# INCLUDE the real roles/pve_ha/tasks/replication_scope.yml (rather than
+# restating its expressions), so a drift in the role fails here instead of
+# passing against a stale copy. The storage-preflight portion below (which
+# needs live `pvesh` command output in the real role) stays a synthetic
+# re-implementation, fed from fixtures shaped like real pvesh/tofu output.
 # Run: ansible-playbook tests/pve_ha_replication/verify_replication_targets.yml -i localhost,
 #
 # The fixture is a code-path model, NOT a snapshot of live inventory, but it
-# tracks reality where it matters: postgres-apps (602000) is ABSENT (not yet
-# provisioned) so it exercises the absent-guest exclusion; nautobot (605000) and
-# vikunja (605010) are PRESENT and in-pair so both must resolve; a made-up
-# out-of-pair-node-c guest (fake vmid) exercises the node-not-in-pair exclusion.
-- name: Verify pve_ha replication target + node-affinity resolution
+# tracks reality where it matters: each guest's replication partner is its
+# OWN declared `ha_replication_target` attribute (set alongside `node` in the
+# tofu desired state) — postgres-apps and iac-platform each publish their
+# own; nautobot/vikunja/shared-app happen to share one; missing-target-ct is
+# present but publishes no attribute at all (a desired-state gap); missing-vm
+# is absent from vms_from_tofu entirely.
+- name: Verify pve_ha replication scope + node-affinity resolution
   hosts: localhost
   become: false
   gather_facts: false
   vars:
     pve_ha_replication_jobnum: 0
-    pve_ha_replication_pair:
-      - node-a
-      - node-b
+    pve_ha_replication_affinity_rule: apps-replication-nodes
     pve_ha_replication_ct_hostnames:
-      - postgres-apps      # ABSENT from the fixture (not provisioned) -> skipped
-      - nautobot           # present, node-b -> target node-a, in the strict pin
-      - vikunja            # present, node-a -> target node-b, in the strict pin
-      - out-of-pair-node-c   # present but homed on node-c (outside pair) -> skipped
-      - shared-app         # present, node-a -> target node-b, storage on ALL nodes
+      - postgres-apps         # present, node-c, target node-d
+      - nautobot              # present, node-b, target node-a
+      - vikunja               # present, node-a, target node-b
+      - missing-target-ct     # present, node-c, NO ha_replication_target -> unsafe
+      - shared-app            # present, node-a, target node-b, storage on ALL nodes
+    pve_ha_replication_vm_names:
+      - iac-platform          # present, node-b, target node-e
+      - missing-vm            # absent from vms_from_tofu -> unsafe
     containers_from_tofu:
-      nautobot: {vmid: 605000, node: node-b}
-      vikunja: {vmid: 605010, node: node-a}
-      out-of-pair-node-c: {vmid: 699000, node: node-c}
-      shared-app: {vmid: 606000, node: node-a}
-      # postgres-apps (602000) deliberately absent — models #662 unapplied.
+      postgres-apps: {ansible_pct_vmid: 602000, node: node-c, ha_replication_target: node-d}
+      nautobot: {ansible_pct_vmid: 605000, node: node-b, ha_replication_target: node-a}
+      vikunja: {ansible_pct_vmid: 605010, node: node-a, ha_replication_target: node-b}
+      missing-target-ct: {ansible_pct_vmid: 699000, node: node-c}
+      shared-app: {ansible_pct_vmid: 606000, node: node-a, ha_replication_target: node-b}
+    vms_from_tofu:
+      iac-platform:
+        vmid: 110130
+        node: node-b
+        ha_replication_target: node-e
+        disks:
+          - {datastore: local-zfs, path: vm-110130-disk-0}
+      # missing-vm deliberately absent.
 
     # Synthetic `pvesh get /storage` output. Mirrors the real incident: local-zfs
-    # is only on node-a+node-c, NOT node-b — so vikunja's job (target node-b) must be
-    # detected as broken. `bulk` models the "target HAS the storage" pass case.
-    # `shared-nfs` has no `nodes` key at all (omitted, like /etc/pve/storage.cfg
-    # having no `nodes` line) — must be treated as available on every node.
+    # is only on node-a+node-c, NOT node-b — so vikunja's job (target node-b) and
+    # iac-platform's job (target node-e) must be detected as broken (local-zfs
+    # absent on node-e too). `bulk` models the "target HAS the storage" pass
+    # case. `shared-nfs` has no `nodes` key at all (omitted, like
+    # /etc/pve/storage.cfg having no `nodes` line) — must be treated as
+    # available on every node.
     pve_ha_storage_cfg_fixture:
       - storage: local-zfs
         nodes: "node-a,node-c"
       - storage: bulk
-        nodes: "node-a,node-b"
+        nodes: "node-a,node-b,node-d"
       - storage: shared-nfs
         # nodes key deliberately absent -> available on ALL nodes
 
     # Synthetic per-guest LXC config (what `pvesh get /nodes/<n>/lxc/<v>/config`
-    # returns), keyed by hostname.
+    # returns), keyed by hostname. postgres-apps' target (node-d) HAS bulk, so
+    # it passes; missing-target-ct is unsafe and never reaches this check.
     pve_ha_guest_configs_fixture:
       vikunja:
         rootfs: "local-zfs:subvol-605010-disk-0,size=8G"
@@ -54,146 +72,112 @@
         rootfs: "bulk:subvol-605000-disk-0,size=8G"
       shared-app:
         rootfs: "shared-nfs:subvol-606000-disk-0,size=8G"
+      postgres-apps:
+        rootfs: "bulk:subvol-602000-disk-0,size=8G"
 
   tasks:
-    - name: Map container hostname -> {vmid, node}
-      ansible.builtin.set_fact:
-        pve_ha_ct_by_host: >-
-          {{
-            dict(
-              (containers_from_tofu | default({})) | dict2items
-              | selectattr('value.vmid', 'defined')
-              | selectattr('value.node', 'defined')
-              | map(attribute='key') | list
-              | zip(
-                  (containers_from_tofu | default({})) | dict2items
-                  | selectattr('value.vmid', 'defined')
-                  | selectattr('value.node', 'defined')
-                  | map(attribute='value') | list
-                )
-            )
-          }}
+    - name: Include the real replication-scope derivation
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_scope.yml
 
-    - name: Resolve replication jobs (present guests homed in the always-on pair)
-      ansible.builtin.set_fact:
-        pve_ha_replication_jobs: >-
-          {{ pve_ha_replication_jobs | default([]) + [ {
-               'hostname': item,
-               'id': (pve_ha_ct_by_host[item].vmid | string) ~ '-'
-                     ~ (pve_ha_replication_jobnum | string),
-               'source': pve_ha_ct_by_host[item].node,
-               'target': (pve_ha_replication_pair
-                          | difference([pve_ha_ct_by_host[item].node]) | first)
-             } ] }}
-      loop: "{{ pve_ha_replication_ct_hostnames }}"
-      when:
-        - item in pve_ha_ct_by_host
-        - pve_ha_ct_by_host[item].node in pve_ha_replication_pair
-
-    - name: Assert both present in-pair guests resolved, to the right partners
+    - name: Assert every guest with a declared ha_replication_target resolved
       ansible.builtin.assert:
         that:
-          - (pve_ha_replication_jobs | map(attribute='hostname') | sort)
-            == ['nautobot', 'shared-app', 'vikunja']
-          - (pve_ha_replication_jobs
-             | selectattr('hostname', 'eq', 'vikunja') | first).target == 'node-b'
-          - (pve_ha_replication_jobs
-             | selectattr('hostname', 'eq', 'vikunja') | first).id == '605010-0'
-          - (pve_ha_replication_jobs
-             | selectattr('hostname', 'eq', 'nautobot') | first).target == 'node-a'
-          - (pve_ha_replication_jobs
-             | selectattr('hostname', 'eq', 'nautobot') | first).id == '605000-0'
+          - (pve_ha_replication_guests | selectattr('viable') | map(attribute='hostname') | sort)
+            == ['iac-platform', 'nautobot', 'postgres-apps', 'shared-app', 'vikunja']
+          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'vikunja') | first).target == 'node-b'
+          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'nautobot') | first).target == 'node-a'
+          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'postgres-apps') | first).target == 'node-d'
+          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'postgres-apps') | first).pair == ['node-c', 'node-d']
+          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'nautobot') | first).pair == ['node-b', 'node-a']
         fail_msg: >-
           pve_ha replication target derivation is wrong:
-          {{ pve_ha_replication_jobs }}
+          {{ pve_ha_replication_guests }}
         success_msg: >-
-          pve_ha replication targets resolve correctly (vikunja node-a -> node-b,
-          nautobot node-b -> node-a; absent postgres-apps + node-c-homed guest skipped).
+          each guest's target comes from its OWN declared ha_replication_target
+          attribute — postgres-apps and iac-platform each have theirs;
+          nautobot/vikunja/shared-app happen to share the same partner but
+          each still resolves from its own attribute, not a shared default.
 
-    # Node-affinity scope: the STRICT pin must cover only guests that have a
-    # replica (present + in-pair), so node-c-homed / absent guests are excluded —
-    # a strict rule over a replica-less guest would stop it, and the pin's node
-    # set (the pair, no node-c) is what keeps ha-manager off the awake node-c.
-    - name: Map container hostname -> vmid (node-affinity resolution input)
-      ansible.builtin.set_fact:
-        pve_ha_vmid_by_host: >-
-          {{ dict(containers_from_tofu | dict2items | map(attribute='key') | list
-             | zip(containers_from_tofu | dict2items
-                   | map(attribute='value.vmid') | list)) }}
-
-    - name: Resolve the strict node-affinity SID set
-      ansible.builtin.set_fact:
-        pve_ha_replication_sids: >-
-          {{ pve_ha_replication_ct_hostnames | select('in', pve_ha_vmid_by_host)
-             | map('extract', containers_from_tofu)
-             | selectattr('node', 'in', pve_ha_replication_pair)
-             | map(attribute='vmid') | map('string')
-             | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
-
-    - name: Assert the strict pin covers exactly the present in-pair guests
+    - name: Assert the VM resolves to a vm:<id> SID
       ansible.builtin.assert:
         that:
-          - (pve_ha_replication_sids | sort)
-            == ['ct:605000', 'ct:605010', 'ct:606000']
-          - "'node-c' not in pve_ha_replication_pair"
+          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'iac-platform') | first).kind == 'vm'
+          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'iac-platform') | first).sid == 'vm:110130'
+          - (pve_ha_replication_guests | selectattr('hostname', 'eq', 'iac-platform') | first).target == 'node-e'
         fail_msg: >-
-          node-affinity SID scope is wrong (must be every present in-pair guest,
-          excluding node-c-homed/absent): {{ pve_ha_replication_sids }}
-        success_msg: >-
-          node-affinity strict pin covers exactly ct:605000 + ct:605010 over
-          {{ pve_ha_replication_pair }} (absent + node-c-homed guests excluded).
+          VM SID resolution is wrong:
+          {{ pve_ha_replication_guests | selectattr('hostname', 'eq', 'iac-platform') | list }}
+        success_msg: "iac-platform (a VM) resolves to sid=vm:110130, target=node-e (its declared ha_replication_target)."
 
-    # The pin and the replica are both scoped to present in-pair guests. Adding
-    # to HA must be scoped the SAME way, or a guest lands under HA with neither
-    # — and ha-manager then relocates it somewhere it cannot start, after the
-    # source node has self-fenced via the HA watchdog to get there.
-    - name: Resolve singleton app guests with no viable replica
-      ansible.builtin.set_fact:
-        pve_ha_unsafe_singletons: >-
-          {{ pve_ha_replication_ct_hostnames
-             | reject('in',
-                 (containers_from_tofu | default({})) | dict2items
-                 | selectattr('value.vmid', 'defined')
-                 | selectattr('value.node', 'defined')
-                 | selectattr('value.node', 'in', pve_ha_replication_pair)
-                 | map(attribute='key') | list)
-             | list }}
-
-    - name: Resolve the HA-managed SID set with the guard applied
-      ansible.builtin.set_fact:
-        pve_ha_managed_sids: >-
-          {{ ['nautobot', 'vikunja', 'out-of-pair-node-c', 'shared-app']
-             | reject('in', pve_ha_unsafe_singletons)
-             | select('in', pve_ha_vmid_by_host)
-             | map('extract', pve_ha_vmid_by_host) | map('string')
-             | map('regex_replace', '^(.+)$', 'ct:\1') | list }}
-
-    - name: Assert replica-less singletons are refused HA membership
+    - name: Assert unsafe singletons are exactly the target-less and absent guests
       ansible.builtin.assert:
         that:
-          # absent (postgres-apps) and out-of-pair (node-c-homed) are both unsafe
-          - (pve_ha_unsafe_singletons | sort)
-            == ['out-of-pair-node-c', 'postgres-apps']
-          # in-pair singletons keep their HA membership
-          - "'ct:605010' in pve_ha_managed_sids"
-          - "'ct:605000' in pve_ha_managed_sids"
-          - "'ct:606000' in pve_ha_managed_sids"
-          # the node-c-homed singleton is kept OUT of HA entirely — this is the
-          # regression: it used to be added, with no replica and no pin
-          - "'ct:699000' not in pve_ha_managed_sids"
-          # nothing reaches HA without also being in the strict pin
-          - (pve_ha_managed_sids | reject('in', pve_ha_replication_sids)
-             | list) == []
+          - (pve_ha_unsafe_singletons | sort) == ['missing-target-ct', 'missing-vm']
         fail_msg: >-
-          the HA-add guard is wrong — unsafe={{ pve_ha_unsafe_singletons }},
-          managed={{ pve_ha_managed_sids }}
+          unsafe-singleton selection is wrong: {{ pve_ha_unsafe_singletons }}
         success_msg: >-
-          replica-less singletons (absent + node-c-homed) are refused HA
-          membership; in-pair singletons keep theirs.
+          missing-target-ct (present, but no ha_replication_target attribute)
+          and missing-vm (absent from vms_from_tofu) are both refused; every
+          guest with a declared target is not.
 
-    # --- pvesr target-storage validation (mirrors tasks/main.yml, fed from the
-    # pve_ha_storage_cfg_fixture / pve_ha_guest_configs_fixture vars above
-    # instead of `pvesh get /storage` and `pvesh get .../lxc/<vmid>/config`) ---
+    # --- rule-naming (mirrors affinity_rules.yml's "keep the live rule name
+    # for whichever pair currently carries it" logic, since it reads from the
+    # cluster rather than a hardcoded pair) ---
+    - name: Group viable replication guests by their [node, target] pair
+      ansible.builtin.set_fact:
+        pve_ha_replication_pair_groups: >-
+          {{ pve_ha_replication_guests | default([]) | selectattr('viable') | groupby('pair_key') }}
+
+    - name: Fixture a live rule named apps-replication-nodes over node-a,node-b (nautobot/vikunja's pair)
+      ansible.builtin.set_fact:
+        pve_ha_rules_raw:
+          stdout: '[{"rule": "apps-replication-nodes", "nodes": "node-a,node-b"}]'
+
+    - name: Resolve the current node set of the legacy-named replication rule
+      ansible.builtin.set_fact:
+        pve_ha_legacy_replication_rule_pair_key: >-
+          {{ ((pve_ha_rules_raw.stdout | from_json)
+              | selectattr('rule', 'equalto', pve_ha_replication_affinity_rule) | list
+              | map(attribute='nodes') | first | default('', true))
+             | split(',') | reject('equalto', '') | sort | join(',') }}
+
+    - name: Name each pair group's node-affinity rule
+      ansible.builtin.set_fact:
+        pve_ha_replication_rules: >-
+          {{ pve_ha_replication_rules | default([]) + [ {
+               'name': (pve_ha_replication_affinity_rule
+                        if item.0 == pve_ha_legacy_replication_rule_pair_key
+                        else pve_ha_replication_affinity_rule ~ '-' ~ (item.0 | regex_replace(',', '-'))),
+               'nodes': item.1[0].pair,
+               'sids': item.1 | map(attribute='sid') | list
+             } ] }}
+      loop: "{{ pve_ha_replication_pair_groups }}"
+      loop_control:
+        label: "{{ item.0 }}"
+
+    - name: Assert the pair matching the live rule's nodes keeps that name; others get derived names
+      ansible.builtin.assert:
+        that:
+          # nautobot+vikunja share pair node-a,node-b, which matches the live
+          # rule's nodes -> keeps the name apps-replication-nodes
+          - (pve_ha_replication_rules | selectattr('name', 'eq', pve_ha_replication_affinity_rule) | first).sids
+            | sort == ['ct:605000', 'ct:605010', 'ct:606000']
+          # postgres-apps' pair (node-c,node-d) does NOT match the live rule
+          # -> gets its own derived name, never renaming the live rule
+          - (pve_ha_replication_rules | rejectattr('name', 'eq', pve_ha_replication_affinity_rule)
+             | selectattr('sids', 'contains', 'ct:602000') | list | length) == 1
+          - (pve_ha_replication_rules | length) == 3
+        fail_msg: >-
+          rule naming is wrong: {{ pve_ha_replication_rules }}
+        success_msg: >-
+          the pair matching the live apps-replication-nodes rule's nodes
+          (nautobot/vikunja/shared-app, all on node-a/node-b) keeps that
+          name; postgres-apps (node-c/node-d) and iac-platform (node-b/node-e)
+          each get their own derived rule name instead of renaming the live one.
+
+    # --- pvesr target-storage validation (mirrors replication_jobs.yml, fed
+    # from the pve_ha_storage_cfg_fixture / pve_ha_guest_configs_fixture vars
+    # above instead of `pvesh get /storage` / `pvesh get .../lxc/<vmid>/config`) ---
     - name: Parse storage-to-nodes availability (empty list = all nodes)
       ansible.builtin.set_fact:
         pve_ha_storage_nodes: >-
@@ -216,7 +200,7 @@
           shared-nfs (no nodes line) resolves to [] (all nodes); local-zfs
           resolves to exactly its listed nodes.
 
-    - name: Resolve each job's required storage ids from its guest's volumes
+    - name: Resolve each CONTAINER job's required storage ids from its volumes
       ansible.builtin.set_fact:
         pve_ha_replication_job_storages: >-
           {{ pve_ha_replication_job_storages | default([]) + [ {
@@ -229,7 +213,19 @@
                  | map('regex_replace', '^([^:]+):.*$', '\1')
                  | unique | list)
              } ] }}
-      loop: "{{ pve_ha_replication_jobs }}"
+      loop: "{{ pve_ha_replication_guests | selectattr('viable') | selectattr('kind', 'equalto', 'ct') | list }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Resolve each VM job's required storage ids from its published disks
+      ansible.builtin.set_fact:
+        pve_ha_replication_job_storages: >-
+          {{ pve_ha_replication_job_storages | default([]) + [ {
+               'hostname': item.hostname,
+               'target': item.target,
+               'storages': (item.disks | default([]) | map(attribute='datastore') | unique | list)
+             } ] }}
+      loop: "{{ pve_ha_replication_guests | selectattr('viable') | selectattr('kind', 'equalto', 'vm') | list }}"
       loop_control:
         label: "{{ item.hostname }}"
 
@@ -250,7 +246,7 @@
         job: "{{ pair.0 }}"
         storage: "{{ pair.1 }}"
 
-    - name: Assert the target-storage check detects the broken job and passes the rest
+    - name: Assert the target-storage check detects both broken jobs and passes the rest
       ansible.builtin.assert:
         that:
           # vikunja's target (node-b) lacks local-zfs -> DETECTED
@@ -258,9 +254,17 @@
              | selectattr('hostname', 'eq', 'vikunja') | list | length) == 1
           - (pve_ha_replication_job_violations
              | selectattr('hostname', 'eq', 'vikunja') | first).storage == 'local-zfs'
+          # iac-platform's target (node-e) lacks local-zfs -> DETECTED (VM disk path)
+          - (pve_ha_replication_job_violations
+             | selectattr('hostname', 'eq', 'iac-platform') | list | length) == 1
+          - (pve_ha_replication_job_violations
+             | selectattr('hostname', 'eq', 'iac-platform') | first).storage == 'local-zfs'
           # nautobot's target (node-a) HAS bulk -> passes, no violation
           - (pve_ha_replication_job_violations
              | selectattr('hostname', 'eq', 'nautobot') | list | length) == 0
+          # postgres-apps' target (node-d) HAS bulk -> passes, no violation
+          - (pve_ha_replication_job_violations
+             | selectattr('hostname', 'eq', 'postgres-apps') | list | length) == 0
           # shared-app's storage has no nodes restriction -> available
           # everywhere, including its target (node-b) -> passes, no violation
           - (pve_ha_replication_job_violations
@@ -268,6 +272,8 @@
         fail_msg: >-
           pvesr target-storage validation is wrong: {{ pve_ha_replication_job_violations }}
         success_msg: >-
-          target-storage validation detects vikunja's broken node-b target
-          (missing local-zfs) and passes nautobot (bulk present) + shared-app
-          (no nodes restriction = available everywhere).
+          target-storage validation detects vikunja's broken node-b target and
+          iac-platform's broken node-e target (both missing local-zfs, the VM
+          case sourced from published disks rather than a live config read),
+          and passes nautobot/postgres-apps (bulk present) + shared-app (no
+          nodes restriction = available everywhere).

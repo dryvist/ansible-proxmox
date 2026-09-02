@@ -1,72 +1,43 @@
 ---
 # Included from main.yml's pvesr replication block (inherits its when/tags).
-# Part 1 of 2: resolves each singleton app guest's replication job and fails
-# fast if a job's target node lacks the guest's storage (see comment below —
-# incident 2026-07-26, a job that silently never replicates).
-- name: Map container hostname -> {vmid, node} from the tofu inventory
-  ansible.builtin.set_fact:
-    pve_ha_ct_by_host: >-
-      {{
-        dict(
-          (containers_from_tofu | default({})) | dict2items
-          | selectattr('value.ansible_pct_vmid', 'defined')
-          | selectattr('value.node', 'defined')
-          | map(attribute='key') | list
-          | zip(
-              (containers_from_tofu | default({})) | dict2items
-              | selectattr('value.ansible_pct_vmid', 'defined')
-              | selectattr('value.node', 'defined')
-              | map(attribute='value') | list
-            )
-        )
-      }}
-
-# target = the pair member that is NOT the guest's home node. Guests absent
-# from the inventory, or homed outside the always-on pair, resolve to no job.
-- name: Resolve replication jobs (present guests homed in the always-on pair)
-  ansible.builtin.set_fact:
-    pve_ha_replication_jobs: >-
-      {{ pve_ha_replication_jobs | default([]) + [ {
-           'hostname': item,
-           'id': (pve_ha_ct_by_host[item].ansible_pct_vmid | string) ~ '-'
-                 ~ (pve_ha_replication_jobnum | string),
-           'source': pve_ha_ct_by_host[item].node,
-           'target': (pve_ha_replication_pair
-                      | difference([pve_ha_ct_by_host[item].node]) | first)
-         } ] }}
-  loop: "{{ pve_ha_replication_ct_hostnames }}"
-  when:
-    - item in pve_ha_ct_by_host
-    - pve_ha_ct_by_host[item].node in pve_ha_replication_pair
+# Part 1 of 2: resolves each singleton app guest's (container AND VM)
+# replication job and fails fast if a job's target node lacks a required
+# storage id (see comment below — incident 2026-07-26, a job that silently
+# never replicates).
+- name: Resolve the replication scope (containers + VMs, per-guest targets)
+  ansible.builtin.include_tasks: replication_scope.yml
 
 - name: Refuse an app guest with no replication job
   ansible.builtin.fail:
     msg: >-
-      pve_ha replication: no job for {{ item }} — absent from the tofu
-      inventory, or its home node is outside the always-on pair
-      {{ pve_ha_replication_pair }}. A singleton listed under
-      pve_ha_replication_ct_hostnames with no viable replica has nowhere to
-      relocate to on node loss.
-  loop: "{{ pve_ha_replication_ct_hostnames }}"
-  when: (item not in (pve_ha_replication_jobs | default([])
-                      | map(attribute='hostname') | list))
-    and pve_ha_fail_on_unresolved | bool
+      pve_ha replication: no job for {{ item }} —
+      {{ 'present in the tofu inventory but publishes no ha_replication_target'
+         if (item in pve_ha_replication_ct_by_host or item in pve_ha_replication_vm_by_host)
+         else 'absent from the tofu inventory' }}. A singleton listed under
+      pve_ha_replication_ct_hostnames/pve_ha_replication_vm_names with no
+      viable replica has nowhere to relocate to on node loss.
+  loop: "{{ pve_ha_replication_ct_hostnames + pve_ha_replication_vm_names }}"
+  when: item in pve_ha_unsafe_singletons and pve_ha_fail_on_unresolved | bool
 
 - name: Warn about an app guest with no replication job (non-fatal mode)
   ansible.builtin.debug:
     msg: >-
-      pve_ha replication: no job for {{ item }} — absent from the tofu
-      inventory, or its home node is outside the always-on pair
-      {{ pve_ha_replication_pair }}.
-  loop: "{{ pve_ha_replication_ct_hostnames }}"
-  when: (item not in (pve_ha_replication_jobs | default([])
-                      | map(attribute='hostname') | list))
-    and not (pve_ha_fail_on_unresolved | bool)
+      pve_ha replication: no job for {{ item }} —
+      {{ 'present in the tofu inventory but publishes no ha_replication_target'
+         if (item in pve_ha_replication_ct_by_host or item in pve_ha_replication_vm_by_host)
+         else 'absent from the tofu inventory' }}.
+  loop: "{{ pve_ha_replication_ct_hostnames + pve_ha_replication_vm_names }}"
+  when: item in pve_ha_unsafe_singletons and not (pve_ha_fail_on_unresolved | bool)
+
+# Only the VIABLE guests (those with a declared ha_replication_target) get a job.
+- name: Restrict to viable replication jobs
+  ansible.builtin.set_fact:
+    pve_ha_replication_jobs: "{{ pve_ha_replication_guests | default([]) | selectattr('viable') | list }}"
 
 # pvesr replicates a volume to the SAME storage id on the target node. If the
 # target lacks that storage, the job fails asynchronously on first sync and
 # the converge still reports success — no replica ever exists, silently.
-# (Incident 2026-07-26: pve_ha_replication_pair named a node that does not
+# (Incident 2026-07-26: the replication target named a node that did not
 # carry the guests' storage (local-zfs); every job failed and a
 # singleton guest sat under HA with nothing to relocate to.) Prefer pvesh
 # over parsing /etc/pve/storage.cfg directly: the API already normalizes the
@@ -92,18 +63,21 @@
     label: "{{ item.storage }}"
   run_once: true
 
-- name: Read each replication guest's LXC config (to find its volumes' storage ids)
+# Container volumes: query the live LXC config, which covers every mount
+# point (rootfs + mpN) — a container's tofu entry does not publish that full
+# list, only its primary datastore.
+- name: Read each replicated CONTAINER's LXC config (to find its volumes' storage ids)
   ansible.builtin.command: >-
-    pvesh get /nodes/{{ item.source }}/lxc/{{ pve_ha_ct_by_host[item.hostname].ansible_pct_vmid }}/config
+    pvesh get /nodes/{{ item.node }}/lxc/{{ item.vmid }}/config
     --output-format json
-  loop: "{{ pve_ha_replication_jobs | default([]) }}"
+  loop: "{{ pve_ha_replication_jobs | selectattr('kind', 'equalto', 'ct') | list }}"
   loop_control:
     label: "{{ item.hostname }}"
   register: pve_ha_guest_configs_raw
   changed_when: false
   run_once: true
 
-- name: Resolve each job's required storage ids from its guest's volumes
+- name: Resolve each CONTAINER job's required storage ids from its volumes
   ansible.builtin.set_fact:
     pve_ha_replication_job_storages: >-
       {{ pve_ha_replication_job_storages | default([]) + [ {
@@ -121,6 +95,22 @@
     label: "{{ item.item.hostname }}"
   run_once: true
 
+# VM disks: tofu already publishes the full `disks` list (each with its own
+# datastore), so there is no need for a second pvesh call — unlike containers,
+# whose tofu entry carries only a single primary datastore.
+- name: Resolve each VM job's required storage ids from its published disks
+  ansible.builtin.set_fact:
+    pve_ha_replication_job_storages: >-
+      {{ pve_ha_replication_job_storages | default([]) + [ {
+           'hostname': item.hostname,
+           'target': item.target,
+           'storages': (item.disks | default([]) | map(attribute='datastore') | unique | list)
+         } ] }}
+  loop: "{{ pve_ha_replication_jobs | selectattr('kind', 'equalto', 'vm') | list }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+  run_once: true
+
 - name: Fail if a replication target lacks a volume's required storage
   ansible.builtin.fail:
     msg: >-
@@ -133,8 +123,8 @@
          | ternary('ALL (no nodes restriction)',
                    pve_ha_storage_nodes[item.1] | join(', ')) }}.
       Fix by adding '{{ item.1 }}' to '{{ item.0.target }}' in
-      /etc/pve/storage.cfg, or changing pve_ha_replication_pair to a pair
-      that shares this storage.
+      /etc/pve/storage.cfg, or changing this guest's declared
+      ha_replication_target to a node that shares this storage.
   loop: "{{ pve_ha_replication_job_storages | default([]) | subelements('storages') }}"
   loop_control:
     label: "{{ item.0.hostname }} / {{ item.1 }}"

@@ -46,7 +46,7 @@
 - name: Configure pvesr storage replication for singleton app guests
   when:
     - pve_ha_enabled | bool
-    - pve_ha_replication_ct_hostnames | length > 0
+    - (pve_ha_replication_ct_hostnames + pve_ha_replication_vm_names) | length > 0
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - pve_ha
