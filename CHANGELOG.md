@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0](https://github.com/dryvist/ansible-proxmox/compare/v2.3.0...v2.4.0) (2026-09-03)
+
+
+### Features
+
+* **pve_backup_jobs:** PBS storage target and backup=1 on unflagged LXC data mounts ([#729](https://github.com/dryvist/ansible-proxmox/issues/729)) ([53a7694](https://github.com/dryvist/ansible-proxmox/commit/53a769454296864a23a67cdd6f677e15e5b95a5b))
+* **pve_ha:** declare each guest's node-loss story and gate rules on storage ([#728](https://github.com/dryvist/ansible-proxmox/issues/728)) ([c9c4e30](https://github.com/dryvist/ansible-proxmox/commit/c9c4e3099600208e299091273d8993d51f352693))
+
+
+### Bug Fixes
+
+* **syncoid:** re-declare the frozen guest volumes and split the healthcheck ([#730](https://github.com/dryvist/ansible-proxmox/issues/730)) ([7b8c7af](https://github.com/dryvist/ansible-proxmox/commit/7b8c7afddf0e4df14944d7bdcbe8ecb8effd817f))
+
 ## [2.3.0](https://github.com/dryvist/ansible-proxmox/compare/v2.2.0...v2.3.0) (2026-09-02)
 
 
