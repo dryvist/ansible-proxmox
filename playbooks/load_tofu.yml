@@ -76,6 +76,11 @@
         zfs_pools_from_tofu: >-
           {{ (tofu_data.node_storage | default({}))[hostvars[item].proxmox_node_name | default(item)] | default({}) }}
         cluster_nodes_from_tofu: "{{ tofu_data.nodes | default({}) }}"
+        # The WHOLE node_storage map, not just this host's slice. pve_ha runs
+        # cluster-wide from one node and has to answer "which OTHER nodes carry
+        # this guest's datastore" before it writes a strict node-affinity rule,
+        # which the per-host slice above cannot answer.
+        node_storage_from_tofu: "{{ tofu_data.node_storage | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
     # A node_storage entry is looked up by proxmox_node_name, so a node key

@@ -1,0 +1,173 @@
+---
+# Pure derivation, no CLI: which nodes can actually START each HA-managed
+# guest, from the published inventory's own `nodes` and `node_storage` maps.
+#
+# A strict node-affinity rule is only as good as the node list in it. Naming a
+# node that does not carry the guest's datastore is worse than naming none:
+# ha-manager relocates the guest there, it cannot start, HA burns
+# max_restart/max_relocate and parks it in `error` — a LATCH, not a retry — and
+# the source node has already self-fenced to get there. The same holds for a
+# node declared but not installed (`commissioned: false`): ha-manager treats it
+# as a legal relocation target and it can start nothing at all.
+#
+# Derived, never a hand list. A node is eligible for a guest when it is
+# commissioned AND its usable datastores include the guest's own `datastore`.
+# "Usable" mirrors the publisher's own definition
+# (modules/proxmox-stack/checks-storage.tf): the stores every PVE node has out
+# of the box, plus each declared pool REGISTERED with pvesm. An unregistered
+# pool is a real ZFS pool that PVE does not expose as storage, so no guest disk
+# can live on it.
+- name: Resolve the commissioned nodes
+  ansible.builtin.set_fact:
+    # `commissioned` is optional and defaults to TRUE on the publishing side, so
+    # a node that omits the key is commissioned — hence the two halves rather
+    # than a single selectattr, which would silently drop those nodes.
+    pve_ha_commissioned_nodes: >-
+      {{ ((cluster_nodes_from_tofu | default({})) | dict2items
+          | rejectattr('value.commissioned', 'defined')
+          | map(attribute='key') | list)
+         + ((cluster_nodes_from_tofu | default({})) | dict2items
+            | selectattr('value.commissioned', 'defined')
+            | selectattr('value.commissioned')
+            | map(attribute='key') | list) }}
+
+# One {node, stores} entry per COMMISSIONED node. A node absent from
+# node_storage declares no pools, which still leaves it the builtin stores —
+# a real and common case (every guest on it sits on the default store), not an
+# error. A node that is not commissioned gets no entry at all, so it can never
+# appear in a rendered rule.
+- name: Project each commissioned node's usable datastore ids
+  ansible.builtin.set_fact:
+    pve_ha_node_stores: >-
+      {{ (pve_ha_node_stores | default([])) + [ {
+           'node': item,
+           'stores': (pve_ha_builtin_datastores
+             + (((node_storage_from_tofu | default({}))[item] | default({})).pools | default({})
+                | dict2items | rejectattr('value.register', 'defined')
+                | map(attribute='key') | list)
+             + (((node_storage_from_tofu | default({}))[item] | default({})).pools | default({})
+                | dict2items | selectattr('value.register', 'defined')
+                | selectattr('value.register')
+                | map(attribute='key') | list))
+         } ] }}
+  loop: "{{ pve_ha_commissioned_nodes }}"
+  loop_control:
+    label: "{{ item }}"
+
+# `datastore` is emitted for every guest by the publisher, which resolves the
+# EFFECTIVE store, so it is never null. A guest missing it means the consumed
+# artifact predates that field — and every answer below would then be a guess,
+# so say so rather than widening the guest's rule to every node.
+- name: Resolve HA guests whose inventory entry publishes no datastore
+  ansible.builtin.set_fact:
+    pve_ha_datastore_less_guests: >-
+      {{ ((containers_from_tofu | default({})) | dict2items
+          | selectattr('key', 'in', pve_ha_ct_hostnames | default([]))
+          | rejectattr('value.datastore', 'defined')
+          | map(attribute='key') | list)
+         + ((vms_from_tofu | default({})) | dict2items
+            | selectattr('key', 'in', pve_ha_vm_names | default([]))
+            | rejectattr('value.datastore', 'defined')
+            | map(attribute='key') | list) }}
+
+- name: Refuse to derive eligibility for a guest with no published datastore
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: {{ pve_ha_datastore_less_guests }} publish no `datastore` in the
+      consumed inventory, so which nodes can start them cannot be derived — and
+      assuming "any node" is the assumption that strands a guest on a fence.
+      Republish the inventory from a tofu apply (the publisher resolves the
+      effective datastore for every guest) before converging HA.
+  when:
+    - pve_ha_datastore_less_guests | length > 0
+    - pve_ha_fail_on_unresolved | bool
+
+- name: Warn about guests with no published datastore (non-fatal mode)
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: {{ pve_ha_datastore_less_guests }} publish no `datastore`; node
+      eligibility for them cannot be derived.
+  when:
+    - pve_ha_datastore_less_guests | length > 0
+    - not (pve_ha_fail_on_unresolved | bool)
+
+# One spec per HA guest: {hostname, node, datastore, eligible}. Built as a list
+# rather than straight into a dict because the home-node check below has to
+# compare two fields of the SAME entry, which no selectattr can express.
+- name: Resolve each HA container's eligible node set
+  ansible.builtin.set_fact:
+    pve_ha_guest_specs: >-
+      {{ (pve_ha_guest_specs | default([])) + [ {
+           'hostname': item.key,
+           'node': item.value.node | default(''),
+           'datastore': item.value.datastore,
+           'eligible': (pve_ha_node_stores | default([])
+                        | selectattr('stores', 'contains', item.value.datastore)
+                        | map(attribute='node') | list)
+         } ] }}
+  loop: >-
+    {{ (containers_from_tofu | default({})) | dict2items
+       | selectattr('key', 'in', pve_ha_ct_hostnames | default([]))
+       | selectattr('value.datastore', 'defined') | list }}
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Resolve each HA VM's eligible node set
+  ansible.builtin.set_fact:
+    pve_ha_guest_specs: >-
+      {{ (pve_ha_guest_specs | default([])) + [ {
+           'hostname': item.key,
+           'node': item.value.node | default(''),
+           'datastore': item.value.datastore,
+           'eligible': (pve_ha_node_stores | default([])
+                        | selectattr('stores', 'contains', item.value.datastore)
+                        | map(attribute='node') | list)
+         } ] }}
+  loop: >-
+    {{ (vms_from_tofu | default({})) | dict2items
+       | selectattr('key', 'in', pve_ha_vm_names | default([]))
+       | selectattr('value.datastore', 'defined') | list }}
+  loop_control:
+    label: "{{ item.key }}"
+
+# hostname -> the nodes that could start it. Consumed by affinity_rules.yml to
+# trim each replication pair's node list, and by estate_wide_enrollment.yml to
+# refuse a home pin onto a node that cannot start the guest.
+- name: Project the eligible node sets by hostname
+  ansible.builtin.set_fact:
+    pve_ha_guest_eligible_nodes: >-
+      {{ dict((pve_ha_guest_specs | default([])) | map(attribute='hostname') | list
+              | zip((pve_ha_guest_specs | default([])) | map(attribute='eligible') | list)) }}
+
+# A guest whose own HOME node cannot start it is a desired-state contradiction,
+# not something to trim: there is nowhere left to pin it. Loud, because the
+# alternative is an empty strict rule, which STOPS the guest.
+- name: Resolve HA guests whose home node cannot start them
+  ansible.builtin.set_fact:
+    pve_ha_homeless_by_storage: >-
+      {{ (pve_ha_homeless_by_storage | default([]))
+         + ([item.hostname] if item.node not in item.eligible else []) }}
+  loop: "{{ pve_ha_guest_specs | default([]) }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Refuse an HA guest homed on a node that cannot start it
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: {{ pve_ha_homeless_by_storage }} are homed on a node that is not
+      commissioned, or that does not carry their datastore. A strict rule can
+      only name nodes that can start the guest, and there are none — an empty
+      strict rule STOPS it. Fix the guest's `node` (or the node's
+      `commissioned` / `node_storage` declaration) in the desired state.
+  when:
+    - (pve_ha_homeless_by_storage | default([])) | length > 0
+    - pve_ha_fail_on_unresolved | bool
+
+- name: Warn about an HA guest homed on a node that cannot start it (non-fatal mode)
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: {{ pve_ha_homeless_by_storage }} are homed on a node that is not
+      commissioned, or that does not carry their datastore.
+  when:
+    - (pve_ha_homeless_by_storage | default([])) | length > 0
+    - not (pve_ha_fail_on_unresolved | bool)

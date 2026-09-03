@@ -48,6 +48,25 @@
   loop_control:
     label: "{{ item.key }}"
 
+# storage_eligibility.yml already refuses a TIER-0 guest homed where it cannot
+# start. This covers the wider scope: with pve_ha_manage_all on, the pin set is
+# every container in the inventory, and a guest declared on a node that is not
+# commissioned would otherwise get a strict rule naming a node that can start
+# nothing at all.
+- name: Refuse a home pin onto a node that is not commissioned
+  ansible.builtin.assert:
+    that:
+      - (pve_ha_home_pin_entries | default([])
+         | rejectattr('node', 'in', pve_ha_commissioned_nodes | default([]))
+         | list) | length == 0
+    fail_msg: >-
+      pve_ha: these guests are homed on a node that is not commissioned, so
+      their strict home pin would name a node that can start nothing:
+      {{ pve_ha_home_pin_entries | default([])
+         | rejectattr('node', 'in', pve_ha_commissioned_nodes | default([]))
+         | map(attribute='hostname') | list }}
+    quiet: true
+
 - name: Refuse guests with no home node (cannot be pinned)
   ansible.builtin.fail:
     msg: >-

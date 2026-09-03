@@ -1,0 +1,59 @@
+---
+# ---------------------------------------------------------------------------
+# Which LXC mount points get backup=1. vzdump skips a mount with no backup
+# flag and still exits 0, so the guest reads as covered while only its rootfs
+# is in the archive.
+#
+# Includes the ROLE's own derivation rather than restating its expressions, so
+# a drift in the role fails here instead of passing against a stale copy.
+# ---------------------------------------------------------------------------
+- name: Verify the unflagged-mount scope
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars:
+    pve_backup_jobs_mount_flag_exclude_vmids: [999000]
+    # Shaped like the registered result of `pct config` per guest.
+    pve_backup_jobs_ct_configs:
+      results:
+        - item: 405000
+          stdout_lines:
+            - "hostname: langfuse"
+            - "rootfs: bulk:subvol-405000-disk-0,size=8G"
+            # No backup flag at all: the case being fixed.
+            - "mp0: bulk:subvol-405000-disk-3,mp=/opt/langfuse,size=80G"
+        - item: 602000
+          stdout_lines:
+            # Already flagged: must not be touched.
+            - "mp0: bulk:subvol-602000-disk-3,mp=/var/lib/postgresql,size=60G,backup=1"
+        - item: 703040
+          stdout_lines:
+            # Explicit backup=0 is a DECISION, left alone.
+            - "mp0: /bulk/data,mp=/data,backup=0"
+            # Read-only bind mount: excluded.
+            - "mp1: /var/lib/vz/template/iso,mp=/iso,ro=1"
+        - item: 999000
+          stdout_lines:
+            # Unflagged, but the vmid is excluded by declaration.
+            - "mp0: bulk:subvol-999000-disk-0,mp=/data,size=10G"
+
+  tasks:
+    - name: Derive the scope
+      ansible.builtin.include_tasks: ../../roles/pve_backup_jobs/tasks/mount_flags_scope.yml
+
+    - name: Assert only the genuinely unflagged, non-excluded mount is selected
+      ansible.builtin.assert:
+        that:
+          - (pve_backup_jobs_unflagged_mounts | default([])) | length == 1
+          - pve_backup_jobs_unflagged_mounts[0].vmid == 405000
+          - pve_backup_jobs_unflagged_mounts[0].key == 'mp0'
+          - "'backup=' not in pve_backup_jobs_unflagged_mounts[0].value"
+          - "pve_backup_jobs_unflagged_mounts[0].value == 'bulk:subvol-405000-disk-3,mp=/opt/langfuse,size=80G'"
+        fail_msg: >-
+          wrong scope: {{ pve_backup_jobs_unflagged_mounts | default([]) }}
+        success_msg: >-
+          selects the mount with no flag; skips one already backup=1, one
+          explicitly backup=0, a read-only bind mount, and an excluded vmid.
+          The captured value is the mount verbatim, so the pct set that appends
+          ",backup=1" cannot drop an existing option.

@@ -1,0 +1,86 @@
+---
+# Pure derivation, no CLI: which node-loss story each HA-managed guest has.
+#
+# This used to be a LIST DIFFERENCE — "in pve_ha_ct_hostnames but not in
+# pve_ha_replication_ct_hostnames" was read as "has a live peer". Nothing
+# declared that; it was inferred from an absence, so a guest simply forgotten
+# from the replication list was silently classified peer-redundant and given
+# only an in-place restart. Two singletons sat that way (Zammad #17172). An
+# absence is not a declaration.
+#
+# Every HA-managed guest must now match exactly one DECLARED class:
+#   * PEER-REDUNDANT — a member of a pve_ha_anti_affinity_groups entry. The
+#     group is the declaration that a peer exists; the surviving half carries
+#     the service, so no replica is needed.
+#   * REPLICATED SINGLETON — a member of pve_ha_replication_ct_hostnames /
+#     pve_ha_replication_vm_names. Relocation to its pvesr replica is its
+#     story.
+#   * PINNED SINGLETON — a member of pve_ha_singleton_ct_hostnames /
+#     pve_ha_singleton_vm_names. No peer and no replica by DECISION: in-place
+#     restart on its home node only, enforced by its strict home pin. This
+#     class exists so "no relocation target" is something an operator wrote
+#     down, not something the role guessed from two lists.
+#
+# A guest in none of them is UNCLASSIFIED and fails the run. That is the whole
+# point: the failure mode being fixed is a guest quietly defaulting to the
+# wrong story.
+- name: Resolve the guests declared peer-redundant by an anti-affinity group
+  ansible.builtin.set_fact:
+    pve_ha_peer_members: >-
+      {{ pve_ha_anti_affinity_groups | default([])
+         | map(attribute='hostnames') | flatten | unique | list }}
+
+- name: Resolve HA members carrying no declared node-loss story
+  ansible.builtin.set_fact:
+    pve_ha_unclassified: >-
+      {{ (pve_ha_ct_hostnames | default([]))
+         | reject('in', pve_ha_peer_members)
+         | reject('in', pve_ha_replication_ct_hostnames | default([]))
+         | reject('in', pve_ha_singleton_ct_hostnames | default([]))
+         | list
+         + ((pve_ha_vm_names | default([]))
+            | reject('in', pve_ha_peer_members)
+            | reject('in', pve_ha_replication_vm_names | default([]))
+            | reject('in', pve_ha_singleton_vm_names | default([]))
+            | list) }}
+
+- name: Refuse an HA guest with no declared node-loss story
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: {{ pve_ha_unclassified }} are HA-managed but declared neither
+      peer-redundant (a pve_ha_anti_affinity_groups member), replicated
+      (pve_ha_replication_ct_hostnames / pve_ha_replication_vm_names), nor a
+      pinned singleton (pve_ha_singleton_ct_hostnames /
+      pve_ha_singleton_vm_names). Left unclassified each is treated as though a
+      peer covers its outage, which is exactly how a singleton ends up with an
+      in-place restart and no relocation target. Declare the class that is
+      true for each one.
+  when:
+    - pve_ha_unclassified | length > 0
+    - pve_ha_fail_on_unresolved | bool
+
+- name: Warn about an HA guest with no declared node-loss story (non-fatal mode)
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: {{ pve_ha_unclassified }} are HA-managed with no declared
+      node-loss story (peer-redundant / replicated / pinned singleton).
+  when:
+    - pve_ha_unclassified | length > 0
+    - not (pve_ha_fail_on_unresolved | bool)
+
+# A guest cannot be both "relocates to its replica" and "never leaves its home
+# node". Declaring both is a contradiction the rule builders would resolve
+# silently and differently from each other (the replication pair rule and the
+# home pin would name different node sets for the same SID).
+- name: Refuse a guest declared both replicated and a pinned singleton
+  ansible.builtin.assert:
+    that:
+      - ((pve_ha_replication_ct_hostnames | default([]))
+         | select('in', pve_ha_singleton_ct_hostnames | default([])) | list) | length == 0
+      - ((pve_ha_replication_vm_names | default([]))
+         | select('in', pve_ha_singleton_vm_names | default([])) | list) | length == 0
+    fail_msg: >-
+      pve_ha: a guest is declared BOTH replicated and a pinned singleton.
+      Those are opposite node-loss stories and would produce two conflicting
+      strict node-affinity rules over the same SID. Pick one.
+    quiet: true

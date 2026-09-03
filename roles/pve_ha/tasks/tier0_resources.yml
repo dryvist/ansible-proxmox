@@ -54,6 +54,18 @@
 #
 # Shared with replication_jobs.yml (which builds the actual pvesr jobs) so
 # the two can never disagree on which guest is safe — see the comment there.
+# Every HA-managed guest must carry a DECLARED node-loss story — peer-redundant,
+# replicated, or a pinned singleton — rather than inheriting one from the gap
+# between two lists. Runs before the resource set is built so an unclassified
+# guest never reaches ha-manager.
+- name: Assert every HA guest carries a declared node-loss story
+  ansible.builtin.include_tasks: classification.yml
+
+# Which nodes can actually START each guest, derived from node_storage +
+# the nodes map. Consumed by both rule builders below.
+- name: Resolve per-guest node eligibility from storage and commissioning
+  ansible.builtin.include_tasks: storage_eligibility.yml
+
 - name: Resolve the replication scope (containers + VMs, per-guest pairs)
   ansible.builtin.include_tasks: replication_scope.yml
 

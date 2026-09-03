@@ -135,6 +135,41 @@ pve_ha_vm_names:
   # pve_ha_replication_vm_names below), so relocation is its node-loss story.
   - iac-platform
 
+# Guests with NO live peer and NO pvesr replica, BY DECISION. Their node-loss
+# story is an in-place restart on their home node, enforced by that node's
+# strict home pin — they never relocate. Declaring one here is what makes that
+# a decision instead of an omission: before this list existed, "has a peer" was
+# read as "in pve_ha_ct_hostnames but not in pve_ha_replication_ct_hostnames",
+# so a singleton simply forgotten from the replication list was silently
+# treated as though a peer covered its outage (Zammad #17172). Every
+# HA-managed guest must now match exactly one declared class — peer-redundant
+# (an anti-affinity group member), replicated, or listed here — and one that
+# matches none fails the run (tasks/classification.yml).
+#
+# zammad: the ticketing guest. Single instance, no peer. Giving it a replica is
+# a desired-state change (an `ha_replication_target` on its container entry) and
+# a real capacity commitment; until that is made, "stays put and restarts" is
+# the true story and this records it.
+# plex: media tier, in-place crash restart only — the placement standard, not
+# HA, decides where it lives.
+pve_ha_singleton_ct_hostnames:
+  - zammad
+  - plex
+
+# VM equivalent of pve_ha_singleton_ct_hostnames. Empty: every HA-managed VM is
+# currently either replicated or peer-redundant.
+pve_ha_singleton_vm_names: []
+
+# Datastore ids present on every PVE node without being declared in
+# node_storage: the packaged directory store and the rpool-backed ZFS store the
+# installer creates. Mirrors the publisher's own list
+# (modules/proxmox-stack/checks-storage.tf) — most guests take the datastore
+# default, which is one of these, so omitting them would make every node look
+# ineligible for most of the estate.
+pve_ha_builtin_datastores:
+  - local
+  - local-zfs
+
 # Anti-affinity groups: guests that must NEVER share a node (redundant pairs).
 # Each: {name, hostnames:[...]}. Rendered as ha-manager resource-affinity rules
 # with affinity=negative over the resolved SIDs. A group whose members do not
