@@ -31,6 +31,11 @@ syncoid_extra_schedules: {}
 # sqlite_standby — without this, a failed dataset is exit-code-only (see the
 # wrapper template), so set this to get an actual alert.
 syncoid_healthcheck_url: ""
+# Per-schedule-group healthcheck URLs, as {group: url}. One shared URL means a
+# failing group is masked by a passing one: the check reflects whichever group
+# pinged last, so a group that stopped replicating still reads green. A group
+# absent here falls back to syncoid_healthcheck_url.
+syncoid_healthcheck_urls: {}
 # Opt-in: run replication immediately during the play (not just install cron).
 # Set true to seed/refresh a normally-off DR node while it is up for a window;
 # the scheduled cron never fires on a node that is powered off at cron time.

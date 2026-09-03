@@ -246,3 +246,64 @@ syncoid_jobs:
   - name: "appdata"
     source: "root@{{ proxmox_node_names.storage }}:bulk/appdata"
     target: "bulk/replica/{{ proxmox_node_names.storage }}/appdata"
+  # Guest service-state volumes on the bulk node. These were replicated until
+  # 2026-07-25 and then silently stopped: the guests were REBUILT with new
+  # dataset suffixes (disk-0 became disk-1, and so on) and the job list still
+  # named the old ones. Nothing failed loudly, because a job that is simply
+  # absent produces no error — the copies left behind just aged in place while
+  # their fresh local autosnaps made them look current.
+  #
+  # The stale copies under bulk/replica/pve2/ are deliberately left untouched
+  # here; deleting them is a separate change, after these targets prove current
+  # by snapshot-name match against their sources.
+  #
+  # Media guests are NOT here on purpose: their rootfs is re-acquirable and
+  # their state already rides along in the appdata job above.
+  - name: "ct-110020-disk1"  # openbao-20
+    source: "root@pve-r540:bulk/subvol-110020-disk-1"
+    target: "bulk/replica/pve-r540/subvol-110020-disk-1"
+  - name: "ct-110021-disk1"  # openbao-21
+    source: "root@pve-r540:bulk/subvol-110021-disk-1"
+    target: "bulk/replica/pve-r540/subvol-110021-disk-1"
+  - name: "ct-110140-disk1"  # openbao-02
+    source: "root@pve-r540:bulk/subvol-110140-disk-1"
+    target: "bulk/replica/pve-r540/subvol-110140-disk-1"
+  - name: "ct-405000-disk2"  # langfuse rootfs
+    source: "root@pve-r540:bulk/subvol-405000-disk-2"
+    target: "bulk/replica/pve-r540/subvol-405000-disk-2"
+  - name: "ct-405000-disk3"  # langfuse /opt/langfuse
+    source: "root@pve-r540:bulk/subvol-405000-disk-3"
+    target: "bulk/replica/pve-r540/subvol-405000-disk-3"
+  - name: "ct-512010-disk1"  # 512010
+    source: "root@pve-r540:bulk/subvol-512010-disk-1"
+    target: "bulk/replica/pve-r540/subvol-512010-disk-1"
+  - name: "ct-514000-disk2"  # qdrant rootfs
+    source: "root@pve-r540:bulk/subvol-514000-disk-2"
+    target: "bulk/replica/pve-r540/subvol-514000-disk-2"
+  - name: "ct-514000-disk3"  # qdrant data
+    source: "root@pve-r540:bulk/subvol-514000-disk-3"
+    target: "bulk/replica/pve-r540/subvol-514000-disk-3"
+  - name: "ct-515010-disk2"  # llamaindex rootfs
+    source: "root@pve-r540:bulk/subvol-515010-disk-2"
+    target: "bulk/replica/pve-r540/subvol-515010-disk-2"
+  - name: "ct-515010-disk3"  # llamaindex data
+    source: "root@pve-r540:bulk/subvol-515010-disk-3"
+    target: "bulk/replica/pve-r540/subvol-515010-disk-3"
+  - name: "ct-518010-disk1"  # 518010
+    source: "root@pve-r540:bulk/subvol-518010-disk-1"
+    target: "bulk/replica/pve-r540/subvol-518010-disk-1"
+  - name: "ct-519010-disk2"  # postgres-ai-2 rootfs
+    source: "root@pve-r540:bulk/subvol-519010-disk-2"
+    target: "bulk/replica/pve-r540/subvol-519010-disk-2"
+  - name: "ct-519010-disk3"  # postgres-ai-2 data
+    source: "root@pve-r540:bulk/subvol-519010-disk-3"
+    target: "bulk/replica/pve-r540/subvol-519010-disk-3"
+  - name: "ct-5310010-disk1"  # technitium-dns-2
+    source: "root@pve-r540:bulk/subvol-5310010-disk-1"
+    target: "bulk/replica/pve-r540/subvol-5310010-disk-1"
+  - name: "ct-602000-disk2"  # postgres-apps rootfs
+    source: "root@pve-r540:bulk/subvol-602000-disk-2"
+    target: "bulk/replica/pve-r540/subvol-602000-disk-2"
+  - name: "ct-602000-disk3"  # postgres-apps data
+    source: "root@pve-r540:bulk/subvol-602000-disk-3"
+    target: "bulk/replica/pve-r540/subvol-602000-disk-3"
