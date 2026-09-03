@@ -1,0 +1,28 @@
+---
+# Pure derivation, no CLI: which mount points carry no backup flag at all.
+# Split out of mount_flags.yml so tests/pve_backup_mount_flags include THIS
+# file rather than restating its expressions — a drift in the role then fails
+# the test instead of passing against a stale copy.
+#
+# Input: pve_backup_jobs_ct_configs.results, one entry per guest, each with
+# `item` (the vmid) and `stdout_lines` (its pct config).
+# One entry per mount point that names no `backup=` at all. A mount with an
+# explicit backup=0 is a DECISION and is left alone — re-adding the flag would
+# fight whoever excluded it.
+- name: Resolve mount points carrying no backup flag
+  ansible.builtin.set_fact:
+    pve_backup_jobs_unflagged_mounts: >-
+      {{ pve_backup_jobs_unflagged_mounts | default([]) + [
+           {'vmid': item.0.item, 'key': item.1 | regex_replace(':.*$', ''),
+            'value': item.1 | regex_replace('^mp[0-9]+:\s*', '')}
+         ] }}
+  loop: >-
+    {{ pve_backup_jobs_ct_configs.results
+       | subelements('stdout_lines') }}
+  loop_control:
+    label: "{{ item.0.item }}"
+  when:
+    - item.1 is match('^mp[0-9]+:')
+    - "'backup=' not in item.1"
+    - "'ro=1' not in item.1"
+    - item.0.item | int not in pve_backup_jobs_mount_flag_exclude_vmids

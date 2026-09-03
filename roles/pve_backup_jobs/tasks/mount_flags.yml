@@ -1,0 +1,50 @@
+---
+# Set backup=1 on LXC data mount points that carry no backup flag.
+#
+# vzdump captures a container's rootfs plus every mount point flagged
+# backup=1, and SKIPS the rest without complaint — the archive is produced,
+# the task exits 0, and the data mount is simply absent from it. Roughly
+# thirty mounts in this estate predate the desired state's backup default and
+# still carry no flag, so their guests have been "backed up" for months with
+# only their rootfs captured.
+#
+# The desired state cannot fix these: `mount_point` sits in the container
+# module's ignore_changes, so a plan never proposes the flag for a mount that
+# already exists. Setting it here is the converge, not a hand edit.
+#
+# A flag change is PENDING UNTIL THE GUEST NEXT STOPS. It applies to the next
+# archive taken after that stop, not to the next archive. Nothing here restarts
+# a guest to force it; verification is by archive CONTENTS after the guest has
+# cycled, never by `pct config`, which shows the pending value and reads as
+# done.
+#
+# Read-only guests (ro=1) and bind mounts of shared media are excluded by
+# pve_backup_jobs_mount_flag_exclude_vmids, since an image copy of either is
+# re-acquirable bulk rather than service state.
+- name: Read the LXC config of every guest on this node
+  ansible.builtin.command: pct config {{ item }}
+  loop: "{{ pve_backup_jobs_local_vmids }}"
+  register: pve_backup_jobs_ct_configs
+  changed_when: false
+  check_mode: false
+
+- name: Resolve the unflagged-mount scope
+  ansible.builtin.include_tasks: mount_flags_scope.yml
+
+- name: Set backup=1 on each unflagged mount point
+  ansible.builtin.command: >-
+    pct set {{ item.vmid }}
+    --{{ item.key }} {{ item.value }},backup=1
+  loop: "{{ pve_backup_jobs_unflagged_mounts | default([]) }}"
+  loop_control:
+    label: "{{ item.vmid }} {{ item.key }}"
+  changed_when: true
+
+- name: Report the mounts whose flag is pending until their guest next stops
+  ansible.builtin.debug:
+    msg: >-
+      pve_backup_jobs: set backup=1 on
+      {{ pve_backup_jobs_unflagged_mounts | default([]) | length }} mount(s).
+      The flag is PENDING until each guest next stops; verify by listing the
+      CONTENTS of an archive taken after that, never by pct config.
+  when: (pve_backup_jobs_unflagged_mounts | default([])) | length > 0

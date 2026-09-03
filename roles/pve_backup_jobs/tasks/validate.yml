@@ -56,3 +56,23 @@
   when: pve_backup_jobs_jobs | length > 0
   tags:
     - pve_backup_jobs
+
+# A PBS target with no credentials is the silent-skip failure this role exists
+# to prevent: the storage is never defined, every job then fails per guest, and
+# the converge that caused it reported success hours earlier.
+- name: Refuse a PBS storage with no credentials in the secret store
+  ansible.builtin.assert:
+    that:
+      - pve_backup_jobs_pbs_token_id | length > 0
+      - pve_backup_jobs_pbs_token_secret | length > 0
+      - pve_backup_jobs_pbs_fingerprint | length > 0
+    fail_msg: >-
+      pve_backup_jobs: the declared storage is type pbs but its credentials are
+      empty. They come from {{ pve_backup_jobs_pbs_secret_path }} in the secret
+      store — token_id, token_secret and fingerprint. Create or grant read on
+      that path; do not define the storage without them.
+    quiet: true
+  when:
+    - pve_backup_jobs_manage | bool
+    - pve_backup_jobs_storage | length > 0
+    - (pve_backup_jobs_storage.type | default('dir')) == 'pbs'

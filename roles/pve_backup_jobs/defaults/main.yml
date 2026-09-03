@@ -64,6 +64,36 @@ pve_backup_jobs_config_host: ""
 #       prune: keep-daily=7,keep-weekly=4
 pve_backup_jobs_jobs: []
 
+
+# --- Data-mount backup flags -------------------------------------------------
+# vzdump skips an LXC mount point with no backup=1 and still exits 0, so a guest
+# reads as covered while only its rootfs is in the archive. Roughly thirty
+# mounts here predate the desired state's backup default; the desired state
+# cannot fix them because `mount_point` is in the container module's
+# ignore_changes. Independent of the job reconcile above, and NODE-LOCAL: pct
+# only manages guests on the node it runs on.
+pve_backup_jobs_manage_mount_flags: false
+
+# vmids whose mounts stay unflagged deliberately. An explicit backup=0 is
+# already respected everywhere; this list is for guests whose mounts carry no
+# flag at all and should stay that way — re-acquirable bulk rather than service
+# state. Object-store and media guests belong here, not a rootfs-only archive of
+# a hundred gigabytes already covered by replication.
+pve_backup_jobs_mount_flag_exclude_vmids: []
+
+# Guests on THIS node, resolved from the published inventory. The pct calls are
+# node-local, so a vmid homed elsewhere would simply fail.
+pve_backup_jobs_local_vmids: >-
+  {{ (containers_from_tofu | default({})) | dict2items
+     | selectattr('value.node', 'defined')
+     | selectattr('value.node', 'equalto', pve_backup_jobs_this_pve_node)
+     | selectattr('value.ansible_pct_vmid', 'defined')
+     | map(attribute='value.ansible_pct_vmid') | list }}
+
+# This host's Proxmox node name, which is not necessarily its inventory key —
+# same rationale as pve_ha_this_pve_node.
+pve_backup_jobs_this_pve_node: "{{ proxmox_node_name | default(inventory_hostname) }}"
+
 pve_backup_jobs_default_mode: snapshot
 pve_backup_jobs_default_compress: zstd
 pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
@@ -81,6 +111,20 @@ pve_backup_jobs_prune_unmanaged: true
 # the intended shape. Keys map to community.proxmox.proxmox_storage:
 #   name, type, nodes, content, path, prune_backups
 pve_backup_jobs_storage: {}
+
+# --- PBS credentials ---------------------------------------------------------
+# Read from the secret store at converge time, never committed. The role FAILS
+# LOUDLY naming this path when they are absent (validate.yml): a silent skip
+# would leave the storage undefined and every job failing per guest hours
+# later, while the converge reported success.
+#
+# secret/, not secrets-external/: PBS is internal-only and nothing about it is
+# reachable from the public internet.
+pve_backup_jobs_pbs_secret_path: secret/platform/pbs/pve-nodes
+pve_backup_jobs_pbs_token_id: ""
+pve_backup_jobs_pbs_token_secret: ""
+# Pinned; PBS serves a self-signed certificate.
+pve_backup_jobs_pbs_fingerprint: ""
 
 # PVE API connection for the storage definition. Same env-sourced shape the
 # other API-using roles here take; no literal belongs in this file.

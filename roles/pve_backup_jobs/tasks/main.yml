@@ -21,6 +21,17 @@
   tags:
     - pve_backup_jobs
 
+# Node-local, and deliberately outside the cluster-wide reconcile block below:
+# pct manages only the guests on the node it runs on, so this must run on every
+# node rather than on the single config host.
+- name: Set backup=1 on unflagged LXC data mounts
+  ansible.builtin.import_tasks: mount_flags.yml
+  when:
+    - pve_backup_jobs_manage_mount_flags | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_backup_jobs
+
 - name: Reconcile cluster backup jobs from the single config host
   when:
     - pve_backup_jobs_manage | bool
@@ -53,7 +64,41 @@
           # reports success is worse than a backup that fails.
           is_mountpoint: "yes"
           prune_backups: "{{ pve_backup_jobs_storage.prune_backups | default(pve_backup_jobs_default_prune) }}"
-      when: pve_backup_jobs_storage | length > 0
+      when:
+        - pve_backup_jobs_storage | length > 0
+        - (pve_backup_jobs_storage.type | default('dir')) != 'pbs'
+
+    # A Proxmox Backup Server target instead of a directory. Kept as its own
+    # task because the module's option blocks are per-type: passing dir_options
+    # for a pbs storage is rejected, and passing both is not a thing.
+    #
+    # The fingerprint is PINNED. PBS serves a self-signed certificate, so
+    # without it every node either refuses the storage or is asked to trust
+    # whatever answers on that name — which is the whole value of pinning.
+    - name: Ensure the PBS backup target storage exists
+      community.proxmox.proxmox_storage:
+        api_host: "{{ pve_backup_jobs_api_host }}"
+        api_user: "{{ pve_backup_jobs_api_user }}"
+        api_token_id: "{{ pve_backup_jobs_api_token_id }}"
+        api_token_secret: "{{ pve_backup_jobs_api_token_secret }}"
+        validate_certs: "{{ pve_backup_jobs_api_validate_certs | bool }}"
+        name: "{{ pve_backup_jobs_storage.name }}"
+        type: pbs
+        nodes: "{{ pve_backup_jobs_storage.nodes }}"
+        content: "{{ pve_backup_jobs_storage.content | default(['backup']) }}"
+        state: present
+        pbs_options:
+          # An FQDN, never a literal address: the guest moves, the name does not.
+          server: "{{ pve_backup_jobs_storage.server }}"
+          datastore: "{{ pve_backup_jobs_storage.datastore }}"
+          username: "{{ pve_backup_jobs_pbs_token_id }}"
+          password: "{{ pve_backup_jobs_pbs_token_secret }}"
+          fingerprint: "{{ pve_backup_jobs_pbs_fingerprint }}"
+          prune_backups: "{{ pve_backup_jobs_storage.prune_backups | default(pve_backup_jobs_default_prune) }}"
+      no_log: true
+      when:
+        - pve_backup_jobs_storage | length > 0
+        - (pve_backup_jobs_storage.type | default('dir')) == 'pbs'
 
     - name: Reconcile the live job set against the declaration
       ansible.builtin.import_tasks: reconcile.yml
