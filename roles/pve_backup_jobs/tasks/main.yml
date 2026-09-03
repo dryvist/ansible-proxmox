@@ -21,6 +21,17 @@
   tags:
     - pve_backup_jobs
 
+# Node-local, and deliberately outside the cluster-wide reconcile block below:
+# pct manages only the guests on the node it runs on, so this must run on every
+# node rather than on the single config host.
+- name: Set backup=1 on unflagged LXC data mounts
+  ansible.builtin.import_tasks: mount_flags.yml
+  when:
+    - pve_backup_jobs_manage_mount_flags | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_backup_jobs
+
 - name: Reconcile cluster backup jobs from the single config host
   when:
     - pve_backup_jobs_manage | bool
