@@ -1,0 +1,129 @@
+---
+# syncoid replication jobs for this node.
+#
+# Split out of the single host_vars file, which reached the repository per-file
+# token limit. Ansible loads every file under host_vars/<host>/ exactly as it
+# loaded host_vars/<host>.yml, so nothing changed name, value or precedence.
+
+
+syncoid_jobs:
+  - name: "splunk-{{ splunk_vmid }}-disk0"
+    source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-0"
+    target: "bulk/replica/{{ splunk_node }}/vm-{{ splunk_vmid }}-disk-0"
+  # disk-2 is the Splunk configuration + log volume (NOT indexes — those are on
+  # their own pool and are never replicated). Small, text, frequently edited:
+  # hourly, per syncoid_extra_schedules above.
+  - name: "splunk-{{ splunk_vmid }}-disk2"
+    schedule: hourly
+    source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-2"
+    target: "bulk/replica/{{ splunk_node }}/vm-{{ splunk_vmid }}-disk-2"
+  # Object storage IS replicated, because it owns no redundancy of its own.
+  #
+  # This previously read that it was erasure-coded across nodes and therefore
+  # needed no ZFS replica. That was not true of the deployment: the store runs
+  # as a single server process over a single directory, on one guest. There is
+  # no erasure set and no second instance, so nothing underneath it was ever
+  # protecting it — and with this job absent, the replica left behind went
+  # stale where it stood.
+  #
+  # It is also the highest-consequence dataset on the estate: it holds the
+  # remote state, the desired-state object, the published inventory, and the
+  # bucket other backups are written INTO. A backup target with no copy of its
+  # own is the one that turns a disk failure into an unrecoverable one.
+  #
+  # Distributed mode upstream is still under test at the pinned version. When
+  # it is production-ready and actually deployed as an erasure set, revisit
+  # this — but delete the job in the same change that proves the replacement
+  # exists, not on the strength of an assumption about how it is deployed.
+  # Node and VMID both come from the published inventory, like the splunk jobs
+  # above: this guest has already moved once, and a pull job naming a node it no
+  # longer runs on fails every cycle while the replica it left behind ages.
+  - name: "object-store"
+    schedule: hourly
+    source: "root@{{ object_store_node }}:bulk/subvol-{{ object_store_vmid }}-disk-1"
+    target: "bulk/replica/{{ object_store_node }}/subvol-{{ object_store_vmid }}-disk-1"
+  #
+  # Database DR: pull the whole bulk/databases namespace off the storage node
+  # (recursive via default options, so every bulk/databases/<instance> child
+  # comes along). What this carries is the logical dump archive, not a live
+  # database volume — a snapshot of a running cluster is inconsistent by
+  # construction, so the dump is the thing worth having on a second pool.
+  #
+  # The source node moved with the storage role: these two jobs previously named
+  # node 2, whose datasets now live on node 540. A pull job pointed at a node
+  # that no longer serves the dataset does not degrade quietly — it fails every
+  # cycle while the replica it left behind ages, so the source has to follow the
+  # data. The source node is fixed by design (the storage home), unlike the
+  # splunk jobs whose source node is derived from tofu; the prefix comes from
+  # proxmox_node_names.storage so the node name is never hard-coded.
+  - name: "databases"
+    source: "root@{{ proxmox_node_names.storage }}:bulk/databases"
+    target: "bulk/replica/{{ proxmox_node_names.storage }}/databases"
+  # App config/state DR: pull the whole bulk/appdata namespace off the same
+  # storage node (recursive via default options, so every bulk/appdata/<app>
+  # child comes along). Same pull pattern and same proxmox_node_names
+  # parameterization as the databases job.
+  - name: "appdata"
+    source: "root@{{ proxmox_node_names.storage }}:bulk/appdata"
+    target: "bulk/replica/{{ proxmox_node_names.storage }}/appdata"
+  # Guest service-state volumes on the bulk node. These were replicated until
+  # 2026-07-25 and then silently stopped: the guests were REBUILT with new
+  # dataset suffixes (disk-0 became disk-1, and so on) and the job list still
+  # named the old ones. Nothing failed loudly, because a job that is simply
+  # absent produces no error — the copies left behind just aged in place while
+  # their fresh local autosnaps made them look current.
+  #
+  # The stale copies under bulk/replica/pve2/ are deliberately left untouched
+  # here; deleting them is a separate change, after these targets prove current
+  # by snapshot-name match against their sources.
+  #
+  # Media guests are NOT here on purpose: their rootfs is re-acquirable and
+  # their state already rides along in the appdata job above.
+  - name: "ct-110020-disk1"  # openbao-20
+    source: "root@pve-r540:bulk/subvol-110020-disk-1"
+    target: "bulk/replica/pve-r540/subvol-110020-disk-1"
+  - name: "ct-110021-disk1"  # openbao-21
+    source: "root@pve-r540:bulk/subvol-110021-disk-1"
+    target: "bulk/replica/pve-r540/subvol-110021-disk-1"
+  - name: "ct-110140-disk1"  # openbao-02
+    source: "root@pve-r540:bulk/subvol-110140-disk-1"
+    target: "bulk/replica/pve-r540/subvol-110140-disk-1"
+  - name: "ct-405000-disk2"  # langfuse rootfs
+    source: "root@pve-r540:bulk/subvol-405000-disk-2"
+    target: "bulk/replica/pve-r540/subvol-405000-disk-2"
+  - name: "ct-405000-disk3"  # langfuse /opt/langfuse
+    source: "root@pve-r540:bulk/subvol-405000-disk-3"
+    target: "bulk/replica/pve-r540/subvol-405000-disk-3"
+  - name: "ct-512010-disk1"  # 512010
+    source: "root@pve-r540:bulk/subvol-512010-disk-1"
+    target: "bulk/replica/pve-r540/subvol-512010-disk-1"
+  - name: "ct-514000-disk2"  # qdrant rootfs
+    source: "root@pve-r540:bulk/subvol-514000-disk-2"
+    target: "bulk/replica/pve-r540/subvol-514000-disk-2"
+  - name: "ct-514000-disk3"  # qdrant data
+    source: "root@pve-r540:bulk/subvol-514000-disk-3"
+    target: "bulk/replica/pve-r540/subvol-514000-disk-3"
+  - name: "ct-515010-disk2"  # llamaindex rootfs
+    source: "root@pve-r540:bulk/subvol-515010-disk-2"
+    target: "bulk/replica/pve-r540/subvol-515010-disk-2"
+  - name: "ct-515010-disk3"  # llamaindex data
+    source: "root@pve-r540:bulk/subvol-515010-disk-3"
+    target: "bulk/replica/pve-r540/subvol-515010-disk-3"
+  - name: "ct-518010-disk1"  # 518010
+    source: "root@pve-r540:bulk/subvol-518010-disk-1"
+    target: "bulk/replica/pve-r540/subvol-518010-disk-1"
+  - name: "ct-519010-disk2"  # postgres-ai-2 rootfs
+    source: "root@pve-r540:bulk/subvol-519010-disk-2"
+    target: "bulk/replica/pve-r540/subvol-519010-disk-2"
+  - name: "ct-519010-disk3"  # postgres-ai-2 data
+    source: "root@pve-r540:bulk/subvol-519010-disk-3"
+    target: "bulk/replica/pve-r540/subvol-519010-disk-3"
+  - name: "ct-5310010-disk1"  # technitium-dns-2
+    source: "root@pve-r540:bulk/subvol-5310010-disk-1"
+    target: "bulk/replica/pve-r540/subvol-5310010-disk-1"
+  - name: "ct-602000-disk2"  # postgres-apps rootfs
+    source: "root@pve-r540:bulk/subvol-602000-disk-2"
+    target: "bulk/replica/pve-r540/subvol-602000-disk-2"
+  - name: "ct-602000-disk3"  # postgres-apps data
+    source: "root@pve-r540:bulk/subvol-602000-disk-3"
+    target: "bulk/replica/pve-r540/subvol-602000-disk-3"
