@@ -102,6 +102,9 @@ Set `NAS_HOMEASSISTANT_SMB_PASSWORD` in the secrets file before saving.
 
 ## Usage
 
+> **Primary Execution Plane: Semaphore**
+> Routine execution (site converge) is handled centrally by **Semaphore**. The CLI commands below are for local development, testing, or break-glass execution only. To deploy in production, trigger the appropriate Semaphore job.
+
 Test the configuration (doesn't change anything):
 
 ```bash
