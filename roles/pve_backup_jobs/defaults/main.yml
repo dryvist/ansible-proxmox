@@ -112,6 +112,20 @@ pve_backup_jobs_prune_unmanaged: true
 #   name, type, nodes, content, path, prune_backups
 pve_backup_jobs_storage: {}
 
+# --- PBS credentials ---------------------------------------------------------
+# Read from the secret store at converge time, never committed. The role FAILS
+# LOUDLY naming this path when they are absent (validate.yml): a silent skip
+# would leave the storage undefined and every job failing per guest hours
+# later, while the converge reported success.
+#
+# secret/, not secrets-external/: PBS is internal-only and nothing about it is
+# reachable from the public internet.
+pve_backup_jobs_pbs_secret_path: secret/platform/pbs/pve-nodes
+pve_backup_jobs_pbs_token_id: ""
+pve_backup_jobs_pbs_token_secret: ""
+# Pinned; PBS serves a self-signed certificate.
+pve_backup_jobs_pbs_fingerprint: ""
+
 # PVE API connection for the storage definition. Same env-sourced shape the
 # other API-using roles here take; no literal belongs in this file.
 pve_backup_jobs_api_host: "{{ lookup('env', 'PROXMOX_VE_ENDPOINT_HOST') | default(omit, true) }}"
