@@ -22,7 +22,16 @@ group="${1:-default}"
 export PATH="/usr/sbin:/sbin:/usr/bin:/bin${PATH:+:$PATH}"
 
 LOG_DIR="{{ syncoid_log_dir }}"
-HC="{{ syncoid_healthcheck_url }}"
+# Per-group healthcheck. One shared URL across every group means a failing
+# group is masked by a passing one — the check goes green on whichever group
+# pings last. A group with no entry falls back to the shared URL, so a node
+# that has not split its checks yet behaves exactly as before.
+case "$group" in
+{% for g, url in (syncoid_healthcheck_urls | default({})).items() %}
+  {{ g }}) HC="{{ url }}" ;;
+{% endfor %}
+  *) HC="{{ syncoid_healthcheck_url }}" ;;
+esac
 mkdir -p "$LOG_DIR"
 log="$LOG_DIR/$(date +%Y-%m-%d).log"
 
