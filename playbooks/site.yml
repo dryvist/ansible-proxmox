@@ -239,11 +239,19 @@
       vars:
         # Extend the role's default-deny root:[ansible] map with the named
         # accounts local_identities just created. jevans and admin reach
-        # THEIR OWN accounts via the CA, never root -- only `ansible` (and,
-        # transitively, iac's use of ansible-proxmox) retains root-level
-        # certificate access.
+        # THEIR OWN accounts via the CA, never root -- only the automation
+        # principals below retain root-level certificate access.
+        #
+        # `semaphore` is the unattended execution plane, which previously
+        # borrowed `ansible`. Separating them buys two things a shared
+        # principal cannot: a host's sshd log names which caller ran the
+        # converge, and either principal can be withdrawn from this map without
+        # taking the other down with it. Both are listed during the cutover --
+        # only ansible-splunk's runner requests the new principal so far, and
+        # removing `ansible` before the rest follow would lock out every
+        # converge that still asks for it.
         ssh_ca_trust_principals:
-          root: [ansible]
+          root: [ansible, semaphore]
           jevans: [jevans]
           admin: [admin]
 
