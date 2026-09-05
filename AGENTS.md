@@ -1,3 +1,6 @@
+---
+skill-groups: [core, git, homelab]
+---
 # Ansible Proxmox - AI Agent Documentation
 
 Ansible automation for Proxmox VE host configuration.
