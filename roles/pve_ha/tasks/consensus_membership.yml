@@ -31,3 +31,35 @@
   when:
     - pve_ha_openbao_voter_hostnames | length > 0
     - pve_ha_anti_affinity_groups | selectattr('name', 'equalto', 'openbao-voters') | list | length > 0
+
+# A rule that silently protects a fraction of the service is worse than no
+# rule — it reads as coverage. This is not "is the count exactly right" (this
+# role has no source for that); it is a floor below which anti-affinity is
+# not doing meaningful work for a consensus/quorum service at all. A count
+# below the floor most often means the desired state is missing members, not
+# that this derivation is wrong — see pve_ha_consensus_min_members.
+- name: Refuse a consensus group derived below its quorum floor
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: the openbao-voters anti-affinity group derived only
+      {{ pve_ha_openbao_voter_hostnames | length }} member(s) from the tofu
+      "openbao" tag (floor: {{ pve_ha_consensus_min_members }}). A
+      consensus/quorum service this small has no meaningful anti-affinity
+      coverage. If that count is genuinely current, lower
+      pve_ha_consensus_min_members; otherwise the desired state is missing
+      members — this is not a defect in the derivation itself.
+  when:
+    - pve_ha_openbao_voter_hostnames | length > 0
+    - pve_ha_openbao_voter_hostnames | length < pve_ha_consensus_min_members
+    - pve_ha_fail_on_unresolved | bool
+
+- name: Warn about a consensus group derived below its quorum floor (non-fatal mode)
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: the openbao-voters anti-affinity group derived only
+      {{ pve_ha_openbao_voter_hostnames | length }} member(s) from the tofu
+      "openbao" tag (floor: {{ pve_ha_consensus_min_members }}).
+  when:
+    - pve_ha_openbao_voter_hostnames | length > 0
+    - pve_ha_openbao_voter_hostnames | length < pve_ha_consensus_min_members
+    - not (pve_ha_fail_on_unresolved | bool)
