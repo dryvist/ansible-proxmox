@@ -39,6 +39,12 @@
         )
       }}
 
+# Membership of the openbao-voters anti-affinity group is derived from the
+# tofu inventory's own tag before it is consumed below — see
+# consensus_membership.yml.
+- name: Derive consensus-store anti-affinity membership
+  ansible.builtin.include_tasks: consensus_membership.yml
+
 # A singleton app guest is only safe under HA if it has somewhere to be
 # relocated TO. Its two safety mechanisms — the pvesr replica and the strict
 # node-affinity pin — are both conditional on the guest being homed in its
@@ -93,6 +99,16 @@
       `ha_replication_target`.
   when: pve_ha_unsafe_singletons | length > 0 and not (pve_ha_fail_on_unresolved | bool)
 
+# Relocation is a CLASS property: only a singleton with a viable replica has
+# anywhere to go. An application_ha guest's peer covers the outage and an
+# immovable guest cannot move at all, so both get 0 — ha-manager never starts
+# a relocation that could only fail and latch the resource in `error`.
+- name: Resolve which managed SIDs are allowed to relocate
+  ansible.builtin.set_fact:
+    pve_ha_relocatable_sids: >-
+      {{ pve_ha_replication_guests | default([])
+         | selectattr('viable') | map(attribute='sid') | list }}
+
 - name: Resolve managed tier-0 SIDs (present hosts only) + any extra SIDs
   ansible.builtin.set_fact:
     pve_ha_managed_sids: >-
@@ -144,7 +160,7 @@
     ha-manager add {{ item }}
     --state {{ pve_ha_state }}
     --max_restart {{ pve_ha_max_restart }}
-    --max_relocate {{ pve_ha_max_relocate }}
+    --max_relocate {{ pve_ha_max_relocate if item in pve_ha_relocatable_sids else pve_ha_pinned_max_relocate }}
   loop: "{{ pve_ha_managed_sids }}"
   when: item not in pve_ha_existing_sids
   changed_when: true
@@ -154,7 +170,7 @@
     ha-manager set {{ item }}
     --state {{ pve_ha_state }}
     --max_restart {{ pve_ha_max_restart }}
-    --max_relocate {{ pve_ha_max_relocate }}
+    --max_relocate {{ pve_ha_max_relocate if item in pve_ha_relocatable_sids else pve_ha_pinned_max_relocate }}
   loop: "{{ pve_ha_managed_sids }}"
   when: item in pve_ha_existing_sids
   # ponytail: ha-manager set is idempotent server-side; we do not diff each

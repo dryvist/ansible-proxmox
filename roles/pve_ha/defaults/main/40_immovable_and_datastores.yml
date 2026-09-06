@@ -1,0 +1,26 @@
+---
+# --- HA class: immovable ----------------------------------------------------
+# The ONE class that cannot be derived, so it is the ONE that must be declared:
+# a guest that cannot relocate for a STRUCTURAL reason, with that reason
+# written down. Keys are guest names (container hostname or tofu vms-map key),
+# values are the reason. An immovable guest gets max_relocate 0, no pvesr
+# replica, and is excluded from the singleton replica requirement so it does
+# not fail the converge for a gap that can never be closed.
+#
+# "Not replicated yet" is NOT immovable — that is a singleton missing its
+# replica, and the converge is supposed to fail on it.
+pve_ha_immovable_guests:
+  plex: >-
+    Its container config carries bind mounts (host directory paths, not
+    zvols). pvesr replicates zvols only, so a bind-mounted container can be
+    neither replicated nor live-migrated — now or later.
+
+# Datastore ids present on every PVE node without being declared in
+# node_storage: the packaged directory store and the rpool-backed ZFS store the
+# installer creates. Mirrors the publisher's own list
+# (modules/proxmox-stack/checks-storage.tf) — most guests take the datastore
+# default, which is one of these, so omitting them would make every node look
+# ineligible for most of the estate.
+pve_ha_builtin_datastores:
+  - local
+  - local-zfs

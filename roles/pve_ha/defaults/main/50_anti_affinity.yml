@@ -1,0 +1,46 @@
+---
+# Anti-affinity groups: guests that must NEVER share a node (redundant pairs).
+# Each: {name, hostnames:[...]}. Rendered as ha-manager resource-affinity rules
+# with affinity=negative over the resolved SIDs. A group whose members do not
+# all currently resolve is skipped (a half-present pair has nothing to separate).
+# Floor below which a derived consensus group (tasks/consensus_membership.yml)
+# fails the converge (or warns, under pve_ha_fail_on_unresolved: false) rather
+# than silently protecting a fraction of the service. 3 is the minimum size at
+# which a quorum-based service tolerates any single-member loss at all — not
+# this service's real target size, which this role has no source for.
+pve_ha_consensus_min_members: 3
+
+pve_ha_anti_affinity_groups:
+  # The consensus store's voter count outgrows a hand-typed pair the moment a
+  # third node joins, so this list is a FALLBACK only: tasks/consensus_membership.yml
+  # overwrites it at converge time with every guest carrying the tofu
+  # "openbao" tag, which is every current and future voter regardless of
+  # count. These two are the pair present before that generator existed.
+  - name: openbao-voters
+    hostnames:
+      - openbao-01
+      - openbao-02
+  - name: technitium-dns
+    hostnames:
+      - technitium-30
+      - technitium-dns-2
+  # The Traefik ingress pair — the VRRP VIP peers. Names come from the
+  # node_services generator, which builds them as <name_prefix><suffix>, so they
+  # are not free-form: a guess here does not fail, it silently skips, because a
+  # pair whose members do not all resolve is dropped. That is why this sat inert
+  # while it named a guest that never existed.
+  #
+  # Activates on its own once the second instance is created.
+  - name: ingress-traefik
+    hostnames:
+      - traefik-10
+      - traefik-30
+  # The Postgres primary/standby pair: a node loss must never take both the
+  # primary and its streaming standby. postgres-apps is restored here now
+  # that it is HA-managed again (pve_ha_ct_hostnames above) — ha-manager
+  # rejects a resource-affinity rule referencing a guest that is not itself
+  # an HA-managed resource, so the two memberships must move together.
+  - name: postgres-pair
+    hostnames:
+      - postgres
+      - postgres-apps

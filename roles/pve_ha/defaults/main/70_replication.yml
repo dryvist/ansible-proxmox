@@ -1,0 +1,21 @@
+---
+# pvesr schedule (systemd-calendar subset) and optional rate limit (MB/s; empty
+# = unlimited). */5 matches the jobs already running; the app guests' real data-loss
+# window is covered separately (postgres-apps by streaming replication + WAL
+# archiving, the others are near-stateless), so this is a relocation-enabler,
+# not the primary durability layer.
+pve_ha_replication_schedule: "*/5"
+pve_ha_replication_rate: ""
+
+# Job-number suffix for the pvesr job id (<vmid>-<jobnum>). One job per guest.
+pve_ha_replication_jobnum: 0
+
+# Name kept for the strict node-affinity rule over whichever pair currently
+# carries it live (see affinity_rules.yml, which resolves this from the
+# cluster rather than a hardcoded pair) — every other distinct
+# [node, ha_replication_target] pair gets its own derived rule name. A
+# replica exists ONLY where ha_replication_target says, so ha-manager must
+# never start one of these guests anywhere else. A strict rule = run ONLY on
+# the listed nodes, so a relocation onto a replica-less node can't happen and
+# then start-fail/flap.
+pve_ha_replication_affinity_rule: apps-replication-nodes

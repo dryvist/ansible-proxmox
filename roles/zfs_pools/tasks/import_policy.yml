@@ -1,0 +1,45 @@
+---
+# Boot-time pool IMPORT policy.
+#
+# Datasets, quotas and pvesm registration are all worthless if the pool is not
+# imported at boot: every guest whose disks live on it fails to start. Import is
+# driven by the ZFS cache file (/etc/zfs/zpool.cache) plus the systemd units
+# that read it, and until now neither was declared anywhere — a pool imported
+# once by hand carries a cachefile entry that a rebuilt or re-imaged node has no
+# way to reproduce.
+#
+# Operates on zfs_pools_present (computed in main.yml), so the pool list stays
+# the single one derived from the node_storage contract.
+
+- name: Read the current cachefile property on each present pool
+  ansible.builtin.command:
+    argv: [zpool, get, -H, -o, value, cachefile, "{{ item }}"]
+  loop: "{{ zfs_pools_present | default([]) }}"
+  register: zfs_pools_cachefile_current
+  changed_when: false
+  failed_when: false
+
+# `zpool get cachefile` reports "-" while the property is at its default, so an
+# untouched pool compares unequal and gets set exactly once.
+- name: Set the cachefile property where it differs
+  ansible.builtin.command:
+    argv:
+      - zpool
+      - set
+      - "cachefile={{ zfs_pools_cachefile }}"
+      - "{{ item.item }}"
+  loop: "{{ zfs_pools_cachefile_current.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - item.rc is defined and item.rc == 0
+    - (item.stdout | default('') | trim) != zfs_pools_cachefile
+  changed_when: true
+
+# Enabled, never started: the units run at boot and importing a pool mid-run on
+# a live hypervisor is not something a converge should decide to do.
+- name: Enable the cachefile-driven import units
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+  loop: "{{ zfs_pools_import_units }}"

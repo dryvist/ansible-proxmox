@@ -1,0 +1,33 @@
+---
+# --- Cluster-wide shutdown policy (/etc/pve/datacenter.cfg) -----------------
+# What ha-manager does with HA-managed guests when a node is shut down.
+#
+# UNSET IS NOT NEUTRAL. With no `shutdown_policy` key, Proxmox falls back to
+# `conditional`, whose behaviour SPLITS on how the node was taken down:
+#   * `reboot`   -> HA guests are FROZEN (left on the node, resumed on return).
+#   * `poweroff` -> HA guests are MIGRATED off to the surviving nodes.
+# So the outcome depends on which command an operator typed, which is not a
+# property anything else in this repo can read or reason about.
+#
+# `freeze` is the default here, NOT `migrate`. Every guest in this estate sits
+# on LOCAL zfspool storage (see the STORAGE NOTE above), so ha-manager can only
+# relocate one that already has a pvesr replica on the target. Under `migrate`
+# a planned shutdown asks it to relocate EVERY HA guest, and each one without a
+# replica fails to start on the far side and LATCHES in `error` — a latch, not
+# a retry, cleared only by a manual `ha-manager set <sid> --state started`. An
+# estate has already lost hours to exactly that. `freeze` leaves guests where
+# they are and brings them back with the node: predictable, and it cannot
+# strand a guest whose storage does not exist anywhere else.
+#
+# `migrate` is correct once EVERY HA-managed guest has a working relocation
+# path (a replica, per pve_ha_replication_ct_hostnames below). That is a
+# precondition, not a default — flip this per-cluster when it holds.
+#
+# Other accepted values are `failover` and `conditional`; an empty string
+# leaves the key unmanaged.
+#
+# Only this key is written — datacenter.cfg is cluster-wide and carries keys
+# this role does not own (see tasks/datacenter_cfg.yml).
+pve_ha_shutdown_policy: freeze
+
+pve_ha_datacenter_cfg_path: /etc/pve/datacenter.cfg

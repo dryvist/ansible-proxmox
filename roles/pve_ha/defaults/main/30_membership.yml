@@ -1,0 +1,69 @@
+---
+# LXC guests to place under HA, identified by HOSTNAME (stable across a VMID
+# renumber). The VMID + "ct:" SID are resolved in tasks/main.yml from the tofu
+# inventory (containers_from_tofu, injected by load_tofu.yml), so a renumber
+# flows through with no edit here. A hostname absent from the inventory is
+# skipped with a warning rather than failing the run.
+#
+# Two classes of guest live here (see the STORAGE NOTE above and the replication
+# block below):
+#   * APPLICATION-HA guests (openbao/technitium/traefik/postgres pairs) — the
+#     service is redundant across nodes, so they need no replicated storage; HA
+#     gives them in-place restart + anti-affinity, and max_relocate 0.
+#   * SINGLETON guests (nautobot/vikunja/zammad) — one instance, no
+#     application-level peer, so RELOCATION to a replica is their only
+#     node-loss story. The derived pve_ha_replication_ct_hostnames picks them
+#     up automatically; see the HA classes section below.
+# VERIFIED AGAINST LIVE 2026-08-15 (pvesh get /cluster/resources). This list was
+# wrong in BOTH directions at once: it named `traefik`, which resolves to no
+# guest, and `technitium-dns`, which exists but is the STOPPED, retired DNS
+# primary — while OMITTING traefik-10, traefik-30 (both halves of the live
+# ingress pair) and technitium-30 (the LIVE DNS primary). A dead entry is
+# skipped as unresolvable; a missing live guest is never considered at all.
+# Both read as a clean converge, so the guest whose failure mode caused an
+# estate-wide DNS fault had no HA coverage while its retired predecessor was
+# listed. technitium-dns is kept out deliberately — a stopped guest with no
+# viable relocation target is worse than one left outside HA.
+pve_ha_ct_hostnames:
+  - openbao-01
+  - openbao-02
+  - technitium-30
+  - technitium-dns-2
+  - traefik-10
+  - traefik-30
+  # Data platform + shared-Postgres apps tier (live under HA since 2026-07-16;
+  # this records what ha-manager already holds so a converge is idempotent).
+  # nautobot/vikunja/zammad derive as SINGLETONS and so require a replica;
+  # postgres/postgres-apps are the streaming primary/standby PAIR and derive
+  # as APPLICATION-HA from their anti-affinity group.
+  - postgres
+  - vikunja
+  - nautobot
+  - zammad
+  # postgres-apps: the streaming PRIMARY of the pair whose standby is the
+  # `postgres` guest (ansible-proxmox-apps declares the topology; the standby
+  # bootstraps from a replication slot on this host). That native replication
+  # IS its node-loss story, so it classifies APPLICATION-HA via the
+  # postgres-pair anti-affinity group and takes no pvesr replica.
+  - postgres-apps
+  # Media tier: in-place crash auto-restart only (no redundant peer, so no
+  # anti-affinity entry; node placement is enforced in the IaC layer — see
+  # terraform-proxmox#615). Issue #396.
+  - plex
+# Extra HA SIDs to manage verbatim for a guest the tofu container/VM maps
+# do not cover. NEVER a VM the tofu vms map DOES cover — an extra SID gets no
+# home pin and no affinity rule, which is exactly the defect that stranded
+# guests with no node-affinity rule during a prior outage. A tofu-known VM
+# belongs in pve_ha_vm_names below, which resolves/enrols/pins it the same
+# way a container is. Empty by default.
+pve_ha_extra_sids: []
+
+# VMs to place under HA, identified by their KEY in the tofu vms map (parallel
+# to pve_ha_ct_hostnames for containers, stable across a VMID renumber). Each
+# resolves through the SAME enrol -> pin/affinity path as a container (see
+# tier0_resources.yml, home_pin_scope.yml, estate_wide_enrollment.yml) —
+# never pve_ha_extra_sids, which carries no node-affinity rule at all.
+pve_ha_vm_names:
+  # The IaC/OpenTofu platform VM: in no anti-affinity group and not immovable,
+  # so it derives as a SINGLETON and must carry a pvesr replica.
+  - iac-platform
