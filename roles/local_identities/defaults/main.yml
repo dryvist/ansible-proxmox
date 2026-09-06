@@ -55,4 +55,3 @@ local_identities_backup_ingress_shell: /bin/bash
 local_identities_backup_ingress_ssh_public_key: ""
 # Directory the account owns. Empty => ownership is managed elsewhere.
 local_identities_backup_ingress_dir: ""
-

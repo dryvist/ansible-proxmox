@@ -201,4 +201,3 @@
   changed_when: true
   tags:
     - local_identities
-
