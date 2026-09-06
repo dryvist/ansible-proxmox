@@ -56,3 +56,30 @@
         that:
           - zfs_pools_zpool_probe.rc != 0
         fail_msg: "Unexpected zpool present — Docker skip guard may be broken"
+
+    # Import policy: the role now declares the cachefile property and enables
+    # the zfs-import units. Both are ZFS/systemd work and must stay behind the
+    # same Docker guard as everything else in the role.
+    - name: Probe for the ZFS cache file
+      ansible.builtin.stat:
+        path: /etc/zfs/zpool.cache
+      register: zfs_pools_cachefile_probe
+
+    # An enabled unit is a symlink under /etc/systemd/system; none may exist,
+    # and the enable would have errored anyway (the unit is not installed here).
+    - name: Probe for zfs-import unit enablement symlinks
+      ansible.builtin.find:
+        paths: /etc/systemd/system
+        patterns: "zfs-import*"
+        file_type: any
+        recurse: true
+      register: zfs_pools_import_unit_probe
+
+    - name: Assert the import policy tasks were skipped under Docker
+      ansible.builtin.assert:
+        that:
+          - not zfs_pools_cachefile_probe.stat.exists
+          - zfs_pools_import_unit_probe.files | length == 0
+        fail_msg: >-
+          Import-policy tasks ran in the container — the Docker skip guard on
+          import_policy.yml may be broken.

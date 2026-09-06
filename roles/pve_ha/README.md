@@ -163,6 +163,34 @@ A guest whose own home node fails that test, or whose inventory entry publishes
 no `datastore` at all, stops the converge rather than receiving a rule built on
 a guess.
 
+## Cluster shutdown policy
+
+The role also owns `shutdown_policy` in the cluster-wide
+`/etc/pve/datacenter.cfg`, which decides what happens to HA-managed guests when
+a node goes down.
+
+**Unset is not neutral.** With the key absent, Proxmox falls back to
+`conditional`, whose behaviour **splits on how the node was taken down**:
+
+| Node taken down with | `conditional` does |
+| --- | --- |
+| `reboot` | **Freezes** HA guests — they stay on the node and resume when it returns. |
+| `poweroff` | **Migrates** HA guests off to the surviving nodes. |
+
+So the outcome depends on which command an operator typed, which nothing else
+in this repo can read or reason about. `pve_ha_shutdown_policy` defaults to
+`migrate`, which is one behaviour for both: HA guests move off before the node
+goes down, whatever the reason. `failover`, `freeze` and `conditional` are the
+other accepted values; an empty string leaves the key unmanaged.
+
+Only that one key is written. `datacenter.cfg` is cluster-wide and carries keys
+this role does not own (`keyboard`, `migration`, bandwidth limits, ...), so
+`tasks/datacenter_cfg.yml` merges the single line in place rather than
+templating the file — a template would drop every unmanaged key on the first
+converge. `tests/pve_ha_datacenter_cfg/verify_shutdown_policy.yml` runs that
+task file against a temporary copy and asserts the unmanaged keys survive and
+an existing policy is rewritten rather than duplicated.
+
 ## Safety
 
 **Inert by default.** Nothing happens unless `pve_ha_enabled=true`. Enabling is a
@@ -185,7 +213,7 @@ No real service is touched.
 | `pve_ha_config_host` | `pve` | Single node the ha-manager commands run on. |
 | `pve_ha_ct_hostnames` | tier-0 list | LXC guests to HA-manage (by hostname). |
 | `pve_ha_vm_names` | `[iac-platform]` | VMs to HA-manage (by tofu vms-map key), resolved/enrolled/pinned the same way as a container. |
-| `pve_ha_extra_sids` | `[]` | Verbatim extra SIDs for a guest the tofu maps don't cover. Never a tofu-known VM — those go in `pve_ha_vm_names`, which gets a node-affinity rule; an extra SID gets none. |
+| `pve_ha_extra_sids` | `[]` | Verbatim SIDs for a guest the tofu maps miss. Never a tofu-known VM — those go in `pve_ha_vm_names`, which is also pinned. |
 | `pve_ha_anti_affinity_groups` | pairs | Redundant pairs to keep apart. |
 | `pve_ha_max_restart` / `pve_ha_max_relocate` | `3` / `1` | Per-guest bounds. |
 | `pve_ha_replication_ct_hostnames` | app list | Singleton containers that get a `pvesr` replica (relocation-enabled). |
@@ -193,8 +221,10 @@ No real service is touched.
 | `pve_ha_replication_schedule` | `*/15` | `pvesr` schedule (systemd-calendar subset). |
 | `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
 | `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
-| `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name kept for the strict node-affinity rule over whichever `[node, ha_replication_target]` pair currently carries it live; every other distinct pair gets its own derived rule name. |
+| `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name kept for the strict node-affinity rule over the pair currently carrying it live. |
 | `pve_ha_home_rule_prefix` | `pve-ha-home` | Prefix of the per-home-node strict pins applied to every replica-less HA guest. |
+| `pve_ha_shutdown_policy` | `migrate` | Cluster-wide `shutdown_policy` in `datacenter.cfg`. Empty string leaves the key unmanaged. |
+| `pve_ha_datacenter_cfg_path` | `/etc/pve/datacenter.cfg` | Path to the cluster-wide config; a variable so the offline test can target a temp copy. |
 | `pve_ha_manage_all` | `false` | Also enroll the rest of the estate in HA. Widens enrollment only — the home pin applies either way. |
 
 ## Why `ha.yml` is imported by `site.yml` rather than left standalone

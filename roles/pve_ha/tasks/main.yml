@@ -25,6 +25,9 @@
   tags:
     - pve_ha
   block:
+    - name: Declare the cluster-wide shutdown policy
+      ansible.builtin.include_tasks: datacenter_cfg.yml
+
     - name: Resolve and enforce the tier-0 HA resource set
       ansible.builtin.include_tasks: tier0_resources.yml
 

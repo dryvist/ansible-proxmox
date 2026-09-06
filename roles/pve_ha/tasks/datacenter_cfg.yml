@@ -1,0 +1,21 @@
+---
+# Cluster-wide shutdown policy in /etc/pve/datacenter.cfg.
+#
+# The key is edited in place rather than templated: datacenter.cfg is a LIVE
+# cluster-wide file carrying keys this role does not own (keyboard, language,
+# migration, bandwidth limits, ...). A whole-file template would silently drop
+# every one of them on the first converge.
+#
+# Path is a variable so tests/pve_ha_datacenter_cfg/ can run THIS file against a
+# temporary copy and prove the merge preserves unmanaged keys.
+
+- name: Declare the cluster shutdown policy
+  ansible.builtin.lineinfile:
+    path: "{{ pve_ha_datacenter_cfg_path }}"
+    regexp: '^\s*shutdown_policy\s*:'
+    line: "shutdown_policy: {{ pve_ha_shutdown_policy }}"
+    create: true
+    # pmxcfs fixes /etc/pve files at 0640; stating it keeps a create on a node
+    # that has no datacenter.cfg yet consistent with the ones that do.
+    mode: "0640"
+  when: pve_ha_shutdown_policy | length > 0

@@ -1,0 +1,88 @@
+---
+# ---------------------------------------------------------------------------
+# datacenter.cfg is CLUSTER-WIDE and carries keys pve_ha does not own. The role
+# therefore merges one key instead of templating the file, and this pins that:
+# unmanaged keys survive, an existing shutdown_policy is UPDATED rather than
+# duplicated, and a second pass reports no change.
+#
+# Runs the role's OWN tasks/datacenter_cfg.yml against a temp file, so it cannot
+# pass against a stale copy of the logic.
+# ---------------------------------------------------------------------------
+- name: Verify pve_ha shutdown-policy merge into datacenter.cfg
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars:
+    pve_ha_datacenter_cfg_path: /tmp/pve_ha_datacenter_cfg_test/datacenter.cfg
+    pve_ha_shutdown_policy: migrate
+
+  tasks:
+    - name: Create the temporary directory
+      ansible.builtin.file:
+        path: "{{ pve_ha_datacenter_cfg_path | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create a datacenter.cfg carrying only unmanaged keys
+      ansible.builtin.copy:
+        dest: "{{ pve_ha_datacenter_cfg_path }}"
+        content: |
+          keyboard: en-us
+          migration: secure
+        mode: "0640"
+
+    - name: Merge the shutdown policy into it
+      ansible.builtin.include_role:
+        name: pve_ha
+        tasks_from: datacenter_cfg.yml
+
+    - name: Read the merged file
+      ansible.builtin.slurp:
+        src: "{{ pve_ha_datacenter_cfg_path }}"
+      register: pve_ha_merged
+
+    - name: Assert the policy was added and the unmanaged keys survived
+      ansible.builtin.assert:
+        that:
+          - "'shutdown_policy: migrate' in (pve_ha_merged.content | b64decode)"
+          - "'keyboard: en-us' in (pve_ha_merged.content | b64decode)"
+          - "'migration: secure' in (pve_ha_merged.content | b64decode)"
+        fail_msg: >-
+          The merge did not add shutdown_policy, or it dropped a key the role
+          does not own.
+
+    - name: Re-run against a file that already declares a DIFFERENT policy
+      ansible.builtin.copy:
+        dest: "{{ pve_ha_datacenter_cfg_path }}"
+        content: |
+          keyboard: en-us
+          shutdown_policy: conditional
+        mode: "0640"
+
+    - name: Merge again
+      ansible.builtin.include_role:
+        name: pve_ha
+        tasks_from: datacenter_cfg.yml
+
+    - name: Read the updated file
+      ansible.builtin.slurp:
+        src: "{{ pve_ha_datacenter_cfg_path }}"
+      register: pve_ha_updated
+
+    - name: Assert the existing key was rewritten, not duplicated
+      ansible.builtin.assert:
+        that:
+          - >-
+            (pve_ha_updated.content | b64decode).splitlines()
+            | select('match', '^\s*shutdown_policy\s*:') | list | length == 1
+          - "'shutdown_policy: migrate' in (pve_ha_updated.content | b64decode)"
+          - "'conditional' not in (pve_ha_updated.content | b64decode)"
+          - "'keyboard: en-us' in (pve_ha_updated.content | b64decode)"
+        fail_msg: >-
+          A pre-existing shutdown_policy was duplicated or left unchanged.
+
+    - name: Remove the temporary file
+      ansible.builtin.file:
+        path: "{{ pve_ha_datacenter_cfg_path | dirname }}"
+        state: absent

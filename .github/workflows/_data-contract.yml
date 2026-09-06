@@ -78,6 +78,15 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_backup_mount_flags/verify_unflagged_scope.yml -i localhost, -c local
 
+      # datacenter.cfg is cluster-wide and holds keys pve_ha does not own, so
+      # the role merges one key instead of templating the file. This runs that
+      # task file against a temp copy and proves the unmanaged keys survive.
+      - name: Verify pve_ha shutdown-policy merge preserves unmanaged keys
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_ha_datacenter_cfg/verify_shutdown_policy.yml -i localhost, -c local
+
       # A backup job's declaration guard is only worth having if it fires. Both
       # playbooks run the role's OWN task files — the guard against fixtures it
       # must refuse, the reconcile against a stubbed pvesh — so neither can pass

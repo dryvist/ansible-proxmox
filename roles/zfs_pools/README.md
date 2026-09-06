@@ -171,6 +171,29 @@ inherits snapshots, the DR copy, and (on `bulk`) the read-only export with no
 extra wiring. Engine-specific *sync* mechanisms (e.g. the `sqlite_standby` role,
 `pg_basebackup`, `mysqldump`) are separate consumers of this namespace.
 
+## Boot-time import policy
+
+Datasets, quotas and `pvesm` registration are all worthless if the pool is not
+imported at boot — every guest stored on it fails to start. Import is driven by
+the ZFS cache file plus the systemd units that read it, so the role declares
+both for the pools it finds present:
+
+- `cachefile` is set on each present pool (`zpool set cachefile=<path>`). A pool
+  at the property default reports `-`, so an untouched pool is set exactly once
+  and a converge afterwards reports no change.
+- `zfs-import-cache.service` and `zfs-import.target` are **enabled, never
+  started**. They run at boot; importing a pool mid-converge on a live
+  hypervisor is not a decision this role makes.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `zfs_pools_manage_import` | `true` | Manage boot-time import at all. |
+| `zfs_pools_cachefile` | `/etc/zfs/zpool.cache` | Cache file recording which pools to import. |
+| `zfs_pools_import_units` | `[zfs-import-cache.service, zfs-import.target]` | Units enabled to perform the boot import. |
+
+The pool list comes from `zfs_pools_present`, the same set derived from the
+`node_storage` contract, so there is no second list of pools to keep in sync.
+
 ## Usage
 
 ```bash

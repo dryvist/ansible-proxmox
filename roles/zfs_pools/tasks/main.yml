@@ -100,6 +100,18 @@
   tags:
     - zfs_pools
 
+# Import policy for the pools now known to be present. Runs BEFORE datasets and
+# pvesm registration for the same reason it exists: those manage what is inside
+# a pool, this manages whether the pool comes back at all.
+- name: Declare boot-time import policy for the present pools
+  ansible.builtin.import_tasks: import_policy.yml
+  when:
+    - ansible_virtualization_type != 'docker'
+    - zfs_pools_manage_import | bool
+  tags:
+    - zfs_pools
+    - zfs_import_policy
+
 - name: Manage pool-level properties and assert topology
   ansible.builtin.include_tasks: pool_properties.yml
   loop: "{{ zfs_pools_map | dict2items }}"

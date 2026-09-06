@@ -33,6 +33,19 @@ zfs_pools_allow_create: false
 zfs_pools_devices: {}
 
 # ---------------------------------------------------------------------------
+# Boot-time import policy (import_policy.yml).
+#
+# A pool that is not imported at boot takes every guest stored on it down with
+# it, so import is declared rather than inherited from whatever a past manual
+# `zpool import` happened to leave behind. The cachefile records which pools to
+# import; the units below read it during boot.
+zfs_pools_manage_import: true
+zfs_pools_cachefile: /etc/zfs/zpool.cache
+zfs_pools_import_units:
+  - zfs-import-cache.service
+  - zfs-import.target
+
+# ---------------------------------------------------------------------------
 # ZFS kernel module parameters -> /etc/modprobe.d/zfs.conf (module_params.yml).
 # Load-time settings: a runtime `echo` into /sys/module/zfs/parameters/ REVERTS
 # ON REBOOT, so anything tuned live must be declared here or it is lost.
