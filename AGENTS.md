@@ -1,3 +1,6 @@
+---
+skill-groups: [core, git, homelab]
+---
 # Ansible Proxmox - AI Agent Documentation
 
 Ansible automation for Proxmox VE host configuration.
@@ -65,8 +68,15 @@ contract is documented once at
 
 ### Running Playbooks
 
+Converges run through Semaphore, the execution plane. Its template wrapper
+loads the run environment from OpenBao before the playbook starts. Playbooks
+read plain environment variables and are independent of the secrets manager:
+`.env`, Doppler, OpenBao or any other injector behaves identically.
+`scripts/run-ansible.sh` remains the runner the wrapper calls and the
+break-glass path from a workstation.
+
 ```bash
-doppler run -- ansible-playbook playbooks/site.yml
+./scripts/run-ansible.sh playbooks/site.yml
 ```
 
 > **`--limit` must include `localhost`.** The inventory loader

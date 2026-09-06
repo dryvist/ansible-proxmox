@@ -7,8 +7,8 @@
 #
 # The role targets containers whose tofu inventory tags include `docker` plus
 # `ai-orchestration`, `agentgateway`, `hindsight` (the memory-plane API
-# replicas) or `dashboard` — every one of them runs Docker on an unprivileged
-# ZFS-backed LXC and so needs the same fuse-overlayfs features.
+# replicas), `dashboard` or `observability` — every one of them runs Docker on
+# an unprivileged ZFS-backed LXC and so needs the same fuse-overlayfs features.
 # `n8n` and `langgraph` remain explicit fallbacks so they stay covered even if
 # the tags have not landed in inventory yet.
 
@@ -27,6 +27,17 @@ docker_lxc_features_target_tags:
   - agentgateway
   - hindsight
   - dashboard
+  # The trace-sink tier: every `observability` guest here is Docker on an
+  # unprivileged ZFS-backed LXC, so it needs the same fuse-overlayfs features
+  # as the tiers above. Added after a guest in this tier failed its converge on
+  # `failed to register layer: using mount program fuse-overlayfs: fuse: device
+  # not found` — Docker starts, pulls, and only fails when it writes a layer.
+  #
+  # This also brings an existing guest under management rather than leaving it
+  # correct by accident: another guest in this tier already carries the three
+  # feature flags while matching none of the tags above, so nothing was
+  # maintaining them.
+  - observability
 
 docker_lxc_features_fallback_services:
   - n8n
