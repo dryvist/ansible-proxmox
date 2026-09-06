@@ -3,13 +3,6 @@
 # Each: {name, hostnames:[...]}. Rendered as ha-manager resource-affinity rules
 # with affinity=negative over the resolved SIDs. A group whose members do not
 # all currently resolve is skipped (a half-present pair has nothing to separate).
-# Floor below which a derived consensus group (tasks/consensus_membership.yml)
-# fails the converge (or warns, under pve_ha_fail_on_unresolved: false) rather
-# than silently protecting a fraction of the service. 3 is the minimum size at
-# which a quorum-based service tolerates any single-member loss at all — not
-# this service's real target size, which this role has no source for.
-pve_ha_consensus_min_members: 3
-
 pve_ha_anti_affinity_groups:
   # The consensus store's voter count outgrows a hand-typed pair the moment a
   # third node joins, so this list is a FALLBACK only: tasks/consensus_membership.yml
