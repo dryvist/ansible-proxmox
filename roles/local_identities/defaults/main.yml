@@ -35,3 +35,23 @@ local_identities_admin_shell: /bin/bash
 # `ssh root@host`, so gating every command behind a password prompt would
 # just reintroduce root-login habits through a side door.
 local_identities_sudoers_dir: /etc/sudoers.d
+
+# --- backup ingress ---
+# A service account for an off-box backup push. Unlike jevans and admin it is
+# NOT an administrative identity: no sudo, and its key carries a forced command
+# so the session cannot do anything but the one transfer. Deny-by-default; a
+# host opts in and supplies the key line from the secret store.
+#
+# It exists so a backup push does not authenticate as root. Writing into a
+# directory is not an administrative act, and giving a scheduled unattended job
+# root on a hypervisor to do it is a far larger grant than the task needs.
+local_identities_backup_ingress_enabled: false
+local_identities_backup_ingress_user: backup-ingress
+# A shell is required, not optional: the forced command is exec'd through it,
+# so nologin would break the transfer. The forced command, not the shell, is
+# what makes the account unusable interactively.
+local_identities_backup_ingress_shell: /bin/bash
+# Full authorized_keys-format line INCLUDING its forced-command options.
+local_identities_backup_ingress_ssh_public_key: ""
+# Directory the account owns. Empty => ownership is managed elsewhere.
+local_identities_backup_ingress_dir: ""

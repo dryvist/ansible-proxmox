@@ -105,3 +105,99 @@
 # admin intentionally gets NO static authorized_key here -- it is reached
 # only via the OpenBao SSH CA (ssh_ca_trust_principals), which is the point
 # of a break-glass account that is not a standing, always-open door.
+
+# --- backup ingress service account ---
+# Deliberately has no sudo task: it is a write-into-one-directory identity, not
+# an administrative one.
+- name: Create the backup ingress account
+  ansible.builtin.user:
+    name: "{{ local_identities_backup_ingress_user }}"
+    shell: "{{ local_identities_backup_ingress_shell }}"
+    create_home: true
+    state: present
+  when:
+    - local_identities_enabled | bool
+    - local_identities_backup_ingress_enabled | bool
+  tags:
+    - local_identities
+
+# Fail rather than create an account that cannot be reached. The other accounts
+# here can fall back to a CA principal; this one is key-only by design, so a
+# missing key is not a degraded state, it is a broken one — and a silent skip
+# would leave a passwordless account with no forced command behind it.
+- name: Assert the backup ingress key is supplied
+  ansible.builtin.assert:
+    that:
+      - local_identities_backup_ingress_ssh_public_key | length > 0
+    fail_msg: >-
+      local_identities_backup_ingress_enabled is true but no key line was
+      supplied. Refusing to create an unreachable service account.
+  when:
+    - local_identities_enabled | bool
+    - local_identities_backup_ingress_enabled | bool
+  tags:
+    - local_identities
+
+- name: Authorize the backup ingress key
+  ansible.posix.authorized_key:
+    user: "{{ local_identities_backup_ingress_user }}"
+    key: "{{ local_identities_backup_ingress_ssh_public_key }}"
+    exclusive: true
+    state: present
+  when:
+    - local_identities_enabled | bool
+    - local_identities_backup_ingress_enabled | bool
+  tags:
+    - local_identities
+
+- name: Give the backup ingress account its directory
+  ansible.builtin.file:
+    path: "{{ local_identities_backup_ingress_dir }}"
+    state: directory
+    owner: "{{ local_identities_backup_ingress_user }}"
+    mode: "0750"
+  when:
+    - local_identities_enabled | bool
+    - local_identities_backup_ingress_enabled | bool
+    - local_identities_backup_ingress_dir | length > 0
+  tags:
+    - local_identities
+
+# The directory may predate the account and hold content owned by someone else,
+# in which case the account owns the top level and still cannot write inside it.
+# `recurse: true` on the file module above would fix that, but it re-stats every
+# file on every converge, which is minutes once the tree is large.
+#
+# So: detect, then act. The probe stops at the FIRST foreign file, so the common
+# case (already converged) costs one directory walk that exits immediately, and
+# an empty result is a true statement about the whole tree rather than about
+# whatever the last chown happened to touch.
+- name: Find whether any of the directory is not owned by the backup ingress account
+  ansible.builtin.command:
+    cmd: >-
+      find {{ local_identities_backup_ingress_dir | quote }}
+      ! -user {{ local_identities_backup_ingress_user | quote }}
+      -print -quit
+  register: local_identities_backup_ingress_foreign
+  changed_when: false
+  check_mode: false
+  when:
+    - local_identities_enabled | bool
+    - local_identities_backup_ingress_enabled | bool
+    - local_identities_backup_ingress_dir | length > 0
+  tags:
+    - local_identities
+
+- name: Take ownership of pre-existing content
+  ansible.builtin.command:
+    cmd: >-
+      chown -R {{ local_identities_backup_ingress_user | quote }}
+      {{ local_identities_backup_ingress_dir | quote }}
+  when:
+    - local_identities_enabled | bool
+    - local_identities_backup_ingress_enabled | bool
+    - local_identities_backup_ingress_dir | length > 0
+    - local_identities_backup_ingress_foreign.stdout | default("") | length > 0
+  changed_when: true
+  tags:
+    - local_identities

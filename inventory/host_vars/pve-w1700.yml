@@ -228,3 +228,24 @@ kernel_tuning_tsc_mode: nowatchdog
 # cannot start and a restart loop can power the node off through the console
 # power button.
 idrac_kiosk_enabled: true
+
+# --- Workstation backup ingress ---
+# This node receives the workstation's off-box media push. The push
+# authenticates as a dedicated service account with no sudo, not as root:
+# writing into one directory is not an administrative act, and a scheduled
+# unattended job should not hold root on a hypervisor to do it.
+#
+# The key line carries a forced command that confines the session to this one
+# directory and strips delete flags, so the archive is append-only as an
+# enforced property rather than a sender-side convention. Snapshots on
+# rpool/data/nas cover the other case, a client that overwrites in place.
+#
+# The line is read from the secret store, not committed, so the forced command
+# can be corrected without a repo round-trip.
+local_identities_backup_ingress_enabled: true
+local_identities_backup_ingress_dir: /mnt/nas/backups/workstation
+local_identities_backup_ingress_ssh_public_key: "{{ lookup('community.hashi_vault.vault_kv2_get',
+  'workstation-backup-key',
+  engine_mount_point='config',
+  url=lookup('env', 'BAO_ADDR'),
+  token=lookup('env', 'BAO_TOKEN')).secret.authorized_key_line }}"
