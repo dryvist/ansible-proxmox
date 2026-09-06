@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0](https://github.com/dryvist/ansible-proxmox/compare/v2.4.0...v2.5.0) (2026-09-06)
+
+
+### Features
+
+* **docker_lxc_features:** cover the observability tier ([#739](https://github.com/dryvist/ansible-proxmox/issues/739)) ([05ed914](https://github.com/dryvist/ansible-proxmox/commit/05ed9147084d5e922a3da162990ca1243674fffe))
+* **ssh-ca:** trust the semaphore principal for root certificate access ([#738](https://github.com/dryvist/ansible-proxmox/issues/738)) ([324382e](https://github.com/dryvist/ansible-proxmox/commit/324382e0ba87d33ea1057ad7a84598fd07573f62))
+
 ## [2.4.0](https://github.com/dryvist/ansible-proxmox/compare/v2.3.0...v2.4.0) (2026-09-03)
 
 
