@@ -77,20 +77,26 @@ instance, the keepalived VRRP VIP):
   returns when its node heals. No replicated storage needed.
 - **Anti-affinity** keeps the redundancy real: it stops HA (or a manual migrate)
   from ever collapsing both peers onto one node.
-- A **strict home-node pin** keeps HA from trying to relocate one at all. These
-  guests have no replica, so a relocation lands on a node that cannot start
-  them; HA then exhausts `max_restart`/`max_relocate` and parks the guest in
+- A **strict home-node pin** keeps HA from trying to relocate a peer that has
+  no replica at all. Such a relocation lands on a node that cannot start it; HA then exhausts `max_restart`/`max_relocate` and parks the guest in
   `error`, which is a LATCH an operator must clear by hand — after the source
   node has already self-fenced to get there. Anti-affinity does not cover this:
   it keeps a pair apart, it never says where either half may run.
 
-**Singleton app guests** (`postgres-apps`, `nautobot`, `vikunja` —
-`pve_ha_replication_ct_hostnames` — plus the VM `iac-platform` —
-`pve_ha_replication_vm_names`) — one instance, no peer, so **relocation is
-the only node-loss story**:
+A peer-redundant guest **may also** be listed in
+`pve_ha_replication_ct_hostnames`. Peer redundancy covers the service; a
+replica additionally gives ha-manager somewhere to put the guest itself, which
+is what a `migrate` shutdown policy needs. `openbao-02` and `technitium-dns-2`
+are listed in both for that reason, and take the replication pair pin in place
+of the home pin.
+
+**Replicated guests** (`postgres-apps`, `nautobot`, `vikunja`, `openbao-02`,
+`technitium-dns-2` — `pve_ha_replication_ct_hostnames` — plus the VM
+`iac-platform` — `pve_ha_replication_vm_names`) — **relocation is a real
+node-loss story** for these, and for the singletons among them the only one:
 
 - `pvesr` ships each guest's storage to its declared `ha_replication_target`
-  on a schedule (`pve_ha_replication_schedule`, default `*/15`), so a
+  on a schedule (`pve_ha_replication_schedule`, default `*/5`), so a
   current-enough replica exists to relocate onto. The target is a per-guest
   attribute in the tofu desired state — this role only reads it, it has no
   opinion on node placement. A guest listed in
@@ -149,6 +155,15 @@ decision an operator wrote down rather than an omission. Giving one a real
 relocation story means declaring an `ha_replication_target` on its entry in the
 desired state and moving it to `pve_ha_replication_ct_hostnames`.
 
+The two are pinned for different reasons, and only one of them is temporary.
+`zammad` could be replicated; it simply has not been. `plex` **cannot** — its
+container config carries bind mounts (host directory paths, not zvols), and
+`pvesr` replicates zvols only, so a bind-mounted container can be neither
+replicated nor live-migrated. Pinning it home with `pve_ha_pinned_max_relocate`
+at `0` is the honest expression of that: it keeps the crash auto-restart it
+does benefit from, while ha-manager never attempts a relocation that could only
+fail and latch the resource in `error`.
+
 ### Which nodes a rule may name
 
 Every strict rule this role writes is checked against the published inventory's
@@ -177,11 +192,23 @@ a node goes down.
 | `reboot` | **Freezes** HA guests — they stay on the node and resume when it returns. |
 | `poweroff` | **Migrates** HA guests off to the surviving nodes. |
 
-So the outcome depends on which command an operator typed, which nothing else
-in this repo can read or reason about. `pve_ha_shutdown_policy` defaults to
-`migrate`, which is one behaviour for both: HA guests move off before the node
-goes down, whatever the reason. `failover`, `freeze` and `conditional` are the
-other accepted values; an empty string leaves the key unmanaged.
+So today's behaviour silently depends on which command an operator typed,
+which nothing else in this repo can read or reason about.
+
+`pve_ha_shutdown_policy` defaults to **`freeze`**, not `migrate`. Every guest
+here sits on local zfspool storage, so ha-manager can only relocate one that
+already has a pvesr replica on the target node. Under `migrate` a planned
+shutdown asks it to relocate *every* HA guest, and each one without a replica
+fails to start on the far side and **latches in `error`** — a latch, not a
+retry, cleared only by a manual `ha-manager set <sid> --state started`.
+`freeze` leaves guests where they are and brings them back with the node:
+predictable, and it cannot strand a guest whose storage exists nowhere else.
+
+`migrate` becomes correct once **every** HA-managed guest has a working
+relocation path. That is a precondition, not a default — the value is a role
+variable so a cluster can move to `migrate` once its replication coverage is
+complete. `failover` and `conditional` are the other accepted values; an empty
+string leaves the key unmanaged.
 
 Only that one key is written. `datacenter.cfg` is cluster-wide and carries keys
 this role does not own (`keyboard`, `migration`, bandwidth limits, ...), so
@@ -218,12 +245,12 @@ No real service is touched.
 | `pve_ha_max_restart` / `pve_ha_max_relocate` | `3` / `1` | Per-guest bounds. |
 | `pve_ha_replication_ct_hostnames` | app list | Singleton containers that get a `pvesr` replica (relocation-enabled). |
 | `pve_ha_replication_vm_names` | `[iac-platform]` | Singleton VMs that get a `pvesr` replica, parallel to `pve_ha_replication_ct_hostnames`. |
-| `pve_ha_replication_schedule` | `*/15` | `pvesr` schedule (systemd-calendar subset). |
+| `pve_ha_replication_schedule` | `*/5` | `pvesr` schedule (systemd-calendar subset). |
 | `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
 | `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
 | `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name kept for the strict node-affinity rule over the pair currently carrying it live. |
 | `pve_ha_home_rule_prefix` | `pve-ha-home` | Prefix of the per-home-node strict pins applied to every replica-less HA guest. |
-| `pve_ha_shutdown_policy` | `migrate` | Cluster-wide `shutdown_policy` in `datacenter.cfg`. Empty string leaves the key unmanaged. |
+| `pve_ha_shutdown_policy` | `freeze` | Cluster-wide `shutdown_policy` in `datacenter.cfg`. `migrate` only once every HA guest has a replica. |
 | `pve_ha_datacenter_cfg_path` | `/etc/pve/datacenter.cfg` | Path to the cluster-wide config; a variable so the offline test can target a temp copy. |
 | `pve_ha_manage_all` | `false` | Also enroll the rest of the estate in HA. Widens enrollment only — the home pin applies either way. |
 

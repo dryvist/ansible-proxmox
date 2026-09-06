@@ -15,7 +15,7 @@
 
   vars:
     pve_ha_datacenter_cfg_path: /tmp/pve_ha_datacenter_cfg_test/datacenter.cfg
-    pve_ha_shutdown_policy: migrate
+    pve_ha_shutdown_policy: freeze
 
   tasks:
     - name: Create the temporary directory
@@ -45,7 +45,7 @@
     - name: Assert the policy was added and the unmanaged keys survived
       ansible.builtin.assert:
         that:
-          - "'shutdown_policy: migrate' in (pve_ha_merged.content | b64decode)"
+          - "'shutdown_policy: freeze' in (pve_ha_merged.content | b64decode)"
           - "'keyboard: en-us' in (pve_ha_merged.content | b64decode)"
           - "'migration: secure' in (pve_ha_merged.content | b64decode)"
         fail_msg: >-
@@ -76,7 +76,7 @@
           - >-
             (pve_ha_updated.content | b64decode).splitlines()
             | select('match', '^\s*shutdown_policy\s*:') | list | length == 1
-          - "'shutdown_policy: migrate' in (pve_ha_updated.content | b64decode)"
+          - "'shutdown_policy: freeze' in (pve_ha_updated.content | b64decode)"
           - "'conditional' not in (pve_ha_updated.content | b64decode)"
           - "'keyboard: en-us' in (pve_ha_updated.content | b64decode)"
         fail_msg: >-

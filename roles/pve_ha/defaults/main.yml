@@ -44,17 +44,27 @@ pve_ha_enabled: false
 # So the outcome depends on which command an operator typed, which is not a
 # property anything else in this repo can read or reason about.
 #
-# `migrate` makes it one behaviour for both: HA guests move off the node before
-# it goes down, whatever the reason. Other accepted values are `failover`,
-# `freeze` and `conditional`; set to an empty string to leave the key
-# unmanaged.
+# `freeze` is the default here, NOT `migrate`. Every guest in this estate sits
+# on LOCAL zfspool storage (see the STORAGE NOTE above), so ha-manager can only
+# relocate one that already has a pvesr replica on the target. Under `migrate`
+# a planned shutdown asks it to relocate EVERY HA guest, and each one without a
+# replica fails to start on the far side and LATCHES in `error` — a latch, not
+# a retry, cleared only by a manual `ha-manager set <sid> --state started`. An
+# estate has already lost hours to exactly that. `freeze` leaves guests where
+# they are and brings them back with the node: predictable, and it cannot
+# strand a guest whose storage does not exist anywhere else.
+#
+# `migrate` is correct once EVERY HA-managed guest has a working relocation
+# path (a replica, per pve_ha_replication_ct_hostnames below). That is a
+# precondition, not a default — flip this per-cluster when it holds.
+#
+# Other accepted values are `failover` and `conditional`; an empty string
+# leaves the key unmanaged.
 #
 # Only this key is written — datacenter.cfg is cluster-wide and carries keys
 # this role does not own (see tasks/datacenter_cfg.yml).
-pve_ha_shutdown_policy: migrate
+pve_ha_shutdown_policy: freeze
 
-# Path to the cluster-wide datacenter config. A variable so the offline test
-# can point the same task file at a temporary copy.
 pve_ha_datacenter_cfg_path: /etc/pve/datacenter.cfg
 
 # A membership list wrong in EITHER direction (a dead hostname, or a live guest
@@ -173,8 +183,13 @@ pve_ha_vm_names:
 # a desired-state change (an `ha_replication_target` on its container entry) and
 # a real capacity commitment; until that is made, "stays put and restarts" is
 # the true story and this records it.
-# plex: media tier, in-place crash restart only — the placement standard, not
-# HA, decides where it lives.
+# plex: media tier. It CANNOT be replicated at any point in the future, so this
+# is not a deferred decision like zammad's: its container config carries bind
+# mounts (host directory paths, not zvols), and pvesr replicates zvols only —
+# a bind-mounted container can be neither replicated nor live-migrated. Its
+# node-loss story is therefore in-place restart on its home node, enforced by
+# the strict home pin every pinned singleton gets (pve_ha_pinned_max_relocate
+# is 0, so ha-manager never attempts a relocation that could only fail).
 pve_ha_singleton_ct_hostnames:
   - zammad
   - plex
@@ -242,6 +257,19 @@ pve_ha_replication_ct_hostnames:
   - postgres-apps
   - nautobot
   - vikunja
+  # openbao-02 / technitium-dns-2: peer-redundant (they stay in their
+  # anti-affinity groups above), but their rootfs lives on a LOCAL pool that
+  # exists on only two nodes, so without a replica ha-manager has nowhere to
+  # put them and a shutdown policy of `migrate` could never be reached. Adding
+  # them here is what gives them a relocation path.
+  #
+  # PRECONDITION: like every other guest in this list, each one's replication
+  # PARTNER is read from its `ha_replication_target` in the tofu desired state
+  # (see tasks/replication_scope.yml) — this repo never picks the node. Until
+  # that attribute is published for these two, they resolve as unsafe
+  # singletons and the run fails with the message naming exactly that.
+  - openbao-02
+  - technitium-dns-2
 
 # VMs that get a pvesr replica + strict pair pin, parallel to
 # pve_ha_replication_ct_hostnames above.
@@ -253,11 +281,11 @@ pve_ha_replication_vm_names:
   - iac-platform
 
 # pvesr schedule (systemd-calendar subset) and optional rate limit (MB/s; empty
-# = unlimited). */15 matches Proxmox's default; the app guests' real data-loss
+# = unlimited). */5 matches the jobs already running; the app guests' real data-loss
 # window is covered separately (postgres-apps by streaming replication + WAL
 # archiving, the others are near-stateless), so this is a relocation-enabler,
 # not the primary durability layer.
-pve_ha_replication_schedule: "*/15"
+pve_ha_replication_schedule: "*/5"
 pve_ha_replication_rate: ""
 
 # Job-number suffix for the pvesr job id (<vmid>-<jobnum>). One job per guest.
