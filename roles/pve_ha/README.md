@@ -31,7 +31,8 @@ doppler run -- ansible-playbook -i inventory playbooks/ha.yml -e pve_ha_enabled=
 When enabled it:
 
 1. Places each managed guest under HA (`ha-manager add ct:VMID` or `vm:VMID
-   --state started --max_restart 3 --max_relocate 1`). VMIDs resolve from the
+   --state started --max_restart 3`) with `--max_relocate` set from its
+   **HA class** — see below. VMIDs resolve from the
    tofu inventory by hostname (containers, `pve_ha_ct_hostnames`) or by tofu
    vms-map key (VMs, `pve_ha_vm_names`), so a renumber flows through with no
    edit.
@@ -40,60 +41,85 @@ When enabled it:
 3. Adds a **strict `node-affinity` rule per home node**
    (`<pve_ha_home_rule_prefix>-<node>`) confining every HA-managed guest with no
    pvesr replica to the single node holding its rootfs/disks.
-4. For the **singleton app guests** (`pve_ha_replication_ct_hostnames` for
-   containers, `pve_ha_replication_vm_names` for VMs), creates a `pvesr` job
+4. For the **singleton** class (`pve_ha_replication_ct_hostnames` for
+   containers, `pve_ha_replication_vm_names` for VMs — both derived), creates
+   a `pvesr` job
    shipping each one's storage to its declared `ha_replication_target` — a
    per-guest attribute in the tofu desired state, alongside `node` — so
    ha-manager has a replica to relocate onto.
 
-Guests (default `pve_ha_ct_hostnames`): `openbao-01`, `openbao-02`,
-`technitium-dns`, `technitium-dns-2`, `traefik`, plus the singleton app guests
-`postgres-apps`, `nautobot`, `vikunja`, and the singleton VM `pve_ha_vm_names`:
-`iac-platform`. Anti-affinity pairs (`pve_ha_anti_affinity_groups`): the two
-OpenBao Raft voters, the two Technitium DNS instances, the Traefik ingress pair
-(auto-activates once `traefik-2` exists), and the Postgres primary/standby
-pair. A pair whose members do not all resolve is skipped.
+Guests under HA come from `pve_ha_ct_hostnames` (containers) and
+`pve_ha_vm_names` (VMs). Anti-affinity pairs (`pve_ha_anti_affinity_groups`):
+the two OpenBao Raft voters, the two Technitium DNS instances, the Traefik
+ingress pair, and the Postgres primary/standby pair. A pair whose members do
+not all resolve is skipped.
 
-## Three guest classes, each one DECLARED
+## Three HA classes, all DERIVED
 
 Every guest here sits on **local ZFS**, not shared storage, so ha-manager can
-only start a guest on another node if its rootfs already exists there (`pvesr`).
-The guests split on how they survive a node loss. Which class a guest is in is
-**declared**, never inferred: an HA-managed guest that matches none of the three
-lists below fails the converge (`roles/pve_ha/tasks/classification.yml`).
+only start a guest on another node if its rootfs already exists there
+(`pvesr`). How a guest survives a node loss is its **class**, and the class is
+derived from data that already exists — there is no per-guest class list to
+keep in sync, so **a guest added later lands in the right class with no edit
+to this role**.
 
-That guard exists because "has a live peer" used to be read as an ABSENCE — in
-`pve_ha_ct_hostnames` but not in `pve_ha_replication_ct_hostnames` — so a
-singleton simply forgotten from the replication list was silently treated as
-though a peer covered its outage, and got an in-place restart with no
-relocation target. An absence is not a declaration.
+**Native application HA is preferred over relocation.** A service that is
+already redundant across nodes does not need, and should not get, a
+block-level copy of its disk.
 
-**Peer-redundant** (`openbao-*`, `technitium-dns*`, `traefik`) — each has a
-redundant PEER on another node (OpenBao Raft quorum, the second Technitium
-instance, the keepalived VRRP VIP):
+| Class | Derived from | `max_relocate` | `pvesr` replica |
+| --- | --- | --- | --- |
+| `application_ha` | membership of a `pve_ha_anti_affinity_groups` entry | `0` | none |
+| `immovable` | a key of `pve_ha_immovable_guests` (the one explicit class) | `0` | none |
+| `singleton` | neither of the above — the default | `pve_ha_max_relocate` | **required** |
+
+**`application_ha`** — the service provides its own redundancy across nodes: a
+Raft quorum member, a DNS secondary with zone transfer, a keepalived VRRP
+ingress pair, a streaming database primary/standby. Being in an anti-affinity
+group is already the assertion that a peer exists on another node, so that
+membership *is* the classification.
 
 - On a **crash**, HA auto-restarts the guest in place (`max_restart`).
-- On a **node loss**, the surviving PEER carries the service; the failed guest
-  returns when its node heals. No replicated storage needed.
-- **Anti-affinity** keeps the redundancy real: it stops HA (or a manual migrate)
-  from ever collapsing both peers onto one node.
-- A **strict home-node pin** keeps HA from trying to relocate a peer that has
-  no replica at all. Such a relocation lands on a node that cannot start it; HA then exhausts `max_restart`/`max_relocate` and parks the guest in
-  `error`, which is a LATCH an operator must clear by hand — after the source
-  node has already self-fenced to get there. Anti-affinity does not cover this:
-  it keeps a pair apart, it never says where either half may run.
+- On a **node loss** the guest stays down, its peer serves, and it returns on
+  boot. `max_relocate` is `0`: there is nowhere to go and nothing to gain.
+- It gets **no `pvesr` replica**, and that is a correctness point, not a
+  saving. A stale block-level copy of a quorum member can rejoin carrying old
+  state; the store already survives losing the guest, which is what quorum is
+  for. The same argument applies to a DNS secondary with native zone transfer.
+- **Anti-affinity** keeps the redundancy real: it stops HA (or a manual
+  migrate) from ever collapsing both peers onto one node.
+- A **strict home-node pin** keeps HA from trying to relocate it at all. Such
+  a relocation lands on a node that cannot start it; HA then exhausts
+  `max_restart`/`max_relocate` and parks the guest in `error`, which is a
+  LATCH an operator must clear by hand — after the source node has already
+  self-fenced to get there.
 
-A peer-redundant guest **may also** be listed in
-`pve_ha_replication_ct_hostnames`. Peer redundancy covers the service; a
-replica additionally gives ha-manager somewhere to put the guest itself, which
-is what a `migrate` shutdown policy needs. `openbao-02` and `technitium-dns-2`
-are listed in both for that reason, and take the replication pair pin in place
-of the home pin.
+**`immovable`** — cannot relocate for a structural reason, declared in
+`pve_ha_immovable_guests` as `name: reason`. `plex` is the only one: its
+container config carries bind mounts (host directory paths, not zvols), and
+`pvesr` replicates zvols only, so it can be neither replicated nor
+live-migrated — now or later. It keeps the crash auto-restart it does benefit
+from, with `max_relocate` `0` so ha-manager never attempts a move that could
+only fail. Being immovable exempts it from the singleton replica requirement.
 
-**Replicated guests** (`postgres-apps`, `nautobot`, `vikunja`, `openbao-02`,
-`technitium-dns-2` — `pve_ha_replication_ct_hostnames` — plus the VM
-`iac-platform` — `pve_ha_replication_vm_names`) — **relocation is a real
-node-loss story** for these, and for the singletons among them the only one:
+"Not replicated yet" is **not** immovable. That is a singleton missing its
+replica, and the converge is supposed to fail on it. Two guards keep the
+exemption honest (`roles/pve_ha/tasks/classification.yml`): an immovable guest
+may not also be an anti-affinity group member, and an immovable entry naming a
+guest under no HA management is refused rather than sitting inert.
+
+**`singleton`** — no application-level redundancy, so relocation is the only
+HA available, and a relocation needs a replica. This is the **default class**,
+which is what makes the model safe: a guest nobody classified is held to the
+strictest requirement rather than silently assumed to have a peer.
+`pve_ha_replication_ct_hostnames` / `pve_ha_replication_vm_names` are derived
+as exactly this class.
+
+**A singleton without a replica fails the converge, by name** — before any
+guest reaches ha-manager (`roles/pve_ha/tasks/tier0_resources.yml`). That
+check is the point of the whole classification: discovering a missing
+relocation path during an outage is how this estate lost a guest in the first
+place.
 
 - `pvesr` ships each guest's storage to its declared `ha_replication_target`
   on a schedule (`pve_ha_replication_schedule`, default `*/5`), so a
@@ -123,11 +149,6 @@ node-loss story** for these, and for the singletons among them the only one:
   streaming replication + WAL archiving; `nautobot`/`vikunja` are near-stateless
   — their state lives in `postgres-apps`).
 
-Membership in `pve_ha_replication_ct_hostnames`/`pve_ha_replication_vm_names`
-is the per-guest "relocation is viable" knob. A guest in `pve_ha_ct_hostnames`/
-`pve_ha_vm_names` but not in the matching replication list is treated as
-peer-redundant and gets no `pvesr` job.
-
 With 4 quorate nodes, HA fencing is safe — losing one node keeps quorum, so no
 surviving node self-fences.
 
@@ -146,23 +167,6 @@ parse of `/etc/pve/storage.cfg`) against its volumes from
 already published in the tofu inventory's `disks` list — a VM can have
 several disks, unlike a container's single rootfs. A storage entry with no
 `nodes` restriction is treated as available on every node.
-
-**Pinned singletons** (`zammad`, `plex` — `pve_ha_singleton_ct_hostnames`,
-`pve_ha_singleton_vm_names`) — no peer and no replica, **by decision**. Their
-node-loss story is an in-place restart on their home node, enforced by that
-node's strict pin; they never relocate. Listing one here is what makes that a
-decision an operator wrote down rather than an omission. Giving one a real
-relocation story means declaring an `ha_replication_target` on its entry in the
-desired state and moving it to `pve_ha_replication_ct_hostnames`.
-
-The two are pinned for different reasons, and only one of them is temporary.
-`zammad` could be replicated; it simply has not been. `plex` **cannot** — its
-container config carries bind mounts (host directory paths, not zvols), and
-`pvesr` replicates zvols only, so a bind-mounted container can be neither
-replicated nor live-migrated. Pinning it home with `pve_ha_pinned_max_relocate`
-at `0` is the honest expression of that: it keeps the crash auto-restart it
-does benefit from, while ha-manager never attempts a relocation that could only
-fail and latch the resource in `error`.
 
 ### Which nodes a rule may name
 
@@ -242,9 +246,12 @@ No real service is touched.
 | `pve_ha_vm_names` | `[iac-platform]` | VMs to HA-manage (by tofu vms-map key), resolved/enrolled/pinned the same way as a container. |
 | `pve_ha_extra_sids` | `[]` | Verbatim SIDs for a guest the tofu maps miss. Never a tofu-known VM — those go in `pve_ha_vm_names`, which is also pinned. |
 | `pve_ha_anti_affinity_groups` | pairs | Redundant pairs to keep apart. |
-| `pve_ha_max_restart` / `pve_ha_max_relocate` | `3` / `1` | Per-guest bounds. |
-| `pve_ha_replication_ct_hostnames` | app list | Singleton containers that get a `pvesr` replica (relocation-enabled). |
-| `pve_ha_replication_vm_names` | `[iac-platform]` | Singleton VMs that get a `pvesr` replica, parallel to `pve_ha_replication_ct_hostnames`. |
+| `pve_ha_max_restart` / `pve_ha_max_relocate` | `3` / `1` | Restart bound for every guest; relocate bound for the singleton class only. |
+| `pve_ha_pinned_max_relocate` | `0` | Relocate bound for `application_ha` and `immovable` guests — nowhere to go. |
+| `pve_ha_replication_ct_hostnames` | *derived* | The singleton containers — HA-managed, in no anti-affinity group, not immovable. Not hand-maintained. |
+| `pve_ha_replication_vm_names` | *derived* | The singleton VMs, derived the same way. |
+| `pve_ha_immovable_guests` | `{plex: ...}` | Guests that cannot relocate for a structural reason, as `name: reason`. The only class that is declared. |
+| `pve_ha_class_application` | *derived* | Anti-affinity group members — the guests whose own service is redundant across nodes. |
 | `pve_ha_replication_schedule` | `*/5` | `pvesr` schedule (systemd-calendar subset). |
 | `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
 | `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
