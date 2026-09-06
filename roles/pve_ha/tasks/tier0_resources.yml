@@ -39,6 +39,12 @@
         )
       }}
 
+# Membership of the openbao-voters anti-affinity group is derived from the
+# tofu inventory's own tag before it is consumed below — see
+# consensus_membership.yml.
+- name: Derive consensus-store anti-affinity membership
+  ansible.builtin.include_tasks: consensus_membership.yml
+
 # A singleton app guest is only safe under HA if it has somewhere to be
 # relocated TO. Its two safety mechanisms — the pvesr replica and the strict
 # node-affinity pin — are both conditional on the guest being homed in its

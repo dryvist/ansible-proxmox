@@ -4,6 +4,11 @@
 # with affinity=negative over the resolved SIDs. A group whose members do not
 # all currently resolve is skipped (a half-present pair has nothing to separate).
 pve_ha_anti_affinity_groups:
+  # The consensus store's voter count outgrows a hand-typed pair the moment a
+  # third node joins, so this list is a FALLBACK only: tasks/consensus_membership.yml
+  # overwrites it at converge time with every guest carrying the tofu
+  # "openbao" tag, which is every current and future voter regardless of
+  # count. These two are the pair present before that generator existed.
   - name: openbao-voters
     hostnames:
       - openbao-01

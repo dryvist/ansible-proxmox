@@ -1,0 +1,33 @@
+---
+# Pure derivation, no CLI. The openbao consensus store's voter set can grow
+# past the anti-affinity group's hand-typed hostname list the same way
+# pve_ha_ct_hostnames once did (see defaults' STORAGE NOTE) — a voter added,
+# renamed, or moved off a two-name list silently stops being kept apart from
+# its peers, and it still reads as a clean converge. So membership is read
+# from the tofu inventory's own "openbao" tag (set on every voter by the
+# openbao_cluster generator's container_defaults, tofu-proxmox) instead of
+# typed twice. Presence-only filtering already happens downstream in
+# affinity_rules.yml ("present members only") — this is membership, never
+# placement, so it does not matter which node a voter currently sits on.
+- name: Derive the openbao consensus store's voter hostnames from its tofu tag
+  ansible.builtin.set_fact:
+    pve_ha_openbao_voter_hostnames: >-
+      {{ (containers_from_tofu | default({})) | dict2items
+         | selectattr('value.tags', 'defined')
+         | selectattr('value.tags', 'contains', 'openbao')
+         | map(attribute='key') | sort | list }}
+
+# Only the tofu-yielded set replaces the group's hostnames — every other
+# pve_ha_anti_affinity_groups entry (true fixed pairs, not a many-member
+# store) is left exactly as declared. Guarded on a non-empty result so a
+# missing/untagged fixture (unit tests, an inventory not carrying tags) keeps
+# the group's declared default rather than being emptied out.
+- name: Apply the derived voter set to the openbao-voters anti-affinity group
+  ansible.builtin.set_fact:
+    pve_ha_anti_affinity_groups: >-
+      {{ pve_ha_anti_affinity_groups | rejectattr('name', 'equalto', 'openbao-voters') | list
+         + [ (pve_ha_anti_affinity_groups | selectattr('name', 'equalto', 'openbao-voters') | first)
+             | combine({'hostnames': pve_ha_openbao_voter_hostnames}) ] }}
+  when:
+    - pve_ha_openbao_voter_hostnames | length > 0
+    - pve_ha_anti_affinity_groups | selectattr('name', 'equalto', 'openbao-voters') | list | length > 0

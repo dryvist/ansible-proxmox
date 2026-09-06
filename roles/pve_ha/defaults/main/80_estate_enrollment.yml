@@ -19,7 +19,17 @@
 # (fatally, under pve_ha_fail_on_unresolved) rather than left unpinned.
 pve_ha_manage_all: false
 
-# Relocation bound for the home-pinned guests. Zero: there is nowhere to go.
+# Relocation bound for the home-pinned guests (application_ha and immovable —
+# see the HA classes note in 60_classes.yml). Zero: there is nowhere to go,
+# and for application_ha this is not merely the default, it is the ONLY value
+# these guests can ever receive — tier0_resources.yml computes
+# pve_ha_relocatable_sids solely from pve_ha_replication_guests (the
+# singleton class), and pve_ha_replication_ct_hostnames/_vm_names explicitly
+# reject membership in pve_ha_class_application. There is no variable or code
+# path that grants an application_ha (consensus/quorum) member a nonzero
+# max_relocate: restarting one from a replicated disk would resurrect a peer
+# with a stale log, which the cluster would accept and then have to
+# reconcile — worse than the peer staying down.
 pve_ha_pinned_max_relocate: 0
 
 # Prefix for the per-node strict affinity rules (one rule per home node,

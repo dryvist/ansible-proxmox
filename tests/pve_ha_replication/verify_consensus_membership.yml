@@ -1,0 +1,75 @@
+---
+# ---------------------------------------------------------------------------
+# The openbao consensus store's anti-affinity membership is derived from the
+# tofu "openbao" tag, not a hand-typed hostname list — a voter added, renamed,
+# or moved off a two-name list would otherwise silently stop being kept apart
+# from its peers. This pins the derivation: the tag wins, untagged/other
+# guests are excluded, and every other anti-affinity group is untouched.
+#
+# Runs through include_role so the ROLE's own expression is what's pinned.
+# Both scenarios run as tasks (not separate plays) in one play, on one host —
+# each fixture is set via set_fact immediately before its include_role call,
+# since set_fact output from one scenario otherwise outranks a later `vars:`
+# block for the same host/play.
+# ---------------------------------------------------------------------------
+- name: Verify pve_ha derives consensus membership from the tofu tag
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Set up a mixed-tag fixture
+      ansible.builtin.set_fact:
+        pve_ha_anti_affinity_groups:
+          - name: openbao-voters
+            hostnames: [openbao-01, openbao-02]
+          - name: postgres-pair
+            hostnames: [postgres, postgres-apps]
+        containers_from_tofu:
+          openbao-01: {tags: [terraform, container, openbao, secrets]}
+          openbao-42: {tags: [terraform, container, openbao, secrets]}
+          # No "openbao" tag: must not be pulled in.
+          zammad: {tags: [terraform, container, zammad]}
+          # No tags key at all: must not error the selectattr chain.
+          no-tags-guest: {}
+
+    - name: Derive consensus membership from the mixed-tag fixture
+      ansible.builtin.include_role:
+        name: pve_ha
+        tasks_from: consensus_membership.yml
+        public: true
+
+    - name: Assert only tagged guests replace the group, everything else untouched
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_anti_affinity_groups | selectattr('name', 'equalto', 'openbao-voters')
+             | map(attribute='hostnames') | first | sort) == ['openbao-01', 'openbao-42']
+          - (pve_ha_anti_affinity_groups | selectattr('name', 'equalto', 'postgres-pair')
+             | map(attribute='hostnames') | first) == ['postgres', 'postgres-apps']
+        fail_msg: >-
+          consensus membership derivation wrong: {{ pve_ha_anti_affinity_groups }}
+        success_msg: >-
+          the tofu "openbao" tag replaced the group's members; other groups
+          were left exactly as declared.
+
+    - name: Set up a fixture with no tagged guests present
+      ansible.builtin.set_fact:
+        pve_ha_anti_affinity_groups:
+          - name: openbao-voters
+            hostnames: [openbao-01, openbao-02]
+        containers_from_tofu: {}
+
+    - name: Derive consensus membership with no tagged guests present
+      ansible.builtin.include_role:
+        name: pve_ha
+        tasks_from: consensus_membership.yml
+        public: true
+
+    - name: Assert an empty tofu inventory keeps the declared fallback
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_anti_affinity_groups | selectattr('name', 'equalto', 'openbao-voters')
+             | map(attribute='hostnames') | first) == ['openbao-01', 'openbao-02']
+        fail_msg: >-
+          an empty tofu inventory should leave the declared default in place,
+          not empty the group out: {{ pve_ha_anti_affinity_groups }}
