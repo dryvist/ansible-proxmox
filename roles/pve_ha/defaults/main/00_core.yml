@@ -1,0 +1,37 @@
+---
+# pve_ha — Proxmox VE HA (High Availability) resource + affinity manager.
+#
+# Configures ha-manager (Proxmox VE 9 "HA rules", not the legacy HA groups) for
+# the tier-0 guests so a node failure is handled with ZERO manual action:
+#   * a crashed guest auto-restarts (max_restart), and
+#   * the redundant PAIRS (the two OpenBao Raft voters, the two Technitium DNS
+#     instances, the two Traefik ingress LXCs) are pinned to SEPARATE nodes by
+#     anti-affinity, so a single node loss can never take out both halves.
+#
+# SAFETY: this role is INERT by default. It does nothing unless pve_ha_enabled is
+# true. HA config is CLUSTER-WIDE (/etc/pve/ha/*, replicated by pmxcfs) so it is
+# applied ONCE from a single node (run_once against pve_ha_config_host), never
+# per-node. All CLI work is skipped under Docker so the role is molecule-testable
+# in containers without a live cluster.
+#
+# STORAGE NOTE: these guests live on LOCAL ZFS, not shared storage. On a node
+# FAILURE ha-manager can only START a guest on another node if that guest's
+# rootfs already exists there (PVE storage replication, pvesr). Two classes of
+# guest split on this:
+#   * APPLICATION-HA guests (openbao/technitium/traefik/postgres): the service
+#     itself is redundant across nodes (Raft quorum / DNS secondary / keepalived
+#     VRRP VIP / streaming replication), so the peer covers the outage and the
+#     failed guest returns when its node heals. They need NO replicated storage,
+#     and giving one a block-level replica is actively harmful — a stale copy of
+#     a quorum member can rejoin carrying old state. The payload is
+#     anti-affinity + in-place auto-restart + orderly return-home.
+#   * SINGLETON guests (pve_ha_replication_ct_hostnames): one instance, no
+#     peer, so RELOCATION is the only node-loss story. The replication block
+#     below runs pvesr to ship each one's rootfs to its declared
+#     `ha_replication_target` (a per-guest attribute in the tofu desired
+#     state, alongside `node`), so ha-manager can start it there.
+#     max_relocate=1 is enough — one hop to the partner that holds the
+#     replica. Only the guest's own [node, ha_replication_target] pair holds
+#     a replica, and its strict node-affinity rule keeps ha-manager off every
+#     other node.
+pve_ha_enabled: false

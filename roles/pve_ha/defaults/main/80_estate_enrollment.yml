@@ -1,0 +1,29 @@
+---
+# --- Estate-wide HA enrollment ----------------------------------------------
+# With this true, EVERY container in the tofu inventory that is not already a
+# tier-0 guest above is also placed under HA. It widens who is ENROLLED; it is
+# NOT the switch for the home pin.
+#
+# The strict home-node pin (pve_ha_home_rule_prefix below) applies to every
+# HA-managed container with no pvesr replica, estate-wide enrollment or not.
+# It was previously gated on this flag, which left the tier-0 guests enrolled
+# under HA with no node-affinity rule at all: verified live 2026-08-25, nine of
+# eleven HA resources were covered by no node-affinity rule. Those guests live
+# on node-local ZFS and have no replica, so relocation cannot work for them —
+# ha-manager moves one to a node lacking its storage, the guest fails to start
+# and parks in `error` (a LATCH, not a retry), and the source node has already
+# self-fenced to get there. Anti-affinity does not cover this: it keeps a
+# redundant pair apart, it never says where either half may run.
+#
+# A guest whose inventory entry has no `node` cannot be pinned and is reported
+# (fatally, under pve_ha_fail_on_unresolved) rather than left unpinned.
+pve_ha_manage_all: false
+
+# Relocation bound for the home-pinned guests. Zero: there is nowhere to go.
+pve_ha_pinned_max_relocate: 0
+
+# Prefix for the per-node strict affinity rules (one rule per home node,
+# e.g. "pve-ha-home-<node>"), so the rule set stays small and readable. One
+# rule per NODE rather than per guest: same constraint, a rule set an operator
+# can read during an incident.
+pve_ha_home_rule_prefix: pve-ha-home

@@ -1,0 +1,44 @@
+---
+# --- HA classes -------------------------------------------------------------
+# Every HA-managed guest lands in exactly one class, DERIVED from data that
+# already exists. There is no per-guest class list to keep in sync, so a guest
+# added later is classified correctly with no edit here.
+#
+#   application_ha — the service provides its own redundancy across nodes
+#     (raft quorum member, DNS secondary, VRRP ingress pair, streaming
+#     database pair). PREFERRED: native application HA beats block-level
+#     relocation. It gets max_relocate 0 and NO pvesr replica — replicating a
+#     quorum member's disk is not merely redundant, a stale block-level copy
+#     can rejoin carrying old state. The guest stays down while its node is
+#     down, its peer serves, and it returns on boot.
+#     DERIVED FROM: membership of a pve_ha_anti_affinity_groups entry. Being
+#     in one is already the assertion that peers exist on another node.
+#
+#   immovable — cannot relocate for a structural reason. max_relocate 0, no
+#     replica, exempt from the singleton check.
+#     DERIVED FROM: pve_ha_immovable_guests above (the one explicit class).
+#
+#   singleton — everything else. No application-level redundancy, so
+#     relocation is the only HA available to it, and a relocation needs a
+#     replica. A singleton without one FAILS THE CONVERGE by name
+#     (tasks/tier0_resources.yml) rather than being discovered mid-outage.
+#     DERIVED FROM: HA-managed and in neither class above.
+pve_ha_class_application: >-
+  {{ pve_ha_anti_affinity_groups | default([])
+     | map(attribute='hostnames') | flatten | unique | list }}
+pve_ha_class_immovable: "{{ pve_ha_immovable_guests | default({}) | list }}"
+
+# --- Storage replication (pvesr) for the SINGLETON guests --------------------
+# Membership IS the singleton class — not a hand-maintained list. Each guest's
+# replication PARTNER is still read from its `ha_replication_target` in the
+# tofu desired state (tasks/replication_scope.yml); this repo never picks the
+# node, it only decides WHO needs one.
+pve_ha_replication_ct_hostnames: >-
+  {{ pve_ha_ct_hostnames | default([])
+     | reject('in', pve_ha_class_application)
+     | reject('in', pve_ha_class_immovable) | list }}
+
+pve_ha_replication_vm_names: >-
+  {{ pve_ha_vm_names | default([])
+     | reject('in', pve_ha_class_application)
+     | reject('in', pve_ha_class_immovable) | list }}
