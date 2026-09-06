@@ -18,7 +18,7 @@
   gather_facts: false
 
   tasks:
-    - name: Set up a mixed-tag fixture
+    - name: Set up a mixed-tag fixture at the quorum floor
       ansible.builtin.set_fact:
         pve_ha_anti_affinity_groups:
           - name: openbao-voters
@@ -52,6 +52,35 @@
         success_msg: >-
           the tofu "openbao" tag replaced the group's members; other groups
           were left exactly as declared.
+
+    - name: Set up a fixture below the quorum floor
+      ansible.builtin.set_fact:
+        pve_ha_anti_affinity_groups:
+          - name: openbao-voters
+            hostnames: [openbao-01, openbao-02]
+        containers_from_tofu:
+          openbao-01: {tags: [terraform, container, openbao, secrets]}
+          openbao-02: {tags: [terraform, container, openbao, secrets]}
+        pve_ha_fail_on_unresolved: true
+
+    - name: Assert a below-floor derivation is refused
+      block:
+        - name: Derive consensus membership below the floor
+          ansible.builtin.include_role:
+            name: pve_ha
+            tasks_from: consensus_membership.yml
+
+        - name: Report that the below-floor derivation was accepted
+          ansible.builtin.fail:
+            msg: a consensus group derived below its quorum floor was accepted.
+      rescue:
+        - name: Confirm the floor was the reason
+          ansible.builtin.assert:
+            that:
+              - "'missing members' in (ansible_failed_result.msg | default(''))"
+            fail_msg: >-
+              failed for a different reason:
+              {{ ansible_failed_result.msg | default('') }}
 
     - name: Set up a fixture with no tagged guests present
       ansible.builtin.set_fact:
