@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1](https://github.com/dryvist/ansible-proxmox/compare/v2.7.0...v2.7.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **inventory:** default ansible_user, which resolved to an empty string ([#756](https://github.com/dryvist/ansible-proxmox/issues/756)) ([20f01eb](https://github.com/dryvist/ansible-proxmox/commit/20f01ebf034580e163a8aea177fd27e9dbbff29d))
+* **wol_enable:** correct the interface on one node, enrol the other ([#755](https://github.com/dryvist/ansible-proxmox/issues/755)) ([97c39bf](https://github.com/dryvist/ansible-proxmox/commit/97c39bfc9063ddefc8522a554e2dc6b954e00644))
+
 ## [2.7.0](https://github.com/dryvist/ansible-proxmox/compare/v2.6.0...v2.7.0) (2026-09-09)
 
 
