@@ -66,8 +66,14 @@
 - name: Write the trusted CA keys file
   ansible.builtin.copy:
     dest: "{{ ssh_ca_trust_ca_file }}"
+    # One entry per line. A `join('\n')` here is NOT a newline: inside a YAML
+    # block scalar the two characters reach the file verbatim, and sshd then
+    # reads one malformed entry. A loop is the only rendering that cannot
+    # collapse the list.
     content: |
-      {{ ([ssh_ca_trust_fetched.content | trim] + ssh_ca_trust_extra_ca_keys) | join('\n') }}
+      {% for key in [ssh_ca_trust_fetched.content | trim] + ssh_ca_trust_extra_ca_keys %}
+      {{ key }}
+      {% endfor %}
     owner: root
     group: root
     mode: "0644"
@@ -88,8 +94,14 @@
 - name: Write the per-user principals files
   ansible.builtin.copy:
     dest: "{{ ssh_ca_trust_principals_dir }}/{{ item.key }}"
+    # One principal per line — same reasoning as the CA keys file above. With a
+    # single principal the collapsed form was indistinguishable from correct;
+    # a second one turns the file into a single name that matches nobody and
+    # locks every certificate out of the host.
     content: |
-      {{ item.value | join('\n') }}
+      {% for principal in item.value %}
+      {{ principal }}
+      {% endfor %}
     owner: root
     group: root
     mode: "0644"
