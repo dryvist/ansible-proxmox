@@ -55,3 +55,13 @@ No live converge is run by this role's authoring session (no credentials
 sought). Reasoned idempotency: `pvesh get` on the target/matcher name decides
 create vs. skip/update; a second run against an already-configured cluster
 issues no `create`.
+
+`molecule/pve_notifications` covers two things separately, since Docker's
+`ansible_virtualization_type` makes the role's whole task block skip (same
+idiom as `pve_cluster`/`pve_ha`): `converge.yml` proves the Docker-skip guard
+holds and the role runs cleanly with no live cluster touched; `verify.yml`
+does **not** exercise a real `pvesh` call (there is no PVE API in CI) — it
+re-renders the matcher-create `argv` Jinja-native-list construct directly
+with representative variables and asserts on its structure (both the
+severity and no-severity shapes). It proves the Jinja is syntactically sound,
+not that `pvesh create` accepts the resulting argv against a live cluster.

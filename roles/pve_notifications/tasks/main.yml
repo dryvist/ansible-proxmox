@@ -56,8 +56,8 @@
           - "{{ pve_notifications_ntfy_method }}"
       when:
         - pve_notifications_target_check.rc == 0
-        - (pve_notifications_ntfy_url not in pve_notifications_target_check.stdout) or
-          (pve_notifications_ntfy_method not in pve_notifications_target_check.stdout)
+        - (pve_notifications_ntfy_url != (pve_notifications_target_check.stdout | from_json).url) or
+          (pve_notifications_ntfy_method != (pve_notifications_target_check.stdout | from_json).method)
       changed_when: true
 
     - name: Check which matchers already exist
