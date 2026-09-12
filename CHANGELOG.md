@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1](https://github.com/dryvist/ansible-proxmox/compare/v2.8.0...v2.8.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **runner:** fall back to the ansible identity when semaphore login fails ([#766](https://github.com/dryvist/ansible-proxmox/issues/766)) ([19f767a](https://github.com/dryvist/ansible-proxmox/commit/19f767a573b7b897ab2cc4d60bbd1f42f1711048))
+* **ssh_ca_trust:** render one principal and one CA key per line ([#765](https://github.com/dryvist/ansible-proxmox/issues/765)) ([575492d](https://github.com/dryvist/ansible-proxmox/commit/575492d616e95d862ebf7eebd716600e08e8a9fc))
+
 ## [2.8.0](https://github.com/dryvist/ansible-proxmox/compare/v2.7.1...v2.8.0) (2026-09-12)
 
 
