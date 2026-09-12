@@ -82,6 +82,9 @@ class RunAnsibleTokenContract(unittest.TestCase):
             case "$url" in
               */auth/approle/login)
                 cat >/dev/null
+                if [[ ${{FAKE_LOGIN_FAILURE:-0}} == 1 ]] && [[ ${{CONVERGE_ROLE_ID:-}} == "$EXPECTED_SEMAPHORE_ROLE_ID" ]]; then
+                  exit 22
+                fi
                 printf '%s\n' '{{"auth":{{"client_token":"{MINTED_TOKEN}"}}}}'
                 ;;
               */sign/automation-ansible|*/sign/automation-semaphore)
@@ -116,7 +119,9 @@ class RunAnsibleTokenContract(unittest.TestCase):
         revoke_first_failure=False,
         ansible_rc=0,
         semaphore=False,
+        login_failure=False,
     ):
+        self.child_role_id_file = self.temp_path / "child-role-id"
         self._write_executable(
             "ansible-playbook",
             f"""
@@ -124,6 +129,7 @@ class RunAnsibleTokenContract(unittest.TestCase):
             set -euo pipefail
             printf 'ansible\n' >> "$FAKE_EVENT_LOG"
             [[ ${{BAO_TOKEN:-}} == "$EXPECTED_CHILD_BAO_TOKEN" ]]
+            printf '%s\n' "${{CONVERGE_ROLE_ID:-}}" > "$FAKE_CHILD_ROLE_ID_FILE"
             printf 'child received expected token\n'
             exit {ansible_rc}
             """,
@@ -137,12 +143,15 @@ class RunAnsibleTokenContract(unittest.TestCase):
                 "OPENBAO_APPROLE_ANSIBLE_SECRET_ID": APPROLE_SECRET,
                 "EXPECTED_APPROLE_ROLE_ID": APPROLE_ROLE_ID,
                 "EXPECTED_APPROLE_SECRET": APPROLE_SECRET,
+                "EXPECTED_SEMAPHORE_ROLE_ID": SEMAPHORE_ROLE_ID,
                 "EXPECTED_CHILD_BAO_TOKEN": caller_token or MINTED_TOKEN,
                 "EXPECTED_MINTED_TOKEN": MINTED_TOKEN,
                 "FAKE_EVENT_LOG": str(self.event_log),
                 "FAKE_JQ_ARGV_LOG": str(self.jq_argv_log),
+                "FAKE_CHILD_ROLE_ID_FILE": str(self.child_role_id_file),
                 "FAKE_SIGN_FAILURE": "1" if sign_failure else "0",
                 "FAKE_REVOKE_FIRST_FAILURE": "1" if revoke_first_failure else "0",
+                "FAKE_LOGIN_FAILURE": "1" if login_failure else "0",
                 "PATH": f"{self.bin_path}{os.pathsep}{env['PATH']}",
                 "TMPDIR": str(self.tmp_path),
             }
@@ -304,6 +313,34 @@ class RunAnsibleTokenContract(unittest.TestCase):
         )
         self._assert_no_secret_leak(result)
         self._assert_cert_cleanup()
+
+    def test_semaphore_login_failure_falls_back_to_ansible_pair(self):
+        result = self._run(semaphore=True, login_failure=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("semaphore AppRole login failed", result.stderr)
+        self.assertIn("authenticated as: ansible", result.stdout)
+        self.assertEqual(
+            self.event_log.read_text(encoding="utf-8").splitlines(),
+            [
+                "curl https://openbao.test/v1/auth/approle/login",
+                "curl https://openbao.test/v1/auth/approle/login",
+                "curl https://openbao.test/v1/ssh-client-ca/sign/automation-ansible runner-auth",
+                "ansible",
+                "curl https://openbao.test/v1/auth/token/revoke-self runner-auth",
+            ],
+        )
+        self._assert_no_secret_leak(result)
+        self._assert_cert_cleanup()
+
+    def test_ansible_playbook_inherits_the_winning_role_id(self):
+        result = self._run(semaphore=True, login_failure=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.child_role_id_file.read_text(encoding="utf-8").strip(),
+            APPROLE_ROLE_ID,
+        )
 
 
 if __name__ == "__main__":
