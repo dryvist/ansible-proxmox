@@ -1,0 +1,79 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: false
+
+  vars:
+    pve_notifications_ntfy_target: ntfy-proxmox
+    # One matcher without severity, one with — the two shapes the real
+    # pve_notifications_matchers list produces.
+    pve_notifications_matcher_check:
+      results:
+        - item:
+            name: ntfy-proxmox-fencing
+            type: fencing
+        - item:
+            name: ntfy-proxmox-vzdump-failed
+            type: vzdump
+            severity: error
+
+  tasks:
+    - name: No PVE config was actually written in the container
+      ansible.builtin.stat:
+        path: /etc/pve/notifications.cfg
+      register: pve_notifications_cfg_probe
+
+    - name: Assert the Docker skip guard held (no live cluster write attempted)
+      ansible.builtin.assert:
+        that:
+          - not pve_notifications_cfg_probe.stat.exists
+        fail_msg: >-
+          notifications.cfg present — the Docker skip guard for pve_notifications
+          may be broken (no live cluster should be touched during molecule).
+
+    # The matcher-create argv is never exercised under Docker (the whole
+    # block is skipped), so render it directly here with representative
+    # inputs and assert on its structure — this is what the task file
+    # actually evaluates, copy-pasted from roles/pve_notifications/tasks/main.yml.
+    - name: Render the matcher-create argv for both matcher shapes
+      ansible.builtin.set_fact:
+        pve_notifications_argv_no_severity: >-
+          {{
+            ['pvesh', 'create', '/cluster/notifications/matchers',
+             '--name', pve_notifications_matcher_check.results[0].item.name,
+             '--target', pve_notifications_ntfy_target,
+             '--match-field', 'exact:type=' + pve_notifications_matcher_check.results[0].item.type,
+             '--comment', 'Managed by ansible-proxmox pve_notifications']
+            + (['--match-severity', pve_notifications_matcher_check.results[0].item.severity]
+               if pve_notifications_matcher_check.results[0].item.severity is defined else [])
+          }}
+        pve_notifications_argv_with_severity: >-
+          {{
+            ['pvesh', 'create', '/cluster/notifications/matchers',
+             '--name', pve_notifications_matcher_check.results[1].item.name,
+             '--target', pve_notifications_ntfy_target,
+             '--match-field', 'exact:type=' + pve_notifications_matcher_check.results[1].item.type,
+             '--comment', 'Managed by ansible-proxmox pve_notifications']
+            + (['--match-severity', pve_notifications_matcher_check.results[1].item.severity]
+               if pve_notifications_matcher_check.results[1].item.severity is defined else [])
+          }}
+
+    - name: Assert the no-severity matcher renders a well-formed argv list with no severity flag
+      ansible.builtin.assert:
+        that:
+          - pve_notifications_argv_no_severity is sequence
+          - pve_notifications_argv_no_severity[0] == 'pvesh'
+          - "'--match-severity' not in pve_notifications_argv_no_severity"
+          - "'exact:type=fencing' in pve_notifications_argv_no_severity"
+        fail_msg: "argv rendering for a matcher without severity is wrong"
+
+    - name: Assert the severity matcher renders a well-formed argv list including the severity flag
+      ansible.builtin.assert:
+        that:
+          - pve_notifications_argv_with_severity is sequence
+          - "'--match-severity' in pve_notifications_argv_with_severity"
+          - (pve_notifications_argv_with_severity.index('--match-severity') + 1) < pve_notifications_argv_with_severity | length
+          - pve_notifications_argv_with_severity[pve_notifications_argv_with_severity.index('--match-severity') + 1] == 'error'
+          - "'exact:type=vzdump' in pve_notifications_argv_with_severity"
+        fail_msg: "argv rendering for a matcher with severity is wrong"
