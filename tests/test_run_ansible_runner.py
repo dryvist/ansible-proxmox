@@ -14,6 +14,8 @@ MINTED_TOKEN = "test-runner-owned-token"
 CALLER_TOKEN = "test-caller-owned-token"
 APPROLE_ROLE_ID = "test-role-id"
 APPROLE_SECRET = "test-approle-secret"
+SEMAPHORE_ROLE_ID = "test-semaphore-role-id"
+SEMAPHORE_SECRET = "test-semaphore-secret"
 
 
 class RunAnsibleTokenContract(unittest.TestCase):
@@ -82,7 +84,7 @@ class RunAnsibleTokenContract(unittest.TestCase):
                 cat >/dev/null
                 printf '%s\n' '{{"auth":{{"client_token":"{MINTED_TOKEN}"}}}}'
                 ;;
-              */sign/automation-ansible)
+              */sign/automation-ansible|*/sign/automation-semaphore)
                 cat >/dev/null
                 [[ ${{FAKE_SIGN_FAILURE:-0}} == 0 ]] || exit 22
                 printf '%s\n' '{{"data":{{"signed_key":"test-certificate"}}}}'
@@ -113,6 +115,7 @@ class RunAnsibleTokenContract(unittest.TestCase):
         sign_failure=False,
         revoke_first_failure=False,
         ansible_rc=0,
+        semaphore=False,
     ):
         self._write_executable(
             "ansible-playbook",
@@ -148,6 +151,12 @@ class RunAnsibleTokenContract(unittest.TestCase):
             env.pop("BAO_TOKEN", None)
         else:
             env["BAO_TOKEN"] = caller_token
+        if semaphore:
+            env["OPENBAO_APPROLE_SEMAPHORE_ROLE_ID"] = SEMAPHORE_ROLE_ID
+            env["OPENBAO_APPROLE_SEMAPHORE_SECRET_ID"] = SEMAPHORE_SECRET
+        else:
+            env.pop("OPENBAO_APPROLE_SEMAPHORE_ROLE_ID", None)
+            env.pop("OPENBAO_APPROLE_SEMAPHORE_SECRET_ID", None)
 
         return subprocess.run(
             [str(RUNNER), "playbooks/site.yml", "--limit", "localhost"],
@@ -162,7 +171,14 @@ class RunAnsibleTokenContract(unittest.TestCase):
         output = result.stdout + result.stderr
         events = self.event_log.read_text(encoding="utf-8")
         jq_argv = self.jq_argv_log.read_text(encoding="utf-8")
-        for secret in (MINTED_TOKEN, CALLER_TOKEN, APPROLE_ROLE_ID, APPROLE_SECRET):
+        for secret in (
+            MINTED_TOKEN,
+            CALLER_TOKEN,
+            APPROLE_ROLE_ID,
+            APPROLE_SECRET,
+            SEMAPHORE_ROLE_ID,
+            SEMAPHORE_SECRET,
+        ):
             self.assertNotIn(secret, output)
             self.assertNotIn(secret, events)
             self.assertNotIn(secret, jq_argv)
@@ -253,6 +269,42 @@ class RunAnsibleTokenContract(unittest.TestCase):
         )
         self._assert_no_secret_leak(result)
         self._assert_cert_cleanup()
+
+    def test_semaphore_pair_preferred_when_both_present(self):
+        result = self._run(semaphore=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.event_log.read_text(encoding="utf-8").splitlines(),
+            [
+                "curl https://openbao.test/v1/auth/approle/login",
+                "curl https://openbao.test/v1/ssh-client-ca/sign/automation-semaphore runner-auth",
+                "ansible",
+                "curl https://openbao.test/v1/auth/token/revoke-self runner-auth",
+            ],
+        )
+        self.assertIn("authenticated as: semaphore", result.stdout)
+        self.assertNotIn("OPENBAO_APPROLE_SEMAPHORE", result.stderr)
+        self._assert_no_secret_leak(result)
+        self._assert_cert_cleanup()
+
+    def test_ansible_pair_fallback_warns_and_signs_automation_ansible(self):
+        result = self._run()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("OPENBAO_APPROLE_SEMAPHORE_ROLE_ID", result.stderr)
+        self.assertEqual(
+            self.event_log.read_text(encoding="utf-8").splitlines(),
+            [
+                "curl https://openbao.test/v1/auth/approle/login",
+                "curl https://openbao.test/v1/ssh-client-ca/sign/automation-ansible runner-auth",
+                "ansible",
+                "curl https://openbao.test/v1/auth/token/revoke-self runner-auth",
+            ],
+        )
+        self._assert_no_secret_leak(result)
+        self._assert_cert_cleanup()
+
 
 if __name__ == "__main__":
     unittest.main()
