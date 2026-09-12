@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0](https://github.com/dryvist/ansible-proxmox/compare/v2.7.1...v2.8.0) (2026-09-12)
+
+
+### Features
+
+* **runner:** authenticate as the execution plane's own identity when its credential is present ([cb7fa2c](https://github.com/dryvist/ansible-proxmox/commit/cb7fa2cade42fe76abd6e57a2f694324cd232ae0))
+* **runner:** authenticate as the execution plane's own identity when its credential is present ([c9f4d5d](https://github.com/dryvist/ansible-proxmox/commit/c9f4d5d63b2fb492c9316c2229512ad3e2ec2935))
+
 ## [2.7.1](https://github.com/dryvist/ansible-proxmox/compare/v2.7.0...v2.7.1) (2026-09-11)
 
 
