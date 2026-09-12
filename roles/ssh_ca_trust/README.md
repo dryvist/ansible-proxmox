@@ -26,8 +26,8 @@ can never lock a human out.
 
 | Host class | User | Principals |
 | --- | --- | --- |
-| PVE node | root | `ansible` |
-| LXC (via pct) | root | `ansible` |
+| PVE node | root | `ansible`, `semaphore` |
+| LXC (via pct) | root | `ansible`, `semaphore` |
 
 `ai-agent` is **never** a hypervisor root principal; it reaches guest-level
 accounts only where a group opts in via `ssh_ca_trust_principals` /

@@ -55,11 +55,11 @@ ssh_ca_trust_principals:
 
 # Also push CA trust into this node's LXC containers via pct (no SSH
 # chicken-and-egg: pct reaches a guest regardless of its network/sshd state).
-# Container principals default: converge runs as root over pct today, so
-# `ansible` on root; `ai-agent` only via explicit override.
+# Trusts the same two automation principals as the PVE-node map, in
+# lockstep: `ansible` and `semaphore` on root; `ai-agent` only via override.
 ssh_ca_trust_manage_lxc: true
 ssh_ca_trust_lxc_principals:
-  root: [ansible]
+  root: [ansible, semaphore]
 
 ssh_ca_trust_ca_file: /etc/ssh/trusted-user-ca-keys.pem
 ssh_ca_trust_principals_dir: /etc/ssh/principals
