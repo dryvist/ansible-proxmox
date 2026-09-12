@@ -44,10 +44,11 @@ trap cleanup EXIT
 
 # --- Preferred auth: short-lived SSH certificate from the OpenBao CA --------
 # ssh-certificate-authority ADR: mint an ephemeral ed25519 keypair, sign it via
-# ssh-client-ca/sign/automation-ansible (principal `ansible`, cert TTL <=1h),
-# and point the inventory at the key (OpenSSH pairs id + id-cert.pub
-# automatically). Requires BAO_ADDR + the ansible-converge AppRole in the
-# ambient env (Doppler). With that env present, a mint failure is fatal.
+# ssh-client-ca/sign/automation-{semaphore,ansible} (principal `semaphore` or
+# the shared `ansible`, cert TTL <=1h), and point the inventory at the key
+# (OpenSSH pairs id + id-cert.pub automatically). Requires BAO_ADDR + one of
+# the AppRole pairs in the ambient env (Doppler). With that env present, a
+# mint failure is fatal.
 mint_ssh_cert() {
   local mount=${SSH_CA_MOUNT:-ssh-client-ca} login token signed
   CERT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ansible-sshcert.XXXXXX") || return 1
@@ -56,7 +57,7 @@ mint_ssh_cert() {
   # No secret material on any command line; xtrace stays off around the login.
   { set +x; } 2>/dev/null
   login=$(jq -nc \
-    '{role_id: env.OPENBAO_APPROLE_ANSIBLE_ROLE_ID, secret_id: env.OPENBAO_APPROLE_ANSIBLE_SECRET_ID}' |
+    '{role_id: env.CONVERGE_ROLE_ID, secret_id: env.CONVERGE_SECRET_ID}' |
     curl -fsSL --max-time 10 -H 'Content-Type: application/json' --data @- \
       "$BAO_ADDR/v1/auth/approle/login") || return 1
   token=$(printf '%s' "$login" | jq -er '.auth.client_token') || return 1
@@ -65,7 +66,7 @@ mint_ssh_cert() {
     '{public_key: $pub, ttl: $ttl}' |
     curl -fsSL --max-time 10 \
       -H @<(printf 'X-Vault-Token: %s\n' "$RUNNER_BAO_TOKEN") --data @- \
-      "$BAO_ADDR/v1/$mount/sign/automation-ansible" |
+      "$BAO_ADDR/v1/$mount/sign/$CONVERGE_SIGN_ROLE" |
     jq -er '.data.signed_key') || return 1
   printf '%s\n' "$signed" >"$CERT_DIR/id-cert.pub"
   export PROXMOX_SSH_KEY_PATH="$CERT_DIR/id"
@@ -81,18 +82,41 @@ mint_ssh_cert() {
   fi
 }
 
-if [[ -n ${BAO_ADDR:-} && -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]]; then
+# Prefer the execution plane's own AppRole (principal `semaphore`) so its
+# cert is distinguishable from the shared `ansible` identity in sshd logs;
+# fall back to the shared ansible pair with a loud warning.
+CONVERGE_ROLE_ID="" CONVERGE_SECRET_ID="" CONVERGE_SIGN_ROLE="" CONVERGE_IDENTITY=""
+if [[ -n ${OPENBAO_APPROLE_SEMAPHORE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_SEMAPHORE_SECRET_ID:-} ]]; then
+  export CONVERGE_ROLE_ID=$OPENBAO_APPROLE_SEMAPHORE_ROLE_ID
+  export CONVERGE_SECRET_ID=$OPENBAO_APPROLE_SEMAPHORE_SECRET_ID
+  CONVERGE_SIGN_ROLE="automation-semaphore"
+  CONVERGE_IDENTITY="semaphore"
+elif [[ -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]]; then
+  export CONVERGE_ROLE_ID=$OPENBAO_APPROLE_ANSIBLE_ROLE_ID
+  export CONVERGE_SECRET_ID=$OPENBAO_APPROLE_ANSIBLE_SECRET_ID
+  CONVERGE_SIGN_ROLE="automation-ansible"
+  CONVERGE_IDENTITY="ansible"
+  if [[ -n ${BAO_ADDR:-} ]]; then
+    echo "WARNING: OPENBAO_APPROLE_SEMAPHORE_ROLE_ID/OPENBAO_APPROLE_SEMAPHORE_SECRET_ID" >&2
+    echo "are not set — authenticating as the shared 'ansible' identity rather than" >&2
+    echo "the execution plane's own." >&2
+  fi
+fi
+
+if [[ -n ${BAO_ADDR:-} && -n $CONVERGE_ROLE_ID && -n $CONVERGE_SECRET_ID ]]; then
   # FAIL-LOUD: when the cert env is present, a mint failure is an error — never
   # silently ride the static key (that masked a dead cert path once already).
-  # Break-glass = unset any of BAO_ADDR / OPENBAO_APPROLE_ANSIBLE_* (this branch
-  # only triggers when all three are present) and set the static key vars.
+  # Break-glass = unset BAO_ADDR and both AppRole pairs, and set the static
+  # key vars instead.
   if ! mint_ssh_cert; then
     echo "ERROR: OpenBao SSH cert mint FAILED and the cert env is present — refusing" >&2
-    echo "the silent static-key fallback. Fix the cert path, or unset the" >&2
-    echo "OPENBAO_APPROLE_ANSIBLE_* env to deliberately use the static break-glass key." >&2
+    echo "the silent static-key fallback. Fix the cert path, or unset BAO_ADDR and the" >&2
+    echo "OPENBAO_APPROLE_* env to deliberately use the static break-glass key." >&2
     exit 1
   fi
-  echo "Using a short-lived SSH certificate from the OpenBao CA (automation-ansible)."
+  unset CONVERGE_ROLE_ID CONVERGE_SECRET_ID
+  echo "Using a short-lived SSH certificate from the OpenBao CA ($CONVERGE_SIGN_ROLE)."
+  echo "  authenticated as: $CONVERGE_IDENTITY"
 # If key file exists at PROXMOX_SSH_KEY_PATH, export expanded path for inventory.
 # Otherwise load key content into ssh-agent and unset PROXMOX_SSH_KEY_PATH so
 # inventory/hosts.yml omits ansible_ssh_private_key_file (Ansible uses the agent).
