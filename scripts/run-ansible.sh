@@ -49,6 +49,13 @@ trap cleanup EXIT
 # (OpenSSH pairs id + id-cert.pub automatically). Requires BAO_ADDR + one of
 # the AppRole pairs in the ambient env (Doppler). With that env present, a
 # mint failure is fatal.
+bao_login() {
+  jq -nc \
+    '{role_id: env.CONVERGE_ROLE_ID, secret_id: env.CONVERGE_SECRET_ID}' |
+    curl -fsSL --max-time 10 -H 'Content-Type: application/json' --data @- \
+      "$BAO_ADDR/v1/auth/approle/login"
+}
+
 mint_ssh_cert() {
   local mount=${SSH_CA_MOUNT:-ssh-client-ca} login token signed
   CERT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ansible-sshcert.XXXXXX") || return 1
@@ -56,10 +63,20 @@ mint_ssh_cert() {
   (umask 077 && ssh-keygen -q -t ed25519 -N '' -C "ansible-converge" -f "$CERT_DIR/id") || return 1
   # No secret material on any command line; xtrace stays off around the login.
   { set +x; } 2>/dev/null
-  login=$(jq -nc \
-    '{role_id: env.CONVERGE_ROLE_ID, secret_id: env.CONVERGE_SECRET_ID}' |
-    curl -fsSL --max-time 10 -H 'Content-Type: application/json' --data @- \
-      "$BAO_ADDR/v1/auth/approle/login") || return 1
+  login=$(bao_login) || {
+    # A refused semaphore login (bad/revoked secret_id) is not fatal — the
+    # shared ansible identity is still a valid principal on target hosts.
+    if [[ $CONVERGE_IDENTITY == semaphore && -n ${OPENBAO_APPROLE_ANSIBLE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_ANSIBLE_SECRET_ID:-} ]]; then
+      echo "WARNING: semaphore AppRole login failed — falling back to the shared 'ansible' identity." >&2
+      export CONVERGE_ROLE_ID=$OPENBAO_APPROLE_ANSIBLE_ROLE_ID
+      export CONVERGE_SECRET_ID=$OPENBAO_APPROLE_ANSIBLE_SECRET_ID
+      CONVERGE_SIGN_ROLE="automation-ansible"
+      CONVERGE_IDENTITY="ansible"
+      login=$(bao_login) || return 1
+    else
+      return 1
+    fi
+  }
   token=$(printf '%s' "$login" | jq -er '.auth.client_token') || return 1
   RUNNER_BAO_TOKEN=$token
   signed=$(jq -nc --rawfile pub "$CERT_DIR/id.pub" --arg ttl "${SSH_CERT_TTL:-1h}" \
@@ -114,7 +131,6 @@ if [[ -n ${BAO_ADDR:-} && -n $CONVERGE_ROLE_ID && -n $CONVERGE_SECRET_ID ]]; the
     echo "OPENBAO_APPROLE_* env to deliberately use the static break-glass key." >&2
     exit 1
   fi
-  unset CONVERGE_ROLE_ID CONVERGE_SECRET_ID
   echo "Using a short-lived SSH certificate from the OpenBao CA ($CONVERGE_SIGN_ROLE)."
   echo "  authenticated as: $CONVERGE_IDENTITY"
 # If key file exists at PROXMOX_SSH_KEY_PATH, export expanded path for inventory.
