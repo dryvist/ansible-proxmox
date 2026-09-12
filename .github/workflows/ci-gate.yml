@@ -30,8 +30,6 @@ jobs:
       contents: read
       pull-requests: read
     uses: dryvist/.github/.github/workflows/_ansible-ci.yml@main
-    with:
-      emit_gate: false
 
   # Deliberately unconditional. Gating this on the shared change filter, and
   # then telling the gate a skip is acceptable, means a green required check
