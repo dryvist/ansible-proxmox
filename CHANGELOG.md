@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.2](https://github.com/dryvist/ansible-proxmox/compare/v2.8.1...v2.8.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* **ssh_ca_trust:** trust the semaphore principal for root on LXC guests ([#771](https://github.com/dryvist/ansible-proxmox/issues/771)) ([2314f5a](https://github.com/dryvist/ansible-proxmox/commit/2314f5a89ab6c82b17bec796aee85b98f1fcd626))
+
 ## [2.8.1](https://github.com/dryvist/ansible-proxmox/compare/v2.8.0...v2.8.1) (2026-09-12)
 
 
