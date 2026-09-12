@@ -49,10 +49,13 @@
       }
       before=$(fingerprint)
       pct exec {{ item }} -- mkdir -p {{ ssh_ca_trust_principals_dir }} /etc/ssh/sshd_config.d
-      printf '%s\n' "{{ ([ssh_ca_trust_fetched.content | trim] + ssh_ca_trust_extra_ca_keys) | join('\n') }}" \
+      # One argument per entry, one line each. A `join('\n')` inside this block
+      # scalar hands printf the two characters `\n` verbatim, which collapses a
+      # multi-entry list into one malformed line (and one principal nobody has).
+      printf '%s\n' {% for key in [ssh_ca_trust_fetched.content | trim] + ssh_ca_trust_extra_ca_keys %}"{{ key }}" {% endfor %}\
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_ca_file }} > /dev/null
       {% for user, principals in ssh_ca_trust_lxc_principals.items() %}
-      printf '%s\n' "{{ principals | join('\n') }}" \
+      printf '%s\n' {% for principal in principals %}"{{ principal }}" {% endfor %}\
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_principals_dir }}/{{ user }} > /dev/null
       {% endfor %}
       printf '%s\n' \
