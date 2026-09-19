@@ -24,8 +24,7 @@ jobs:
       id-token: write
       pull-requests: write
     uses: dryvist/ai-workflows/.github/workflows/cc-dep-review.yml@main
-    secrets:
-      GH_ACTION_AI_API_KEY: ${{ secrets.GH_ACTION_AI_API_KEY }}
+    secrets: inherit
 
   release-notes:
     permissions:
@@ -33,5 +32,4 @@ jobs:
       id-token: write
       pull-requests: write
     uses: dryvist/ai-workflows/.github/workflows/cc-release-notes.yml@main
-    secrets:
-      GH_ACTION_AI_API_KEY: ${{ secrets.GH_ACTION_AI_API_KEY }}
+    secrets: inherit
