@@ -308,6 +308,13 @@
       vars:
         pve_config_backup_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/pve-config-backup"
 
+    # ntfy webhook + matchers for vzdump failures, HA fencing, replication
+    # failures, and package updates. Additive-only against
+    # /etc/pve/notifications.cfg (see roles/pve_notifications/README.md).
+    - role: pve_notifications
+      tags:
+        - pve_notifications
+
     # Daily bare-mirror of every configured owner's PUBLIC repositories.
     # Public repos only (v1) -- no credential of any kind, cloned/fetched
     # anonymously. Inert unless a host sets git_mirror_enabled: true and a

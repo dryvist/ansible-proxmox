@@ -1,0 +1,93 @@
+---
+# pve_notifications — add an ntfy webhook target + matchers to the
+# cluster-wide /etc/pve/notifications.cfg. Additive only (see defaults for why
+# this is API-driven, not templated) so the existing `proxman` target and any
+# other unmanaged targets/matchers are left untouched. All pvesh calls skip
+# under Docker so the role is molecule-testable without a live cluster.
+
+- name: Configure ntfy notifications from the single config host
+  when:
+    - pve_notifications_enabled | bool
+    - inventory_hostname == pve_notifications_config_host
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_notifications
+  block:
+    - name: Check whether the ntfy webhook target already exists
+      ansible.builtin.command:
+        argv:
+          - pvesh
+          - get
+          - "/cluster/notifications/targets/webhook/{{ pve_notifications_ntfy_target }}"
+          - --output-format
+          - json
+      register: pve_notifications_target_check
+      changed_when: false
+      failed_when: false
+
+    - name: Create the ntfy webhook target
+      ansible.builtin.command:
+        argv:
+          - pvesh
+          - create
+          - /cluster/notifications/targets/webhook
+          - --name
+          - "{{ pve_notifications_ntfy_target }}"
+          - --url
+          - "{{ pve_notifications_ntfy_url }}"
+          - --method
+          - "{{ pve_notifications_ntfy_method }}"
+          - --comment
+          - Managed by ansible-proxmox pve_notifications
+      when: pve_notifications_target_check.rc != 0
+      changed_when: true
+
+    # rc == 0 means the target already exists; keep its URL/method in sync
+    # rather than re-creating (pvesh create fails on a name that exists).
+    - name: Update the ntfy webhook target if its URL or method drifted
+      ansible.builtin.command:
+        argv:
+          - pvesh
+          - set
+          - "/cluster/notifications/targets/webhook/{{ pve_notifications_ntfy_target }}"
+          - --url
+          - "{{ pve_notifications_ntfy_url }}"
+          - --method
+          - "{{ pve_notifications_ntfy_method }}"
+      when:
+        - pve_notifications_target_check.rc == 0
+        - (pve_notifications_ntfy_url != (pve_notifications_target_check.stdout | from_json).url) or
+          (pve_notifications_ntfy_method != (pve_notifications_target_check.stdout | from_json).method)
+      changed_when: true
+
+    - name: Check which matchers already exist
+      ansible.builtin.command:
+        argv:
+          - pvesh
+          - get
+          - "/cluster/notifications/matchers/{{ item.name }}"
+          - --output-format
+          - json
+      loop: "{{ pve_notifications_matchers }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: pve_notifications_matcher_check
+      changed_when: false
+      failed_when: false
+
+    - name: Create missing matchers routed at the ntfy target
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ['pvesh', 'create', '/cluster/notifications/matchers',
+             '--name', item.item.name,
+             '--target', pve_notifications_ntfy_target,
+             '--match-field', 'exact:type=' + item.item.type,
+             '--comment', 'Managed by ansible-proxmox pve_notifications']
+            + (['--match-severity', item.item.severity] if item.item.severity is defined else [])
+          }}
+      loop: "{{ pve_notifications_matcher_check.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: item.rc != 0
+      changed_when: true

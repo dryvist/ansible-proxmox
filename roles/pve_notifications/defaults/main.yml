@@ -1,0 +1,36 @@
+---
+# pve_notifications role defaults
+#
+# Adds ONE additive webhook target + matchers to the cluster-wide
+# /etc/pve/notifications.cfg via `pvesh` (the PVE API) — never a whole-file
+# template. That file already carries a `proxman` webhook target this role
+# does not own and that is confirmed firing today (see
+# roles/common/defaults/main.yml); a template would silently drop it on the
+# first converge, the same trap called out in
+# roles/pve_ha/tasks/datacenter_cfg.yml for datacenter.cfg.
+
+pve_notifications_enabled: true
+
+# notifications.cfg is pmxcfs-replicated cluster-wide state, so this role acts
+# from exactly ONE node — same run_once idiom as pve_ha/pve_cluster.
+pve_notifications_config_host: "{{ pve_cluster_primary_host | default(proxmox_node_names.primary, true) }}"
+
+pve_notifications_ntfy_target: ntfy-proxmox
+pve_notifications_ntfy_url: "https://ntfy.{{ domain_from_tofu }}/proxmox"
+pve_notifications_ntfy_method: POST
+
+# PVE's built-in matchable notification classes (chapter 12, "Notifications",
+# in the PVE admin guide). Each entry becomes one `matcher` routed at the ntfy
+# target via `match-field exact:type=<type>`. `severity`, where set, narrows
+# to the failure case of a class that also reports success (vzdump reports
+# both `info` and `error` under the same type).
+pve_notifications_matchers:
+  - name: ntfy-proxmox-vzdump-failed
+    type: vzdump
+    severity: error
+  - name: ntfy-proxmox-fencing
+    type: fencing
+  - name: ntfy-proxmox-replication-failed
+    type: replication
+  - name: ntfy-proxmox-package-updates
+    type: package-updates

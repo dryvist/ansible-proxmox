@@ -1,0 +1,18 @@
+---
+# pve_notifications role metadata
+galaxy_info:
+  role_name: pve_notifications
+  author: ansible-proxmox
+  description: Route Proxmox VE native notifications (vzdump, fencing, replication, package updates) to ntfy via a webhook target
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - proxmox
+    - notifications
+
+dependencies: []

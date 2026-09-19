@@ -1,0 +1,18 @@
+---
+- name: Converge
+  hosts: all
+  become: false
+  gather_facts: true
+
+  vars:
+    # Docker's ansible_virtualization_type makes every task in the role's
+    # block skip (same idiom as pve_cluster/pve_ha), so this proves the
+    # Docker-skip guard and idempotent convergence without a live PVE API.
+    # It does NOT exercise a real pvesh call — see verify.yml for the argv
+    # Jinja-native-list construct, checked separately since it never runs
+    # under this container.
+    pve_notifications_enabled: true
+    pve_notifications_config_host: proxmox-notifications-test
+
+  roles:
+    - role: pve_notifications
