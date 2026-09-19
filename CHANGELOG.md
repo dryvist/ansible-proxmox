@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0](https://github.com/dryvist/ansible-proxmox/compare/v2.8.2...v2.9.0) (2026-09-19)
+
+
+### Features
+
+* **pve_notifications:** route backup/HA/replication/update events to ntfy ([#775](https://github.com/dryvist/ansible-proxmox/issues/775)) ([e1307b6](https://github.com/dryvist/ansible-proxmox/commit/e1307b6021f8a3a4b5c11b2a2a2b0198026f2bf2))
+
+
+### Bug Fixes
+
+* **ci:** cache Galaxy collections in the Molecule workflow ([e57516d](https://github.com/dryvist/ansible-proxmox/commit/e57516d59ad1ea9bb2b4f977dcc5840b5fd3b7ba))
+* **ci:** cache Galaxy collections in the Molecule workflow ([8fc9d7e](https://github.com/dryvist/ansible-proxmox/commit/8fc9d7e86409650b76fbd3cdbec637f7d9603802))
+* **ci:** forward the router secrets to ai-pr-care with secrets: inherit ([27bc0b5](https://github.com/dryvist/ansible-proxmox/commit/27bc0b546d9026d18c16f0d6e67697f9e16269d9))
+* **ci:** forward the router secrets to ai-pr-care with secrets: inherit ([adc5520](https://github.com/dryvist/ansible-proxmox/commit/adc5520fbef5ce379e5486b733a83452df95aadd))
+
 ## [2.8.2](https://github.com/dryvist/ansible-proxmox/compare/v2.8.1...v2.8.2) (2026-09-12)
 
 
