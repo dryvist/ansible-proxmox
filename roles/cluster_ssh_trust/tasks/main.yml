@@ -1,9 +1,9 @@
 ---
 # cluster_ssh_trust tasks — seed /root/.ssh/known_hosts with every cluster
-# peer's current host keys so inter-node root SSH never needs a manual
-# ssh-keyscan (and survives renames), and repair the pmxcfs identity/
-# authorized_keys symlinks if either has been replaced by a plain file.
-# Skipped under Docker (molecule).
+# peer's current host keys, by BOTH hostname and management IP, so inter-node
+# root SSH never needs a manual ssh-keyscan (and survives renames); and repair
+# the pmxcfs-shared authorized_keys if this node's entry has dropped out of
+# it. Skipped under Docker (molecule).
 
 - name: Ensure root .ssh directory exists
   ansible.builtin.file:
@@ -23,12 +23,12 @@
       set -o pipefail;
       touch /root/.ssh/known_hosts;
       before=$(sort -u /root/.ssh/known_hosts | sha1sum);
-      scanned=$(ssh-keyscan -T 5 {{ cluster_ssh_trust_peers | join(' ') }} 2>/dev/null || true);
+      scanned=$(ssh-keyscan -T 5 {{ cluster_ssh_trust_scan_targets | join(' ') }} 2>/dev/null || true);
       printf '%s\n' "$scanned" >> /root/.ssh/known_hosts;
       sort -u -o /root/.ssh/known_hosts /root/.ssh/known_hosts;
       after=$(sha1sum /root/.ssh/known_hosts);
       reachable=$(printf '%s\n' "$scanned" | awk 'NF && $1 !~ /^#/ {print $1}' | sort -u | grep -c . || true);
-      echo "RESOLVED=$reachable/{{ cluster_ssh_trust_peers | length }}";
+      echo "RESOLVED=$reachable/{{ cluster_ssh_trust_scan_targets | length }}";
       [[ "${before%% *}" == "${after%% *}" ]] && echo UNCHANGED || echo CHANGED
   register: cluster_ssh_trust_seed
   # stdout is now two lines: RESOLVED=<n>/<total> then UNCHANGED|CHANGED.
@@ -37,7 +37,7 @@
   changed_when: cluster_ssh_trust_seed.stdout_lines[-1] == "CHANGED"
   when:
     - cluster_ssh_trust_enabled | bool
-    - cluster_ssh_trust_peers | length > 0
+    - cluster_ssh_trust_scan_targets | length > 0
     - ansible_virtualization_type != 'docker'
   tags:
     - cluster_ssh_trust
@@ -56,73 +56,83 @@
     that:
       - scanned_count | int > 0
     fail_msg: >-
-      ssh-keyscan resolved NONE of the {{ cluster_ssh_trust_peers | length }}
-      configured peers ({{ cluster_ssh_trust_peers | join(', ') }}), so
-      known_hosts was not seeded and inter-node root SSH will fail. The usual
-      cause is a peer list that no longer matches live cluster membership --
-      compare it against `pvecm nodes`.
+      ssh-keyscan resolved NONE of the {{ cluster_ssh_trust_scan_targets | length }}
+      configured scan targets ({{ cluster_ssh_trust_scan_targets | join(', ') }}),
+      so known_hosts was not seeded and inter-node root SSH will fail. The
+      usual cause is a peer list that no longer matches live cluster
+      membership -- compare it against `pvecm nodes`.
     success_msg: >-
       host keys scanned for {{ scanned_count }} of
-      {{ cluster_ssh_trust_peers | length }} peers
+      {{ cluster_ssh_trust_scan_targets | length }} scan targets
   vars:
     scanned_count: >-
       {{ (cluster_ssh_trust_seed.stdout_lines[0] | default('RESOLVED=0/0'))
          | regex_replace('^RESOLVED=', '') | split('/') | first }}
   when:
     - cluster_ssh_trust_enabled | bool
-    - cluster_ssh_trust_peers | length > 0
+    - cluster_ssh_trust_scan_targets | length > 0
     - ansible_virtualization_type != 'docker'
     - not cluster_ssh_trust_seed.skipped | default(false)
   tags:
     - cluster_ssh_trust
 
-# --- pmxcfs SSH symlink guard (root outbound identity + inbound acceptance) ---
-# Proxmox's own inter-node root SSH (qmigrate, pvecm) authenticates with the
-# single cluster-shared keypair kept in /etc/pve/priv/authkey.key(.pub),
-# normally symlinked onto every node as /root/.ssh/id_rsa (this node's
-# outbound identity) and /root/.ssh/authorized_keys (what it accepts
-# inbound) via pmxcfs. If either symlink is silently replaced by a plain
-# file -- e.g. a package touching /root/.ssh on reinstall -- the node
-# offers/accepts no key at all and inter-node SSH fails with "Permission
-# denied (publickey,password)" / "Can't connect to destination address
-# using public key", far from this cause. This is the OTHER half of cluster
-# SSH trust; known_hosts (above) is unaffected by it and vice versa.
+# --- pmxcfs authorized_keys membership guard (root inter-node SSH) ---
+# On current Proxmox VE, every node keeps its OWN per-node keypair in
+# /root/.ssh/id_rsa(.pub) -- this is NOT a shared symlink -- and `pvecm
+# updatecerts` folds each node's PUBLIC key into the pmxcfs-shared
+# /etc/pve/priv/authorized_keys (replicated to every node, normally
+# symlinked as /root/.ssh/authorized_keys). Root SSH between nodes
+# (qmigrate, pvecm) works only while every node's pubkey is actually present
+# in that shared file. If this node's entry silently drops out of it --
+# observed live: pve-w1700's line was gone from the shared file while its
+# own /root/.ssh/id_rsa was untouched -- the node can no longer authenticate
+# outbound OR be authenticated to, and fails with "Permission denied
+# (publickey,password)" / "Can't connect to destination address using
+# public key", far from this cause. This is independent of known_hosts
+# (above): that is HOST verification, this is KEY acceptance.
 #
-# `pvecm updatecerts` is the vendor-native repair (pve-docs pvecm(1):
-# "Update the node certificates and generate all needed files/directories"
-# -- this includes (re)creating these two symlinks). `--force` re-runs it
-# even when Proxmox's own heuristic thinks it is not needed, which is
-# exactly this case: Proxmox has no signal that a symlink was silently
-# swapped for a file. Only run it when a symlink is actually missing, never
-# unconditionally, so a healthy node's converge stays a true no-op.
-- name: Repair pmxcfs SSH symlinks if either has been replaced by a plain file
+# `pvecm updatecerts --force` is the vendor-native repair (pve-docs
+# pvecm(1): "Update the node certificates and generate all needed
+# files/directories" -- this includes re-merging this node's pubkey into
+# the shared file). Only run it when this node's key is actually missing,
+# never unconditionally, so a healthy node's converge stays a true no-op.
+- name: Check whether this node's public key is present in the shared authorized_keys
   ansible.builtin.shell:
     executable: /bin/bash
     cmd: >-
       set -o pipefail;
-      broken=0;
-      for f in /root/.ssh/id_rsa /root/.ssh/authorized_keys; do
-        [[ -L "$f" ]] || broken=1;
-      done;
-      if [[ "$broken" == "1" ]]; then
-        pvecm updatecerts --force;
-        echo CHANGED;
-      else
-        echo UNCHANGED;
-      fi
-  register: cluster_ssh_trust_pmxcfs_repair
-  changed_when: cluster_ssh_trust_pmxcfs_repair.stdout_lines[-1] == "CHANGED"
+      pub=$(awk '{print $1, $2}' /root/.ssh/id_rsa.pub 2>/dev/null);
+      [[ -n "$pub" ]] && grep -qF "$pub" /etc/pve/priv/authorized_keys
+  register: cluster_ssh_trust_pubkey_check
+  changed_when: false
+  failed_when: false
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
   tags:
     - cluster_ssh_trust
 
-# Fail closed: if updatecerts ran and the symlinks are STILL not in place,
-# this node's inter-node SSH stays broken and the play must not report green.
-- name: Assert both pmxcfs SSH symlinks are intact after the repair attempt
+- name: Repair the shared authorized_keys if this node's key is missing (pvecm updatecerts)
   ansible.builtin.command:
-    cmd: /usr/bin/env bash -c '[[ -L /root/.ssh/id_rsa && -L /root/.ssh/authorized_keys ]]'
+    cmd: pvecm updatecerts --force
+  changed_when: true
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+    - cluster_ssh_trust_pubkey_check.rc | default(1) != 0
+  tags:
+    - cluster_ssh_trust
+
+# Fail closed: if updatecerts ran and this node's key is STILL missing from
+# the shared file, its inter-node SSH stays broken and the play must not
+# report green.
+- name: Assert this node's public key is present in the shared authorized_keys after repair
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: >-
+      set -o pipefail;
+      pub=$(awk '{print $1, $2}' /root/.ssh/id_rsa.pub 2>/dev/null);
+      [[ -n "$pub" ]] && grep -qF "$pub" /etc/pve/priv/authorized_keys
   changed_when: false
   when:
     - cluster_ssh_trust_enabled | bool
