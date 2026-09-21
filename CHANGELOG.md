@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1](https://github.com/dryvist/ansible-proxmox/compare/v2.9.0...v2.9.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **cluster_ssh_trust:** correct pmxcfs guard, IP-based trust, and prove reachability ([#785](https://github.com/dryvist/ansible-proxmox/issues/785)) ([2256cb6](https://github.com/dryvist/ansible-proxmox/commit/2256cb6398b975969e1bb87937c542aefcee4217))
+* **cluster_ssh_trust:** repair pmxcfs SSH symlinks when replaced by a plain file ([#784](https://github.com/dryvist/ansible-proxmox/issues/784)) ([b9000ee](https://github.com/dryvist/ansible-proxmox/commit/b9000ee66db43e5737f5d656d8e37702884165af))
+
 ## [2.9.0](https://github.com/dryvist/ansible-proxmox/compare/v2.8.2...v2.9.0) (2026-09-19)
 
 
