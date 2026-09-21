@@ -1,11 +1,20 @@
 # cluster_ssh_trust
 
-Keeps inter-node **root SSH** working automatically across the Proxmox cluster
-by seeding each node's `/root/.ssh/known_hosts` with the **current** host keys
-of every cluster peer. Without this, root SSH between nodes (syncoid
-replication, `pvecm`, live migration) fails with *Host key verification failed*
-after a node rename or reinstall — exactly what happened when `pve` was renamed
-to `node-a`.
+Keeps inter-node **root SSH** working automatically across the Proxmox
+cluster. Two independent halves of that trust, both repaired here:
+
+- Seeds each node's `/root/.ssh/known_hosts` with the **current** host keys
+  of every cluster peer. Without this, root SSH between nodes (syncoid
+  replication, `pvecm`, live migration) fails with *Host key verification
+  failed* after a node rename or reinstall — exactly what happened when `pve`
+  was renamed to `node-a`.
+- Repairs `/root/.ssh/id_rsa` and `/root/.ssh/authorized_keys` if either has
+  been replaced by a plain file instead of the pmxcfs symlink Proxmox expects
+  (`-> /etc/pve/priv/authkey.key` / `-> /etc/pve/priv/authorized_keys`). A
+  broken symlink on either end fails inter-node SSH with *Permission denied
+  (publickey,password)* / *Can't connect to destination address using public
+  key* — the failure a native `qmigrate` hits when the SOURCE node's identity
+  symlink is gone, since it then offers no key at all.
 
 ## Installation
 
@@ -30,6 +39,10 @@ ansible-galaxy install -r requirements.yml
   variable is absent (e.g. molecule), it falls back to the `pve_cluster_members`
   inventory group.
 - Idempotent: re-runs only report `changed` when a new/rotated key is added.
+- Checks `/root/.ssh/id_rsa` and `/root/.ssh/authorized_keys` are still
+  symlinks; if either is not, runs `pvecm updatecerts --force` (the
+  vendor-native repair — pve-docs `pvecm(1)`) and fails closed if the
+  symlinks are still missing afterwards.
 - Skipped under Docker so molecule can converge.
 
 ## Variables

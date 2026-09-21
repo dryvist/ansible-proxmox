@@ -1,7 +1,9 @@
 ---
 # cluster_ssh_trust tasks — seed /root/.ssh/known_hosts with every cluster
 # peer's current host keys so inter-node root SSH never needs a manual
-# ssh-keyscan (and survives renames). Skipped under Docker (molecule).
+# ssh-keyscan (and survives renames), and repair the pmxcfs identity/
+# authorized_keys symlinks if either has been replaced by a plain file.
+# Skipped under Docker (molecule).
 
 - name: Ensure root .ssh directory exists
   ansible.builtin.file:
@@ -71,5 +73,59 @@
     - cluster_ssh_trust_peers | length > 0
     - ansible_virtualization_type != 'docker'
     - not cluster_ssh_trust_seed.skipped | default(false)
+  tags:
+    - cluster_ssh_trust
+
+# --- pmxcfs SSH symlink guard (root outbound identity + inbound acceptance) ---
+# Proxmox's own inter-node root SSH (qmigrate, pvecm) authenticates with the
+# single cluster-shared keypair kept in /etc/pve/priv/authkey.key(.pub),
+# normally symlinked onto every node as /root/.ssh/id_rsa (this node's
+# outbound identity) and /root/.ssh/authorized_keys (what it accepts
+# inbound) via pmxcfs. If either symlink is silently replaced by a plain
+# file -- e.g. a package touching /root/.ssh on reinstall -- the node
+# offers/accepts no key at all and inter-node SSH fails with "Permission
+# denied (publickey,password)" / "Can't connect to destination address
+# using public key", far from this cause. This is the OTHER half of cluster
+# SSH trust; known_hosts (above) is unaffected by it and vice versa.
+#
+# `pvecm updatecerts` is the vendor-native repair (pve-docs pvecm(1):
+# "Update the node certificates and generate all needed files/directories"
+# -- this includes (re)creating these two symlinks). `--force` re-runs it
+# even when Proxmox's own heuristic thinks it is not needed, which is
+# exactly this case: Proxmox has no signal that a symlink was silently
+# swapped for a file. Only run it when a symlink is actually missing, never
+# unconditionally, so a healthy node's converge stays a true no-op.
+- name: Repair pmxcfs SSH symlinks if either has been replaced by a plain file
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: >-
+      set -o pipefail;
+      broken=0;
+      for f in /root/.ssh/id_rsa /root/.ssh/authorized_keys; do
+        [[ -L "$f" ]] || broken=1;
+      done;
+      if [[ "$broken" == "1" ]]; then
+        pvecm updatecerts --force;
+        echo CHANGED;
+      else
+        echo UNCHANGED;
+      fi
+  register: cluster_ssh_trust_pmxcfs_repair
+  changed_when: cluster_ssh_trust_pmxcfs_repair.stdout_lines[-1] == "CHANGED"
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
+# Fail closed: if updatecerts ran and the symlinks are STILL not in place,
+# this node's inter-node SSH stays broken and the play must not report green.
+- name: Assert both pmxcfs SSH symlinks are intact after the repair attempt
+  ansible.builtin.command:
+    cmd: /usr/bin/env bash -c '[[ -L /root/.ssh/id_rsa && -L /root/.ssh/authorized_keys ]]'
+  changed_when: false
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
   tags:
     - cluster_ssh_trust
