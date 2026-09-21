@@ -1,141 +1,161 @@
 #!/usr/bin/env python3
-"""Exercise the pmxcfs SSH symlink repair gate in cluster_ssh_trust.
+"""Exercise the pmxcfs authorized_keys membership expression in cluster_ssh_trust.
 
-The task is a shell script the cluster_ssh_trust role runs on real PVE nodes
-to detect and repair /root/.ssh/id_rsa and /root/.ssh/authorized_keys when
-either has been replaced by a plain file instead of its pmxcfs symlink. It
-cannot be covered by molecule: the Docker test container has no pmxcfs, no
-`pvecm`, and the task is deliberately skipped there (`ansible_virtualization_
-type != 'docker'`) — so the real assertion is this contract test.
+The role decides whether `pvecm updatecerts --force` needs to run (and
+whether the post-repair state is acceptable) with a single Jinja expression
+evaluated in a `set_fact`/`assert`, over the base64 `content` two
+`ansible.builtin.slurp` tasks register -- no shell, per this repo's "no
+scripts embedded in YAML" rule. It cannot be covered by molecule: the
+Docker test container has no pmxcfs and the tasks are deliberately skipped
+there (`ansible_virtualization_type != 'docker'`) -- so the real assertion
+is this contract test.
 
-This test does not carry a copy of the script. It EXTRACTS the script out of
-roles/cluster_ssh_trust/tasks/main.yml and substitutes its two hardcoded
-/root/.ssh paths for temp-dir equivalents (root's real home is neither safe
-nor writable from a workstation test run), so a change to the role that this
-test no longer covers fails here instead of passing silently against a stale
-duplicate. `pvecm` is faked on PATH so the CHANGED branch is exercised
-without a live cluster.
+This test does not carry a copy of the expression. It EXTRACTS the
+`cluster_ssh_trust_pubkey_present` value out of
+roles/cluster_ssh_trust/tasks/main.yml and renders it with `ansible-playbook`
+against fixture base64 content standing in for the two slurped files, so a
+change to the role that this test no longer covers fails here instead of
+passing silently against a stale duplicate.
 
 Run: python3 tests/cluster_ssh_trust/test_pmxcfs_repair_gate.py
 """
+import base64
 import os
-import stat
 import subprocess
 import sys
 import tempfile
-import textwrap
+
+import yaml
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TASKS = os.path.join(REPO, "roles", "cluster_ssh_trust", "tasks", "main.yml")
+HANDLERS = os.path.join(REPO, "roles", "cluster_ssh_trust", "handlers", "main.yml")
+HANDLER_NAME = "Restart pveproxy and pvedaemon"
 
-ID_RSA = "/root/.ssh/id_rsa"
-AUTH_KEYS = "/root/.ssh/authorized_keys"
+
+def check_repair_notifies_handler():
+    """The updatecerts repair task must notify the cert-restart handler, and
+    that handler must actually exist -- a notify to a typo'd or missing
+    handler name is silently a no-op, not an error."""
+    with open(TASKS) as fh:
+        tasks = yaml.safe_load(fh)
+    repair = next(
+        (t for t in tasks if "pvecm updatecerts" in str(t.get("ansible.builtin.command", {}))), None)
+    if repair is None:
+        sys.exit("FAIL: no task runs `pvecm updatecerts --force` — the role "
+                 "changed shape and this test no longer covers it")
+    notify = repair.get("notify")
+    notify_list = notify if isinstance(notify, list) else [notify]
+    if HANDLER_NAME not in notify_list:
+        sys.exit("FAIL: the updatecerts repair task does not notify %r "
+                 "(notify=%r) — pveproxy/pvedaemon won't restart after a "
+                 "certificate regeneration" % (HANDLER_NAME, notify))
+
+    with open(HANDLERS) as fh:
+        handlers = yaml.safe_load(fh) or []
+    if not any(h.get("name") == HANDLER_NAME for h in handlers):
+        sys.exit("FAIL: no handler named %r is defined in handlers/main.yml "
+                 "— the notify above is a silent no-op" % HANDLER_NAME)
 
 
-def extract_repair_script():
-    """Pull the literal `cmd: >-` block of the repair task out of the role."""
+def extract_expression():
+    """Pull the `cluster_ssh_trust_pubkey_present: >-` block's Jinja body."""
     with open(TASKS) as fh:
         lines = fh.readlines()
 
     start = next(
         (i for i, ln in enumerate(lines)
-         if "Repair pmxcfs SSH symlinks if either has been replaced" in ln), None)
+         if ln.strip() == "cluster_ssh_trust_pubkey_present: >-"), None)
     if start is None:
-        sys.exit("FAIL: no task named the pmxcfs symlink repair — the role "
-                 "changed shape and this test no longer covers it")
+        sys.exit("FAIL: no `cluster_ssh_trust_pubkey_present: >-` block — "
+                 "the role changed shape and this test no longer covers it")
 
-    cmd_at = next(
-        (i for i in range(start, min(start + 6, len(lines)))
-         if lines[i].strip() == "cmd: >-"), None)
-    if cmd_at is None:
-        sys.exit("FAIL: the repair task no longer uses a `cmd: >-` block — "
-                 "extraction is stale")
-
-    indent = len(lines[cmd_at]) - len(lines[cmd_at].lstrip()) + 2
+    indent = len(lines[start]) - len(lines[start].lstrip()) + 2
     body = []
-    for ln in lines[cmd_at + 1:]:
+    for ln in lines[start + 1:]:
         if ln.strip() and (len(ln) - len(ln.lstrip())) < indent:
             break
         body.append(ln[indent:] if len(ln) > indent else "\n")
-    script = " ".join(l.strip() for l in body)  # >- folds to a single line
+    expr = " ".join(l.strip() for l in body)
 
-    if "pvecm updatecerts --force" not in script or ID_RSA not in script:
-        sys.exit("FAIL: extracted script is missing its repair command or "
-                 "identity path — extraction is wrong, or the role regressed")
-    return script
-
-
-SCRIPT = extract_repair_script()
+    if "b64decode" not in expr or "cluster_ssh_trust_id_rsa_pub" not in expr:
+        sys.exit("FAIL: extracted expression is missing an expected term — "
+                 "extraction is wrong, or the role regressed")
+    return expr
 
 
-def run_case(tmp, id_rsa_is_link, auth_keys_is_link):
-    """Substitute the two hardcoded paths for a temp dir, seed the two files
-    as either symlinks or plain files, fake `pvecm` on PATH, run the script,
-    and return (stdout_last_line, pvecm_was_called)."""
-    ssh_dir = os.path.join(tmp, "ssh")
-    os.makedirs(ssh_dir, exist_ok=True)
-    id_rsa = os.path.join(ssh_dir, "id_rsa")
-    auth_keys = os.path.join(ssh_dir, "authorized_keys")
-    target = os.path.join(tmp, "pmxcfs-target")
-    with open(target, "w") as fh:
-        fh.write("fake pmxcfs-backed content\n")
+EXPR = extract_expression()
 
-    def seed(path, is_link):
-        if is_link:
-            os.symlink(target, path)
-        else:
-            with open(path, "w") as fh:
-                fh.write("plain file, not the pmxcfs symlink\n")
+PUB_LINE = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABfakefakefakefakefakefakefake"
 
-    seed(id_rsa, id_rsa_is_link)
-    seed(auth_keys, auth_keys_is_link)
 
-    marker = os.path.join(tmp, "pvecm-called")
-    bin_dir = os.path.join(tmp, "bin")
-    os.makedirs(bin_dir, exist_ok=True)
-    pvecm = os.path.join(bin_dir, "pvecm")
-    with open(pvecm, "w") as fh:
-        fh.write("#!/bin/sh\ntouch %s\n" % marker)
-    os.chmod(pvecm, os.stat(pvecm).st_mode | stat.S_IEXEC)
+def run_case(tmp, pub_line, known_keys_lines):
+    """Render the extracted expression with ansible-playbook against fixture
+    slurp-shaped content, and return the resulting boolean."""
+    pub_b64 = base64.b64encode((pub_line + " root@node\n").encode()).decode()
+    known_keys_b64 = base64.b64encode(("\n".join(known_keys_lines) + "\n").encode()).decode()
 
-    body = SCRIPT.replace(ID_RSA, id_rsa).replace(AUTH_KEYS, auth_keys)
-    if "/root/.ssh" in body:
-        sys.exit("FAIL: unsubstituted /root/.ssh path remains: %r" % body)
+    result_path = os.path.join(tmp, "result.txt")
+    playbook = os.path.join(tmp, "test.yml")
+    with open(playbook, "w") as fh:
+        fh.write(
+            "- hosts: localhost\n"
+            "  gather_facts: false\n"
+            "  vars:\n"
+            "    cluster_ssh_trust_id_rsa_pub:\n"
+            "      content: %r\n"
+            "    cluster_ssh_trust_shared_authorized_keys:\n"
+            "      content: %r\n"
+            "  tasks:\n"
+            "    - name: evaluate the extracted expression\n"
+            "      ansible.builtin.set_fact:\n"
+            "        cluster_ssh_trust_pubkey_present: \"%s\"\n"
+            "    - name: write the result\n"
+            "      ansible.builtin.copy:\n"
+            "        dest: %r\n"
+            "        content: \"{{ cluster_ssh_trust_pubkey_present }}\"\n"
+            % (pub_b64, known_keys_b64, EXPR, result_path)
+        )
 
-    with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False, dir=tmp) as fh:
-        fh.write("#!/bin/bash\n" + body + "\n")
-        script_path = fh.name
-    os.chmod(script_path, os.stat(script_path).st_mode | stat.S_IEXEC)
-
-    env = dict(os.environ)
-    env["PATH"] = bin_dir + os.pathsep + env["PATH"]
-    result = subprocess.run([script_path], capture_output=True, text=True,
-                            timeout=30, env=env)
-    out = result.stdout.strip().splitlines()
-    last = out[-1] if out else ""
-    return last, os.path.exists(marker), result.returncode
+    result = subprocess.run(
+        ["ansible-playbook", "-i", "localhost,", "-c", "local", playbook],
+        capture_output=True, text=True, timeout=60, cwd=tmp,
+    )
+    if result.returncode != 0:
+        sys.exit("FAIL: ansible-playbook errored rendering the expression:\n"
+                 + result.stdout + result.stderr)
+    with open(result_path) as fh:
+        return fh.read().strip() == "True"
 
 
 def main():
+    if subprocess.run(["which", "ansible-playbook"], capture_output=True).returncode != 0:
+        sys.exit("FAIL: ansible-playbook not on PATH — run inside the nix devshell")
+
+    check_repair_notifies_handler()
+    print("updatecerts repair task notifies %r, and that handler exists  ok" % HANDLER_NAME)
+
     failures = []
     cases = [
-        ("both symlinks intact", True, True, "UNCHANGED", False),
-        ("id_rsa replaced by a plain file", False, True, "CHANGED", True),
-        ("authorized_keys replaced by a plain file", True, False, "CHANGED", True),
-        ("both replaced by plain files", False, False, "CHANGED", True),
+        ("pubkey present in shared authorized_keys",
+         [PUB_LINE, "ssh-ed25519 UNRELATED root@other"], True),
+        ("pubkey missing from shared authorized_keys (live incident shape)",
+         ["ssh-ed25519 UNRELATED root@other"], False),
+        ("shared authorized_keys empty",
+         [], False),
     ]
-    for name, id_link, auth_link, want_status, want_called in cases:
+    for name, known_keys, want in cases:
         with tempfile.TemporaryDirectory() as tmp:
-            status, called, rc = run_case(tmp, id_link, auth_link)
-        ok = status == want_status and called == want_called and rc == 0
-        print("%-42s -> status=%-10s pvecm_called=%-5s rc=%s  %s" %
-              (name, status, called, rc, "ok" if ok else "FAIL"))
+            got = run_case(tmp, PUB_LINE, known_keys)
+        ok = got == want
+        print("%-58s -> present=%s (want %s)  %s" %
+              (name, got, want, "ok" if ok else "FAIL"))
         if not ok:
             failures.append(name)
 
     if failures:
         sys.exit("\nFAILURES: %s" % failures)
-    print("\ncluster_ssh_trust pmxcfs repair gate: all cases passed")
+    print("\ncluster_ssh_trust pmxcfs authorized_keys membership expression: all cases passed")
 
 
 if __name__ == "__main__":

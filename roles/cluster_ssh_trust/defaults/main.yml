@@ -20,3 +20,22 @@ cluster_ssh_trust_peers: >-
       | regex_findall('[A-Za-z0-9][A-Za-z0-9._-]*'))
     or (groups['pve_cluster_members'] | default([]))
   }}
+
+# Each peer's management IP, resolved from inventory (hostvars[peer].ansible_host)
+# when the peer is a known inventory host -- silently omitted otherwise (e.g. a
+# peer name from PROXMOX_VE_NODES that doesn't match any inventory_hostname).
+# qmigrate connects by IP, not by name, so known_hosts must carry both: a peer
+# resolvable by name but not by IP (observed live: pve-w5900 -> pve-r540) still
+# fails "Host key verification failed" on the address migration actually uses.
+cluster_ssh_trust_peer_ips: >-
+  {{
+    cluster_ssh_trust_peers
+    | select('in', hostvars.keys() | list)
+    | map('extract', hostvars)
+    | map(attribute='ansible_host', default='')
+    | select
+    | list
+  }}
+
+# What ssh-keyscan actually scans: every peer by name AND by IP, de-duplicated.
+cluster_ssh_trust_scan_targets: "{{ (cluster_ssh_trust_peers + cluster_ssh_trust_peer_ips) | unique }}"
