@@ -50,6 +50,12 @@ ansible-galaxy install -r requirements.yml
   `/etc/pve/priv/authorized_keys`; if not, runs `pvecm updatecerts --force`
   (the vendor-native repair — pve-docs `pvecm(1)`) and fails closed if the
   key is still missing afterwards.
+- Then proves it: runs `ssh -n -o BatchMode=yes root@<peer IP> true` against
+  every peer's management IP — the exact connection native migration/`pvecm`
+  make — and fails closed if any peer is still unreachable. The two checks
+  above can both pass while one specific peer pair is still broken (that is
+  exactly what `pve-w5900` -> `pve-r540` was), so this is the real proof,
+  not an inference from the other two.
 - Skipped under Docker so molecule can converge.
 
 ## Variables

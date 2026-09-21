@@ -139,3 +139,49 @@
     - ansible_virtualization_type != 'docker'
   tags:
     - cluster_ssh_trust
+
+# --- end-to-end reachability proof (the actual litmus test) ---
+# Both guards above can pass -- known_hosts seeded, this node's key present
+# in the shared file -- while a SPECIFIC peer is still unreachable by IP
+# (observed live: pve-w5900 -> pve-r540 worked by name, failed "Host key
+# verification failed" by IP). Proving the fix from this converge's own
+# output, rather than trusting the two checks above to imply it, is the
+# point: run the exact connection native migration/pvecm makes -- root SSH
+# by IP, no password, no prompt -- against every peer, from every node,
+# every converge. A failure here means the role is still incomplete for
+# that pair, not that this task is broken.
+- name: Verify SSH to every peer by IP actually succeeds
+  ansible.builtin.command:
+    cmd: ssh -n -o BatchMode=yes -o ConnectTimeout=5 root@{{ item }} true
+  loop: "{{ cluster_ssh_trust_peer_ips }}"
+  loop_control:
+    label: "{{ item }}"
+  register: cluster_ssh_trust_peer_reachability
+  changed_when: false
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - cluster_ssh_trust_peer_ips | length > 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
+- name: Assert every peer is reachable by IP
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+    fail_msg: >-
+      ssh root@{{ item.item }} (by IP, the address native migration/pvecm
+      use) failed with rc={{ item.rc }}: {{ item.stderr | default('') }}.
+      known_hosts and/or the shared authorized_keys entry for this pair are
+      still wrong -- inter-node operations to/from this peer will keep
+      failing.
+    success_msg: "peer {{ item.item }} reachable by IP"
+  loop: "{{ cluster_ssh_trust_peer_reachability.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - cluster_ssh_trust_peer_ips | length > 0
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
