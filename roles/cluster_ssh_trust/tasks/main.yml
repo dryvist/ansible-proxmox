@@ -133,12 +133,20 @@
   ansible.builtin.command:
     cmd: pvecm updatecerts --force
   changed_when: true
+  notify: Restart pveproxy and pvedaemon
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
     - not cluster_ssh_trust_pubkey_present
   tags:
     - cluster_ssh_trust
+
+# updatecerts can regenerate this node's certificate; flush the restart
+# handler now rather than at end-of-play, so every check below (and every
+# later task in this same converge that calls this node's API) sees the
+# restarted pveproxy/pvedaemon, not the ones still serving the old cert.
+- name: Flush the pveproxy/pvedaemon restart before checking the served certificate
+  ansible.builtin.meta: flush_handlers
 
 # Fail closed: if updatecerts ran and this node's key is STILL missing from
 # the shared file, its inter-node SSH stays broken and the play must not
@@ -175,6 +183,57 @@
       /etc/pve/priv/authorized_keys after `pvecm updatecerts --force` --
       inter-node SSH (migration, pvecm) will keep failing for this node.
     success_msg: "this node's public key is present in the shared authorized_keys"
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
+# --- served-certificate guard ---
+# `pvecm updatecerts` can regenerate /etc/pve/local/pve-ssl.pem (the pmxcfs
+# `local` symlink always points at THIS node's own cert directory) without
+# the already-running pveproxy ever picking it up -- the handler above
+# restarts it, this proves the restart actually happened. Uses the
+# vendor-shipped `openssl` (present on every PVE node) rather than adding
+# community.crypto as a new collection dependency for one fingerprint
+# comparison the estate doesn't otherwise need.
+- name: Read the pinned certificate's fingerprint
+  ansible.builtin.command:
+    cmd: openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256
+  register: cluster_ssh_trust_pinned_cert
+  changed_when: false
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
+- name: Read pveproxy's served certificate fingerprint
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: >-
+      set -o pipefail;
+      openssl s_client -connect 127.0.0.1:8006 </dev/null 2>/dev/null
+      | openssl x509 -noout -fingerprint -sha256
+  register: cluster_ssh_trust_served_cert
+  changed_when: false
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
+- name: Assert pveproxy is serving the pinned certificate
+  ansible.builtin.assert:
+    that:
+      - cluster_ssh_trust_served_cert.stdout == cluster_ssh_trust_pinned_cert.stdout
+    fail_msg: >-
+      pveproxy is serving {{ cluster_ssh_trust_served_cert.stdout }} but the
+      pinned certificate at /etc/pve/local/pve-ssl.pem is
+      {{ cluster_ssh_trust_pinned_cert.stdout }} -- pveproxy is still running
+      with the certificate from before the repair. Every cross-node API call
+      to this node will keep failing TLS verification until it restarts.
+    success_msg: "pveproxy is serving the pinned certificate"
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'

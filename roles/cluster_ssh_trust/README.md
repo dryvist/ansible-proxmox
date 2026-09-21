@@ -50,6 +50,10 @@ ansible-galaxy install -r requirements.yml
   `/etc/pve/priv/authorized_keys`; if not, runs `pvecm updatecerts --force`
   (the vendor-native repair — pve-docs `pvecm(1)`) and fails closed if the
   key is still missing afterwards.
+- Restarts `pveproxy`/`pvedaemon` (handler) whenever that repair runs, and
+  asserts the certificate pveproxy is serving on `127.0.0.1:8006` matches
+  the pinned one at `/etc/pve/local/pve-ssl.pem` — `updatecerts` can
+  regenerate the file without the already-running proxy picking it up.
 - Then proves it: runs `ssh -n -o BatchMode=yes root@<peer IP> true` against
   every peer's management IP — the exact connection native migration/`pvecm`
   make — and fails closed if any peer is still unreachable. The two checks

@@ -1,0 +1,14 @@
+---
+# `pvecm updatecerts --force` can regenerate this node's certificate
+# (/etc/pve/local/pve-ssl.pem), but pveproxy and pvedaemon hold the
+# certificate they started with in memory -- they do not reload it on their
+# own. Until they restart, every TLS client (including cross-node API calls
+# from other cluster members) keeps seeing the certificate from before the
+# repair.
+- name: Restart pveproxy and pvedaemon
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - pveproxy
+    - pvedaemon

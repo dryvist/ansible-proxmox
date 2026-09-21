@@ -25,8 +25,37 @@ import subprocess
 import sys
 import tempfile
 
+import yaml
+
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TASKS = os.path.join(REPO, "roles", "cluster_ssh_trust", "tasks", "main.yml")
+HANDLERS = os.path.join(REPO, "roles", "cluster_ssh_trust", "handlers", "main.yml")
+HANDLER_NAME = "Restart pveproxy and pvedaemon"
+
+
+def check_repair_notifies_handler():
+    """The updatecerts repair task must notify the cert-restart handler, and
+    that handler must actually exist -- a notify to a typo'd or missing
+    handler name is silently a no-op, not an error."""
+    with open(TASKS) as fh:
+        tasks = yaml.safe_load(fh)
+    repair = next(
+        (t for t in tasks if "pvecm updatecerts" in str(t.get("ansible.builtin.command", {}))), None)
+    if repair is None:
+        sys.exit("FAIL: no task runs `pvecm updatecerts --force` — the role "
+                 "changed shape and this test no longer covers it")
+    notify = repair.get("notify")
+    notify_list = notify if isinstance(notify, list) else [notify]
+    if HANDLER_NAME not in notify_list:
+        sys.exit("FAIL: the updatecerts repair task does not notify %r "
+                 "(notify=%r) — pveproxy/pvedaemon won't restart after a "
+                 "certificate regeneration" % (HANDLER_NAME, notify))
+
+    with open(HANDLERS) as fh:
+        handlers = yaml.safe_load(fh) or []
+    if not any(h.get("name") == HANDLER_NAME for h in handlers):
+        sys.exit("FAIL: no handler named %r is defined in handlers/main.yml "
+                 "— the notify above is a silent no-op" % HANDLER_NAME)
 
 
 def extract_expression():
@@ -102,6 +131,9 @@ def run_case(tmp, pub_line, auth_keys_lines):
 def main():
     if subprocess.run(["which", "ansible-playbook"], capture_output=True).returncode != 0:
         sys.exit("FAIL: ansible-playbook not on PATH — run inside the nix devshell")
+
+    check_repair_notifies_handler()
+    print("updatecerts repair task notifies %r, and that handler exists  ok" % HANDLER_NAME)
 
     failures = []
     cases = [
