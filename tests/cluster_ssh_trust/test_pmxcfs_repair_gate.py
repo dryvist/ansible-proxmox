@@ -89,11 +89,11 @@ EXPR = extract_expression()
 PUB_LINE = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABfakefakefakefakefakefakefake"
 
 
-def run_case(tmp, pub_line, auth_keys_lines):
+def run_case(tmp, pub_line, known_keys_lines):
     """Render the extracted expression with ansible-playbook against fixture
     slurp-shaped content, and return the resulting boolean."""
     pub_b64 = base64.b64encode((pub_line + " root@node\n").encode()).decode()
-    auth_b64 = base64.b64encode(("\n".join(auth_keys_lines) + "\n").encode()).decode()
+    known_keys_b64 = base64.b64encode(("\n".join(known_keys_lines) + "\n").encode()).decode()
 
     result_path = os.path.join(tmp, "result.txt")
     playbook = os.path.join(tmp, "test.yml")
@@ -114,7 +114,7 @@ def run_case(tmp, pub_line, auth_keys_lines):
             "      ansible.builtin.copy:\n"
             "        dest: %r\n"
             "        content: \"{{ cluster_ssh_trust_pubkey_present }}\"\n"
-            % (pub_b64, auth_b64, EXPR, result_path)
+            % (pub_b64, known_keys_b64, EXPR, result_path)
         )
 
     result = subprocess.run(
@@ -144,9 +144,9 @@ def main():
         ("shared authorized_keys empty",
          [], False),
     ]
-    for name, auth_lines, want in cases:
+    for name, known_keys, want in cases:
         with tempfile.TemporaryDirectory() as tmp:
-            got = run_case(tmp, PUB_LINE, auth_lines)
+            got = run_case(tmp, PUB_LINE, known_keys)
         ok = got == want
         print("%-58s -> present=%s (want %s)  %s" %
               (name, got, want, "ok" if ok else "FAIL"))
