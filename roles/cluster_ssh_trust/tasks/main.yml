@@ -96,16 +96,33 @@
 # files/directories" -- this includes re-merging this node's pubkey into
 # the shared file). Only run it when this node's key is actually missing,
 # never unconditionally, so a healthy node's converge stays a true no-op.
-- name: Check whether this node's public key is present in the shared authorized_keys
-  ansible.builtin.shell:
-    executable: /bin/bash
-    cmd: >-
-      set -o pipefail;
-      pub=$(awk '{print $1, $2}' /root/.ssh/id_rsa.pub 2>/dev/null);
-      [[ -n "$pub" ]] && grep -qF "$pub" /etc/pve/priv/authorized_keys
-  register: cluster_ssh_trust_pubkey_check
-  changed_when: false
-  failed_when: false
+- name: Read this node's public key
+  ansible.builtin.slurp:
+    src: /root/.ssh/id_rsa.pub
+  register: cluster_ssh_trust_id_rsa_pub
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
+- name: Read the shared authorized_keys
+  ansible.builtin.slurp:
+    src: /etc/pve/priv/authorized_keys
+  register: cluster_ssh_trust_shared_authorized_keys
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
+- name: Determine whether this node's public key is present in the shared authorized_keys
+  ansible.builtin.set_fact:
+    cluster_ssh_trust_pubkey_present: >-
+      {{
+        (cluster_ssh_trust_id_rsa_pub.content | b64decode).split()[:2] | join(' ')
+        in (cluster_ssh_trust_shared_authorized_keys.content | b64decode)
+      }}
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
@@ -119,21 +136,45 @@
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
-    - cluster_ssh_trust_pubkey_check.rc | default(1) != 0
+    - not cluster_ssh_trust_pubkey_present
   tags:
     - cluster_ssh_trust
 
 # Fail closed: if updatecerts ran and this node's key is STILL missing from
 # the shared file, its inter-node SSH stays broken and the play must not
-# report green.
+# report green. Re-slurp both files (the repair task may have changed the
+# shared one) and re-evaluate the identical membership expression.
+- name: Re-read this node's public key after the repair attempt
+  ansible.builtin.slurp:
+    src: /root/.ssh/id_rsa.pub
+  register: cluster_ssh_trust_id_rsa_pub
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
+- name: Re-read the shared authorized_keys after the repair attempt
+  ansible.builtin.slurp:
+    src: /etc/pve/priv/authorized_keys
+  register: cluster_ssh_trust_shared_authorized_keys
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - cluster_ssh_trust
+
 - name: Assert this node's public key is present in the shared authorized_keys after repair
-  ansible.builtin.shell:
-    executable: /bin/bash
-    cmd: >-
-      set -o pipefail;
-      pub=$(awk '{print $1, $2}' /root/.ssh/id_rsa.pub 2>/dev/null);
-      [[ -n "$pub" ]] && grep -qF "$pub" /etc/pve/priv/authorized_keys
-  changed_when: false
+  ansible.builtin.assert:
+    that:
+      - >-
+        (cluster_ssh_trust_id_rsa_pub.content | b64decode).split()[:2] | join(' ')
+        in (cluster_ssh_trust_shared_authorized_keys.content | b64decode)
+    fail_msg: >-
+      this node's public key is still not present in
+      /etc/pve/priv/authorized_keys after `pvecm updatecerts --force` --
+      inter-node SSH (migration, pvecm) will keep failing for this node.
+    success_msg: "this node's public key is present in the shared authorized_keys"
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
