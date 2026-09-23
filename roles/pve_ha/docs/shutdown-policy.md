@@ -1,11 +1,11 @@
 # Cluster shutdown policy
 
 The role also owns `shutdown_policy`, which decides what happens to
-HA-managed guests when a node goes down. It lives inside the `ha` property
-string of the cluster-wide `/etc/pve/datacenter.cfg` (`ha:
-shutdown_policy=freeze`) — a bare top-level `shutdown_policy` key is outside
-the config schema and makes every `ha-manager`/`pvesh` call on the node fail
-to parse the file.
+HA-managed guests when a node goes down. It is the `ha.shutdown_policy` key
+of `/cluster/options`, set through `pvesh` rather than by editing
+`/etc/pve/datacenter.cfg` directly — a bare top-level `shutdown_policy` key
+there is outside the config schema and makes every `ha-manager`/`pvesh` call
+on the node fail to parse the file.
 
 **Unset is not neutral.** With the key absent, Proxmox falls back to
 `conditional`, whose behaviour **splits on how the node was taken down**:
@@ -33,14 +33,13 @@ variable so a cluster can move to `migrate` once its replication coverage is
 complete. `failover` and `conditional` are the other accepted values; an empty
 string leaves the key unmanaged.
 
-Only that one key is written, inside the `ha` line. `datacenter.cfg` is
-cluster-wide and carries keys this role does not own (`keyboard`, `migration`,
-bandwidth limits, ...), so `tasks/datacenter_cfg.yml` parses and merges the
-`ha` property in place rather than templating the file — a template would
-drop every unmanaged key on the first converge, and overwriting the whole `ha`
-line would drop any other `key=value` pair already inside it. Any leftover
-top-level `shutdown_policy` key from a prior release is removed.
+`tasks/datacenter_cfg.yml` reads `/cluster/options` via `pvesh get` and only
+calls `pvesh set /cluster/options -ha shutdown_policy=<value>` when the
+current value differs, so a converge with nothing to do makes no API call.
+Any leftover top-level `shutdown_policy` key in `datacenter.cfg` from a prior
+release — cluster-wide and carrying keys this role does not own (`keyboard`,
+`migration`, bandwidth limits, ...) — is removed.
 `tests/pve_ha_datacenter_cfg/verify_shutdown_policy.yml` runs that task file
-against a temporary copy and asserts the unmanaged keys and other `ha`
-sub-keys survive, the legacy top-level key is removed, and an existing policy
-is rewritten rather than duplicated.
+against a mock `pvesh` and asserts the legacy key is removed, the policy is
+set when it differs, another key already in `ha` survives, and a second pass
+against an already-correct policy calls `pvesh set` no further.

@@ -65,11 +65,10 @@ strict rule may name: [docs/ha-classes.md](docs/ha-classes.md).
 
 ## Cluster shutdown policy
 
-The role also owns `shutdown_policy`, written inside the `ha` property of the
-cluster-wide `/etc/pve/datacenter.cfg` (default `freeze`, not `migrate`) — why
-unset is not neutral, why `migrate` is only safe once every HA guest has a
-replica, and how the `ha` property is merged in place:
-[docs/shutdown-policy.md](docs/shutdown-policy.md).
+The role also owns `shutdown_policy`, set via `pvesh` on `/cluster/options`
+(default `freeze`, not `migrate`) — why unset is not neutral, why `migrate`
+is only safe once every HA guest has a replica, and why it isn't a
+`datacenter.cfg` edit: [docs/shutdown-policy.md](docs/shutdown-policy.md).
 
 ## Safety
 
@@ -106,7 +105,8 @@ No real service is touched.
 | `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
 | `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name kept for the strict node-affinity rule over the pair currently carrying it live. |
 | `pve_ha_home_rule_prefix` | `pve-ha-home` | Prefix of the per-home-node strict pins applied to every replica-less HA guest. |
-| `pve_ha_shutdown_policy` | `freeze` | Cluster `shutdown_policy`, inside `datacenter.cfg`'s `ha` property. `migrate` needs every guest to have a replica. |
+| `pve_ha_shutdown_policy` | `freeze` | Cluster `shutdown_policy`, set via `pvesh`. `migrate` needs every guest to have a replica. |
+| `pve_ha_pvesh_bin` | `pvesh` | Override point so the offline test can point this at a mock binary. |
 | `pve_ha_datacenter_cfg_path` | `/etc/pve/datacenter.cfg` | Path to the cluster-wide config; a variable so the offline test can target a temp copy. |
 | `pve_ha_manage_all` | `false` | Also enroll the rest of the estate in HA. Widens enrollment only — the home pin applies either way. |
 
