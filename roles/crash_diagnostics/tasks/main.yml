@@ -457,3 +457,35 @@
   tags:
     - crash_diagnostics
     - memtest
+
+# =============================================================================
+# PANIC DUMP FORWARDING (systemd-pstore)
+# =============================================================================
+# By default systemd-pstore only copies EFI/ACPI ERST panic dumps to
+# /var/lib/systemd/pstore/, a file that is never shipped to Splunk. Setting
+# Storage=journal makes it log the dump content into the journal at boot,
+# which the existing pve_syslog_forwarder role already forwards.
+
+- name: Ensure pstore.conf.d drop-in directory exists
+  ansible.builtin.file:
+    path: "{{ crash_diagnostics_pstore_conf_dropin | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - crash_diagnostics
+    - pstore
+
+- name: Deploy systemd-pstore journal-storage drop-in
+  ansible.builtin.template:
+    src: pstore-journal.conf.j2
+    dest: "{{ crash_diagnostics_pstore_conf_dropin }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - crash_diagnostics
+    - pstore
