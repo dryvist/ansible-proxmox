@@ -1,7 +1,33 @@
 ---
 # hba_storcli tasks — install perccli64 (once staged, see defaults) and assert
 # every physical drive is Non-RAID/JBOD passthrough. Skipped in Docker
-# (molecule) where there is no real controller to query.
+# (molecule) where there is no real controller to query, AND on any node
+# whose PCI bus has no MegaRAID/PERC-family controller (Broadcom/LSI/Avago,
+# PCI vendor 1000, RAID-bus-controller class) — a desktop/workstation node has
+# no such card and must never be asked to install or run perccli64. Detected
+# from the live PCI bus, not a per-host exception list, so a node's hardware
+# decides this on its own regardless of which inventory group it sits in.
+
+- name: Detect a MegaRAID/PERC-family controller on the PCI bus
+  ansible.builtin.command:
+    cmd: "lspci -d 1000: -n"
+  register: hba_storcli_pci_scan
+  changed_when: false
+  failed_when: false
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - hba_storcli
+
+- name: Record whether a MegaRAID/PERC-family controller is present
+  ansible.builtin.set_fact:
+    hba_storcli_controller_present: "{{ (hba_storcli_pci_scan.stdout | default('', true) | trim | length) > 0 }}"
+  when:
+    - hba_storcli_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - hba_storcli
 
 - name: Check whether a perccli64 binary is already present
   ansible.builtin.stat:
@@ -11,6 +37,7 @@
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_controller_present | default(false)
   tags:
     - hba_storcli
 
@@ -26,6 +53,7 @@
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_controller_present | default(false)
   tags:
     - hba_storcli
 
@@ -41,6 +69,7 @@
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_controller_present | default(false)
     - hba_storcli_resolved_path | default('', true) | length == 0
     - hba_storcli_package_path | default('', true) | length == 0
   tags:
@@ -53,6 +82,7 @@
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_controller_present | default(false)
     - hba_storcli_resolved_path | default('', true) | length == 0
     - hba_storcli_package_path | default('', true) | length > 0
   tags:
@@ -66,6 +96,7 @@
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_controller_present | default(false)
     - hba_storcli_resolved_path | default('', true) | length == 0
     - hba_storcli_package_path | default('', true) | length > 0
   tags:
@@ -85,6 +116,7 @@
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_controller_present | default(false)
   tags:
     - hba_storcli
 
@@ -98,6 +130,7 @@
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_controller_present | default(false)
     - hba_storcli_resolved_path | default('', true) | length > 0
   tags:
     - hba_storcli
@@ -120,6 +153,7 @@
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+    - hba_storcli_controller_present | default(false)
     - hba_storcli_resolved_path | default('', true) | length > 0
     - hba_storcli_drive_query.stdout | default('', true) | length > 0
   tags:
