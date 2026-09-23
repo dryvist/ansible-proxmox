@@ -31,6 +31,15 @@
       {{ (pve_ha_rules_raw.stdout | from_json)
          | map(attribute='rule') | list }}
 
+# Consumed by reconcile_node_affinity_rule.yml (here and in
+# estate_wide_enrollment.yml) to find a resource's PREVIOUS node-affinity
+# rule when its membership changes.
+- name: Parse existing node-affinity rules with their resource lists
+  ansible.builtin.set_fact:
+    pve_ha_node_affinity_rules_raw: >-
+      {{ (pve_ha_rules_raw.stdout | from_json)
+         | selectattr('type', 'equalto', 'node-affinity') | list }}
+
 - name: Add anti-affinity (negative) rules for redundant pairs
   ansible.builtin.command: >-
     ha-manager rules add resource-affinity {{ item.name }}
@@ -141,6 +150,16 @@
   when:
     - (pve_ha_replication_rules | default([]) | selectattr('ineligible') | list) | length > 0
     - not (pve_ha_fail_on_unresolved | bool)
+
+- name: Reconcile stale node-affinity membership before claiming replication-pair rules
+  ansible.builtin.include_tasks: reconcile_node_affinity_rule.yml
+  loop: "{{ pve_ha_replication_rules | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    reconcile_name: "{{ item.name }}"
+    reconcile_sids: "{{ item.sids }}"
+  when: item.sids | length > 0
 
 - name: Pin each replication pair's viable guests (strict; add if absent)
   ansible.builtin.command: >-

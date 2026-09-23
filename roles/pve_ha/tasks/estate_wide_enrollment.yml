@@ -160,6 +160,15 @@
 
 # One strict rule per home node rather than one per guest: same constraint,
 # a rule set an operator can read.
+- name: Reconcile stale node-affinity membership before claiming home-node pins
+  ansible.builtin.include_tasks: reconcile_node_affinity_rule.yml
+  loop: "{{ pve_ha_home_pin_entries | default([]) | groupby('node') }}"
+  loop_control:
+    label: "{{ item.0 }}"
+  vars:
+    reconcile_name: "{{ pve_ha_home_rule_prefix }}-{{ item.0 }}"
+    reconcile_sids: "{{ item.1 | map(attribute='sid') | list }}"
+
 - name: Pin each home node's guests to that node (strict; add if absent)
   ansible.builtin.command: >-
     ha-manager rules add node-affinity
