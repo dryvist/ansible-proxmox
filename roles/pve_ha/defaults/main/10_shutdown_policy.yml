@@ -26,8 +26,9 @@
 # Other accepted values are `failover` and `conditional`; an empty string
 # leaves the key unmanaged.
 #
-# Only this key is written — datacenter.cfg is cluster-wide and carries keys
-# this role does not own (see tasks/datacenter_cfg.yml).
+# Written inside the `ha` property string of datacenter.cfg (`ha:
+# shutdown_policy=...`), not as a top-level key — see tasks/datacenter_cfg.yml.
+# datacenter.cfg is cluster-wide and carries keys this role does not own.
 pve_ha_shutdown_policy: freeze
 
 pve_ha_datacenter_cfg_path: /etc/pve/datacenter.cfg

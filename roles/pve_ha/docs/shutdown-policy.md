@@ -1,8 +1,11 @@
 # Cluster shutdown policy
 
-The role also owns `shutdown_policy` in the cluster-wide
-`/etc/pve/datacenter.cfg`, which decides what happens to HA-managed guests when
-a node goes down.
+The role also owns `shutdown_policy`, which decides what happens to
+HA-managed guests when a node goes down. It lives inside the `ha` property
+string of the cluster-wide `/etc/pve/datacenter.cfg` (`ha:
+shutdown_policy=freeze`) — a bare top-level `shutdown_policy` key is outside
+the config schema and makes every `ha-manager`/`pvesh` call on the node fail
+to parse the file.
 
 **Unset is not neutral.** With the key absent, Proxmox falls back to
 `conditional`, whose behaviour **splits on how the node was taken down**:
@@ -30,10 +33,14 @@ variable so a cluster can move to `migrate` once its replication coverage is
 complete. `failover` and `conditional` are the other accepted values; an empty
 string leaves the key unmanaged.
 
-Only that one key is written. `datacenter.cfg` is cluster-wide and carries keys
-this role does not own (`keyboard`, `migration`, bandwidth limits, ...), so
-`tasks/datacenter_cfg.yml` merges the single line in place rather than
-templating the file — a template would drop every unmanaged key on the first
-converge. `tests/pve_ha_datacenter_cfg/verify_shutdown_policy.yml` runs that
-task file against a temporary copy and asserts the unmanaged keys survive and
-an existing policy is rewritten rather than duplicated.
+Only that one key is written, inside the `ha` line. `datacenter.cfg` is
+cluster-wide and carries keys this role does not own (`keyboard`, `migration`,
+bandwidth limits, ...), so `tasks/datacenter_cfg.yml` parses and merges the
+`ha` property in place rather than templating the file — a template would
+drop every unmanaged key on the first converge, and overwriting the whole `ha`
+line would drop any other `key=value` pair already inside it. Any leftover
+top-level `shutdown_policy` key from a prior release is removed.
+`tests/pve_ha_datacenter_cfg/verify_shutdown_policy.yml` runs that task file
+against a temporary copy and asserts the unmanaged keys and other `ha`
+sub-keys survive, the legacy top-level key is removed, and an existing policy
+is rewritten rather than duplicated.

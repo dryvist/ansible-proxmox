@@ -1,13 +1,15 @@
----
 # ---------------------------------------------------------------------------
 # datacenter.cfg is CLUSTER-WIDE and carries keys pve_ha does not own. The role
-# therefore merges one key instead of templating the file, and this pins that:
-# unmanaged keys survive, an existing shutdown_policy is UPDATED rather than
-# duplicated, and a second pass reports no change.
+# therefore merges one key inside the `ha` property string instead of
+# templating the file, and this pins that: unmanaged top-level keys survive, a
+# stray top-level shutdown_policy key (the invalid legacy form) is removed, an
+# existing `ha` line's OTHER key=value pairs survive, and a second pass reports
+# no further content change.
 #
 # Runs the role's OWN tasks/datacenter_cfg.yml against a temp file, so it cannot
 # pass against a stale copy of the logic.
 # ---------------------------------------------------------------------------
+---
 - name: Verify pve_ha shutdown-policy merge into datacenter.cfg
   hosts: localhost
   become: false
@@ -24,12 +26,13 @@
         state: directory
         mode: "0755"
 
-    - name: Create a datacenter.cfg carrying only unmanaged keys
+    - name: Create a datacenter.cfg carrying only unmanaged keys plus the invalid legacy key
       ansible.builtin.copy:
         dest: "{{ pve_ha_datacenter_cfg_path }}"
         content: |
           keyboard: en-us
           migration: secure
+          shutdown_policy: freeze
         mode: "0640"
 
     - name: Merge the shutdown policy into it
@@ -42,22 +45,25 @@
         src: "{{ pve_ha_datacenter_cfg_path }}"
       register: pve_ha_merged
 
-    - name: Assert the policy was added and the unmanaged keys survived
+    - name: Assert the invalid top-level key is gone and the ha property was added
       ansible.builtin.assert:
         that:
-          - "'shutdown_policy: freeze' in (pve_ha_merged.content | b64decode)"
+          - "'ha: shutdown_policy=freeze' in (pve_ha_merged.content | b64decode)"
           - "'keyboard: en-us' in (pve_ha_merged.content | b64decode)"
           - "'migration: secure' in (pve_ha_merged.content | b64decode)"
+          - >-
+            (pve_ha_merged.content | b64decode).splitlines()
+            | select('match', '^[ \t]*shutdown_policy[ \t]*:') | list | length == 0
         fail_msg: >-
-          The merge did not add shutdown_policy, or it dropped a key the role
-          does not own.
+          The merge left the invalid top-level shutdown_policy key in place, did
+          not add the ha property, or dropped a key the role does not own.
 
-    - name: Re-run against a file that already declares a DIFFERENT policy
+    - name: Re-run against a file whose ha property already carries another key and a different policy
       ansible.builtin.copy:
         dest: "{{ pve_ha_datacenter_cfg_path }}"
         content: |
           keyboard: en-us
-          shutdown_policy: conditional
+          ha: some_other_key=1,shutdown_policy=conditional
         mode: "0640"
 
     - name: Merge again
@@ -70,17 +76,35 @@
         src: "{{ pve_ha_datacenter_cfg_path }}"
       register: pve_ha_updated
 
-    - name: Assert the existing key was rewritten, not duplicated
+    - name: Assert the policy was rewritten in place and the other ha key survived
       ansible.builtin.assert:
         that:
           - >-
             (pve_ha_updated.content | b64decode).splitlines()
-            | select('match', '^\s*shutdown_policy\s*:') | list | length == 1
-          - "'shutdown_policy: freeze' in (pve_ha_updated.content | b64decode)"
+            | select('match', '^[ \t]*ha[ \t]*:') | list | length == 1
+          - "'shutdown_policy=freeze' in (pve_ha_updated.content | b64decode)"
+          - "'some_other_key=1' in (pve_ha_updated.content | b64decode)"
           - "'conditional' not in (pve_ha_updated.content | b64decode)"
           - "'keyboard: en-us' in (pve_ha_updated.content | b64decode)"
         fail_msg: >-
-          A pre-existing shutdown_policy was duplicated or left unchanged.
+          A pre-existing ha property was duplicated, lost its other key, or the
+          policy was not updated.
+
+    - name: Merge a third time to prove idempotency
+      ansible.builtin.include_role:
+        name: pve_ha
+        tasks_from: datacenter_cfg.yml
+
+    - name: Read the file after the idempotent pass
+      ansible.builtin.slurp:
+        src: "{{ pve_ha_datacenter_cfg_path }}"
+      register: pve_ha_idempotent
+
+    - name: Assert a third pass changes nothing
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_idempotent.content | b64decode) == (pve_ha_updated.content | b64decode)
+        fail_msg: A converge that changed nothing should not have changed the file.
 
     - name: Remove the temporary file
       ansible.builtin.file:

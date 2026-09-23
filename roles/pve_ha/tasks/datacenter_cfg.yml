@@ -1,19 +1,78 @@
 ---
-# Cluster-wide shutdown policy in /etc/pve/datacenter.cfg.
+# Cluster-wide HA shutdown policy in /etc/pve/datacenter.cfg.
 #
-# The key is edited in place rather than templated: datacenter.cfg is a LIVE
-# cluster-wide file carrying keys this role does not own (keyboard, language,
-# migration, bandwidth limits, ...). A whole-file template would silently drop
-# every one of them on the first converge.
+# The value lives INSIDE the `ha` property string (`ha: shutdown_policy=freeze`),
+# not as a bare top-level `shutdown_policy` key. A top-level key is outside the
+# datacenter.cfg schema: PVE refuses to parse the file at all, every
+# `ha-manager`/`pvesh` call on the node then fails with a schema error, and the
+# shutdown policy silently stays at the schema default (`conditional`) instead
+# of whatever this role intended.
+#
+# The `ha` line is parsed and merged rather than templated whole, so any other
+# `key=value` pair already inside it survives a converge — datacenter.cfg is a
+# LIVE cluster-wide file carrying keys this role does not own (keyboard,
+# language, migration, bandwidth limits, ...); a whole-file template would
+# silently drop every one of them on the first converge.
 #
 # Path is a variable so tests/pve_ha_datacenter_cfg/ can run THIS file against a
 # temporary copy and prove the merge preserves unmanaged keys.
 
-- name: Declare the cluster shutdown policy
+- name: Remove the invalid legacy top-level shutdown_policy key
   ansible.builtin.lineinfile:
     path: "{{ pve_ha_datacenter_cfg_path }}"
-    regexp: '^\s*shutdown_policy\s*:'
-    line: "shutdown_policy: {{ pve_ha_shutdown_policy }}"
+    regexp: '^[ \t]*shutdown_policy[ \t]*:'
+    state: absent
+  when: pve_ha_shutdown_policy | length > 0
+
+- name: Check whether datacenter.cfg already exists
+  ansible.builtin.stat:
+    path: "{{ pve_ha_datacenter_cfg_path }}"
+  register: pve_ha_datacenter_cfg_stat
+  when: pve_ha_shutdown_policy | length > 0
+
+- name: Read datacenter.cfg to preserve any other keys already in ha
+  ansible.builtin.slurp:
+    src: "{{ pve_ha_datacenter_cfg_path }}"
+  register: pve_ha_datacenter_cfg_raw
+  when:
+    - pve_ha_shutdown_policy | length > 0
+    - pve_ha_datacenter_cfg_stat.stat.exists
+
+- name: Extract the current ha property value, if any
+  ansible.builtin.set_fact:
+    pve_ha_current_ha_value: >-
+      {{
+        (
+          (pve_ha_datacenter_cfg_raw.content | b64decode)
+          if pve_ha_datacenter_cfg_stat.stat.exists else ''
+        )
+        | regex_search('^[ \t]*ha[ \t]*:[ \t]*(.*)$', '\1', multiline=True)
+        | default([''], true)
+        | first
+      }}
+  when: pve_ha_shutdown_policy | length > 0
+
+- name: Strip any existing shutdown_policy pair, keeping other ha keys
+  ansible.builtin.set_fact:
+    pve_ha_other_ha_keys: >-
+      {{
+        pve_ha_current_ha_value
+        | regex_replace('(^|,)[ \t]*shutdown_policy[ \t]*=[ \t]*[^,]*', '')
+        | trim(',')
+      }}
+  when: pve_ha_shutdown_policy | length > 0
+
+- name: Declare the cluster HA shutdown policy
+  ansible.builtin.lineinfile:
+    path: "{{ pve_ha_datacenter_cfg_path }}"
+    regexp: '^[ \t]*ha[ \t]*:'
+    line: >-
+      ha: {{
+        (
+          ([pve_ha_other_ha_keys] if pve_ha_other_ha_keys | length > 0 else [])
+          + ['shutdown_policy=' ~ pve_ha_shutdown_policy]
+        ) | join(',')
+      }}
     create: true
     # pmxcfs fixes /etc/pve files at 0640; stating it keeps a create on a node
     # that has no datacenter.cfg yet consistent with the ones that do.
