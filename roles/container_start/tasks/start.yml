@@ -22,13 +22,15 @@
     _live: "{{ container_start_identity_info.proxmox_vms[0] }}"
 
 - name: "Start the container on its live node: {{ container_start_target.key }}"
-  ansible.builtin.raw: "pct start {{ container_start_target.value.vmid | int }}"
+  ansible.builtin.command:
+    argv: [pct, start, "{{ container_start_target.value.vmid | int }}"]
   delegate_to: "{{ container_start_identity_info.proxmox_vms[0].node }}"
   changed_when: true
   when: container_start_identity_info.proxmox_vms[0].status != 'running'
 
 - name: "Verify the container reaches running: {{ container_start_target.key }}"
-  ansible.builtin.raw: "pct status {{ container_start_target.value.vmid | int }}"
+  ansible.builtin.command:
+    argv: [pct, status, "{{ container_start_target.value.vmid | int }}"]
   delegate_to: "{{ container_start_identity_info.proxmox_vms[0].node }}"
   register: container_start_verify
   changed_when: false
