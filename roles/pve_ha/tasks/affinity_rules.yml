@@ -2,14 +2,19 @@
 # Part 2 of 3 (see main.yml). Anti-affinity rules for redundant pairs, then
 # the strict node-affinity pin that keeps singleton app guests on the node
 # holding their pvesr replica.
-- name: Resolve anti-affinity rule SID sets (present members only)
+# ha-manager rejects a resource-affinity rule naming a guest that is not
+# itself an HA-managed resource, so a group derived past the tier-0 set
+# (e.g. openbao-voters, consensus_membership.yml) must only reference
+# members already added to HA (pve_ha_managed_sids) — same as postgres-pair.
+- name: Resolve anti-affinity rule SID sets (HA-managed members only)
   ansible.builtin.set_fact:
     pve_ha_affinity_rules: >-
       {{ pve_ha_affinity_rules | default([]) + [ {
            'name': item.name,
-           'sids': (item.hostnames | select('in', pve_ha_vmid_by_host)
-                    | map('extract', pve_ha_vmid_by_host) | map('string')
-                    | map('regex_replace', '^(.+)$', 'ct:\1') | list)
+           'sids': ((item.hostnames | select('in', pve_ha_vmid_by_host)
+                     | map('extract', pve_ha_vmid_by_host) | map('string')
+                     | map('regex_replace', '^(.+)$', 'ct:\1') | list)
+                    | select('in', pve_ha_managed_sids) | list)
          } ] }}
   loop: "{{ pve_ha_anti_affinity_groups }}"
   loop_control:
