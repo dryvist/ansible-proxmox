@@ -1,6 +1,17 @@
 ---
 # Group variables for Proxmox VE servers
 
+# The ONE Proxmox login user, used for every Proxmox SSH and UI auth path
+# (ansible_user below). Not the API token owner (pve_cluster_api_user) --
+# that is a separate identity. Source: OpenBao secret/infrastructure/proxmox
+# PROXMOX_USER, exported to this env var by the run wrapper.
+proxmox_user: "{{ lookup('env', 'PROXMOX_USER') | default('root', true) }}"
+
+# The realm PVE authenticates the login user against. A separate, hard-coded
+# constant -- never stored joined with proxmox_user. Any "user@realm" string
+# (e.g. for the Proxmox API) is generated from the two at the point of use.
+proxmox_realm: pam
+
 # Enables roles/pve_ha (see playbooks/site.yml, which now imports playbooks/ha.yml
 # on every converge). Previously this only existed as a hand-typed `-e
 # pve_ha_enabled=true` on a standalone playbook that site.yml never included, so
