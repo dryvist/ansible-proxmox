@@ -1,8 +1,6 @@
 {
   "domain": "example.com",
-  "constants": {
-    "proxmox_user": "root"
-  },
+  "proxmox_user": "root",
   "splunk_vm": {
     "splunk": {
       "ansible_connection": "ssh",

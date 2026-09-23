@@ -240,16 +240,6 @@
         vms_from_tofu: "{{ tofu_data.vms | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
-    # Estate-wide scalar constants (currently just the Proxmox login user),
-    # published once by tofu-proxmox rather than duplicated per consumer.
-    # Pass-through like containers_from_tofu/vms_from_tofu above; group_vars
-    # resolves the specific field it needs and fails loudly if absent.
-    - name: Inject OpenTofu constants onto proxmox hosts
-      ansible.builtin.add_host:
-        name: "{{ item }}"
-        proxmox_constants_from_tofu: "{{ tofu_data.constants | default({}) }}"
-      loop: "{{ groups['proxmox'] | default([]) }}"
-
     # The cluster's primary node, by name. Node identity used to come from
     # environment variables that named each node by a positional ordinal; a
     # value that drifted resolved to a placeholder and the consuming task
@@ -257,10 +247,14 @@
     # from. The desired state already names this node, so it is the only
     # sensible source. Empty when absent (test fixture) — group_vars asserts on
     # it rather than substituting a default.
-    - name: Inject the OpenTofu primary node name onto proxmox hosts
+    #
+    # The Proxmox login user is a sibling of proxmox_node in the published
+    # inventory. Same pass-through, same empty-when-absent contract.
+    - name: Inject the OpenTofu primary node name and login user onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
         primary_node_from_tofu: "{{ tofu_data.proxmox_node | default('') }}"
+        proxmox_user_from_tofu: "{{ tofu_data.proxmox_user | default('') }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
     # Estate domain, so host_vars can build guest FQDNs (e.g. the

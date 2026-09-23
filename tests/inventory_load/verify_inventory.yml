@@ -55,11 +55,11 @@
     - name: Assert pve-w1700 host received the OpenTofu-published Proxmox login user
       ansible.builtin.assert:
         that:
-          - hostvars['pve-w1700'].proxmox_constants_from_tofu.proxmox_user == "root"
+          - hostvars['pve-w1700'].proxmox_user_from_tofu == "root"
           - hostvars['pve-w1700'].proxmox_user == "root"
         fail_msg: >-
-          load_tofu.yml did not inject tofu_data.constants, or group_vars did
-          not derive proxmox_user from it.
+          load_tofu.yml did not inject tofu_data.proxmox_user, or group_vars
+          did not derive proxmox_user from it.
 
     - name: Assert the storage node declares a snapshot policy for the state it holds
       ansible.builtin.assert:

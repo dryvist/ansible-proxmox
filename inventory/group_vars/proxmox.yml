@@ -1,19 +1,12 @@
 ---
 # Group variables for Proxmox VE servers
 
-# The ONE Proxmox login user, used for every Proxmox SSH and UI auth path
-# (ansible_user below). Not the API token owner (pve_cluster_api_user) --
-# that is a separate identity. Published by tofu-proxmox (deployment.json
-# "proxmox_user") and injected by playbooks/load_tofu.yml, the same way
-# containers_from_tofu/vms_from_tofu are -- not an env var, and deliberately
-# no literal default: a hidden fallback user is exactly what this variable
-# exists to eliminate.
-proxmox_user: >-
-  {{ (proxmox_constants_from_tofu | default({}, true)).proxmox_user
-     | mandatory('proxmox_constants_from_tofu is unset, so the Proxmox login
-       user cannot be resolved. Run playbooks/load_tofu.yml — it targets
-       localhost, so any --limit must include localhost. Refusing to guess a
-       login user.') }}
+# The ONE Proxmox login user (ansible_user below), not the API token owner
+# (pve_cluster_api_user). Published by tofu-proxmox, top-level sibling of
+# proxmox_node, injected by playbooks/load_tofu.yml. `| mandatory` never
+# fires on the empty string a missing key resolves to, so this uses the same
+# reject/first idiom as proxmox_node_names.primary below -- no literal default.
+proxmox_user: "{{ [proxmox_user_from_tofu | default('')] | reject('equalto', '') | list | first }}"
 
 # Enables roles/pve_ha (see playbooks/site.yml, which now imports playbooks/ha.yml
 # on every converge). Previously this only existed as a hand-typed `-e
