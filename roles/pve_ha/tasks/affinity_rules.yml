@@ -31,9 +31,7 @@
       {{ (pve_ha_rules_raw.stdout | from_json)
          | map(attribute='rule') | list }}
 
-# Consumed by reconcile_node_affinity_rule.yml (here and in
-# estate_wide_enrollment.yml) to find a resource's PREVIOUS node-affinity
-# rule when its membership changes.
+# Consumed by the stale-membership reconciliation pass below.
 - name: Parse existing node-affinity rules with their resource lists
   ansible.builtin.set_fact:
     pve_ha_node_affinity_rules_raw: >-
@@ -151,15 +149,102 @@
     - (pve_ha_replication_rules | default([]) | selectattr('ineligible') | list) | length > 0
     - not (pve_ha_fail_on_unresolved | bool)
 
-- name: Reconcile stale node-affinity membership before claiming replication-pair rules
-  ansible.builtin.include_tasks: reconcile_node_affinity_rule.yml
-  loop: "{{ pve_ha_replication_rules | default([]) }}"
+# Resolved here (not estate_wide_enrollment.yml, part 3) so the single
+# reconciliation pass below sees the FULL declared node-affinity set.
+- name: Resolve the home-pin scope
+  ansible.builtin.include_tasks: home_pin_scope.yml
+
+- name: Project container home-pinned entries to {hostname, node, sid}
+  ansible.builtin.set_fact:
+    pve_ha_home_pin_entries: >-
+      {{ (pve_ha_home_pin_entries | default([])) + [ {
+           'hostname': item.key,
+           'node': item.value.node,
+           'sid': 'ct:' ~ (item.value.ansible_pct_vmid | string)
+         } ] }}
+  loop: "{{ pve_ha_home_entries | default([]) }}"
   loop_control:
-    label: "{{ item.name }}"
-  vars:
-    reconcile_name: "{{ item.name }}"
-    reconcile_sids: "{{ item.sids }}"
-  when: item.sids | length > 0
+    label: "{{ item.key }}"
+
+- name: Project VM home-pinned entries to {hostname, node, sid}
+  ansible.builtin.set_fact:
+    pve_ha_home_pin_entries: >-
+      {{ (pve_ha_home_pin_entries | default([])) + [ {
+           'hostname': item.key,
+           'node': item.value.node,
+           'sid': 'vm:' ~ (item.value.vmid | string)
+         } ] }}
+  loop: "{{ pve_ha_home_vm_entries | default([]) }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Name each home-pin node's node-affinity rule
+  ansible.builtin.set_fact:
+    pve_ha_home_node_affinity_groups: >-
+      {{ pve_ha_home_node_affinity_groups | default([]) + [ {
+           'name': pve_ha_home_rule_prefix ~ '-' ~ item.0,
+           'sids': item.1 | map(attribute='sid') | list
+         } ] }}
+  loop: "{{ pve_ha_home_pin_entries | default([]) | groupby('node') }}"
+  loop_control:
+    label: "{{ item.0 }}"
+
+# A resource may belong to only one node-affinity rule; a guest's rule can
+# change between converges (new/moved replication target, a home pin gaining
+# a replica). One pass over a single live snapshot strips it from its old
+# rule before the new one claims it below — never two passes, which could
+# read a stale copy of a rule already shrunk by an earlier pass.
+- name: Build this converge's full declared node-affinity rule set
+  ansible.builtin.set_fact:
+    pve_ha_declared_node_affinity: "{{ pve_ha_replication_rules | default([]) + pve_ha_home_node_affinity_groups | default([]) }}"
+
+- name: Map each declared SID to its owning node-affinity rule this converge
+  ansible.builtin.set_fact:
+    pve_ha_sid_owner: >-
+      {{ dict((pve_ha_declared_node_affinity | subelements('sids', skip_missing=True) | map(attribute='1') | list)
+              | zip(pve_ha_declared_node_affinity | subelements('sids', skip_missing=True) | map(attribute='0.name') | list)) }}
+
+- name: Resolve each live node-affinity rule's membership after reassignment
+  ansible.builtin.set_fact:
+    pve_ha_node_affinity_reconciled: >-
+      {{ pve_ha_node_affinity_reconciled | default([]) + [ {
+           'rule': item.rule,
+           'nodes': item.nodes,
+           'strict': item.strict | default(0),
+           'original': item.resources | split(','),
+           'kept': (item.resources | split(',')
+                    | reject('in', pve_ha_sid_owner | dict2items
+                             | rejectattr('value', 'equalto', item.rule)
+                             | map(attribute='key') | list)
+                    | list)
+         } ] }}
+  loop: "{{ pve_ha_node_affinity_rules_raw }}"
+  loop_control:
+    label: "{{ item.rule }}"
+
+- name: Shrink a node-affinity rule whose members were reassigned to another rule
+  ansible.builtin.command: >-
+    ha-manager rules set node-affinity {{ item.rule }}
+    --resources {{ item.kept | join(',') }}
+    --nodes {{ item.nodes }}
+    --strict {{ item.strict }}
+  loop: "{{ pve_ha_node_affinity_reconciled | default([]) }}"
+  loop_control:
+    label: "{{ item.rule }}"
+  when:
+    - (item.kept | length) > 0
+    - (item.kept | length) < (item.original | length)
+  changed_when: true
+
+- name: Remove a node-affinity rule left with no members after reassignment
+  ansible.builtin.command: ha-manager rules remove {{ item.rule }}
+  loop: "{{ pve_ha_node_affinity_reconciled | default([]) }}"
+  loop_control:
+    label: "{{ item.rule }}"
+  when:
+    - (item.kept | length) == 0
+    - (item.original | length) > 0
+  changed_when: true
 
 - name: Pin each replication pair's viable guests (strict; add if absent)
   ansible.builtin.command: >-
