@@ -47,7 +47,10 @@ zfs_fault_alert_openbao_mount: secret
 zfs_fault_alert_openbao_path: apps/zammad
 zfs_fault_alert_openbao_key: zammad_hermes_api_token
 
-# Passed as extra vars at converge time (BAO_ADDR / a short-lived read token),
-# never committed. Mandatory when the role is enabled.
-zfs_fault_alert_openbao_addr: ""
-zfs_fault_alert_openbao_token: ""
+# Read from the controller's own environment, same as
+# roles/zammad/tasks/publish_mcp.yml's zammad_token_openbao_addr/token
+# (ansible-proxmox-apps): the Semaphore plane already exports BAO_ADDR and a
+# short-lived read token into every converge's environment, so there is
+# nothing to pass by hand here.
+zfs_fault_alert_openbao_addr: "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
+zfs_fault_alert_openbao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"

@@ -11,18 +11,18 @@
   tags:
     - zfs_fault_alert
   block:
-    - name: Assert the OpenBao read credentials were passed as extra vars
+    - name: Assert the OpenBao address/token resolved and the Zammad customer was passed
       ansible.builtin.assert:
         that:
           - zfs_fault_alert_openbao_addr | length > 0
           - zfs_fault_alert_openbao_token | length > 0
           - zfs_fault_alert_zammad_customer | length > 0
         fail_msg: >-
-          zfs_fault_alert is enabled but zfs_fault_alert_openbao_addr /
-          zfs_fault_alert_openbao_token / zfs_fault_alert_zammad_customer
-          were not passed as extra vars. These are never committed -- pass
-          them at converge time the same way roles/zammad/tasks/publish_mcp.yml
-          does.
+          zfs_fault_alert is enabled but zfs_fault_alert_openbao_addr/token
+          did not resolve from the controller's BAO_ADDR/BAO_TOKEN
+          environment (see defaults/main.yml), and/or
+          zfs_fault_alert_zammad_customer was not passed as an extra var --
+          it is operator-specific and never committed.
 
     - name: Read the shared Zammad token from OpenBao
       ansible.builtin.uri:
