@@ -2,6 +2,35 @@
 - name: Validate and resolve the container start allowlist
   ansible.builtin.include_tasks: preflight.yml
 
+# Any node answers /cluster/resources for the whole cluster. raw needs no
+# Python or remote tmp dir on the node.
+- name: Read live container placement from the cluster
+  ansible.builtin.raw: pvesh get /cluster/resources --type vm --output-format json
+  delegate_to: "{{ item }}"
+  register: container_start_placement
+  loop: "{{ container_start_nodes }}"
+  changed_when: false
+  failed_when: false
+  ignore_unreachable: true
+  when: container_start_services | length > 0
+
+- name: Parse the first placement answer
+  ansible.builtin.set_fact:
+    container_start_live: >-
+      {{ (container_start_placement.results
+          | selectattr('rc', 'defined') | selectattr('rc', 'equalto', 0)
+          | map(attribute='stdout') | first | default('[]')) | from_json }}
+  when: container_start_services | length > 0
+
+- name: Assert a node answered the placement read
+  ansible.builtin.assert:
+    that:
+      - container_start_live | length > 0
+    fail_msg: >-
+      No node in {{ container_start_nodes }} answered /cluster/resources; no
+      container was started.
+  when: container_start_services | length > 0
+
 - name: Start and verify explicitly approved containers
   ansible.builtin.include_tasks: start.yml
   loop: "{{ container_start_resolved }}"
