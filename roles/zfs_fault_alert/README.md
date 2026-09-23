@@ -54,11 +54,11 @@ existing `zammad_hermes_api_token` (`secret/apps/zammad`) and the published
 Zammad URL (`secret/ai/mcp/zammad` -> `ZAMMAD_MCP_URL`) -- no new credential
 is minted for this one more consumer.
 
-At converge time, still pass:
-
-- `zfs_fault_alert_zammad_customer` -- the ticket customer email. Not
-  committed; this repo is public and the value is operator-specific, and
-  OpenBao's `secret/apps/zammad` carries no such field to read instead.
+No customer field is sent on the ticket -- the same convention as the
+`hermes`/`svc-splunk`/`svc-ntfy` service users in
+`roles/zammad/files/zammad_bootstrap.rb` (ansible-proxmox-apps): Zammad
+defaults an omitted customer to the API token's own user, and this role
+reuses the `hermes` token, whose user already carries the Customer role.
 
 ## Verification
 

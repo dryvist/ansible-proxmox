@@ -37,7 +37,12 @@ zfs_fault_alert_zammad_priority_id: 4
 # real value passed as an extra var at converge time, sourced from the vault/
 # OpenBao-backed group_vars rather than committed literal).
 zfs_fault_alert_zammad_url: ""
-zfs_fault_alert_zammad_customer: ""
+
+# No customer field is sent to Zammad -- the ticket's customer is derived,
+# same convention as roles/zammad/files/zammad_bootstrap.rb's hermes/splunk/
+# ntfy service users: Zammad makes an omitted customer default to the API
+# token's own user, and zfs_fault_alert_openbao_key already reuses the hermes
+# token, whose user carries the Customer role.
 
 # OpenBao KV path holding zammad_hermes_api_token, read at converge time the
 # same way roles/zammad/tasks/publish_mcp.yml does -- reuses the existing

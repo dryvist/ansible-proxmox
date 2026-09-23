@@ -16,7 +16,6 @@ set -uo pipefail
 TOKEN_FILE=/etc/zfs-fault-alert/zammad-token
 ZAMMAD_URL="{{ zfs_fault_alert_zammad_url }}"
 ZAMMAD_GROUP="{{ zfs_fault_alert_zammad_group }}"
-ZAMMAD_CUSTOMER="{{ zfs_fault_alert_zammad_customer }}"
 ZAMMAD_PRIORITY_ID="{{ zfs_fault_alert_zammad_priority_id }}"
 
 REASON="${1:?usage: zfs-fault-alert.sh <reason> <detail...>}"
@@ -57,7 +56,6 @@ logger -t zfs-fault-alert "FIRING: $REASON $DETAIL"
 payload=$(jq -nc \
   --arg title "$(hostname -f) ${REASON} -- ZFS fault signature, IMMEDIATE REPLACEMENT TRIGGER" \
   --arg group "$ZAMMAD_GROUP" \
-  --arg customer "$ZAMMAD_CUSTOMER" \
   --argjson priority_id "$ZAMMAD_PRIORITY_ID" \
   --arg body "Auto-filed by zed on $(hostname -f) at $(date -u +%FT%TZ).
 
@@ -69,7 +67,7 @@ zed reporting a missed-events queue overflow. See Zammad #17242 for the
 originating investigation and the drive-replacement decision this signature
 already triggered once. If that ticket is closed, this is a NEW occurrence on
 a device that should already have been swapped -- treat as immediate." \
-  '{title: $title, group: $group, customer: $customer, priority_id: $priority_id,
+  '{title: $title, group: $group, priority_id: $priority_id,
     article: {subject: $title, body: $body, type: "note", internal: false}}')
 
 resp=$(curl -fsS --max-time 15 -X POST \
