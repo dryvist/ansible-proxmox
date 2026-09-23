@@ -1,12 +1,22 @@
 # Container start
 
-Starts explicitly approved LXC guests through the Proxmox API. This role cannot
-stop, restart, create, delete, or enroll a guest in HA.
+Starts explicitly approved LXC guests with `pct start` over SSH on the node
+each guest is currently placed on. This role cannot stop, restart, create,
+delete, or enroll a guest in HA.
 
 The allowlist is keyed by the service name in the published `tofu-proxmox`
-inventory. Node and VMID are resolved from that inventory and checked against
-the live API before the start operation. The default allowlist is empty, so an
-unscoped run performs no Proxmox API calls.
+inventory. The role reads `pvesh get /cluster/resources` from the first
+`proxmox` node that answers, requires exactly one LXC with the declared VMID
+and hostname, logs the decision for each guest (already running, or start),
+then runs `pct start` and `pct status` on the node that placement reports. The
+default allowlist is empty, so an unscoped run touches no node.
+
+## Installation
+
+Part of this repository's roles; no separate install. Transport is the same root SSH access the `proxmox` inventory hosts already
+use; no Proxmox API token is involved.
+
+## Usage
 
 ```bash
 doppler run -- ansible-playbook -i inventory/hosts.yml \
@@ -14,8 +24,5 @@ doppler run -- ansible-playbook -i inventory/hosts.yml \
   -e '{"container_start_services":["service-name"]}'
 ```
 
-Authentication uses `PROXMOX_VE_HOSTNAME` and the existing
-`PROXMOX_VE_API_TOKEN` Doppler/OpenBao value. The token must use Proxmox's
-`user@realm!token-id=secret` format; the role validates and splits it without
-logging the token or secret. TLS certificate validation follows the same
-`PROXMOX_VE_INSECURE` policy as the `pve_cluster` role.
+`site.yml` imports `playbooks/container-start.yml`, so the allowlist declared in
+`inventory/group_vars` is applied on every site converge.

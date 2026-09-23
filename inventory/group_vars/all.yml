@@ -1,0 +1,5 @@
+---
+# Containers the site converge keeps started (roles/container_start). Keyed by
+# service name in the published tofu inventory.
+container_start_services:
+  - llamaindex
