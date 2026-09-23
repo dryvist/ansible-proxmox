@@ -1,6 +1,13 @@
 ---
 # Group variables for Proxmox VE servers
 
+# The ONE Proxmox login user (ansible_user below), not the API token owner
+# (pve_cluster_api_user). Published by tofu-proxmox, top-level sibling of
+# proxmox_node, injected by playbooks/load_tofu.yml. `| mandatory` never
+# fires on the empty string a missing key resolves to, so this uses the same
+# reject/first idiom as proxmox_node_names.primary below -- no literal default.
+proxmox_user: "{{ [proxmox_user_from_tofu | default('')] | reject('equalto', '') | list | first }}"
+
 # Enables roles/pve_ha (see playbooks/site.yml, which now imports playbooks/ha.yml
 # on every converge). Previously this only existed as a hand-typed `-e
 # pve_ha_enabled=true` on a standalone playbook that site.yml never included, so
