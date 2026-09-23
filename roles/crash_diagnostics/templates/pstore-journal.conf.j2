@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+# Route kernel panic dumps captured by systemd-pstore into the journal instead
+# of only /var/lib/systemd/pstore/*, so a dump reaches the log platform through
+# the same journal -> rsyslog -> Cribl -> Splunk path every other host log
+# already uses (pve_syslog_forwarder). No second pipeline.
+[PStore]
+Storage=journal
