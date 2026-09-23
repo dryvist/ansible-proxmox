@@ -18,7 +18,7 @@
         argv:
           - pvesh
           - get
-          - "/cluster/notifications/targets/webhook/{{ pve_notifications_ntfy_target }}"
+          - "/cluster/notifications/endpoints/webhook/{{ pve_notifications_ntfy_target }}"
           - --output-format
           - json
       register: pve_notifications_target_check
@@ -30,7 +30,7 @@
         argv:
           - pvesh
           - create
-          - /cluster/notifications/targets/webhook
+          - /cluster/notifications/endpoints/webhook
           - --name
           - "{{ pve_notifications_ntfy_target }}"
           - --url
@@ -49,7 +49,7 @@
         argv:
           - pvesh
           - set
-          - "/cluster/notifications/targets/webhook/{{ pve_notifications_ntfy_target }}"
+          - "/cluster/notifications/endpoints/webhook/{{ pve_notifications_ntfy_target }}"
           - --url
           - "{{ pve_notifications_ntfy_url }}"
           - --method
