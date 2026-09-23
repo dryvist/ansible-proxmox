@@ -41,5 +41,7 @@ release — cluster-wide and carrying keys this role does not own (`keyboard`,
 `migration`, bandwidth limits, ...) — is removed.
 `tests/pve_ha_datacenter_cfg/verify_shutdown_policy.yml` runs that task file
 against a mock `pvesh` and asserts the legacy key is removed, the policy is
-set when it differs, another key already in `ha` survives, and a second pass
-against an already-correct policy calls `pvesh set` no further.
+set when it differs, and a second pass against an already-correct policy
+calls `pvesh set` no further. `ha`'s only documented sub-key is
+`shutdown_policy` (per `man datacenter.cfg`), so `pvesh set` replacing the
+whole property is not a merge to test for.

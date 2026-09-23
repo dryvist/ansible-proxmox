@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
 # The HA shutdown policy is set through pvesh (mocked here), not by editing
-# datacenter.cfg. This pins: the legacy top-level datacenter.cfg key is
-# removed, `pvesh set` is called when the cluster's current policy differs,
-# any other key already in the `ha` property survives, and a second pass
-# against an already-correct policy calls `pvesh set` no further.
+# datacenter.cfg. This pins only what the real API does: the legacy
+# top-level datacenter.cfg key is removed, `pvesh set` is called when the
+# cluster's current policy differs, and a second pass against an
+# already-correct policy calls `pvesh set` no further.
 #
 # Runs the role's OWN tasks/datacenter_cfg.yml against a mock pvesh binary and
 # a temp datacenter.cfg, so it cannot pass against a stale copy of the logic.
@@ -41,10 +41,10 @@
           shutdown_policy: freeze
         mode: "0640"
 
-    - name: Seed cluster options with another ha key and no shutdown_policy yet
+    - name: Seed cluster options with no shutdown_policy yet
       ansible.builtin.copy:
         dest: "{{ pve_ha_mock_state }}"
-        content: '{"keyboard": "en-us", "ha": {"some_other_key": "1"}}'
+        content: '{"keyboard": "en-us"}'
         mode: "0644"
 
     - name: Reset the mock invocation log
@@ -73,7 +73,7 @@
         src: "{{ pve_ha_mock_log }}"
       register: pve_ha_log_after_first
 
-    - name: Assert the legacy key is gone, pvesh set was called, and the other ha key survived
+    - name: Assert the legacy key is gone and pvesh set was called
       ansible.builtin.assert:
         that:
           - "'keyboard: en-us' in (pve_ha_merged_cfg.content | b64decode)"
@@ -81,11 +81,10 @@
             (pve_ha_merged_cfg.content | b64decode).splitlines()
             | select('match', '^[ \t]*shutdown_policy[ \t]*:') | list | length == 0
           - (pve_ha_options_after_first.content | b64decode | from_json).ha.shutdown_policy == 'freeze'
-          - (pve_ha_options_after_first.content | b64decode | from_json).ha.some_other_key == '1'
           - "'set shutdown_policy=freeze' in (pve_ha_log_after_first.content | b64decode)"
         fail_msg: >-
-          The merge left the invalid top-level key in place, did not set the
-          policy via pvesh, or dropped another key already in ha.
+          The merge left the invalid top-level key in place, or did not set
+          the policy via pvesh.
 
     - name: Reconcile again against an already-correct policy
       ansible.builtin.include_role:
