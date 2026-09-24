@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0](https://github.com/dryvist/ansible-proxmox/compare/v2.9.1...v2.10.0) (2026-09-24)
+
+
+### Features
+
+* **container_start:** start allowlisted containers with pct over SSH on their live node ([#797](https://github.com/dryvist/ansible-proxmox/issues/797)) ([daa3900](https://github.com/dryvist/ansible-proxmox/commit/daa3900f6562fe9cc9fc261dd4d68614c6ef2329))
+
+
+### Bug Fixes
+
+* **container_start:** run pct start and pct status through the command module ([#798](https://github.com/dryvist/ansible-proxmox/issues/798)) ([e539067](https://github.com/dryvist/ansible-proxmox/commit/e5390677774afecd929523b79a392f9c88c0aa0d))
+* **crash_diagnostics:** forward systemd-pstore panic dumps to the journal ([#794](https://github.com/dryvist/ansible-proxmox/issues/794)) ([e580c04](https://github.com/dryvist/ansible-proxmox/commit/e580c04bc180e52feced0ee32ccfcf56cce2b0e5))
+* **inventory,hba_storcli:** drop decommissioned node, scope perccli by hardware ([#790](https://github.com/dryvist/ansible-proxmox/issues/790)) ([3bfff9d](https://github.com/dryvist/ansible-proxmox/commit/3bfff9d6ce323b7235b3385d1b7e5e616e01077b))
+* **pve_ha:** only reference HA-managed guests in anti-affinity rules ([#793](https://github.com/dryvist/ansible-proxmox/issues/793)) ([53445a9](https://github.com/dryvist/ansible-proxmox/commit/53445a9d8268a4d66dfb3e5ad5977209c0b0b00d))
+* **pve_ha:** reconcile stale node-affinity membership across converges ([#795](https://github.com/dryvist/ansible-proxmox/issues/795)) ([4c87563](https://github.com/dryvist/ansible-proxmox/commit/4c875635fa1ba32abc91e51b4f5b0883f333351d))
+* **pve_ha:** write shutdown_policy inside datacenter.cfg's ha property ([#796](https://github.com/dryvist/ansible-proxmox/issues/796)) ([d7927ea](https://github.com/dryvist/ansible-proxmox/commit/d7927ea658a5b65ef46b633e24817750c80aa468))
+* **pve_notifications,zfs_fault_alert:** use PVE 9 notification API path, derive Zammad customer ([#791](https://github.com/dryvist/ansible-proxmox/issues/791)) ([3c1a3c5](https://github.com/dryvist/ansible-proxmox/commit/3c1a3c5dab2328bc242f37217e45ea4fcb99c3e0))
+* **pve_notifications:** use lowercase HTTP method for the webhook endpoint ([#792](https://github.com/dryvist/ansible-proxmox/issues/792)) ([8590af4](https://github.com/dryvist/ansible-proxmox/commit/8590af446d6c0d3bd7782cfc653af204a22ced2e))
+
 ## [2.9.1](https://github.com/dryvist/ansible-proxmox/compare/v2.9.0...v2.9.1) (2026-09-21)
 
 
