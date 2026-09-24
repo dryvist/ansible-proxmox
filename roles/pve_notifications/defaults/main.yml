@@ -17,7 +17,8 @@ pve_notifications_config_host: "{{ pve_cluster_primary_host | default(proxmox_no
 
 pve_notifications_ntfy_target: ntfy-proxmox
 pve_notifications_ntfy_url: "https://ntfy.{{ domain_from_tofu }}/proxmox"
-pve_notifications_ntfy_method: POST
+# Lowercase: the PVE API enum for this field is get|post|put -- "POST" 400s.
+pve_notifications_ntfy_method: post
 
 # PVE's built-in matchable notification classes (chapter 12, "Notifications",
 # in the PVE admin guide). Each entry becomes one `matcher` routed at the ntfy

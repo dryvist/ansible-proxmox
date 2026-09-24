@@ -46,16 +46,19 @@ Disabled everywhere by default. A host opts in via `host_vars`:
 zfs_fault_alert_enabled: true
 ```
 
-At converge time (never committed), pass:
+`zfs_fault_alert_openbao_addr` / `zfs_fault_alert_openbao_token` resolve on
+their own from the controller's `BAO_ADDR` / `BAO_TOKEN` environment -- the
+same pattern as `roles/zammad/tasks/publish_mcp.yml`'s
+`zammad_token_openbao_addr`/`token` (ansible-proxmox-apps). Reads the
+existing `zammad_hermes_api_token` (`secret/apps/zammad`) and the published
+Zammad URL (`secret/ai/mcp/zammad` -> `ZAMMAD_MCP_URL`) -- no new credential
+is minted for this one more consumer.
 
-- `zfs_fault_alert_openbao_addr` / `zfs_fault_alert_openbao_token` -- a
-  short-lived OpenBao read token, same pattern as
-  `roles/zammad/tasks/publish_mcp.yml`. Reads the existing
-  `zammad_hermes_api_token` (`secret/apps/zammad`) and the published Zammad
-  URL (`secret/ai/mcp/zammad` -> `ZAMMAD_MCP_URL`) -- no new credential is
-  minted for this one more consumer.
-- `zfs_fault_alert_zammad_customer` -- the ticket customer email. Not
-  committed; this repo is public and the value is operator-specific.
+No customer field is sent on the ticket -- the same convention as the
+`hermes`/`svc-splunk`/`svc-ntfy` service users in
+`roles/zammad/files/zammad_bootstrap.rb` (ansible-proxmox-apps): Zammad
+defaults an omitted customer to the API token's own user, and this role
+reuses the `hermes` token, whose user already carries the Customer role.
 
 ## Verification
 

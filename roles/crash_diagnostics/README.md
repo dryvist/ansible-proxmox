@@ -81,3 +81,12 @@ See `defaults/main.yml` for all configurable options:
 - `memory_logging` - Boot-time memory configuration logging
 - `mce_monitor` - Real-time MCE monitoring service
 - `memtest` - memtest86+ boot partition installation
+- `pstore` - systemd-pstore journal-storage drop-in
+
+## Panic dump forwarding (systemd-pstore)
+
+`systemd-pstore` defaults to `Storage=external`, which only writes captured
+EFI/ACPI panic dumps to `/var/lib/systemd/pstore/` — a file never shipped to
+Splunk. This role drops in `Storage=journal` (`/etc/pstore.conf.d/`), so the
+dump content lands in the journal at boot and rides the same
+`pve_syslog_forwarder` path as every other host log. Physical hosts only.

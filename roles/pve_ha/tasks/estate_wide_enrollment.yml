@@ -18,35 +18,10 @@
 #   * ENROLLMENT (pve_ha_manage_all only): pulling the REST of the estate into
 #     HA. The tier-0 set (containers + VMs) is enrolled by tier0_resources.yml
 #     either way.
-- name: Resolve the home-pin scope
-  ansible.builtin.include_tasks: home_pin_scope.yml
-
-# Container and VM home entries are projected here to one common {hostname,
-# node, sid} shape, so the enrolment/rule-building tasks below need no
-# per-kind branching.
-- name: Project container home-pinned entries to {hostname, node, sid}
-  ansible.builtin.set_fact:
-    pve_ha_home_pin_entries: >-
-      {{ (pve_ha_home_pin_entries | default([])) + [ {
-           'hostname': item.key,
-           'node': item.value.node,
-           'sid': 'ct:' ~ (item.value.ansible_pct_vmid | string)
-         } ] }}
-  loop: "{{ pve_ha_home_entries | default([]) }}"
-  loop_control:
-    label: "{{ item.key }}"
-
-- name: Project VM home-pinned entries to {hostname, node, sid}
-  ansible.builtin.set_fact:
-    pve_ha_home_pin_entries: >-
-      {{ (pve_ha_home_pin_entries | default([])) + [ {
-           'hostname': item.key,
-           'node': item.value.node,
-           'sid': 'vm:' ~ (item.value.vmid | string)
-         } ] }}
-  loop: "{{ pve_ha_home_vm_entries | default([]) }}"
-  loop_control:
-    label: "{{ item.key }}"
+# The home-pin scope (pve_ha_home_pin_entries) and its node-affinity rule
+# names are already resolved by affinity_rules.yml, ahead of this file — the
+# single stale-membership reconciliation pass there needs the full declared
+# node-affinity set, not just the replication pairs it also builds.
 
 # storage_eligibility.yml already refuses a TIER-0 guest homed where it cannot
 # start. This covers the wider scope: with pve_ha_manage_all on, the pin set is
@@ -159,7 +134,9 @@
   changed_when: false
 
 # One strict rule per home node rather than one per guest: same constraint,
-# a rule set an operator can read.
+# a rule set an operator can read. Stale membership from a guest reassigned
+# to a different node-affinity rule this converge was already reconciled by
+# affinity_rules.yml, before either file's "add"/"enforce" tasks run.
 - name: Pin each home node's guests to that node (strict; add if absent)
   ansible.builtin.command: >-
     ha-manager rules add node-affinity

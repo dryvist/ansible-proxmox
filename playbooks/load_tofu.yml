@@ -247,10 +247,14 @@
     # from. The desired state already names this node, so it is the only
     # sensible source. Empty when absent (test fixture) — group_vars asserts on
     # it rather than substituting a default.
-    - name: Inject the OpenTofu primary node name onto proxmox hosts
+    #
+    # The Proxmox login user is a sibling of proxmox_node in the published
+    # inventory. Same pass-through, same empty-when-absent contract.
+    - name: Inject the OpenTofu primary node name and login user onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
         primary_node_from_tofu: "{{ tofu_data.proxmox_node | default('') }}"
+        proxmox_user_from_tofu: "{{ tofu_data.proxmox_user | default('') }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
     # Estate domain, so host_vars can build guest FQDNs (e.g. the

@@ -1,21 +1,29 @@
----
 # ---------------------------------------------------------------------------
-# datacenter.cfg is CLUSTER-WIDE and carries keys pve_ha does not own. The role
-# therefore merges one key instead of templating the file, and this pins that:
-# unmanaged keys survive, an existing shutdown_policy is UPDATED rather than
-# duplicated, and a second pass reports no change.
+# The HA shutdown policy is set through pvesh (mocked here), not by editing
+# datacenter.cfg. This pins only what the real API does: the legacy
+# top-level datacenter.cfg key is removed, `pvesh set` is called when the
+# cluster's current policy differs, and a second pass against an
+# already-correct policy calls `pvesh set` no further.
 #
-# Runs the role's OWN tasks/datacenter_cfg.yml against a temp file, so it cannot
-# pass against a stale copy of the logic.
+# Runs the role's OWN tasks/datacenter_cfg.yml against a mock pvesh binary and
+# a temp datacenter.cfg, so it cannot pass against a stale copy of the logic.
 # ---------------------------------------------------------------------------
-- name: Verify pve_ha shutdown-policy merge into datacenter.cfg
+---
+- name: Verify pve_ha shutdown-policy reconciliation via pvesh
   hosts: localhost
   become: false
   gather_facts: false
 
   vars:
     pve_ha_datacenter_cfg_path: /tmp/pve_ha_datacenter_cfg_test/datacenter.cfg
+    pve_ha_pvesh_bin: "{{ playbook_dir }}/mock-pvesh"
     pve_ha_shutdown_policy: freeze
+    pve_ha_mock_state: /tmp/pve_ha_datacenter_cfg_test/cluster_options.json
+    pve_ha_mock_log: /tmp/pve_ha_datacenter_cfg_test/pvesh_set.log
+
+  environment:
+    PVESH_MOCK_STATE: "{{ pve_ha_mock_state }}"
+    PVESH_MOCK_LOG: "{{ pve_ha_mock_log }}"
 
   tasks:
     - name: Create the temporary directory
@@ -24,65 +32,77 @@
         state: directory
         mode: "0755"
 
-    - name: Create a datacenter.cfg carrying only unmanaged keys
+    - name: Create a datacenter.cfg carrying only unmanaged keys plus the invalid legacy key
       ansible.builtin.copy:
         dest: "{{ pve_ha_datacenter_cfg_path }}"
         content: |
           keyboard: en-us
           migration: secure
+          shutdown_policy: freeze
         mode: "0640"
 
-    - name: Merge the shutdown policy into it
-      ansible.builtin.include_role:
-        name: pve_ha
-        tasks_from: datacenter_cfg.yml
-
-    - name: Read the merged file
-      ansible.builtin.slurp:
-        src: "{{ pve_ha_datacenter_cfg_path }}"
-      register: pve_ha_merged
-
-    - name: Assert the policy was added and the unmanaged keys survived
-      ansible.builtin.assert:
-        that:
-          - "'shutdown_policy: freeze' in (pve_ha_merged.content | b64decode)"
-          - "'keyboard: en-us' in (pve_ha_merged.content | b64decode)"
-          - "'migration: secure' in (pve_ha_merged.content | b64decode)"
-        fail_msg: >-
-          The merge did not add shutdown_policy, or it dropped a key the role
-          does not own.
-
-    - name: Re-run against a file that already declares a DIFFERENT policy
+    - name: Seed cluster options with no shutdown_policy yet
       ansible.builtin.copy:
-        dest: "{{ pve_ha_datacenter_cfg_path }}"
-        content: |
-          keyboard: en-us
-          shutdown_policy: conditional
-        mode: "0640"
+        dest: "{{ pve_ha_mock_state }}"
+        content: '{"keyboard": "en-us"}'
+        mode: "0644"
 
-    - name: Merge again
+    - name: Reset the mock invocation log
+      ansible.builtin.copy:
+        dest: "{{ pve_ha_mock_log }}"
+        content: ""
+        mode: "0644"
+
+    - name: Reconcile the shutdown policy
       ansible.builtin.include_role:
         name: pve_ha
         tasks_from: datacenter_cfg.yml
 
-    - name: Read the updated file
+    - name: Read the datacenter.cfg file
       ansible.builtin.slurp:
         src: "{{ pve_ha_datacenter_cfg_path }}"
-      register: pve_ha_updated
+      register: pve_ha_merged_cfg
 
-    - name: Assert the existing key was rewritten, not duplicated
+    - name: Read the mock cluster options after the first pass
+      ansible.builtin.slurp:
+        src: "{{ pve_ha_mock_state }}"
+      register: pve_ha_options_after_first
+
+    - name: Read the mock invocation log after the first pass
+      ansible.builtin.slurp:
+        src: "{{ pve_ha_mock_log }}"
+      register: pve_ha_log_after_first
+
+    - name: Assert the legacy key is gone and pvesh set was called
       ansible.builtin.assert:
         that:
+          - "'keyboard: en-us' in (pve_ha_merged_cfg.content | b64decode)"
           - >-
-            (pve_ha_updated.content | b64decode).splitlines()
-            | select('match', '^\s*shutdown_policy\s*:') | list | length == 1
-          - "'shutdown_policy: freeze' in (pve_ha_updated.content | b64decode)"
-          - "'conditional' not in (pve_ha_updated.content | b64decode)"
-          - "'keyboard: en-us' in (pve_ha_updated.content | b64decode)"
+            (pve_ha_merged_cfg.content | b64decode).splitlines()
+            | select('match', '^[ \t]*shutdown_policy[ \t]*:') | list | length == 0
+          - (pve_ha_options_after_first.content | b64decode | from_json).ha.shutdown_policy == 'freeze'
+          - "'set shutdown_policy=freeze' in (pve_ha_log_after_first.content | b64decode)"
         fail_msg: >-
-          A pre-existing shutdown_policy was duplicated or left unchanged.
+          The merge left the invalid top-level key in place, or did not set
+          the policy via pvesh.
 
-    - name: Remove the temporary file
+    - name: Reconcile again against an already-correct policy
+      ansible.builtin.include_role:
+        name: pve_ha
+        tasks_from: datacenter_cfg.yml
+
+    - name: Read the mock invocation log after the idempotent pass
+      ansible.builtin.slurp:
+        src: "{{ pve_ha_mock_log }}"
+      register: pve_ha_log_after_idempotent
+
+    - name: Assert a second pass with no drift calls pvesh set no further
+      ansible.builtin.assert:
+        that:
+          - (pve_ha_log_after_idempotent.content | b64decode) == (pve_ha_log_after_first.content | b64decode)
+        fail_msg: A converge against an already-correct policy should not call pvesh set again.
+
+    - name: Remove the temporary directory
       ansible.builtin.file:
         path: "{{ pve_ha_datacenter_cfg_path | dirname }}"
         state: absent

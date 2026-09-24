@@ -224,7 +224,7 @@ ANSIBLE_ALLOW_BROKEN_CONDITIONALS=1 molecule test -s nas_storage
 
 # Verify OpenTofu inventory loading locally
 TOFU_INVENTORY_PATH=$PWD/tests/inventory_load/tofu_inventory.json \
-PROXMOX_VE_HOSTNAME=localhost PROXMOX_VM_SSH_USERNAME=root \
+PROXMOX_VE_HOSTNAME=localhost \
   ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
 ```
 

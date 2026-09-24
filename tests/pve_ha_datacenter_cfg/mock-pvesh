@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Mock of pvesh's two subcommands this role uses, for offline testing.
+# PVESH_MOCK_STATE: JSON file holding the fake /cluster/options.
+# PVESH_MOCK_LOG: appended with one line per invocation of "set".
+set -euo pipefail
+: "${PVESH_MOCK_STATE:?}"
+: "${PVESH_MOCK_LOG:?}"
+
+case "$1 $2" in
+  "get /cluster/options")
+    cat "$PVESH_MOCK_STATE"
+    ;;
+  "set /cluster/options")
+    shift 2
+    for arg in "$@"; do
+      case "$arg" in
+        shutdown_policy=*)
+          echo "set shutdown_policy=${arg#shutdown_policy=}" >> "$PVESH_MOCK_LOG"
+          python3 - "$PVESH_MOCK_STATE" "${arg#shutdown_policy=}" <<'PY'
+import json, sys
+path, value = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    data = json.load(f)
+data.setdefault("ha", {})["shutdown_policy"] = value
+with open(path, "w") as f:
+    json.dump(data, f)
+PY
+          ;;
+      esac
+    done
+    ;;
+  *)
+    echo "mock-pvesh: unhandled invocation: $*" >&2
+    exit 1
+    ;;
+esac

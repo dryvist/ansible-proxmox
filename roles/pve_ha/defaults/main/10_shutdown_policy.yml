@@ -26,8 +26,11 @@
 # Other accepted values are `failover` and `conditional`; an empty string
 # leaves the key unmanaged.
 #
-# Only this key is written — datacenter.cfg is cluster-wide and carries keys
-# this role does not own (see tasks/datacenter_cfg.yml).
+# Written via `pvesh set /cluster/options -ha shutdown_policy=...`, not as a
+# top-level datacenter.cfg key — see tasks/datacenter_cfg.yml.
 pve_ha_shutdown_policy: freeze
 
 pve_ha_datacenter_cfg_path: /etc/pve/datacenter.cfg
+
+# Overridable so tests/pve_ha_datacenter_cfg/ can point this at a mock script.
+pve_ha_pvesh_bin: pvesh

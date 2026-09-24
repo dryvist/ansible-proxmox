@@ -339,6 +339,12 @@
 - name: Configure Proxmox VE HA for tier-0 guests
   import_playbook: ha.yml
 
+# Starts the containers allowlisted in inventory/group_vars/all.yml
+# (container_start_services), on the node each is placed on. Inert when the
+# allowlist is empty.
+- name: Start allowlisted containers
+  import_playbook: container-start.yml
+
 # Cribl Edge on every host. Imported here rather than left as a standalone
 # playbook so it is enforced by the standard converge — a node without a local
 # Edge agent has no approved route for host signals into Splunk, and would

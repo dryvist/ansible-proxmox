@@ -17,7 +17,7 @@
           vmid: 900001
 
   tasks:
-    - name: Prove the default allowlist is inert without API credentials
+    - name: Prove the default allowlist is inert
       ansible.builtin.include_role:
         name: container_start
 
@@ -33,8 +33,6 @@
       vars:
         container_start_services:
           - example-agent
-        container_start_api_host: example.invalid
-        container_start_api_token: test@pve!automation-token=fixture-secret
 
     - name: Assert the positive fixture retains its declared identity
       ansible.builtin.assert:
@@ -91,7 +89,7 @@
         that:
           - container_start_check_mode_active.rc != 0
           - >-
-            'container_start cannot safely predict the community.proxmox start'
+            'container_start cannot safely predict the pct start operation'
             in (container_start_check_mode_active.stdout
                 ~ container_start_check_mode_active.stderr)
         fail_msg: "{{ container_start_check_mode_active | to_nice_json }}"

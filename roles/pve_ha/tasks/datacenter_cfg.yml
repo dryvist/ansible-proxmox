@@ -1,21 +1,29 @@
 ---
-# Cluster-wide shutdown policy in /etc/pve/datacenter.cfg.
-#
-# The key is edited in place rather than templated: datacenter.cfg is a LIVE
-# cluster-wide file carrying keys this role does not own (keyboard, language,
-# migration, bandwidth limits, ...). A whole-file template would silently drop
-# every one of them on the first converge.
-#
-# Path is a variable so tests/pve_ha_datacenter_cfg/ can run THIS file against a
-# temporary copy and prove the merge preserves unmanaged keys.
+# Cluster-wide HA shutdown policy, via the /cluster/options `ha` property.
+# A bare top-level `shutdown_policy` key in datacenter.cfg is outside the
+# schema and breaks every ha-manager/pvesh call on the node; the real key is
+# `ha.shutdown_policy`, set through the API rather than by editing the file.
 
-- name: Declare the cluster shutdown policy
+- name: Remove the invalid legacy top-level shutdown_policy key
   ansible.builtin.lineinfile:
     path: "{{ pve_ha_datacenter_cfg_path }}"
-    regexp: '^\s*shutdown_policy\s*:'
-    line: "shutdown_policy: {{ pve_ha_shutdown_policy }}"
-    create: true
-    # pmxcfs fixes /etc/pve files at 0640; stating it keeps a create on a node
-    # that has no datacenter.cfg yet consistent with the ones that do.
-    mode: "0640"
+    regexp: '^[ \t]*shutdown_policy[ \t]*:'
+    state: absent
   when: pve_ha_shutdown_policy | length > 0
+
+- name: Read the current cluster HA options
+  ansible.builtin.command: "{{ pve_ha_pvesh_bin }} get /cluster/options --output-format json"
+  register: pve_ha_cluster_options
+  changed_when: false
+  when: pve_ha_shutdown_policy | length > 0
+
+- name: Set the cluster HA shutdown policy if it differs
+  ansible.builtin.command: >-
+    {{ pve_ha_pvesh_bin }} set /cluster/options
+    -ha shutdown_policy={{ pve_ha_shutdown_policy }}
+  changed_when: true
+  when:
+    - pve_ha_shutdown_policy | length > 0
+    - >-
+      ((pve_ha_cluster_options.stdout | from_json).get('ha') or {})
+      .get('shutdown_policy', '') != pve_ha_shutdown_policy
