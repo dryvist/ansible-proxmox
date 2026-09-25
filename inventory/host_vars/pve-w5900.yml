@@ -36,6 +36,11 @@ wol_enable_interface: enp6s0
 # non-free packaging, and for the reboot the driver switch requires.
 nvidia_driver_enabled: true
 
+# Cribl Edge (playbooks/cribl_edge.yml, every Proxmox host) collects GPU
+# metrics from this node's card via nvidia-smi (installed above). Opt-in
+# per-host — cribl_edge_gpu_mode defaults to disabled everywhere else.
+cribl_edge_gpu_mode: custom
+
 # sanoid snapshot policy for this node's guests.
 #
 # The dataset PATHS are derived, never written down. An earlier revision named
