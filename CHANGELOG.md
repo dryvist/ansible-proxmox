@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.1](https://github.com/dryvist/ansible-proxmox/compare/v2.11.0...v2.11.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **idrac_kiosk:** keep the chromium profile in the runtime directory ([#807](https://github.com/dryvist/ansible-proxmox/issues/807)) ([6ae3c3b](https://github.com/dryvist/ansible-proxmox/commit/6ae3c3b685cf1315f69d8db00f18cfd0bcdb9052))
+
 ## [2.11.0](https://github.com/dryvist/ansible-proxmox/compare/v2.10.0...v2.11.0) (2026-09-25)
 
 
