@@ -12,7 +12,7 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../../roles/docker_lxc_features/defaults/main.yml"
 
-    - name: Build the tagged service selection
+    - name: Build the docker-tagged service selection
       ansible.builtin.set_fact:
         docker_lxc_features_verify_selected: >-
           {{
@@ -25,21 +25,6 @@
       when:
         - item.value.vmid is defined
         - "'docker' in (item.value.tags | default([]))"
-        - "'ai-orchestration' in (item.value.tags | default([]))"
-
-    - name: Add fallback services when tags are absent
-      ansible.builtin.set_fact:
-        docker_lxc_features_verify_selected: >-
-          {{
-            docker_lxc_features_verify_selected | default([])
-            + [ { 'key': item, 'value': containers_from_tofu[item] } ]
-          }}
-      loop: "{{ docker_lxc_features_fallback_services }}"
-      loop_control:
-        label: "{{ item }}"
-      when:
-        - item in containers_from_tofu
-        - item not in (docker_lxc_features_verify_selected | default([]) | map(attribute='key') | list)
 
     - name: Build the resolved service to vmid map
       ansible.builtin.set_fact:
@@ -63,20 +48,24 @@
           - docker_lxc_features_desired_tokens == ['nesting=1', 'keyctl=1', 'fuse=1']
           - docker_lxc_features_desired_features == 'nesting=1,keyctl=1,fuse=1'
 
-    - name: Assert tagged services and fallback services are selected
+    - name: Assert every docker-tagged service is selected and others are not
       ansible.builtin.assert:
         that:
           - >-
             docker_lxc_features_verify_service_vmids.keys() | list | sort ==
-            ['assistant-01', 'dify', 'langflow', 'langgraph', 'n8n']
+            ['analytics', 'assistant-01', 'dify', 'langflow', 'langgraph', 'n8n']
           - docker_lxc_features_verify_service_vmids['n8n'] == '90001'
           - docker_lxc_features_verify_service_vmids['langgraph'] == '90002'
           - docker_lxc_features_verify_service_vmids['dify'] == '90003'
           - docker_lxc_features_verify_service_vmids['langflow'] == '90004'
           - docker_lxc_features_verify_service_vmids['assistant-01'] == '90005'
-          # Quoted: unquoted, Jinja reads `analytics` as a variable name and
-          # the conditional fails as undefined rather than testing membership.
-          - "'analytics' not in docker_lxc_features_verify_service_vmids"
+          # analytics carries no AI-tier tag, only `docker` — proves selection
+          # is the bare tag, not a tag intersection.
+          - docker_lxc_features_verify_service_vmids['analytics'] == '90006'
+          # Quoted: unquoted, Jinja reads the key as a variable name and the
+          # conditional fails as undefined rather than testing membership.
+          - "'database' not in docker_lxc_features_verify_service_vmids"
+          - "'untagged' not in docker_lxc_features_verify_service_vmids"
 
     - name: Assert the pct CLI is absent under Docker
       ansible.builtin.command:

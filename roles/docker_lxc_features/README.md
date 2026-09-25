@@ -1,6 +1,6 @@
 # docker_lxc_features
 
-Applies the root-only LXC features needed by AI-orchestration Docker guests:
+Applies the root-only LXC features needed by every Docker guest:
 `nesting=1,keyctl=1,fuse=1`.
 
 The BPG Proxmox Terraform provider can create the shell, but Proxmox only lets
@@ -9,11 +9,10 @@ host with `pct set`.
 
 ## Selection
 
-The role resolves candidate containers from `containers_from_tofu`:
-
-- any container tagged `docker` plus either `ai-orchestration` or
-  `agentgateway` is selected
-- `n8n` and `langgraph` remain explicit fallbacks until those tags are present
+The role resolves candidate containers from `containers_from_tofu`: any
+container tagged `docker` is selected — the same rule
+`playbooks/site/01a-docker-daemon.yml` uses to pin the fuse-overlayfs storage
+driver.
 
 That keeps the role VMID-agnostic and lets a renumber flow through from tofu
 inventory without editing the role.
