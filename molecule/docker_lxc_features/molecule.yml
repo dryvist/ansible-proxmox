@@ -15,8 +15,16 @@ provisioner:
         docker_lxc_features_test_containers:
           n8n:
             vmid: 90001
+            tags:
+              - container
+              - docker
+              - ai-orchestration
           langgraph:
             vmid: 90002
+            tags:
+              - container
+              - docker
+              - ai-orchestration
           dify:
             vmid: 90003
             tags:
@@ -41,3 +49,10 @@ provisioner:
               - container
               - docker
               - analytics
+          database:
+            vmid: 90007
+            tags:
+              - container
+              - database
+          untagged:
+            vmid: 90008
