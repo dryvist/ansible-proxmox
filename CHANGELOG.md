@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0](https://github.com/dryvist/ansible-proxmox/compare/v2.11.1...v2.12.0) (2026-09-25)
+
+
+### Features
+
+* **pve_node_exporter:** enable drm collector for AMD GPU metrics ([#812](https://github.com/dryvist/ansible-proxmox/issues/812)) ([1c8dfe3](https://github.com/dryvist/ansible-proxmox/commit/1c8dfe3fba9a0af4f50fbcfec33bbba42cb2c91f))
+
+
+### Bug Fixes
+
+* **docker_lxc_features:** apply Docker LXC features to every docker-tagged container ([#811](https://github.com/dryvist/ansible-proxmox/issues/811)) ([d24f946](https://github.com/dryvist/ansible-proxmox/commit/d24f946d29aa64c566309740f8e77ff8505591b0))
+
 ## [2.11.1](https://github.com/dryvist/ansible-proxmox/compare/v2.11.0...v2.11.1) (2026-09-25)
 
 
