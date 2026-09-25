@@ -239,6 +239,9 @@ kernel_tuning_tsc_mode: nowatchdog
 # cannot start and a restart loop can power the node off through the console
 # power button.
 idrac_kiosk_enabled: true
+# The monitor shows the server-room wall (homelab-wall). Its ingress route
+# sits under the same subdomain as the iDRAC viewer.
+idrac_kiosk_url: "https://wall.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}/mc1/"
 
 # --- Workstation backup ingress ---
 # This node receives the workstation's off-box media push. The push

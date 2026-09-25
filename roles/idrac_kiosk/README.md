@@ -37,7 +37,8 @@ stays up and retries on the browser's normal schedule.
 
 | Variable                | Default                        | Description                                   |
 | ----------------------- | ------------------------------ | --------------------------------------------- |
-| `idrac_kiosk_enabled`   | `true`                         | Master switch; `false` makes the role a no-op |
+| `idrac_kiosk_enabled`   | `false`                        | Master switch; `false` makes the role a no-op |
+| `idrac_kiosk_url`       | the local iDRAC page           | URL the kiosk opens                           |
 | `idrac_kiosk_kvm_host`  | `idrac-kvm.$PROXMOX_SUBDOMAIN` | FQDN of the LXC serving the noVNC viewers     |
 | `idrac_kiosk_r410_port` | `5410`                         | R410 viewer port                              |
 | `idrac_kiosk_r710_port` | `5710`                         | R710 viewer port                              |

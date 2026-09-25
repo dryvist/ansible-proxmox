@@ -42,6 +42,7 @@
       - libgl1-mesa-dri # Mesa DRI drivers (OpenGL on the AMD iGPU)
       - mesa-vulkan-drivers # Vulkan drivers for the AMD iGPU
       - fonts-dejavu-core # baseline fonts so the noVNC UI renders
+      - fonts-noto-color-emoji # colour emoji (country flags on dashboards)
     state: present
     update_cache: true
   when: idrac_kiosk_enabled | bool
@@ -114,6 +115,37 @@
   tags:
     - idrac_kiosk
 
+# cage holds the console input devices, the power button among them, and
+# logind's default for that key is poweroff. Ignored while the kiosk runs, so
+# no input reaching the kiosk can turn the node off; the drop-in is removed
+# where the role is off.
+- name: Create the logind drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/logind.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: idrac_kiosk_enabled | bool
+  tags:
+    - idrac_kiosk
+
+- name: Ignore the power key while the kiosk owns the console
+  ansible.builtin.copy:
+    dest: /etc/systemd/logind.conf.d/10-idrac-kiosk-power-key.conf
+    content: |
+      # Managed by Ansible (idrac_kiosk role). Do not edit on the host.
+      [Login]
+      HandlePowerKey=ignore
+      HandlePowerKeyLongPress=ignore
+    owner: root
+    group: root
+    mode: "0644"
+  when: idrac_kiosk_enabled | bool
+  notify: Reload logind
+  tags:
+    - idrac_kiosk
+
 - name: Create the kiosk data directory
   ansible.builtin.file:
     path: "{{ idrac_kiosk_data_dir }}"
@@ -174,6 +206,18 @@
     enabled: false
     state: stopped
   failed_when: false
+  when:
+    - not (idrac_kiosk_enabled | bool)
+    - ansible_service_mgr == 'systemd'
+    - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - idrac_kiosk
+
+- name: Restore the default power-key action where the role is off
+  ansible.builtin.file:
+    path: /etc/systemd/logind.conf.d/10-idrac-kiosk-power-key.conf
+    state: absent
+  notify: Reload logind
   when:
     - not (idrac_kiosk_enabled | bool)
     - ansible_service_mgr == 'systemd'
