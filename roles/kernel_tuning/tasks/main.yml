@@ -1,21 +1,12 @@
 ---
 # Kernel Tuning role tasks
 
-# ------------------------------------------------------------------------------
-# hwmon sensor kernel modules (fans, drive temperatures)
-#
-# node_exporter's hwmon collector only reports what the kernel already exposes
-# under /sys/class/hwmon — it never loads a driver. Two gaps in this estate:
-#
-# - SATA/SAS drive temperatures: read from the ATA/SCSI temperature log by the
-#   in-tree `drivetemp` driver, which nothing loads by default. Safe fleet-wide:
-#   it only creates hwmon entries for drives that actually support the log, and
-#   is a no-op elsewhere.
-# - Motherboard fan RPM on the workstation nodes: exposed by the board's Super
-#   I/O chip driver (commonly `nct6775` or `it87`), which is autodetected by
-#   `sensors-detect` but not auto-loaded by the kernel the way PCI/USB drivers
-#   are. This is genuinely per-board, so it is a per-host override
-#   (kernel_tuning_hwmon_modules in host_vars), never guessed here.
+# hwmon sensor kernel modules (fans, drive temperatures). node_exporter only
+# reports what the kernel already exposes under /sys/class/hwmon; it never
+# loads a driver. `drivetemp` (SATA/SAS drive temps) is safe fleet-wide.
+# Motherboard fan RPM needs a board-specific Super I/O driver (`nct6775`,
+# `it87`, ...), set per host via kernel_tuning_hwmon_modules — never guessed
+# here.
 - name: Load hwmon sensor kernel modules at boot
   ansible.builtin.copy:
     content: |
@@ -36,14 +27,6 @@
     name: "{{ item }}"
     state: present
   loop: "{{ kernel_tuning_hwmon_modules }}"
-  # A workstation's Super I/O chip is board-specific; a wrong guess in
-  # kernel_tuning_hwmon_modules must be reported, not silently swallowed —
-  # but drivetemp genuinely has nothing to attach on a node with no SATA/SAS
-  # drives behind a supported controller, which modprobe treats the same as
-  # "wrong module name". Load it now on a best-effort basis; the persistent
-  # /etc/modules-load.d entry above is what actually matters at boot, and its
-  # own next boot will surface a real failure in `dmesg`/`systemd-modules-load`.
-  failed_when: false
   tags:
     - kernel_tuning
     - hwmon
