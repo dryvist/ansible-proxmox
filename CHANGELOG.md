@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.0](https://github.com/dryvist/ansible-proxmox/compare/v2.10.0...v2.11.0) (2026-09-25)
+
+
+### Features
+
+* **idrac_kiosk:** configurable URL, emoji fonts, power key ignored while running ([#803](https://github.com/dryvist/ansible-proxmox/issues/803)) ([4b175c1](https://github.com/dryvist/ansible-proxmox/commit/4b175c131b1e9716340ab77c5423a9b54d5d0e78))
+
 ## [2.10.0](https://github.com/dryvist/ansible-proxmox/compare/v2.9.1...v2.10.0) (2026-09-24)
 
 
