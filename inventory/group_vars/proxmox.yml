@@ -134,6 +134,14 @@ common_packages:
   - lm-sensors
   - rasdaemon
 
+# node_exporter's drm collector (disabled upstream by default) reads GPU
+# metrics from sysfs/DRM; amdgpu is the only driver it currently exposes
+# (node_drm_gpu_busy_percent, node_drm_memory_vram_used_bytes, ...). Set
+# group-wide rather than a per-host exception: on a node with no amdgpu
+# device the collector just finds nothing to report.
+pve_node_exporter_extra_args:
+  - "--collector.drm"
+
 # apt caching proxies (apt-cacher-ng) for Proxmox nodes. Real URLs are injected
 # via the APT_PROXY_URL env var (e.g. from Doppler), like http://<acng>:3142, so
 # no environment-specific address is committed. Empty disables proxying.
