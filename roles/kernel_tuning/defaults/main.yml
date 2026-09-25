@@ -1,6 +1,16 @@
 ---
 # Kernel Tuning role defaults
 
+# hwmon sensor kernel modules to load persistently (/etc/modules-load.d).
+# `drivetemp` is safe fleet-wide (see tasks/main.yml). A workstation's Super
+# I/O fan-monitoring chip (nct6775, it87, ...) is board-specific and must be
+# identified per host — e.g. `sensors-detect --auto` (a read-only probe) run
+# once against that host — then added in its host_vars, never guessed here:
+#
+#   kernel_tuning_hwmon_modules: "{{ kernel_tuning_hwmon_modules + ['nct6775'] }}"
+kernel_tuning_hwmon_modules:
+  - drivetemp
+
 # Swap behavior - lower = prefer RAM (10-30 for SSD/NVMe)
 kernel_tuning_swappiness: 10
 
