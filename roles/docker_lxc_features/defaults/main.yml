@@ -1,16 +1,14 @@
 ---
 # docker_lxc_features role defaults
 #
-# Root-only LXC feature flags for AI-orchestration Docker guests. The BPG
-# Proxmox provider's API token cannot set `keyctl` or `fuse` on these shells,
-# so this role applies the host-side `pct set --features` step after create.
+# Root-only LXC feature flags for Docker guests. The BPG Proxmox provider's
+# API token cannot set `keyctl` or `fuse` on these shells, so this role
+# applies the host-side `pct set --features` step after create.
 #
-# The role targets containers whose tofu inventory tags include `docker` plus
-# `ai-orchestration`, `agentgateway`, `hindsight` (the memory-plane API
-# replicas), `dashboard` or `observability` — every one of them runs Docker on
-# an unprivileged ZFS-backed LXC and so needs the same fuse-overlayfs features.
-# `n8n` and `langgraph` remain explicit fallbacks so they stay covered even if
-# the tags have not landed in inventory yet.
+# Selection rule: every container whose tofu inventory tags include `docker`
+# gets these features — the same rule playbooks/site/01a-docker-daemon.yml
+# uses to pin the fuse-overlayfs storage driver, so every Docker LXC gets
+# both the daemon config and the kernel features it needs.
 
 docker_lxc_features_desired_tokens:
   - nesting=1
@@ -18,27 +16,3 @@ docker_lxc_features_desired_tokens:
   - fuse=1
 
 docker_lxc_features_desired_features: "{{ docker_lxc_features_desired_tokens | join(',') }}"
-
-# Guest tiers that run Docker in an unprivileged LXC. A guest joins by carrying
-# `docker` plus one of these; widening the role is a data change here, not an
-# edit to the selection task.
-docker_lxc_features_target_tags:
-  - ai-orchestration
-  - agentgateway
-  - hindsight
-  - dashboard
-  # The trace-sink tier: every `observability` guest here is Docker on an
-  # unprivileged ZFS-backed LXC, so it needs the same fuse-overlayfs features
-  # as the tiers above. Added after a guest in this tier failed its converge on
-  # `failed to register layer: using mount program fuse-overlayfs: fuse: device
-  # not found` — Docker starts, pulls, and only fails when it writes a layer.
-  #
-  # This also brings an existing guest under management rather than leaving it
-  # correct by accident: another guest in this tier already carries the three
-  # feature flags while matching none of the tags above, so nothing was
-  # maintaining them.
-  - observability
-
-docker_lxc_features_fallback_services:
-  - n8n
-  - langgraph
