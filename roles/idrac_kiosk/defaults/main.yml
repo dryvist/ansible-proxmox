@@ -31,5 +31,9 @@ idrac_kiosk_r710_port: 5710
 # On-host directory holding the generated kiosk landing page.
 idrac_kiosk_data_dir: /opt/idrac-kiosk
 
+# What the kiosk opens. Defaults to the local page with both iDRAC consoles;
+# a host can point it at any URL (the server-room wall, for one).
+idrac_kiosk_url: "file://{{ idrac_kiosk_data_dir }}/index.html"
+
 # Unprivileged user that runs the cage + chromium session.
 idrac_kiosk_user: kiosk

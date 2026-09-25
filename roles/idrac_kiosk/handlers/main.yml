@@ -11,3 +11,10 @@
   when:
     - ansible_service_mgr == 'systemd'
     - ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+
+# logind re-reads logind.conf.d on SIGHUP; a restart would end every session.
+- name: Reload logind
+  ansible.builtin.command:
+    cmd: systemctl kill --signal=SIGHUP systemd-logind
+  changed_when: true
+  when: ansible_service_mgr == 'systemd'

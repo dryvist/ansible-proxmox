@@ -18,7 +18,7 @@ RuntimeDirectory=idrac-kiosk
 Environment=XDG_RUNTIME_DIR=/run/idrac-kiosk
 Environment=WLR_RENDERER=gles2
 # cage hosts a single Wayland app fullscreen; chromium runs as the kiosk app.
-ExecStart=/usr/bin/cage -- /usr/bin/chromium --kiosk --ozone-platform=wayland --noerrdialogs --disable-infobars --incognito --no-first-run --app=file://{{ idrac_kiosk_data_dir }}/index.html
+ExecStart=/usr/bin/cage -- /usr/bin/chromium --kiosk --ozone-platform=wayland --noerrdialogs --disable-infobars --incognito --no-first-run --ignore-gpu-blocklist --app={{ idrac_kiosk_url }}
 # A kiosk that cannot start must FAIL, never loop. cage holds the console input
 # devices including the power button, so an endless restart cycle is a way to
 # power the node off by accident. Give up after a few tries and stay down.
