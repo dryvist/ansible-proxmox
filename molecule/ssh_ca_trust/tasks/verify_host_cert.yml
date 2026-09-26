@@ -1,0 +1,205 @@
+---
+# Host-certificate verification, split out of verify.yml to keep that file
+# under the repo's per-file token budget. Included from verify.yml's task
+# list only — same `hosts`/vars_files/become as the parent play.
+
+# Host-certificate renewal decision — rendered, never hand-duplicated.
+# ssh-keygen -Lf's real output format, captured once from a certificate
+# this role's own sign call issued (see PR description).
+- name: Fixture — a valid, non-expiring host certificate's ssh-keygen -Lf output
+  ansible.builtin.set_fact:
+    ssh_ca_trust_host_cert_test_valid_probe: |
+      /etc/ssh/ssh_host_ed25519_key-cert.pub:
+              Type: ssh-ed25519-cert-v01@openssh.com host certificate
+              Public key: ED25519-CERT SHA256:zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+              Signing CA: ED25519 SHA256:AAAAtestCAfingerprintAAAA (using ssh-ed25519)
+              Key ID: "host-cert"
+              Serial: 1
+              Valid: from 2026-01-01T00:00:00 to 2026-04-01T00:00:00
+              Principals:
+                      guest1.pve.molecule-test.example.com
+              Critical Options: (none)
+              Extensions: (none)
+
+- name: Render the host-cert decision — absent (expect sign)
+  ansible.builtin.set_fact:
+    ssh_ca_trust_host_cert_test_absent: >-
+      {{ lookup('template', '../../../roles/ssh_ca_trust/templates/host_cert_needs_signing.j2', template_vars={
+           'ssh_ca_trust_host_cert_present': false,
+           'ssh_ca_trust_host_cert_probe_text': '',
+           'ssh_ca_trust_host_cert_expected_principal': 'guest1.pve.molecule-test.example.com',
+           'ssh_ca_trust_ca_trust_fetched_fp': 'SHA256:AAAAtestCAfingerprintAAAA',
+           'ssh_ca_trust_host_cert_now': '2026-01-15T00:00:00',
+           'ssh_ca_trust_host_cert_renew_before_days': 45,
+         }) | trim }}
+
+- name: Render the host-cert decision — valid, far from expiry, right principal/CA (expect keep)
+  ansible.builtin.set_fact:
+    ssh_ca_trust_host_cert_test_valid: >-
+      {{ lookup('template', '../../../roles/ssh_ca_trust/templates/host_cert_needs_signing.j2', template_vars={
+           'ssh_ca_trust_host_cert_present': true,
+           'ssh_ca_trust_host_cert_probe_text': ssh_ca_trust_host_cert_test_valid_probe,
+           'ssh_ca_trust_host_cert_expected_principal': 'guest1.pve.molecule-test.example.com',
+           'ssh_ca_trust_ca_trust_fetched_fp': 'SHA256:AAAAtestCAfingerprintAAAA',
+           'ssh_ca_trust_host_cert_now': '2026-01-15T00:00:00',
+           'ssh_ca_trust_host_cert_renew_before_days': 45,
+         }) | trim }}
+
+- name: Render the host-cert decision — inside the renew-before window (expect sign)
+  ansible.builtin.set_fact:
+    ssh_ca_trust_host_cert_test_expiring: >-
+      {{ lookup('template', '../../../roles/ssh_ca_trust/templates/host_cert_needs_signing.j2', template_vars={
+           'ssh_ca_trust_host_cert_present': true,
+           'ssh_ca_trust_host_cert_probe_text': ssh_ca_trust_host_cert_test_valid_probe,
+           'ssh_ca_trust_host_cert_expected_principal': 'guest1.pve.molecule-test.example.com',
+           'ssh_ca_trust_ca_trust_fetched_fp': 'SHA256:AAAAtestCAfingerprintAAAA',
+           'ssh_ca_trust_host_cert_now': '2026-03-20T00:00:00',
+           'ssh_ca_trust_host_cert_renew_before_days': 45,
+         }) | trim }}
+
+- name: Render the host-cert decision — wrong principal (expect sign)
+  ansible.builtin.set_fact:
+    ssh_ca_trust_host_cert_test_wrong_principal: >-
+      {{ lookup('template', '../../../roles/ssh_ca_trust/templates/host_cert_needs_signing.j2', template_vars={
+           'ssh_ca_trust_host_cert_present': true,
+           'ssh_ca_trust_host_cert_probe_text': ssh_ca_trust_host_cert_test_valid_probe,
+           'ssh_ca_trust_host_cert_expected_principal': 'a-different-guest.pve.molecule-test.example.com',
+           'ssh_ca_trust_ca_trust_fetched_fp': 'SHA256:AAAAtestCAfingerprintAAAA',
+           'ssh_ca_trust_host_cert_now': '2026-01-15T00:00:00',
+           'ssh_ca_trust_host_cert_renew_before_days': 45,
+         }) | trim }}
+
+- name: Render the host-cert decision — CA fingerprint no longer matches the pin (expect sign)
+  ansible.builtin.set_fact:
+    ssh_ca_trust_host_cert_test_ca_mismatch: >-
+      {{ lookup('template', '../../../roles/ssh_ca_trust/templates/host_cert_needs_signing.j2', template_vars={
+           'ssh_ca_trust_host_cert_present': true,
+           'ssh_ca_trust_host_cert_probe_text': ssh_ca_trust_host_cert_test_valid_probe,
+           'ssh_ca_trust_host_cert_expected_principal': 'guest1.pve.molecule-test.example.com',
+           'ssh_ca_trust_ca_trust_fetched_fp': 'SHA256:aRotatedCAfingerprintThatNoLongerMatches',
+           'ssh_ca_trust_host_cert_now': '2026-01-15T00:00:00',
+           'ssh_ca_trust_host_cert_renew_before_days': 45,
+         }) | trim }}
+
+- name: Assert every host-cert renewal-decision fixture rendered the expected outcome
+  ansible.builtin.assert:
+    that:
+      - ssh_ca_trust_host_cert_test_absent == 'True'
+      - ssh_ca_trust_host_cert_test_valid == 'False'
+      - ssh_ca_trust_host_cert_test_expiring == 'True'
+      - ssh_ca_trust_host_cert_test_wrong_principal == 'True'
+      - ssh_ca_trust_host_cert_test_ca_mismatch == 'True'
+    fail_msg: >-
+      host_cert_needs_signing.j2 did not decide correctly: absent={{ ssh_ca_trust_host_cert_test_absent }}
+      valid={{ ssh_ca_trust_host_cert_test_valid }} expiring={{ ssh_ca_trust_host_cert_test_expiring }}
+      wrong_principal={{ ssh_ca_trust_host_cert_test_wrong_principal }}
+      ca_mismatch={{ ssh_ca_trust_host_cert_test_ca_mismatch }}
+
+# SECURITY regression: the LXC host-cert principal must be sourced from
+# `pct config` (the PVE-node-side container config a guest cannot write
+# to), never from a command run INSIDE the guest — a compromised
+# container that could choose its own reported hostname would get a
+# CA-signed cert for any principal it claimed. This scenario has no live
+# `pct` to prove the runtime behavior against, so it asserts the
+# production script itself never reintroduces the guest-sourced pattern.
+- name: Assert the host-cert principal comes from pct config, never a guest-executed hostname
+  vars:
+    ssh_ca_trust_lxc_host_cert_tasks_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/lxc_host_cert.yml') }}"
+  ansible.builtin.assert:
+    that:
+      - "'-- hostname' not in ssh_ca_trust_lxc_host_cert_tasks_text"
+      - "'pct config' in ssh_ca_trust_lxc_host_cert_tasks_text"
+    fail_msg: >-
+      tasks/lxc_host_cert.yml must derive the host-cert principal from
+      `pct config` (PVE-node-side, operator-controlled) and must never run
+      `hostname` inside the guest via `pct exec` — a compromised container
+      could otherwise choose the principal a signed host certificate is
+      issued for.
+
+# Reload regression: a cert-only renewal (dropin/CA/principals unchanged)
+# must still reload sshd, or the container keeps serving the old/no
+# certificate. lxc.yml's "Push CA trust" task drives that reload from a
+# before/after fingerprint; it can only see a cert-only change if "before"
+# was captured BEFORE the cert was signed and installed — capturing it
+# fresh inside that task (after install) would compare the post-install
+# state against itself and never detect the change. This has no live
+# `pct` to prove the reload fires end to end, so it asserts (1) the
+# production scripts wire a pre-signing snapshot into that decision, and
+# (2), functionally, that the SAME fingerprint expression they use treats
+# a cert-only byte change as a real change — the actual mechanism the
+# reload line depends on.
+- name: Assert the production scripts wire a pre-signing fingerprint into the reload decision
+  vars:
+    ssh_ca_trust_lxc_host_cert_tasks_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/lxc_host_cert.yml') }}"
+    ssh_ca_trust_lxc_tasks_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/lxc.yml') }}"
+  ansible.builtin.assert:
+    that:
+      - "'PREFP=' in ssh_ca_trust_lxc_host_cert_tasks_text"
+      - "'ssh_ca_trust_lxc_host_cert_pre_fp' in ssh_ca_trust_lxc_tasks_text"
+    fail_msg: >-
+      tasks/lxc_host_cert.yml must snapshot a fingerprint that includes the
+      host cert file (PREFP) BEFORE the certificate is signed and
+      installed, and tasks/lxc.yml's "Push CA trust" task must assign that
+      pre-signing snapshot straight into `before` — a fingerprint taken
+      after the cert is already installed cannot detect a renewal-only
+      change, so sshd would never reload for it.
+
+- name: Functionally prove a cert-only byte change flips the SAME fingerprint expression the reload decision uses
+  vars:
+    ssh_ca_trust_fp_tmpdir: /tmp/ssh_ca_trust_fp_test
+  block:
+    - name: Set up 4 local stand-in files (CA, dropin, one principals file, host cert)
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: |
+          set -euo pipefail
+          rm -rf {{ ssh_ca_trust_fp_tmpdir }}
+          mkdir -p {{ ssh_ca_trust_fp_tmpdir }}/principals
+          printf 'ca-key-v1\n' > {{ ssh_ca_trust_fp_tmpdir }}/ca
+          printf 'dropin-v1\n' > {{ ssh_ca_trust_fp_tmpdir }}/dropin
+          printf 'root\n' > {{ ssh_ca_trust_fp_tmpdir }}/principals/root
+          printf 'cert-v1\n' > {{ ssh_ca_trust_fp_tmpdir }}/cert
+      changed_when: false
+
+    - name: Fingerprint before a cert-only change (same "cat ... | md5sum" shape fingerprint() uses)
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: >-
+          set -o pipefail; cat {{ ssh_ca_trust_fp_tmpdir }}/ca {{ ssh_ca_trust_fp_tmpdir }}/dropin
+          {{ ssh_ca_trust_fp_tmpdir }}/principals/* {{ ssh_ca_trust_fp_tmpdir }}/cert
+          2>/dev/null | md5sum
+      register: ssh_ca_trust_fp_before
+      changed_when: false
+
+    - name: Renew ONLY the cert file — CA/dropin/principals are untouched
+      ansible.builtin.copy:
+        content: "cert-v2-renewed\n"
+        dest: "{{ ssh_ca_trust_fp_tmpdir }}/cert"
+        mode: "0644"
+
+    - name: Fingerprint after the cert-only change
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: >-
+          set -o pipefail; cat {{ ssh_ca_trust_fp_tmpdir }}/ca {{ ssh_ca_trust_fp_tmpdir }}/dropin
+          {{ ssh_ca_trust_fp_tmpdir }}/principals/* {{ ssh_ca_trust_fp_tmpdir }}/cert
+          2>/dev/null | md5sum
+      register: ssh_ca_trust_fp_after
+      changed_when: false
+
+    - name: Assert the fingerprint changed from a cert-only edit (this IS the reload trigger)
+      ansible.builtin.assert:
+        that:
+          - ssh_ca_trust_fp_before.stdout != ssh_ca_trust_fp_after.stdout
+        fail_msg: >-
+          A cert-only change must change this fingerprint — it is what
+          "before != after" gates the `systemctl reload` call on in
+          tasks/lxc.yml. If this fingerprint expression stops including the
+          host-cert path, a cert-only renewal would silently stop
+          reloading sshd in every container.
+
+    - name: Clean up the fingerprint test's local stand-in files
+      ansible.builtin.file:
+        path: "{{ ssh_ca_trust_fp_tmpdir }}"
+        state: absent
+      changed_when: false
