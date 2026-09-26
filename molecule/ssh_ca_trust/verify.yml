@@ -30,6 +30,11 @@
 #    (operator-controlled) and never from a guest-executed `hostname` — a
 #    static check, since this scenario has no live `pct` to prove it against
 #    a real compromised-guest scenario.
+# 7. Asserts tasks/lxc.yml snapshots a fingerprint that includes the host
+#    cert path BEFORE signing/installing a certificate, and that the reload
+#    task consumes that pre-signing snapshot — a static check, since this
+#    scenario has no live `pct`/sshd to prove a cert-only renewal actually
+#    reloads sshd against.
 
 - name: Verify
   hosts: all
@@ -248,3 +253,28 @@
           inside the guest via `pct exec` — a compromised container could
           otherwise choose the principal a signed host certificate is issued
           for.
+
+    # Reload regression: a cert-only renewal (dropin/CA/principals unchanged)
+    # must still reload sshd, or the container keeps serving the old/no
+    # certificate. The "Push CA trust" task's own before/after fingerprint
+    # can only see that if "before" was captured BEFORE the cert was signed
+    # and installed — capturing it fresh inside that task (after install)
+    # would compare the post-install state against itself and never detect
+    # the change. This has no live `pct` to prove the reload fires, so it
+    # asserts the production script snapshots a pre-signing fingerprint
+    # (including the cert path) and that the reload task consumes it.
+    - name: Assert a cert-only LXC renewal is captured by a pre-signing fingerprint, not a post-install one
+      vars:
+        ssh_ca_trust_lxc_tasks_text: "{{ lookup('file', '../../roles/ssh_ca_trust/tasks/lxc.yml') }}"
+      ansible.builtin.assert:
+        that:
+          - "'PREFP=' in ssh_ca_trust_lxc_tasks_text"
+          - "'ssh_ca_trust_lxc_host_cert_pre_fp' in ssh_ca_trust_lxc_tasks_text"
+          - "ssh_ca_trust_lxc_tasks_text.count('ssh_ca_trust_host_cert_path') >= 4"
+        fail_msg: >-
+          tasks/lxc.yml must snapshot a fingerprint that includes the host
+          cert file (PREFP) BEFORE the certificate is signed and installed,
+          and the "Push CA trust" task must use that pre-signing snapshot
+          (ssh_ca_trust_lxc_host_cert_pre_fp) as its `before` value — a
+          fingerprint taken after the cert is already installed cannot
+          detect a renewal-only change, so sshd would never reload for it.
