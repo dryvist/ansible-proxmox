@@ -1,0 +1,112 @@
+---
+# ssh_ca_trust/lxc_host_cert — issue and install an SSH host certificate for
+# every running container, over pct exec. Included from lxc.yml (which owns
+# discovering the running-container list) only when
+# ssh_ca_trust_host_cert_enabled is true. Same shape as tasks/host_cert.yml's
+# node path: probe each container's own host key + existing cert, decide via
+# the SAME decision template tasks/host_cert.yml and this role's tests
+# render, sign on the CONTROLLER (never inside the container), then push the
+# signed cert back in — BEFORE lxc.yml's drop-in write, which adds the
+# HostCertificate line, `sshd -t -f` validates, then reloads.
+#
+# SECURITY: the principal a signed cert is issued for MUST come from data
+# the controller/PVE node controls, never from inside the guest — otherwise
+# a compromised container could report an arbitrary hostname (e.g. another
+# guest's fqdn) and get a CA-signed host cert every other guest trusts under
+# that identity. `pct config` reads the container's config as stored in
+# /etc/pve/lxc/<ctid>.conf on the PVE node — a guest cannot rewrite that file
+# from inside its own namespace, unlike asking the guest's own OS to
+# report its hostname, which it fully controls. Only the
+# PUBLIC KEY is read from the guest below (safe: the cert still binds that
+# key to the principal WE chose, never one the guest chose).
+- name: Probe each running container's host key and existing host certificate
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -o pipefail
+      pubkey=$(pct exec {{ item }} -- cat /etc/ssh/ssh_host_ed25519_key.pub)
+      hostname=$(pct config {{ item }} | awk -F': ' '$1=="hostname"{print $2}')
+      hostname="${hostname:-CT{{ item }}}"
+      if pct exec {{ item }} -- test -f {{ ssh_ca_trust_host_cert_path }}; then
+        probe=$(pct exec {{ item }} -- ssh-keygen -Lf {{ ssh_ca_trust_host_cert_path }})
+        present=1
+      else
+        probe=""
+        present=0
+      fi
+      # Snapshot the same fingerprint "Push CA trust into running containers"
+      # (lxc.yml) uses for its own reload decision, but taken NOW — before
+      # any signing or cert install touches the guest. A renewal-only run
+      # (dropin/CA/principals unchanged) still changes this file's bytes, so
+      # comparing against this pre-signing snapshot (not one taken after the
+      # cert is already installed) is what lets that task detect a cert-only
+      # change and reload sshd for it.
+      certfp_before=$(pct exec {{ item }} -- sh -c \
+        'cat {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }} {{ ssh_ca_trust_principals_dir }}/* {{ ssh_ca_trust_host_cert_path }} 2>/dev/null | md5sum' \
+        2>/dev/null || echo absent)
+      printf 'PUBKEY=%s\n' "$pubkey"
+      printf 'HOSTNAME=%s\n' "$hostname"
+      printf 'PRESENT=%s\n' "$present"
+      printf 'PROBE_B64=%s\n' "$(printf '%s' "$probe" | base64 | tr -d '\n')"
+      printf 'PREFP=%s\n' "$certfp_before"
+  loop: "{{ ssh_ca_trust_lxc_running }}"
+  register: ssh_ca_trust_lxc_host_cert_probe
+  changed_when: false
+
+- name: Decide whether each running container's host certificate needs (re)signing
+  ansible.builtin.set_fact:
+    ssh_ca_trust_lxc_host_cert_decisions: >-
+      {{ (ssh_ca_trust_lxc_host_cert_decisions | default([])) + [{
+           'ctid': item.item,
+           'pubkey': (item.stdout | regex_search('PUBKEY=(\S+)', '\\1') | first),
+           'principal': (item.stdout | regex_search('HOSTNAME=(\S+)', '\\1') | first) ~ '.' ~ ssh_ca_trust_host_cert_domain,
+           'pre_fp': (item.stdout | regex_search('PREFP=(\S+)', '\\1') | first),
+           'needs_signing': (lookup('template', 'host_cert_needs_signing.j2', template_vars={
+               'ssh_ca_trust_host_cert_present': (item.stdout | regex_search('PRESENT=(\d)', '\\1') | first) == '1',
+               'ssh_ca_trust_host_cert_probe_text': ((item.stdout | regex_search('PROBE_B64=(\S*)', '\\1') | first) | default('', true) | b64decode),
+               'ssh_ca_trust_host_cert_expected_principal': (item.stdout | regex_search('HOSTNAME=(\S+)', '\\1') | first) ~ '.' ~ ssh_ca_trust_host_cert_domain,
+               'ssh_ca_trust_ca_trust_fetched_fp': ssh_ca_trust_fetched_fp.stdout,
+               'ssh_ca_trust_host_cert_now': ansible_date_time.date ~ 'T' ~ ansible_date_time.time,
+               'ssh_ca_trust_host_cert_renew_before_days': (ssh_ca_trust_host_cert_renew_before | regex_replace('d$', '') | int),
+             }) | trim | bool)
+         }] }}
+  loop: "{{ ssh_ca_trust_lxc_host_cert_probe.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Index each container's pre-signing fingerprint by ctid
+  ansible.builtin.set_fact:
+    ssh_ca_trust_lxc_host_cert_pre_fp: "{{ ssh_ca_trust_lxc_host_cert_decisions | default([]) | items2dict(key_name='ctid', value_name='pre_fp') }}"
+
+- name: Sign new host certificates for containers that need one (controller)
+  ansible.builtin.uri:
+    url: "{{ ssh_ca_trust_bao_addr }}/v1/{{ ssh_ca_trust_mount }}/sign/{{ ssh_ca_trust_host_cert_role }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ ssh_ca_trust_host_cert_bao_token }}"
+    body_format: json
+    body:
+      cert_type: host
+      public_key: "{{ item.pubkey }}"
+      valid_principals: "{{ item.principal }}"
+    return_content: true
+  delegate_to: localhost
+  become: false
+  register: ssh_ca_trust_lxc_host_cert_signed
+  no_log: true
+  loop: "{{ ssh_ca_trust_lxc_host_cert_decisions | default([]) | selectattr('needs_signing') | list }}"
+  loop_control:
+    label: "{{ item.ctid }}"
+
+- name: Install each signed host certificate into its container (pct)
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      printf '%s' {{ item.json.data.signed_key | quote }} \
+        | pct exec {{ item.item.ctid }} -- tee {{ ssh_ca_trust_host_cert_path }} > /dev/null
+      pct exec {{ item.item.ctid }} -- chmod 0644 {{ ssh_ca_trust_host_cert_path }}
+  loop: "{{ ssh_ca_trust_lxc_host_cert_signed.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.ctid }}"
+  changed_when: true

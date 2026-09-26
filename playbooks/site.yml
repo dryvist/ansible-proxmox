@@ -175,6 +175,23 @@
       tags:
         - zfs_pools
 
+    # Single source of the llm-fabric GGUF model list (id, HF repo/file,
+    # pinned revision), shared with ansible-proxmox-ai's llama_cpp role via
+    # the dryvist.homelab collection. Defaults only, no tasks — included here
+    # so llm_model_catalog_models is in scope for llm_model_store_seed below,
+    # in the same play.
+    - role: dryvist.homelab.llm_model_catalog
+      tags:
+        - llm_model_store_seed
+
+    # Populates the llm fabric's shared model-store mount(s) from the node
+    # that owns the backing volume. Runs after zfs_pools so the volume
+    # already exists; targets are derived from containers_from_tofu
+    # (loaded by the first play above), never a hand-written host list.
+    - role: llm_model_store_seed
+      tags:
+        - llm_model_store_seed
+
     # Record which physical drive sits in which machine, for Nautobot. Placed
     # after zfs_pools so the `used` field reports the pool membership this run
     # established rather than the state that preceded it. Read-only.
@@ -255,76 +272,12 @@
           jevans: [jevans]
           admin: [admin]
 
-    # Cross-node ZFS replication (syncoid, layer 2). Pull model — runs on the
-    # backup node; inert until syncoid_jobs is set. Why the healthcheck is
-    # load-bearing rather than decoration: roles/syncoid/README.md.
-    - role: syncoid
-      tags:
-        - syncoid
-      vars:
-        syncoid_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/syncoid"
-
-    # Insert-only SQLite warm standby — one consumer of the generic
-    # <pool>/databases storage namespace. Daily appends new rows from a source
-    # DB into a queryable archive (never deletes). Inert until
-    # sqlite_standby_jobs is set (per host). Runs after zfs_pools (dataset) and
-    # syncoid; the namespace is snapshotted (sanoid) and replicated (syncoid).
-    - role: sqlite_standby
-      tags:
-        - sqlite_standby
-      vars:
-        sqlite_standby_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/sqlite-standby"
-
-    # Postgres dump archive pull + Tier-2 cloud upload — the Postgres consumer
-    # of docs/DATABASE_DR_STANDARD.md. Inert until postgres_standby_jobs is set
-    # (per host). Tier-2 targets are env-wired (Doppler/SOPS); an unset key
-    # drops that target, leaving Tier 1 (sanoid + syncoid) intact.
-    - role: postgres_standby
-      tags:
-        - postgres_standby
-      vars:
-        postgres_standby_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/postgres-standby"
-        postgres_standby_s3_targets: >-
-          {{ [
-               {'name': 'RUSTFS',
-                'bucket': lookup('env', 'POSTGRES_DR_RUSTFS_BUCKET'),
-                'prefix': 'postgres',
-                'endpoint_url': lookup('env', 'POSTGRES_DR_RUSTFS_ENDPOINT'),
-                'access_key': lookup('env', 'POSTGRES_DR_RUSTFS_ACCESS_KEY'),
-                'secret_key': lookup('env', 'POSTGRES_DR_RUSTFS_SECRET_KEY')},
-               {'name': 'AWS',
-                'bucket': lookup('env', 'POSTGRES_DR_AWS_BUCKET'),
-                'prefix': 'postgres',
-                'access_key': lookup('env', 'POSTGRES_DR_AWS_ACCESS_KEY'),
-                'secret_key': lookup('env', 'POSTGRES_DR_AWS_SECRET_KEY')}
-             ] | selectattr('access_key', 'ne', '') | list }}
-
-    # Daily tar of the local pmxcfs mount into the <pool>/databases archive
-    # namespace. Inert unless a host sets pve_config_backup_enabled: true.
-    # What it captures and why one member suffices: the role's README.
-    - role: pve_config_backup
-      tags:
-        - pve_config_backup
-      vars:
-        pve_config_backup_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/pve-config-backup"
-
-    # ntfy webhook + matchers for vzdump failures, HA fencing, replication
-    # failures, and package updates. Additive-only against
-    # /etc/pve/notifications.cfg (see roles/pve_notifications/README.md).
-    - role: pve_notifications
-      tags:
-        - pve_notifications
-
-    # Daily bare-mirror of every configured owner's PUBLIC repositories.
-    # Public repos only (v1) -- no credential of any kind, cloned/fetched
-    # anonymously. Inert unless a host sets git_mirror_enabled: true and a
-    # non-empty git_mirror_owners (the node that already owns the
-    # <pool>/git-mirror dataset). See roles/git_mirror/README.md.
-    - role: git_mirror
-      tags:
-        - git_mirror
-      vars:
-        git_mirror_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/git-mirror"
+# Backup, disaster-recovery, and notification roles (syncoid, sqlite_standby,
+# postgres_standby, pve_config_backup, pve_notifications, git_mirror). Split
+# out of this file rather than left inline so site.yml stays inside its token
+# budget; imported in the position the block held, so role order is unchanged.
+- name: Configure backup, disaster-recovery, and notification roles
+  import_playbook: backup-dr.yml
 
 # Node hardware and power policy (BMC console, the power-off/wake cycle,
 # chassis power-restore, host GPU driver). Split out of this file rather than

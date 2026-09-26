@@ -4,6 +4,12 @@ Serves already-existing ZFS datasets over Samba, from the per-node
 `node_storage` contract: declarative shares, a Unix/Samba group, and managed
 Samba users.
 
+## Installation
+
+Part of this repository's role collection; no separate install step. It runs
+via `playbooks/site.yml` on every `proxmox` host that declares a `node_storage`
+share (see "Where shares are declared" below).
+
 ## What it does NOT do
 
 It does **not** create datasets, set quotas, or manage mountpoints. `zfs_pools`
@@ -88,6 +94,7 @@ doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags nas_storage
 | `nas_storage_managed_users` | `[]` | Declarative Samba-backed service accounts |
 | `nas_storage_shares` | `[]` | Declarative Samba shares (no single-share fallback) |
 | `nas_storage_macos_optimized` | `true` | Global vfs_fruit tuning for macOS Finder/Time Machine |
+| `nas_storage_smb_min_protocol` | `SMB3` | Global protocol floor (`node_storage.<node>.smb.min_protocol` to override) |
 | `nas_storage_password_fingerprint_dir` | `/etc/samba/password-fingerprints` | Root-only password hash cache for idempotence |
 
 ## Apple clients (macOS, Time Machine, Infuse)
@@ -102,7 +109,7 @@ Per-share Apple options, set in the dataset's `smb` block:
 | Share field | Effect |
 | --- | --- |
 | `time_machine: true` | Adds `fruit:time machine = yes` — the share becomes a Time Machine target |
-| `time_machine_max_size: "600G"` | **Required** when `time_machine` is true. Time Machine grows until the volume is full, so an uncapped target eventually consumes the whole pool and takes every other dataset on it down with it. The tofu schema rejects the uncapped case |
+| `time_machine_max_size: "600G"` | **Required** when `time_machine` is true — else the target grows until the pool is full. Tofu's schema rejects uncapped |
 | `read_only: true` | A read-only media share — e.g. for **Infuse** on Apple TV / iPhone to play directly over SMB alongside Plex |
 
 Spotlight *search* over SMB additionally requires a server-side indexer

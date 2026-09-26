@@ -9,5 +9,5 @@
     # deployment would look fine while scheduling nothing.
     - name: Install Python and system utilities (required for Ansible)
       ansible.builtin.raw: |
-        apt-get update && apt-get install -y python3 procps cron
+        apt-get update && apt-get install -y python3 procps cron kmod
       changed_when: true

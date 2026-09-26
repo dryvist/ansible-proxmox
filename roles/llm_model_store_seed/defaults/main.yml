@@ -1,0 +1,23 @@
+---
+# llm_model_store_seed role defaults.
+#
+# Populates the llm fabric's shared model-store mount(s) with every declared
+# GGUF, running on the PVE host that owns the backing volume — never a
+# serving guest, which never downloads models (see role README).
+#
+# The model list itself is NOT here. It lives in
+# dryvist.homelab.llm_model_catalog (dryvist/homelab-contracts), the single
+# catalog shared with ansible-proxmox-ai's llama_cpp role, as
+# `llm_model_catalog_models`. playbooks/site.yml includes that role
+# immediately before this one, in the same play, so its defaults are already
+# in scope by the time tasks/seed_node.yml reads them.
+
+# Timeout for the HF metadata lookup and the GGUF download itself, in
+# seconds. Multi-gigabyte files over a home internet connection, not a CDN
+# SLA — generous on purpose.
+llm_model_store_seed_timeout: 3600
+
+# File mode for a seeded GGUF. World-readable: llama-server runs as the
+# guest's own service user, and this file is only ever reached read-only
+# through the fabric's ro bind mount.
+llm_model_store_seed_file_mode: "0644"

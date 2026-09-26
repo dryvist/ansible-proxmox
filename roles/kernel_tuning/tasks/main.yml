@@ -1,6 +1,37 @@
 ---
 # Kernel Tuning role tasks
 
+# hwmon sensor kernel modules (fans, drive temperatures). node_exporter only
+# reports what the kernel already exposes under /sys/class/hwmon; it never
+# loads a driver. `drivetemp` (SATA/SAS drive temps) is safe fleet-wide.
+# Motherboard fan RPM needs a board-specific Super I/O driver (`nct6775`,
+# `it87`, ...), set per host via kernel_tuning_hwmon_modules — never guessed
+# here.
+- name: Load hwmon sensor kernel modules at boot
+  ansible.builtin.copy:
+    content: |
+      {% for module in kernel_tuning_hwmon_modules %}
+      {{ module }}
+      {% endfor %}
+    dest: /etc/modules-load.d/hwmon-sensors.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: kernel_tuning_hwmon_modules | length > 0
+  tags:
+    - kernel_tuning
+    - hwmon
+
+- name: Load hwmon sensor kernel modules now
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ kernel_tuning_hwmon_modules }}"
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - kernel_tuning
+    - hwmon
+
 - name: Configure kernel tuning parameters
   ansible.posix.sysctl:
     name: "{{ item.name }}"

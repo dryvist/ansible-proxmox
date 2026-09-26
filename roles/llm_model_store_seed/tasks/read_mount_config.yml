@@ -1,0 +1,39 @@
+---
+# Read each target's live LXC config and find the mpN entry (if any) backing
+# its declared models mount. Extracted so attach_missing_mounts.yml can call
+# it twice: once to discover what's missing, once more to pick up what it
+# just created — pct config is the only source of truth for which mpN index
+# a mount landed on.
+
+- name: Reset the mount-match accumulator before this read
+  ansible.builtin.set_fact:
+    llm_model_store_seed_mount_matches: []
+
+- name: Read each model-store container's live LXC configuration
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ llm_model_store_seed_node_name }}/lxc/{{ item.vmid }}/config"
+      - --output-format
+      - json
+  loop: "{{ llm_model_store_seed_targets }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+  register: llm_model_store_seed_configs
+  changed_when: false
+
+- name: Find the exact mpN entry backing each container's declared models mount
+  ansible.builtin.set_fact:
+    llm_model_store_seed_mount_matches: >-
+      {{
+        llm_model_store_seed_mount_matches | default([]) + [
+          ((item.1.stdout | from_json) | dict2items
+            | selectattr('key', 'match', '^mp[0-9]+$')
+            | selectattr('value', 'match', '(?:^|,)mp=' ~ (item.0.models_mount_path | regex_escape) ~ '(?:,|$)')
+            | list)
+        ]
+      }}
+  loop: "{{ llm_model_store_seed_targets | zip(llm_model_store_seed_configs.results) | list }}"
+  loop_control:
+    label: "{{ item.0.hostname }}"

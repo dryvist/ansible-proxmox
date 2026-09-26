@@ -65,6 +65,15 @@
       ansible.builtin.command:
         cmd: testparm -s
       changed_when: false
+      register: testparm_output
+
+    - name: Assert the protocol floor is SMB3
+      ansible.builtin.assert:
+        that:
+          - "'SMB3' in testparm_output.stdout"
+        fail_msg: >-
+          Effective smb.conf does not report a minimum protocol of SMB3 --
+          the global 'server min protocol' setting did not render or apply.
 
     # The account is created under the name from the SECRET MAP
     # ("molecule-resolved-user"), not the one from the declaration -- the

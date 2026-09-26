@@ -1,0 +1,42 @@
+{#- ssh_ca_trust host-certificate renewal decision.
+
+  Rendered from tasks/host_cert.yml and tasks/lxc.yml (against live
+  ssh-keygen -Lf output) AND from molecule/ssh_ca_trust/verify.yml (against a
+  controller-side ssh-keygen -Lf FIXTURE) via the identical
+  `lookup('template', 'host_cert_needs_signing.j2', template_vars={...})`
+  call — the test renders this file, it never hand-copies the logic.
+
+  Required template_vars:
+    ssh_ca_trust_host_cert_present            bool  does the -cert.pub exist
+    ssh_ca_trust_host_cert_probe_text         str   `ssh-keygen -Lf` stdout
+                                                     (ignored when not present)
+    ssh_ca_trust_host_cert_expected_principal str   guest fqdn that must be
+                                                     the cert's sole principal
+    ssh_ca_trust_ca_trust_fetched_fp          str   pinned/fetched CA
+                                                     fingerprint (SHA256:...)
+    ssh_ca_trust_host_cert_now                str   "YYYY-MM-DDTHH:MM:SS",
+                                                     same local-time frame
+                                                     ssh-keygen -Lf prints in
+    ssh_ca_trust_host_cert_renew_before_days  int   renew-before window
+
+  Renders the single token "True" or "False" (the caller applies
+  `| trim | bool`). Sign only when: absent, expiring within the window,
+  wrong principal, or a CA fingerprint that doesn't match the pinned one.
+-#}
+{%- if not ssh_ca_trust_host_cert_present -%}
+{{ true }}
+{%- else -%}
+{%- set expiry_group = ssh_ca_trust_host_cert_probe_text | regex_search('Valid: from \S+ to (\S+)', '\\1') -%}
+{%- set expiry_str = (expiry_group | first) if expiry_group else '' -%}
+{%- if expiry_str | length == 0 -%}
+{%- set expiring_soon = true -%}
+{%- else -%}
+{%- set now_dt = ssh_ca_trust_host_cert_now | to_datetime('%Y-%m-%dT%H:%M:%S') -%}
+{%- set expiry_dt = expiry_str | to_datetime('%Y-%m-%dT%H:%M:%S') -%}
+{%- set expiring_soon = (expiry_dt - now_dt).days < ssh_ca_trust_host_cert_renew_before_days -%}
+{%- endif -%}
+{%- set principal_pattern = '(?m)^\s*' ~ (ssh_ca_trust_host_cert_expected_principal | regex_escape) ~ '\s*$' -%}
+{%- set has_principal = (ssh_ca_trust_host_cert_probe_text | regex_search(principal_pattern)) is not none -%}
+{%- set ca_matches = ssh_ca_trust_ca_trust_fetched_fp in ssh_ca_trust_host_cert_probe_text -%}
+{{ expiring_soon or (not has_principal) or (not ca_matches) }}
+{%- endif -%}

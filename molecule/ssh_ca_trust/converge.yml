@@ -10,12 +10,27 @@
 # The pin+rollout-both-true "activates" path needs a live/mocked OpenBao CA
 # endpoint this scenario does not stand up; verify.yml instead asserts the
 # gate FORMULA directly for that case (see verify.yml header).
+#
+# tasks/lxc.yml's own writes go through `pct exec`, which this Docker
+# container cannot run — that transport genuinely isn't exercised here. What
+# CAN be, and is below: the hardened drop-in's CONTENT, rendered from the
+# exact same template file (templates/lxc_sshd_hardening.conf.j2) tasks/
+# lxc.yml sources via `lookup('template', ...)`, applied directly to this
+# container's real sshd (no pct needed — this container already IS the
+# target). A regression in that template, or in what tasks/main.yml's/
+# lxc.yml's effective-config assert checks for, fails CI via verify.yml's
+# matching assertions below.
 
 - name: Converge
   hosts: all
   # The Docker test container runs as root and does not install sudo.
   become: false
   gather_facts: true
+
+  vars:
+    ssh_ca_trust_lxc_test_ca_pub: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMc4shG4OO1GtC46CMVsOK8Tz7kuEGWX0xutfFYBjLth
+      molecule-test-ca-throwaway-key-not-a-real-ca
 
   tasks:
     - name: Converge — no pin, rollout default (expect no-op)
@@ -30,3 +45,60 @@
       vars:
         ssh_ca_trust_ca_fingerprint: "SHA256:fakeFAKEfakeFAKEfakeFAKEfakeFAKEfakeFAKEfak"
         ssh_ca_trust_rollout_enabled: false
+
+    - name: Converge — LXC hardening drop-in against a REAL sshd (no pct — this container IS the target)
+      # Deliberately DISTINCT paths from the role's own defaults (also used
+      # below in this play by the earlier no-op cases) — this test writes
+      # real files on purpose, and must never be mistaken by verify.yml's
+      # "no CA trust file was ever written" check for the role itself doing
+      # so (that check asserts the role's own default paths stayed untouched).
+      vars:
+        ssh_ca_trust_ca_file: /etc/ssh/molecule-test-ca-keys.pem
+        ssh_ca_trust_principals_dir: /etc/ssh/molecule-test-principals
+        ssh_ca_trust_dropin: /etc/ssh/sshd_config.d/50-molecule-test-hardening.conf
+        ssh_ca_trust_lxc_principals:
+          root: [ansible, semaphore]
+        ssh_ca_trust_lxc_allow_users_extra: []
+      block:
+        - name: Install openssh-server for the hardening-drop-in test
+          ansible.builtin.apt:
+            name: openssh-server
+            state: present
+            update_cache: true
+
+        - name: Write a throwaway test CA public key (not a real CA — CI plumbing only)
+          ansible.builtin.copy:
+            dest: "{{ ssh_ca_trust_ca_file }}"
+            content: "{{ ssh_ca_trust_lxc_test_ca_pub }}\n"
+            mode: "0644"
+
+        - name: Create the principals directory
+          ansible.builtin.file:
+            path: "{{ ssh_ca_trust_principals_dir }}"
+            state: directory
+            mode: "0755"
+
+        - name: Write the root principals file
+          ansible.builtin.copy:
+            dest: "{{ ssh_ca_trust_principals_dir }}/root"
+            content: |
+              ansible
+              semaphore
+            mode: "0644"
+
+        - name: Write the hardened sshd drop-in from templates/lxc_sshd_hardening.conf.j2
+          # validate tests the RENDERED TEMP FILE (sshd -t -f %s) before the
+          # module moves it into place — the same standalone-then-atomic-move
+          # guarantee tasks/lxc.yml's own `pct exec ... sshd -t -f
+          # {{ dropin }}.new` + `mv` gives the live pct-exec path, since that
+          # path can't use this module and has to do it by hand.
+          ansible.builtin.template:
+            src: ../../roles/ssh_ca_trust/templates/lxc_sshd_hardening.conf.j2
+            dest: "{{ ssh_ca_trust_dropin }}"
+            mode: "0644"
+            validate: "sshd -t -f %s"
+
+        - name: Syntax-check the MERGED sshd config after the drop-in lands (same check tasks/lxc.yml runs post-move)
+          ansible.builtin.command:
+            cmd: sshd -t
+          changed_when: false

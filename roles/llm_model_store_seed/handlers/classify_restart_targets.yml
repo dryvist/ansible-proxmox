@@ -1,0 +1,36 @@
+---
+# Given llm_model_store_seed_restart_status (the registered result of reading
+# each changed container's `pvesh .../status/current`), sort each one into
+# llm_model_store_seed_restart_running or llm_model_store_seed_restart_stopped
+# by its live status field. Pure derivation, no command execution, so a test
+# can drive it against a fixture.
+
+- name: Reset the running-restart-target accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_restart_running: []
+
+- name: Identify changed containers that are currently running
+  ansible.builtin.set_fact:
+    llm_model_store_seed_restart_running: >-
+      {{
+        llm_model_store_seed_restart_running
+        + ([item.item] if (item.stdout | from_json).status == 'running' else [])
+      }}
+  loop: "{{ llm_model_store_seed_restart_status.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Reset the stopped-restart-target accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_restart_stopped: []
+
+- name: Identify changed containers that are currently stopped
+  ansible.builtin.set_fact:
+    llm_model_store_seed_restart_stopped: >-
+      {{
+        llm_model_store_seed_restart_stopped
+        + ([item.item] if (item.stdout | from_json).status != 'running' else [])
+      }}
+  loop: "{{ llm_model_store_seed_restart_status.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"

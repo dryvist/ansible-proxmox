@@ -190,3 +190,20 @@ jobs:
         # several behaviour-named modules, and naming them individually is how
         # a newly added one silently never runs.
         run: python -m pytest tests/pve_guest_evacuation_lxc_managed_volumes/
+
+      # A new mpN can hotplug live on a running LXC; restarting unconditionally
+      # to apply it takes the serving guest down for nothing when it already
+      # did. Drives the role's own decision task against both outcomes.
+      - name: Verify llm_model_store_seed mount hotplug-vs-restart decision
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_mount_hotplug_check.yml -i localhost, -c local
+
+      # Whether a changed container gets `pct reboot` or `pct start`. Drives
+      # the handler's own decision task against both outcomes.
+      - name: Verify llm_model_store_seed restart-target classification
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_restart_target_classification.yml -i localhost, -c local

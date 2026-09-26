@@ -4,6 +4,15 @@
 # chicken-and-egg). Stopped containers are reported as blockers: static-key
 # retirement is gated on every guest carrying CA trust, so a skipped guest
 # must be visible, never silent.
+#
+# Also hardens the pushed sshd config to PVE-node parity (no password/kbd-int
+# auth, AllowUsers scoped to the declared principal map plus
+# ssh_ca_trust_lxc_allow_users_extra) and, where sshd is present, validates
+# the rendered drop-in standalone BEFORE it ever becomes the live file, then
+# proves the EFFECTIVE config actually reflects that hardening —
+# mirroring tasks/main.yml's node-level assert — before recording the
+# container as ready in ssh_ca_trust_lxc_ready (default: {} in
+# defaults/main.yml, so it's always defined even when this file never runs).
 
 - name: List this node's running LXC containers
   ansible.builtin.shell:
@@ -31,9 +40,19 @@
       did NOT receive CA trust — static-key retirement stays blocked for them.
   when: ssh_ca_trust_lxc_stopped | length > 0
 
-# One pct exec per container writes all three artifacts and reloads sshd only
-# when the guest actually runs one (LXCs are converged over pct, so a guest
-# without sshd is fine — it simply has nothing to trust the CA with).
+# --- SSH host certificates for running containers (rollout gate) ---------
+# Split into tasks/lxc_host_cert.yml (probe/decide/sign/install) to keep this
+# file under the repo's per-file token budget — see that file for the
+# SECURITY note on why the principal must never come from inside the guest.
+- name: Issue and install SSH host certificates for running containers
+  ansible.builtin.include_tasks: lxc_host_cert.yml
+  when: ssh_ca_trust_host_cert_enabled | bool
+
+# One pct exec per container writes all three artifacts, best-effort installs
+# openssh-server on an apt-based guest that lacks it, writes the hardened
+# drop-in, and reloads sshd only when the guest actually runs one (LXCs are
+# converged over pct, so a guest without sshd — or a non-apt guest we won't
+# touch, e.g. an "unmanaged" NixOS container — is fine, just not-ready).
 - name: Push CA trust into running containers
   ansible.builtin.shell:
     executable: /bin/bash
@@ -42,12 +61,24 @@
       # Fingerprint the managed files BEFORE writing. Writing identical bytes is
       # harmless, but reloading sshd in every container on every converge is not,
       # and reporting `changed` unconditionally hides real drift in the noise.
+      # Includes the host-cert path so a renewal-only run (cert re-signed, but
+      # the CA/dropin/principals content unchanged) still counts as a change —
+      # harmless to include when host-cert is disabled or absent, since `cat`
+      # on that path then just contributes nothing (stderr swallowed).
       fingerprint() {
         pct exec {{ item }} -- sh -c \
-          'cat {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }} {{ ssh_ca_trust_principals_dir }}/* 2>/dev/null | md5sum' \
+          'cat {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }} {{ ssh_ca_trust_principals_dir }}/* {{ ssh_ca_trust_host_cert_path }} 2>/dev/null | md5sum' \
           2>/dev/null || echo absent
       }
-      before=$(fingerprint)
+      # A cert-only renewal already wrote the new cert (the "Install each
+      # signed host certificate" task above, earlier in this same play) before
+      # this task ever runs — so fingerprinting fresh here would compare the
+      # post-install state against itself and miss the change. Use the
+      # snapshot the probe task took BEFORE signing/installing instead, when
+      # one exists (host-cert enabled); otherwise fall back to a fresh probe,
+      # matching this task's original behavior when host-cert is disabled.
+      before="{{ (ssh_ca_trust_lxc_host_cert_pre_fp | default({}))[item] | default('') }}"
+      if [ -z "$before" ]; then before=$(fingerprint); fi
       pct exec {{ item }} -- mkdir -p {{ ssh_ca_trust_principals_dir }} /etc/ssh/sshd_config.d
       # One argument per entry, one line each. A `join('\n')` inside this block
       # scalar hands printf the two characters `\n` verbatim, which collapses a
@@ -58,19 +89,50 @@
       printf '%s\n' {% for principal in principals %}"{{ principal }}" {% endfor %}\
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_principals_dir }}/{{ user }} > /dev/null
       {% endfor %}
-      printf '%s\n' \
-        "# Managed by ansible-proxmox ssh_ca_trust (via pct) — OpenBao SSH client CA" \
-        "TrustedUserCAKeys {{ ssh_ca_trust_ca_file }}" \
-        "AuthorizedPrincipalsFile {{ ssh_ca_trust_principals_dir }}/%u" \
-        | pct exec {{ item }} -- tee {{ ssh_ca_trust_dropin }} > /dev/null
-      pct exec {{ item }} -- chmod 0644 {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}
-      after=$(fingerprint)
+      # Best-effort, non-fatal: install openssh-server only on an apt-based
+      # guest that doesn't already have it. A non-apt guest (e.g. an
+      # "unmanaged" NixOS container) or one whose install fails is left alone
+      # and simply reported not-ready below — never a failed loop item over
+      # one container's package manager.
+      if ! pct exec {{ item }} -- sh -c 'command -v sshd' > /dev/null 2>&1; then
+        if pct exec {{ item }} -- sh -c 'command -v apt-get' > /dev/null 2>&1; then
+          pct exec {{ item }} -- sh -c \
+            'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server' \
+            > /dev/null 2>&1 || true
+          pct exec {{ item }} -- sh -c \
+            'systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true' \
+            > /dev/null 2>&1 || true
+        fi
+      fi
+      {# Rendered from templates/lxc_sshd_hardening.conf.j2 — the SAME file
+         the ssh_ca_trust Molecule scenario renders directly onto a real
+         sshd, so a content regression here fails CI there. One printf arg
+         per line, same reasoning as the CA-keys/principals writes above:
+         join('\n') hands printf the two characters \n verbatim. #}
+      {# Staged to a `.new` path, never straight to the live drop-in — a bad
+         render must never leave a broken config on disk for the next sshd
+         restart/reboot to trip over. Validated standalone (sshd -t -f, the
+         same pattern Ansible's own `template: validate:` uses — see the
+         Molecule converge.yml counterpart) before the atomic rename into
+         place; `set -euo pipefail` means a failed validate aborts this
+         script before the rename runs, so whatever was already live (or
+         nothing) is what's still on disk. #}
+      printf '%s\n' {% for line in lookup('template', 'lxc_sshd_hardening.conf.j2').splitlines() %}"{{ line }}" {% endfor %}\
+        | pct exec {{ item }} -- tee {{ ssh_ca_trust_dropin }}.new > /dev/null
+      pct exec {{ item }} -- chmod 0644 {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}.new
+      ready=0
       if pct exec {{ item }} -- sh -c 'command -v sshd' > /dev/null 2>&1; then
         # sshd -t needs the privilege-separation dir, which a bare `pct exec`
         # shell lacks (systemd normally creates it at sshd start) — create it
         # so the config test doesn't abort with "Missing privilege separation
         # directory: /run/sshd".
         pct exec {{ item }} -- mkdir -p /run/sshd
+        # Validate the STAGED file standalone before it ever becomes the live
+        # drop-in — a rendering bug must fail here, not brick the guest's
+        # sshd on its next restart.
+        pct exec {{ item }} -- sshd -t -f {{ ssh_ca_trust_dropin }}.new
+        pct exec {{ item }} -- mv {{ ssh_ca_trust_dropin }}.new {{ ssh_ca_trust_dropin }}
+        after=$(fingerprint)
         # Validate on every run: the trust config is what lets the CA in, so a
         # guest that would refuse to start sshd must surface now, not at the
         # next restart.
@@ -78,10 +140,51 @@
         if [ "$before" != "$after" ]; then
           pct exec {{ item }} -- sh -c 'systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true'
         fi
+        # `sshd -t` only proves syntax; assert the EFFECTIVE config actually
+        # carries the hardening — a competing drop-in or main-file directive,
+        # or one a per-guest cloud-init already set, would otherwise silently
+        # win. Mirrors tasks/main.yml's node-level effective-config assert.
+        # Fail loud (not a warning): a hardened-looking drop-in that some
+        # other fragment overrides is a security gap, not a readiness note.
+        effective=$(pct exec {{ item }} -- sshd -T)
+        fail=0
+        echo "$effective" | grep -qx 'passwordauthentication no' || fail=1
+        echo "$effective" | grep -qx 'kbdinteractiveauthentication no' || fail=1
+        echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}' || fail=1
+        echo "$effective" | grep -qx "allowusers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra) | join(' ') }}" || fail=1
+        {% if ssh_ca_trust_host_cert_enabled | bool %}
+        echo "$effective" | grep -qF 'hostcertificate {{ ssh_ca_trust_host_cert_path }}' || fail=1
+        {% endif %}
+        # ForceCommand has no on-wire "unset" value other than its absence or
+        # the literal default "none" — either is fine, any real command is not.
+        fc_line=$(echo "$effective" | grep -i '^forcecommand ' | head -n1 || true)
+        if [ -n "$fc_line" ] && [ "$fc_line" != "forcecommand none" ]; then
+          fail=1
+        fi
+        if [ "$fail" -eq 1 ]; then
+          echo "HARDEN_FAIL {{ item }}: effective sshd config does not carry the hardening — a competing fragment is overriding it" >&2
+          echo "$effective" >&2
+          exit 1
+        fi
+        ready=1
+      else
+        # No sshd to validate against — move the staged drop-in into place
+        # unvalidated, same as before this file ever had a staging step.
+        pct exec {{ item }} -- mv {{ ssh_ca_trust_dropin }}.new {{ ssh_ca_trust_dropin }}
+        after=$(fingerprint)
       fi
       if [ "$before" != "$after" ]; then echo "RESULT=changed"; else echo "RESULT=unchanged"; fi
+      echo "READY=$ready"
   loop: "{{ ssh_ca_trust_lxc_running }}"
   register: ssh_ca_trust_lxc_push
   # 'RESULT=changed' is not a substring of 'RESULT=unchanged', so this cannot
   # match the negative case the way a bare 'CHANGED' test would.
   changed_when: "'RESULT=changed' in ssh_ca_trust_lxc_push.stdout"
+
+- name: Record per-container hardened-sshd readiness
+  ansible.builtin.set_fact:
+    ssh_ca_trust_lxc_ready: >-
+      {{ ssh_ca_trust_lxc_ready | default({}) | combine({item.item: ('READY=1' in item.stdout)}) }}
+  loop: "{{ ssh_ca_trust_lxc_push.results }}"
+  loop_control:
+    label: "{{ item.item }}"

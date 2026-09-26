@@ -1,0 +1,172 @@
+---
+# Attach a declared-but-not-yet-live models mount natively, the way
+# media_lxc_features already applies its own root@pam-only mount_point
+# changes. Needed because modules/proxmox-container/main.tf (tofu-proxmox)
+# puts mount_point in ignore_changes: the BPG API token can't set it
+# (root@pam-only), so terraform never applies a mount_points addition to an
+# already-created container — deployment.json can declare the mount and the
+# published inventory picks it up, but the live guest never sees it without
+# this step.
+#
+# A new mpN on a RUNNING LXC can hotplug live (pve-container source:
+# vmconfig_hotplug_pending -> apply_pending_mountpoint(..., running=1); the
+# failure path that forces a restart only fires for a change to an EXISTING
+# mp, not one newly added). So the restart below is evidence-driven, not
+# unconditional: check_mount_hotplug.yml reads each attached container's
+# /pending config and restarts only the ones where the new mpN is still
+# listed as pending, i.e. it did not take effect live. media_lxc_features
+# restarts unconditionally because it can also rewrite an EXISTING mp
+# (backup=/ro= flags), which is exactly the case the hotplug path excludes.
+#
+# Runs once per node, after the first read_mount_config.yml (so
+# llm_model_store_seed_mount_matches reflects the CURRENT live state) and
+# before the "require exactly one" assert in seed_node.yml, which reads the
+# config again afterward via a second read_mount_config.yml include.
+
+- name: Reset the missing-target accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_missing: []
+
+# A plain string-keyed attribute lookup ('1') on a zip() tuple resolves via
+# Jinja's environment.getattr, which does not fall back to integer indexing
+# the way template syntax like item.1 does -- selectattr('1', ...) would
+# silently match nothing. Loop + accumulate instead, matching the pattern
+# already used for llm_model_store_seed_mount_matches itself.
+- name: Identify targets whose declared models mount is not yet live
+  ansible.builtin.set_fact:
+    llm_model_store_seed_missing: >-
+      {{
+        llm_model_store_seed_missing
+        + ([item.0] if item.1 == [] else [])
+      }}
+  loop: "{{ llm_model_store_seed_targets | zip(llm_model_store_seed_mount_matches) | list }}"
+  loop_control:
+    label: "{{ item.0.hostname }}"
+
+- name: Require an allocation spec for every target missing its mount
+  ansible.builtin.assert:
+    that:
+      - item.models_mount_storage is not none
+      - item.models_mount_size is not none
+    fail_msg: >-
+      {{ item.hostname }} declares models_mount_path
+      ({{ item.models_mount_path }}) with no live mpN backing it, but the
+      published inventory has no models_mount_storage/models_mount_size to
+      create one from. Refusing to guess a storage pool or size.
+    quiet: true
+  loop: "{{ llm_model_store_seed_missing }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Reset the used-mpN-index accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_used_mp_idxs: {}
+
+- name: Record each target's currently-used mpN indices
+  ansible.builtin.set_fact:
+    llm_model_store_seed_used_mp_idxs: >-
+      {{
+        llm_model_store_seed_used_mp_idxs | combine({
+          item.hostname: (
+            ((llm_model_store_seed_configs.results
+              | selectattr('item.hostname', 'equalto', item.hostname) | first
+            ).stdout | from_json) | dict2items
+            | selectattr('key', 'match', '^mp[0-9]+$')
+            | map(attribute='key') | map('regex_replace', '^mp', '') | map('int') | list
+          )
+        })
+      }}
+  loop: "{{ llm_model_store_seed_missing }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+# A container with zero existing mpN entries has no key to take max() of --
+# max() on an empty list raises, so -1 is appended as a sentinel first,
+# guaranteeing a non-empty list either way (giving index 0 when none exist).
+- name: Reset the next-free-mpN-index accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_next_mp_idx: {}
+
+- name: Find the next free mpN index per target missing its mount
+  ansible.builtin.set_fact:
+    llm_model_store_seed_next_mp_idx: >-
+      {{
+        llm_model_store_seed_next_mp_idx | combine({
+          item.hostname: ((llm_model_store_seed_used_mp_idxs[item.hostname] + [-1]) | max + 1)
+        })
+      }}
+  loop: "{{ llm_model_store_seed_missing }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Attach each missing models mount (pct set)
+  ansible.builtin.command:
+    argv:
+      - pct
+      - set
+      - "{{ item.vmid }}"
+      - "--mp{{ llm_model_store_seed_next_mp_idx[item.hostname] }}"
+      - >-
+        {{ item.models_mount_storage }}:{{ item.models_mount_size }},mp={{
+        item.models_mount_path }}{{ ',ro=1' if item.models_mount_read_only else '' }}
+  loop: "{{ llm_model_store_seed_missing }}"
+  loop_control:
+    label: >-
+      {{ item.hostname }} mp{{ llm_model_store_seed_next_mp_idx[item.hostname] }}:
+      {{ item.models_mount_storage }}:{{ item.models_mount_size }} -> {{ item.models_mount_path }}
+  changed_when: true
+  notify: Restart changed llm model-store containers
+  register: llm_model_store_seed_attach
+
+- name: Read each attached target's pending-vs-applied config
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ llm_model_store_seed_node_name }}/lxc/{{ item.vmid }}/pending"
+      - --output-format
+      - json
+  loop: "{{ llm_model_store_seed_missing }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+  register: llm_model_store_seed_pending_after_attach
+  changed_when: false
+
+- name: Decide which attached mounts still need a restart
+  ansible.builtin.include_tasks: check_mount_hotplug.yml
+
+- name: Record which containers still need a restart, for the handler
+  ansible.builtin.set_fact:
+    llm_model_store_seed_changed: >-
+      {{ llm_model_store_seed_still_pending | map(attribute='vmid') | list }}
+  when: llm_model_store_seed_still_pending | length > 0
+
+# Apply the restart NOW rather than at end-of-play: seed_model.yml (a later
+# include in this same run) does not depend on it -- pct set already
+# allocates the managed volume synchronously, before any start. Only the
+# containers in llm_model_store_seed_still_pending get restarted here; one
+# whose mount hotplugged live triggers no notify and the handler's own loop
+# never sees it, so an already-converged host performs zero restarts.
+- name: Apply the mount-attach restart immediately
+  ansible.builtin.meta: flush_handlers
+
+- name: Log the mount-attach restart for each container whose mount was pending
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.hostname }} (vmid {{ item.vmid }}): attached
+      {{ item.models_mount_storage }}:{{ item.models_mount_size }} at
+      {{ item.models_mount_path }}; it did not hotplug (still pending), so
+      the container was restarted to apply it.
+  loop: "{{ llm_model_store_seed_still_pending }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Log the mount-attach hotplug for each container needing no restart
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.hostname }} (vmid {{ item.vmid }}): attached
+      {{ item.models_mount_storage }}:{{ item.models_mount_size }} at
+      {{ item.models_mount_path }} and it hotplugged live; no restart needed.
+  loop: "{{ llm_model_store_seed_hotplugged }}"
+  loop_control:
+    label: "{{ item.hostname }}"
