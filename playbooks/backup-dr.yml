@@ -1,0 +1,88 @@
+---
+# Backup, disaster-recovery, and operator-notification roles: cross-node ZFS
+# replication, the SQLite/Postgres standby archives, the pmxcfs config
+# backup, vzdump/HA/replication ntfy alerts, and the public-repo git mirror.
+#
+# Split out of site.yml, which imports it in the position this block held, so
+# role order is unchanged. The split is not cosmetic: site.yml is token-budgeted
+# (.token-limits.yaml) because an agent asked to change one thing should not
+# have to read thirty unrelated roles to find it, and these roles form a
+# self-contained DR concern that nothing earlier in the converge depends on.
+# Every role here is inert unless a host opts in.
+
+- name: Configure backup, disaster-recovery, and notification roles
+  hosts: proxmox
+  become: true
+  gather_facts: true
+
+  roles:
+    # Cross-node ZFS replication (syncoid, layer 2). Pull model — runs on the
+    # backup node; inert until syncoid_jobs is set. Why the healthcheck is
+    # load-bearing rather than decoration: roles/syncoid/README.md.
+    - role: syncoid
+      tags:
+        - syncoid
+      vars:
+        syncoid_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/syncoid"
+
+    # Insert-only SQLite warm standby — one consumer of the generic
+    # <pool>/databases storage namespace. Daily appends new rows from a source
+    # DB into a queryable archive (never deletes). Inert until
+    # sqlite_standby_jobs is set (per host). Runs after zfs_pools (dataset) and
+    # syncoid; the namespace is snapshotted (sanoid) and replicated (syncoid).
+    - role: sqlite_standby
+      tags:
+        - sqlite_standby
+      vars:
+        sqlite_standby_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/sqlite-standby"
+
+    # Postgres dump archive pull + Tier-2 cloud upload — the Postgres consumer
+    # of docs/DATABASE_DR_STANDARD.md. Inert until postgres_standby_jobs is set
+    # (per host). Tier-2 targets are env-wired (Doppler/SOPS); an unset key
+    # drops that target, leaving Tier 1 (sanoid + syncoid) intact.
+    - role: postgres_standby
+      tags:
+        - postgres_standby
+      vars:
+        postgres_standby_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/postgres-standby"
+        postgres_standby_s3_targets: >-
+          {{ [
+               {'name': 'RUSTFS',
+                'bucket': lookup('env', 'POSTGRES_DR_RUSTFS_BUCKET'),
+                'prefix': 'postgres',
+                'endpoint_url': lookup('env', 'POSTGRES_DR_RUSTFS_ENDPOINT'),
+                'access_key': lookup('env', 'POSTGRES_DR_RUSTFS_ACCESS_KEY'),
+                'secret_key': lookup('env', 'POSTGRES_DR_RUSTFS_SECRET_KEY')},
+               {'name': 'AWS',
+                'bucket': lookup('env', 'POSTGRES_DR_AWS_BUCKET'),
+                'prefix': 'postgres',
+                'access_key': lookup('env', 'POSTGRES_DR_AWS_ACCESS_KEY'),
+                'secret_key': lookup('env', 'POSTGRES_DR_AWS_SECRET_KEY')}
+             ] | selectattr('access_key', 'ne', '') | list }}
+
+    # Daily tar of the local pmxcfs mount into the <pool>/databases archive
+    # namespace. Inert unless a host sets pve_config_backup_enabled: true.
+    # What it captures and why one member suffices: the role's README.
+    - role: pve_config_backup
+      tags:
+        - pve_config_backup
+      vars:
+        pve_config_backup_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/pve-config-backup"
+
+    # ntfy webhook + matchers for vzdump failures, HA fencing, replication
+    # failures, and package updates. Additive-only against
+    # /etc/pve/notifications.cfg (see roles/pve_notifications/README.md).
+    - role: pve_notifications
+      tags:
+        - pve_notifications
+
+    # Daily bare-mirror of every configured owner's PUBLIC repositories.
+    # Public repos only (v1) -- no credential of any kind, cloned/fetched
+    # anonymously. Inert unless a host sets git_mirror_enabled: true and a
+    # non-empty git_mirror_owners (the node that already owns the
+    # <pool>/git-mirror dataset). See roles/git_mirror/README.md.
+    - role: git_mirror
+      tags:
+        - git_mirror
+      vars:
+        git_mirror_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/git-mirror"

@@ -1,0 +1,94 @@
+---
+# Resolves each target container's models-mount volume to a real host
+# filesystem path, natively, from this node's own live LXC configuration —
+# never from a value guessed or cached in the desired state. A container
+# mount_point declared with a `size` (a managed volume, as every llm-fabric
+# guest's is today) only gets its real backing dataset name once Proxmox
+# allocates it, so this is read live via `pvesh`/`pvesm`, the same mechanism
+# roles/pve_guest_evacuation_lxc_managed_volumes already uses for the same
+# problem (resolve_volumes.yml).
+
+- name: Read the current live models-mount config for every target
+  ansible.builtin.include_tasks: read_mount_config.yml
+
+- name: Attach any declared models mount that is not yet live
+  ansible.builtin.include_tasks: attach_missing_mounts.yml
+  when: llm_model_store_seed_mount_matches | select('equalto', []) | list | length > 0
+
+- name: Re-read the live models-mount config after any attach
+  ansible.builtin.include_tasks: read_mount_config.yml
+  when: llm_model_store_seed_mount_matches | select('equalto', []) | list | length > 0
+
+- name: Require exactly one models-mount mpN entry per container
+  ansible.builtin.assert:
+    that:
+      - item.1 | length == 1
+    fail_msg: >-
+      {{ item.0.hostname }} (vmid {{ item.0.vmid }}) does not have exactly
+      one mpN entry matching its declared models_mount_path
+      ({{ item.0.models_mount_path }}) in its live LXC configuration on
+      {{ llm_model_store_seed_node_name }} — found {{ item.1 | length }}.
+      Refusing to guess which volume to seed.
+    quiet: true
+  loop: "{{ llm_model_store_seed_targets | zip(llm_model_store_seed_mount_matches) | list }}"
+  loop_control:
+    label: "{{ item.0.hostname }}"
+
+- name: Resolve each container's models-mount volid
+  ansible.builtin.set_fact:
+    llm_model_store_seed_volids: >-
+      {{
+        (llm_model_store_seed_volids | default({})) | combine({
+          item.0.hostname: (item.1[0].value | regex_replace(',.*$', ''))
+        })
+      }}
+  loop: "{{ llm_model_store_seed_targets | zip(llm_model_store_seed_mount_matches) | list }}"
+  loop_control:
+    label: "{{ item.0.hostname }}"
+
+- name: Resolve each models-mount volid to its real host filesystem path
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - path
+      - "{{ llm_model_store_seed_volids[item.hostname] }}"
+  loop: "{{ llm_model_store_seed_targets }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+  register: llm_model_store_seed_paths_raw
+  changed_when: false
+
+- name: Read each resolved models-mount path
+  ansible.builtin.stat:
+    path: "{{ item.stdout | trim }}"
+  loop: "{{ llm_model_store_seed_paths_raw.results }}"
+  loop_control:
+    label: "{{ item.item.hostname }}"
+  register: llm_model_store_seed_path_stats
+
+- name: Require every resolved models-mount path to be an existing directory
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isdir | default(false)
+      - not (item.stat.islnk | default(false))
+    fail_msg: >-
+      {{ item.item.item.hostname }}'s resolved models-mount path
+      ({{ item.item.stdout | trim }}) is not a real directory on
+      {{ llm_model_store_seed_node_name }}. Refusing to seed GGUFs under an
+      unverified path.
+    quiet: true
+  loop: "{{ llm_model_store_seed_path_stats.results }}"
+  loop_control:
+    label: "{{ item.item.item.hostname }}"
+
+- name: Seed every declared GGUF onto each resolved models-mount path
+  ansible.builtin.include_tasks: seed_model.yml
+  vars:
+    llm_model_store_seed_target_hostname: "{{ llm_model_store_seed_pair.0.item.hostname }}"
+    llm_model_store_seed_target_path: "{{ llm_model_store_seed_pair.0.stdout | trim }}"
+    llm_model_store_seed_model: "{{ llm_model_store_seed_pair.1 }}"
+  loop: "{{ llm_model_store_seed_paths_raw.results | product(llm_model_catalog_models) | list }}"
+  loop_control:
+    loop_var: llm_model_store_seed_pair
+    label: "{{ llm_model_store_seed_pair.0.item.hostname }}/{{ llm_model_store_seed_pair.1.name }}"

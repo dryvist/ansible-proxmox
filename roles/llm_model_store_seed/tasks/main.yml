@@ -1,0 +1,33 @@
+---
+# llm_model_store_seed role tasks.
+#
+# Targets are DERIVED from the published OpenTofu inventory
+# (containers_from_tofu, injected by playbooks/load_tofu.yml onto every
+# `proxmox` host) — never a hand-written host or vmid list. A host with no
+# llm-fabric model-store mount declared does nothing.
+
+- name: Determine this node's tofu identity
+  ansible.builtin.set_fact:
+    llm_model_store_seed_node_name: "{{ hostvars[inventory_hostname].proxmox_node_name | default(inventory_hostname) }}"
+  tags:
+    - llm_model_store_seed
+
+- name: Find this node's llm-fabric model-store containers in the published inventory
+  ansible.builtin.set_fact:
+    llm_model_store_seed_targets: >-
+      {{
+        (containers_from_tofu | default({})) | dict2items
+        | selectattr('value.node', 'defined')
+        | selectattr('value.node', 'equalto', llm_model_store_seed_node_name)
+        | selectattr('value.models_mount_path', 'defined')
+        | rejectattr('value.models_mount_path', 'equalto', None)
+        | map(attribute='value') | list
+      }}
+  tags:
+    - llm_model_store_seed
+
+- name: Seed the model store for this node's declared llm-fabric mounts
+  ansible.builtin.include_tasks: seed_node.yml
+  when: llm_model_store_seed_targets | length > 0
+  tags:
+    - llm_model_store_seed

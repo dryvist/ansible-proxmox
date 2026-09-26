@@ -1,0 +1,57 @@
+---
+# ---------------------------------------------------------------------------
+# Whether an attached models mount still needs a restart. A new mpN on a
+# running LXC can hotplug live; forcing an unconditional restart to apply it
+# takes the serving guest down for nothing when it already did. Drives the
+# role's OWN decision task (check_mount_hotplug.yml) against both a hotplug
+# and a still-pending /pending fixture, so drift in that logic fails here.
+# ---------------------------------------------------------------------------
+- name: Verify the mount hotplug-vs-restart decision
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars:
+    llm_model_store_seed_missing:
+      - hostname: llm-hotplugged
+        vmid: 405001
+      - hostname: llm-needs-restart
+        vmid: 405002
+
+    llm_model_store_seed_next_mp_idx:
+      llm-hotplugged: 1
+      llm-needs-restart: 2
+
+    # Shaped like the registered result of `pvesh get .../lxc/<vmid>/pending`.
+    # An entry with only `value` already applied; one with `pending` (no
+    # `value` yet) is queued for the next start.
+    llm_model_store_seed_pending_after_attach:
+      results:
+        - item:
+            hostname: llm-hotplugged
+            vmid: 405001
+          stdout: >-
+            [{"key": "rootfs", "value": "local-zfs:subvol-405001-disk-0,size=8G"},
+             {"key": "mp1", "value": "fast:vm-405001-disk-1,mp=/var/lib/llm,size=120G"}]
+        - item:
+            hostname: llm-needs-restart
+            vmid: 405002
+          stdout: >-
+            [{"key": "rootfs", "value": "local-zfs:subvol-405002-disk-0,size=8G"},
+             {"key": "mp2", "pending": "fast:vm-405002-disk-1,mp=/var/lib/llm,size=120G"}]
+
+  tasks:
+    - name: Run the hotplug-vs-pending decision
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/check_mount_hotplug.yml
+
+    - name: Assert the hotplugged target needs no restart and the pending one does
+      ansible.builtin.assert:
+        that:
+          - (llm_model_store_seed_hotplugged | map(attribute='hostname') | list) == ['llm-hotplugged']
+          - (llm_model_store_seed_still_pending | map(attribute='hostname') | list) == ['llm-needs-restart']
+        fail_msg: >-
+          Expected llm-hotplugged (mp1 applied, no `pending`) to need no
+          restart and llm-needs-restart (mp2 only `pending`) to still need
+          one. Got hotplugged={{ llm_model_store_seed_hotplugged | map(attribute='hostname') | list }}
+          still_pending={{ llm_model_store_seed_still_pending | map(attribute='hostname') | list }}.
+        quiet: true
