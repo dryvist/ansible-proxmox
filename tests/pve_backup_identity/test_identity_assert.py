@@ -121,8 +121,18 @@ def run(archives, mapping):
         os.chmod(script, os.stat(script).st_mode | stat.S_IEXEC)
 
         # Stub logger so the emitted line is captured instead of hitting the
-        # journal. Everything else the script probes degrades to a sentinel on
-        # its own when absent, which is the documented behaviour.
+        # journal. Most other probes degrade to a sentinel on their own when
+        # the tool is absent (ipmitool, sensors, pvesr), which is documented
+        # behaviour and fine to leave live. `ps` is not one of those: it is
+        # always present, so sample_dstate() reads the REAL process table of
+        # whatever machine runs this test. A build agent under its own I/O
+        # load reports genuine persistent D-state tasks, which crosses
+        # pve_health_telemetry_dstate_alert_threshold and stamps every case
+        # `critical` regardless of the backup fixture — the assertion starts
+        # failing depending on host load, not on anything under test. Stub
+        # `ps` to report no processes at all so dstate_persist/transient are
+        # always 0 here, the same way logger is stubbed to capture output
+        # instead of hitting the journal.
         binstub = os.path.join(work, "bin")
         os.makedirs(binstub)
         emitted = os.path.join(work, "emitted")
@@ -130,6 +140,11 @@ def run(archives, mapping):
         with open(logger, "w") as fh:
             fh.write('#!/bin/sh\nshift 4\nprintf "%s\\n" "$*" > ' + emitted + "\n")
         os.chmod(logger, os.stat(logger).st_mode | stat.S_IEXEC)
+
+        ps_stub = os.path.join(binstub, "ps")
+        with open(ps_stub, "w") as fh:
+            fh.write("#!/bin/sh\nexit 0\n")
+        os.chmod(ps_stub, os.stat(ps_stub).st_mode | stat.S_IEXEC)
 
         env = dict(os.environ, PATH=binstub + os.pathsep + os.environ["PATH"])
         result = subprocess.run([script], env=env, capture_output=True, text=True)
