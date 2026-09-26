@@ -5,6 +5,7 @@
 
 # Pinned upstream release. Renovate-friendly single source for the version;
 # bump deliberately (the checksum below must move with it when set).
+# renovate: datasource=github-releases depName=prometheus/node_exporter
 pve_node_exporter_version: "1.9.1"
 
 # Where the release tarball comes from. Standard GitHub releases URL; override

@@ -30,6 +30,12 @@ jobs:
       contents: read
       pull-requests: read
     uses: dryvist/.github/.github/workflows/_ansible-ci.yml@main
+    with:
+      # Opt in to the shared Renovate-annotation gate: a git-type SHA pin in
+      # requirements.yml (e.g. the homelab-contracts collection) without its
+      # `# renovate:` annotation is otherwise invisible to Renovate and to
+      # this check alike, and stays that way silently.
+      renovate_annotations: true
 
   # Deliberately unconditional. Gating this on the shared change filter, and
   # then telling the gate a skip is acceptable, means a green required check

@@ -61,6 +61,23 @@ ssh_ca_trust_manage_lxc: true
 ssh_ca_trust_lxc_principals:
   root: [ansible, semaphore]
 
+# Extra AllowUsers entries for a container that also has a NON-root user
+# logging in over SSH (e.g. a git-over-ssh service user, an sftp-only user,
+# an rsync/backup-pull user) — set per-host/group via inventory, never here.
+# AllowUsers is built from ssh_ca_trust_lxc_principals' keys (root, today)
+# PLUS this list, so such a container isn't silently locked out by a
+# principal map that only covers the automation login.
+ssh_ca_trust_lxc_allow_users_extra: []
+
+# Per-container hardened-sshd readiness, keyed by CTID, populated by
+# tasks/lxc.yml. A role default (not a mid-task set_fact) so it stays a
+# DEFINED, EMPTY structure — never undefined — whenever lxc.yml doesn't run
+# at all (ssh_ca_trust_manage_lxc: false, the node has no LXCs, or the
+# activation gate above is closed). Read by nobody yet in this role; it
+# exists so a later per-host `ansible_connection` flip has something to check
+# instead of re-deriving readiness itself.
+ssh_ca_trust_lxc_ready: {}
+
 ssh_ca_trust_ca_file: /etc/ssh/trusted-user-ca-keys.pem
 ssh_ca_trust_principals_dir: /etc/ssh/principals
 # Late-numbered so it wins over distro/local snippets in sshd_config.d.
