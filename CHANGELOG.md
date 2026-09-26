@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0](https://github.com/dryvist/ansible-proxmox/compare/v2.12.0...v2.13.0) (2026-09-26)
+
+
+### Features
+
+* **kernel_tuning:** load hwmon sensor kernel modules fleet-wide ([#816](https://github.com/dryvist/ansible-proxmox/issues/816)) ([0375b35](https://github.com/dryvist/ansible-proxmox/commit/0375b3557dcc991a42f7c0fe6b4ad6d4d3eb5d58))
+* **llm_model_store_seed:** seed llm fabric GGUFs from the storage-owning host ([#819](https://github.com/dryvist/ansible-proxmox/issues/819)) ([9932292](https://github.com/dryvist/ansible-proxmox/commit/99322928c75d72bee616563d0b123f2030a3e696))
+* **nas_storage:** floor Samba protocol at SMB3 ([e9e348f](https://github.com/dryvist/ansible-proxmox/commit/e9e348f83aa5f78725a959b46016e698cb8ca57a))
+* **nas_storage:** floor Samba protocol at SMB3 ([8299b91](https://github.com/dryvist/ansible-proxmox/commit/8299b91380df473cd48662e59b6871810783719a))
+* **pve-w5900:** opt in to Cribl Edge GPU metrics ([#817](https://github.com/dryvist/ansible-proxmox/issues/817)) ([3754b6e](https://github.com/dryvist/ansible-proxmox/commit/3754b6e0628449ec8d065ff7bf9859ff4b9b6772))
+* **ssh_ca_trust:** harden LXC sshd config to PVE-node parity ([#818](https://github.com/dryvist/ansible-proxmox/issues/818)) ([49ec0e1](https://github.com/dryvist/ansible-proxmox/commit/49ec0e1da2b137b944782a6901603eeba339078d))
+* **ssh_ca_trust:** issue and install ssh host certificates ([#822](https://github.com/dryvist/ansible-proxmox/issues/822)) ([48dd02a](https://github.com/dryvist/ansible-proxmox/commit/48dd02af51e89e23cb74b471b5b7fb3355f410f6))
+
+
+### Bug Fixes
+
+* **requirements:** annotate the homelab-contracts git SHA pin for Renovate ([#820](https://github.com/dryvist/ansible-proxmox/issues/820)) ([61ed49c](https://github.com/dryvist/ansible-proxmox/commit/61ed49c3a802f4d4d150d43fcae167601b2bb746))
+* **test:** stub ps in the backup identity test to stop reading the real host ([#824](https://github.com/dryvist/ansible-proxmox/issues/824)) ([8c79c0a](https://github.com/dryvist/ansible-proxmox/commit/8c79c0ac8ff15c6a961119a5f0cde5874ef1c56c))
+
 ## [2.12.0](https://github.com/dryvist/ansible-proxmox/compare/v2.11.1...v2.12.0) (2026-09-25)
 
 
