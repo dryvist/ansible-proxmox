@@ -1,4 +1,17 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>dryvist/.github"]
+  "extends": ["local>dryvist/.github"],
+  "customManagers": [
+    {
+      "description": "Renovate-annotated HuggingFace revision pins in roles/llm_model_store_seed/defaults/main.yml. A HuggingFace model repo is a plain git repository, so this tracks the pinned commit against the git-refs datasource (packageName = the repo's own HF URL) rather than a custom datasource. Uses its own `# renovate-digest:` prefix, distinct from this estate's shared `# renovate: datasource=... depName=...` annotation (dryvist/.github's renovate-presets.json): that shared manager's regex has no packageName group and would otherwise also match this same line, trying (and failing) to resolve git-refs against a packageName of just the model's short name instead of its HuggingFace URL.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/roles/llm_model_store_seed/defaults/main\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate-digest: datasource=(?<datasource>git-refs) depName=(?<depName>\\S+) packageName=(?<packageName>\\S+)\\s+hf_revision:\\s*[\"']?(?<currentDigest>[0-9a-f]{7,40})[\"']?"
+      ],
+      "currentValueTemplate": "main"
+    }
+  ]
 }

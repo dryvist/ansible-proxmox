@@ -1,0 +1,57 @@
+---
+# Seeds one model's GGUF onto one resolved models-mount path. Included once
+# per (container, model) pair by seed_node.yml.
+#
+# The sha256 is never a literal in this repo: it is read from HuggingFace's
+# own LFS blob metadata at run time, pinned to the model's Renovate-tracked
+# hf_revision (defaults/main.yml) rather than "whatever main currently is".
+# get_url's own `checksum:` then makes the fetch idempotent (skipped once the
+# dest already matches) AND atomic — per Ansible module convention, get_url
+# downloads to a temp file next to `dest` and atomic_move()s it into place,
+# so a concurrent reader (a serving guest, through its ro bind of the same
+# volume) only ever sees the previous complete file or the new complete one,
+# never a partial download.
+
+- name: "Resolve the pinned HuggingFace blob metadata for {{ llm_model_store_seed_model.name }}"
+  ansible.builtin.uri:
+    url: >-
+      https://huggingface.co/api/models/{{ llm_model_store_seed_model.hf_repo }}/revision/{{ llm_model_store_seed_model.hf_revision }}?blobs=true
+    return_content: true
+    timeout: "{{ llm_model_store_seed_timeout }}"
+  register: llm_model_store_seed_hf_meta
+  changed_when: false
+
+- name: "Require the pinned revision to contain {{ llm_model_store_seed_model.gguf }}"
+  ansible.builtin.assert:
+    that:
+      - llm_model_store_seed_gguf_sha256 | default('') | length > 0
+    fail_msg: >-
+      {{ llm_model_store_seed_model.hf_repo }}@{{ llm_model_store_seed_model.hf_revision }}
+      has no file named {{ llm_model_store_seed_model.gguf }} in its LFS
+      blob list. The pinned hf_revision or the gguf filename has drifted
+      from the upstream repo's current layout — fix defaults/main.yml, don't
+      guess a fallback name.
+    quiet: true
+  vars:
+    llm_model_store_seed_gguf_sha256: >-
+      {{
+        (llm_model_store_seed_hf_meta.json.siblings
+          | selectattr('rfilename', 'equalto', llm_model_store_seed_model.gguf)
+          | map(attribute='lfs.sha256') | list | first) | default('')
+      }}
+
+- name: "Seed the model store with {{ llm_model_store_seed_model.gguf }}"
+  ansible.builtin.get_url:
+    url: >-
+      https://huggingface.co/{{ llm_model_store_seed_model.hf_repo }}/resolve/{{ llm_model_store_seed_model.hf_revision }}/{{ llm_model_store_seed_model.gguf }}
+    dest: "{{ llm_model_store_seed_target_path }}/{{ llm_model_store_seed_model.gguf }}"
+    checksum: >-
+      sha256:{{
+        (llm_model_store_seed_hf_meta.json.siblings
+          | selectattr('rfilename', 'equalto', llm_model_store_seed_model.gguf)
+          | map(attribute='lfs.sha256') | first)
+      }}
+    mode: "{{ llm_model_store_seed_file_mode }}"
+    owner: root
+    group: root
+    timeout: "{{ llm_model_store_seed_timeout }}"

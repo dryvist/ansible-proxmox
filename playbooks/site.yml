@@ -175,6 +175,14 @@
       tags:
         - zfs_pools
 
+    # Populates the llm fabric's shared model-store mount(s) from the node
+    # that owns the backing volume. Runs after zfs_pools so the volume
+    # already exists; targets are derived from containers_from_tofu
+    # (loaded by the first play above), never a hand-written host list.
+    - role: llm_model_store_seed
+      tags:
+        - llm_model_store_seed
+
     # Record which physical drive sits in which machine, for Nautobot. Placed
     # after zfs_pools so the `used` field reports the pool membership this run
     # established rather than the state that preceded it. Read-only.
