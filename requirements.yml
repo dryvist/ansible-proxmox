@@ -38,6 +38,7 @@ collections:
   # Now at homelab-contracts#58, which makes inventory_resolve report the
   # underlying error on every failure path, instead of naming one presumed
   # cause regardless of what actually failed.
+  # renovate: datasource=git-refs depName=https://github.com/dryvist/homelab-contracts.git currentValue=main
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
     version: c5e139cb7ccb286016020dd85c2f1d9c3b5a376f

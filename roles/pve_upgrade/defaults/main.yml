@@ -12,6 +12,7 @@ pve_upgrade_reboot_timeout: 600
 # Substring asserted in `pveversion` output after the upgrade. The role does not
 # pin an exact build: the no-subscription channel always serves the latest 9.x
 # point release, so the node lands on current 9.2.x.
+# renovate: ignore — asserted post-upgrade PVE point release, not a fetched dependency
 pve_upgrade_expected_version: "9.2"
 
 # Put the node into PVE HA maintenance mode before rebooting, so the CRM migrates
