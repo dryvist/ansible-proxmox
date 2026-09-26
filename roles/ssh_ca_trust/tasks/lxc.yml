@@ -40,6 +40,14 @@
       did NOT receive CA trust — static-key retirement stays blocked for them.
   when: ssh_ca_trust_lxc_stopped | length > 0
 
+# --- SSH host certificates for running containers (rollout gate) ---------
+# Split into tasks/lxc_host_cert.yml (probe/decide/sign/install) to keep this
+# file under the repo's per-file token budget — see that file for the
+# SECURITY note on why the principal must never come from inside the guest.
+- name: Issue and install SSH host certificates for running containers
+  ansible.builtin.include_tasks: lxc_host_cert.yml
+  when: ssh_ca_trust_host_cert_enabled | bool
+
 # One pct exec per container writes all three artifacts, best-effort installs
 # openssh-server on an apt-based guest that lacks it, writes the hardened
 # drop-in, and reloads sshd only when the guest actually runs one (LXCs are
@@ -53,12 +61,24 @@
       # Fingerprint the managed files BEFORE writing. Writing identical bytes is
       # harmless, but reloading sshd in every container on every converge is not,
       # and reporting `changed` unconditionally hides real drift in the noise.
+      # Includes the host-cert path so a renewal-only run (cert re-signed, but
+      # the CA/dropin/principals content unchanged) still counts as a change —
+      # harmless to include when host-cert is disabled or absent, since `cat`
+      # on that path then just contributes nothing (stderr swallowed).
       fingerprint() {
         pct exec {{ item }} -- sh -c \
-          'cat {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }} {{ ssh_ca_trust_principals_dir }}/* 2>/dev/null | md5sum' \
+          'cat {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }} {{ ssh_ca_trust_principals_dir }}/* {{ ssh_ca_trust_host_cert_path }} 2>/dev/null | md5sum' \
           2>/dev/null || echo absent
       }
-      before=$(fingerprint)
+      # A cert-only renewal already wrote the new cert (the "Install each
+      # signed host certificate" task above, earlier in this same play) before
+      # this task ever runs — so fingerprinting fresh here would compare the
+      # post-install state against itself and miss the change. Use the
+      # snapshot the probe task took BEFORE signing/installing instead, when
+      # one exists (host-cert enabled); otherwise fall back to a fresh probe,
+      # matching this task's original behavior when host-cert is disabled.
+      before="{{ (ssh_ca_trust_lxc_host_cert_pre_fp | default({}))[item] | default('') }}"
+      if [ -z "$before" ]; then before=$(fingerprint); fi
       pct exec {{ item }} -- mkdir -p {{ ssh_ca_trust_principals_dir }} /etc/ssh/sshd_config.d
       # One argument per entry, one line each. A `join('\n')` inside this block
       # scalar hands printf the two characters `\n` verbatim, which collapses a
@@ -132,6 +152,9 @@
         echo "$effective" | grep -qx 'kbdinteractiveauthentication no' || fail=1
         echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}' || fail=1
         echo "$effective" | grep -qx "allowusers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra) | join(' ') }}" || fail=1
+        {% if ssh_ca_trust_host_cert_enabled | bool %}
+        echo "$effective" | grep -qF 'hostcertificate {{ ssh_ca_trust_host_cert_path }}' || fail=1
+        {% endif %}
         # ForceCommand has no on-wire "unset" value other than its absence or
         # the literal default "none" — either is fine, any real command is not.
         fc_line=$(echo "$effective" | grep -i '^forcecommand ' | head -n1 || true)

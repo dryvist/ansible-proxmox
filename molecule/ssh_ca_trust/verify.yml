@@ -19,6 +19,10 @@
 #    exercise without a live `pct`/sshd. See PR description for what the
 #    live pct-exec hardening path (openssh-server install, the hardened
 #    drop-in content, the effective-config assert) does NOT get covered here.
+# 5-7. Host-certificate coverage (renewal-decision fixtures, the
+#    guest-sourced-principal regression, and the cert-only-reload
+#    regression) lives in verify_host_cert.yml, included below — split out
+#    to keep this file under the repo's per-file token budget.
 
 - name: Verify
   hosts: all
@@ -124,3 +128,6 @@
           the expected directives — a regression in
           templates/lxc_sshd_hardening.conf.j2, or in what tasks/lxc.yml's
           own effective-config assert checks for, would show up here.
+
+    - name: Host-certificate coverage (renewal decisions, principal-source and reload regressions)
+      ansible.builtin.include_tasks: tasks/verify_host_cert.yml

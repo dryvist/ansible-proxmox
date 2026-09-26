@@ -112,6 +112,17 @@
   notify: Reload sshd
   tags: [ssh_ca_trust]
 
+# Issue/install this node's own SSH host certificate BEFORE the drop-in
+# below is written — the drop-in's HostCertificate line (when the gate is
+# on) names a file `sshd -t -f %s` validates, so it must already exist.
+- name: Issue and install this host's SSH host certificate
+  ansible.builtin.include_tasks: host_cert.yml
+  when:
+    - ssh_ca_trust_enabled | bool
+    - ssh_ca_trust_host_cert_enabled | bool
+    - ansible_virtualization_type != 'docker'
+  tags: [ssh_ca_trust]
+
 - name: Install the sshd CA drop-in
   ansible.builtin.copy:
     dest: "{{ ssh_ca_trust_dropin }}"
@@ -120,6 +131,9 @@
       # (ssh-certificate-authority ADR). Late-numbered to win drop-in merges.
       TrustedUserCAKeys {{ ssh_ca_trust_ca_file }}
       AuthorizedPrincipalsFile {{ ssh_ca_trust_principals_dir }}/%u
+      {% if ssh_ca_trust_host_cert_enabled | bool %}
+      HostCertificate {{ ssh_ca_trust_host_cert_path }}
+      {% endif %}
     owner: root
     group: root
     mode: "0644"
@@ -148,6 +162,7 @@
     that:
       - ("trustedusercakeys " ~ ssh_ca_trust_ca_file) in ssh_ca_trust_effective.stdout
       - ("authorizedprincipalsfile " ~ ssh_ca_trust_principals_dir ~ "/%u") in ssh_ca_trust_effective.stdout
+      - (not (ssh_ca_trust_host_cert_enabled | bool)) or (("hostcertificate " ~ ssh_ca_trust_host_cert_path) in ssh_ca_trust_effective.stdout)
     fail_msg: >-
       sshd -T does not show the CA trust directives — another config fragment
       is overriding the drop-in. Effective config must win before certs work.
