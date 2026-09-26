@@ -27,6 +27,7 @@
     name: "{{ item }}"
     state: present
   loop: "{{ kernel_tuning_hwmon_modules }}"
+  when: ansible_virtualization_type | default('') != 'docker'
   tags:
     - kernel_tuning
     - hwmon
