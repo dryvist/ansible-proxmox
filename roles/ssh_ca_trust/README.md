@@ -5,6 +5,18 @@ ADR): automation authenticates with short-TTL SSH certificates signed by the
 CA at `ssh-client-ca/`; humans stay on static `authorized_keys` so a CA outage
 can never lock a human out.
 
+## Installation
+
+Ships in this repository's roles; no separate install. Applied via
+`playbooks/site.yml`, gated inert (`ssh_ca_trust_rollout_enabled: false`)
+unless a group flips rollout on for that host class.
+
+## Usage
+
+```bash
+doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags ssh_ca_trust
+```
+
 ## What it does
 
 1. Preflights: pinned CA fingerprint + `BAO_ADDR` present, clock
@@ -20,7 +32,14 @@ can never lock a human out.
    and that a static root key still authenticates (human lockout guard).
 5. On PVE nodes, pushes the same trust into every **running** LXC via `pct`
    (no SSH chicken-and-egg); non-running containers are reported as blockers —
-   static-key retirement stays gated on every guest carrying CA trust.
+   static-key retirement stays gated on every guest carrying CA trust. Each
+   container's sshd is hardened to the same `PasswordAuthentication no` /
+   `KbdInteractiveAuthentication no` / principal-scoped `AllowUsers` as a PVE
+   node, best-effort installs `openssh-server` on an apt-based guest that
+   lacks it, and — where sshd is present — proves the **effective** config
+   carries that hardening before recording the container as ready in
+   `ssh_ca_trust_lxc_ready` (keyed by CTID; a container without sshd is
+   recorded not-ready, never failed over its package manager).
 
 ## Principals (default-deny)
 

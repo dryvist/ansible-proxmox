@@ -4,6 +4,13 @@
 # chicken-and-egg). Stopped containers are reported as blockers: static-key
 # retirement is gated on every guest carrying CA trust, so a skipped guest
 # must be visible, never silent.
+#
+# Also hardens the pushed sshd config to PVE-node parity (no password/kbd-int
+# auth, AllowUsers scoped to the declared principal map) and, where sshd is
+# present, proves the EFFECTIVE config actually reflects that hardening —
+# mirroring tasks/main.yml's node-level assert — before recording the
+# container as ready in ssh_ca_trust_lxc_ready (default: {} in
+# defaults/main.yml, so it's always defined even when this file never runs).
 
 - name: List this node's running LXC containers
   ansible.builtin.shell:
@@ -31,9 +38,11 @@
       did NOT receive CA trust — static-key retirement stays blocked for them.
   when: ssh_ca_trust_lxc_stopped | length > 0
 
-# One pct exec per container writes all three artifacts and reloads sshd only
-# when the guest actually runs one (LXCs are converged over pct, so a guest
-# without sshd is fine — it simply has nothing to trust the CA with).
+# One pct exec per container writes all three artifacts, best-effort installs
+# openssh-server on an apt-based guest that lacks it, writes the hardened
+# drop-in, and reloads sshd only when the guest actually runs one (LXCs are
+# converged over pct, so a guest without sshd — or a non-apt guest we won't
+# touch, e.g. an "unmanaged" NixOS container — is fine, just not-ready).
 - name: Push CA trust into running containers
   ansible.builtin.shell:
     executable: /bin/bash
@@ -58,13 +67,32 @@
       printf '%s\n' {% for principal in principals %}"{{ principal }}" {% endfor %}\
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_principals_dir }}/{{ user }} > /dev/null
       {% endfor %}
+      # Best-effort, non-fatal: install openssh-server only on an apt-based
+      # guest that doesn't already have it. A non-apt guest (e.g. an
+      # "unmanaged" NixOS container) or one whose install fails is left alone
+      # and simply reported not-ready below — never a failed loop item over
+      # one container's package manager.
+      if ! pct exec {{ item }} -- sh -c 'command -v sshd' > /dev/null 2>&1; then
+        if pct exec {{ item }} -- sh -c 'command -v apt-get' > /dev/null 2>&1; then
+          pct exec {{ item }} -- sh -c \
+            'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server' \
+            > /dev/null 2>&1 || true
+          pct exec {{ item }} -- sh -c \
+            'systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true' \
+            > /dev/null 2>&1 || true
+        fi
+      fi
       printf '%s\n' \
         "# Managed by ansible-proxmox ssh_ca_trust (via pct) — OpenBao SSH client CA" \
         "TrustedUserCAKeys {{ ssh_ca_trust_ca_file }}" \
         "AuthorizedPrincipalsFile {{ ssh_ca_trust_principals_dir }}/%u" \
+        "PasswordAuthentication no" \
+        "KbdInteractiveAuthentication no" \
+        "AllowUsers {{ ssh_ca_trust_lxc_principals.keys() | join(' ') }}" \
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_dropin }} > /dev/null
       pct exec {{ item }} -- chmod 0644 {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}
       after=$(fingerprint)
+      ready=0
       if pct exec {{ item }} -- sh -c 'command -v sshd' > /dev/null 2>&1; then
         # sshd -t needs the privilege-separation dir, which a bare `pct exec`
         # shell lacks (systemd normally creates it at sshd start) — create it
@@ -78,10 +106,42 @@
         if [ "$before" != "$after" ]; then
           pct exec {{ item }} -- sh -c 'systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true'
         fi
+        # `sshd -t` only proves syntax; assert the EFFECTIVE config actually
+        # carries the hardening — a competing drop-in or main-file directive,
+        # or one a per-guest cloud-init already set, would otherwise silently
+        # win. Mirrors tasks/main.yml's node-level effective-config assert.
+        # Fail loud (not a warning): a hardened-looking drop-in that some
+        # other fragment overrides is a security gap, not a readiness note.
+        effective=$(pct exec {{ item }} -- sshd -T)
+        fail=0
+        echo "$effective" | grep -qx 'passwordauthentication no' || fail=1
+        echo "$effective" | grep -qx 'kbdinteractiveauthentication no' || fail=1
+        echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}' || fail=1
+        # ForceCommand has no on-wire "unset" value other than its absence or
+        # the literal default "none" — either is fine, any real command is not.
+        fc_line=$(echo "$effective" | grep -i '^forcecommand ' | head -n1 || true)
+        if [ -n "$fc_line" ] && [ "$fc_line" != "forcecommand none" ]; then
+          fail=1
+        fi
+        if [ "$fail" -eq 1 ]; then
+          echo "HARDEN_FAIL {{ item }}: effective sshd config does not carry the hardening — a competing fragment is overriding it" >&2
+          echo "$effective" >&2
+          exit 1
+        fi
+        ready=1
       fi
       if [ "$before" != "$after" ]; then echo "RESULT=changed"; else echo "RESULT=unchanged"; fi
+      echo "READY=$ready"
   loop: "{{ ssh_ca_trust_lxc_running }}"
   register: ssh_ca_trust_lxc_push
   # 'RESULT=changed' is not a substring of 'RESULT=unchanged', so this cannot
   # match the negative case the way a bare 'CHANGED' test would.
   changed_when: "'RESULT=changed' in ssh_ca_trust_lxc_push.stdout"
+
+- name: Record per-container hardened-sshd readiness
+  ansible.builtin.set_fact:
+    ssh_ca_trust_lxc_ready: >-
+      {{ ssh_ca_trust_lxc_ready | default({}) | combine({item.item: ('READY=1' in item.stdout)}) }}
+  loop: "{{ ssh_ca_trust_lxc_push.results }}"
+  loop_control:
+    label: "{{ item.item }}"
