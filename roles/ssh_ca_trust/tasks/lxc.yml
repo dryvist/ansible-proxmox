@@ -47,13 +47,25 @@
 # tests render, sign on the CONTROLLER (never inside the container), then
 # push the signed cert back in — BEFORE the drop-in write below, which adds
 # the HostCertificate line `sshd -t -f` then validates.
+#
+# SECURITY: the principal a signed cert is issued for MUST come from data
+# the controller/PVE node controls, never from inside the guest — otherwise
+# a compromised container could report an arbitrary hostname (e.g. another
+# guest's fqdn) and get a CA-signed host cert every other guest trusts under
+# that identity. `pct config` reads the container's config as stored in
+# /etc/pve/lxc/<ctid>.conf on the PVE node — a guest cannot rewrite that file
+# from inside its own namespace, unlike asking the guest's own OS to
+# report its hostname, which it fully controls. Only the
+# PUBLIC KEY is read from the guest below (safe: the cert still binds that
+# key to the principal WE chose, never one the guest chose).
 - name: Probe each running container's host key and existing host certificate
   ansible.builtin.shell:
     executable: /bin/bash
     cmd: |
       set -o pipefail
       pubkey=$(pct exec {{ item }} -- cat /etc/ssh/ssh_host_ed25519_key.pub)
-      hostname=$(pct exec {{ item }} -- hostname)
+      hostname=$(pct config {{ item }} | awk -F': ' '$1=="hostname"{print $2}')
+      hostname="${hostname:-CT{{ item }}}"
       if pct exec {{ item }} -- test -f {{ ssh_ca_trust_host_cert_path }}; then
         probe=$(pct exec {{ item }} -- ssh-keygen -Lf {{ ssh_ca_trust_host_cert_path }})
         present=1

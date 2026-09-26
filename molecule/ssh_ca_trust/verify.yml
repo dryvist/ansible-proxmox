@@ -26,6 +26,10 @@
 #    valid, expiring-soon, wrong-principal and CA-fingerprint-mismatch. No
 #    hand-copied duplicate of that decision logic exists in this test; a
 #    live OpenBao sign call is not exercised here (no live endpoint in CI).
+# 6. Asserts tasks/lxc.yml sources the host-cert principal from `pct config`
+#    (operator-controlled) and never from a guest-executed `hostname` — a
+#    static check, since this scenario has no live `pct` to prove it against
+#    a real compromised-guest scenario.
 
 - name: Verify
   hosts: all
@@ -223,3 +227,24 @@
           valid={{ ssh_ca_trust_host_cert_test_valid }} expiring={{ ssh_ca_trust_host_cert_test_expiring }}
           wrong_principal={{ ssh_ca_trust_host_cert_test_wrong_principal }}
           ca_mismatch={{ ssh_ca_trust_host_cert_test_ca_mismatch }}
+
+    # SECURITY regression: the LXC host-cert principal must be sourced from
+    # `pct config` (the PVE-node-side container config a guest cannot write
+    # to), never from a command run INSIDE the guest — a compromised
+    # container that could choose its own reported hostname would get a
+    # CA-signed cert for any principal it claimed. This scenario has no live
+    # `pct` to prove the runtime behavior against, so it asserts the
+    # production script itself never reintroduces the guest-sourced pattern.
+    - name: Assert the host-cert principal comes from pct config, never a guest-executed hostname
+      vars:
+        ssh_ca_trust_lxc_tasks_text: "{{ lookup('file', '../../roles/ssh_ca_trust/tasks/lxc.yml') }}"
+      ansible.builtin.assert:
+        that:
+          - "'-- hostname' not in ssh_ca_trust_lxc_tasks_text"
+          - "'pct config' in ssh_ca_trust_lxc_tasks_text"
+        fail_msg: >-
+          tasks/lxc.yml must derive the host-cert principal from `pct config`
+          (PVE-node-side, operator-controlled) and must never run `hostname`
+          inside the guest via `pct exec` — a compromised container could
+          otherwise choose the principal a signed host certificate is issued
+          for.

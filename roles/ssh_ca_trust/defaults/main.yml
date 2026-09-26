@@ -103,6 +103,11 @@ ssh_ca_trust_host_cert_domain: >-
   {{ hostvars['localhost'].tofu_data.domain
      if hostvars['localhost'].tofu_data is defined
      else ansible_domain }}
+# SECURITY: the certificate's principal is `inventory_hostname` (below) plus
+# this domain — inventory_hostname comes from the CONTROLLER's inventory,
+# never from a fact gathered off the guest, so a compromised guest cannot
+# choose the identity a signed host certificate is issued for (see
+# tasks/lxc.yml's matching note for the pct-exec path).
 ssh_ca_trust_host_cert_fqdn: "{{ inventory_hostname }}.{{ ssh_ca_trust_host_cert_domain }}"
 # The converge runner exports BAO_ADDR/BAO_TOKEN for exactly this (same
 # pattern as roles/nas_storage) — the guest itself never holds a token; the
