@@ -175,6 +175,15 @@
       tags:
         - zfs_pools
 
+    # Single source of the llm-fabric GGUF model list (id, HF repo/file,
+    # pinned revision), shared with ansible-proxmox-ai's llama_cpp role via
+    # the dryvist.homelab collection. Defaults only, no tasks — included here
+    # so llm_model_catalog_models is in scope for llm_model_store_seed below,
+    # in the same play.
+    - role: dryvist.homelab.llm_model_catalog
+      tags:
+        - llm_model_store_seed
+
     # Populates the llm fabric's shared model-store mount(s) from the node
     # that owns the backing volume. Runs after zfs_pools so the volume
     # already exists; targets are derived from containers_from_tofu

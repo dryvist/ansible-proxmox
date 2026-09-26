@@ -4,86 +4,13 @@
 # Populates the llm fabric's shared model-store mount(s) with every declared
 # GGUF, running on the PVE host that owns the backing volume — never a
 # serving guest, which never downloads models (see role README).
-
-# KNOWN, FLAGGED DUPLICATE — not yet the single source.
 #
-# This list mirrors dryvist/ansible-proxmox-ai's `llama_cpp_models` (the role
-# default in roles/llama_cpp/defaults/main/00-core.yml, plus the per-group
-# overrides in inventory/group_vars/llm_cpu_9b_group.yml,
-# llm_cpu_moe_group.yml and llm_vllm_group.yml) as read from that repo's
-# `develop` branch in the same session this file was written. It is a
-# duplicate on purpose, not an oversight: ansible-proxmox (this repo, host-
-# level config) and ansible-proxmox-ai (serving-guest config) are separate
-# Ansible inventories with no automatic variable sharing, and there is today
-# no cross-repo-published registry this role could read instead (tofu's
-# ansible_inventory carries topology, not a model catalog, and adding one
-# there would make an infra-layer repo own an application concern).
-#
-# tests/llm_model_store_seed/test_model_catalog_contract.py pins the known
-# upstream list as of the same read and fails if this catalog drops an entry,
-# so the two lists cannot silently drift apart unnoticed — it does not
-# eliminate the duplication, only make it loud. The real single-source fix
-# (recommended, not done here): add a small shared "GGUF catalog" role to
-# dryvist/homelab-contracts — the same repo, and the same "needed by more
-# than one consumer" rationale, that already hosts roles/cribl_edge and
-# roles/cribl_packs for ansible-proxmox and ansible-proxmox-apps — and have
-# ansible-proxmox-ai's llama_cpp_models reference it instead of repeating
-# hf_repo/gguf literally. That migration needs its own homelab-contracts
-# release plus a Renovate-driven collection-version bump in
-# ansible-proxmox-ai (upgrades only via Renovate, never a hand bump), so it
-# is out of scope for the PR that introduces this role.
-#
-# Each entry's `hf_revision` is the ONE Renovate-tracked var per model,
-# pinning the exact HuggingFace commit the sha256 and download are read
-# against (never "whatever main currently is"). HuggingFace model repos are
-# plain git repositories, so this uses Renovate's native git-refs datasource
-# against https://huggingface.co/<hf_repo> — no custom datasource needed.
-# The out-of-band `renovate-digest:` annotation below follows this repo's
-# own established shape for a pinned var in role defaults (see
-# roles/pve_node_exporter/defaults and dryvist/.github's shared annotation
-# convention in renovate-presets.json), but under its own prefix and a
-# customManagers entry in this repo's own renovate.json, scoped to this file
-# only: the shared annotation manager has no packageName group, so it cannot
-# express "track this HuggingFace repo's git history", and reusing its exact
-# prefix would make it also (wrongly) match the line below.
-llm_model_store_seed_models:
-  # --- light tier (llm_fast_group role default; llm-fast + llm-light) ------
-  - name: qwen3-4b
-    hf_repo: bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF
-    gguf: Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf
-    # renovate-digest: datasource=git-refs depName=qwen3-4b packageName=https://huggingface.co/bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF
-    hf_revision: ae44f08e1392f39c0e474af10c3ff8355c8b6688
-
-  - name: nomic-embed-text-v1.5
-    hf_repo: nomic-ai/nomic-embed-text-v1.5-GGUF
-    gguf: nomic-embed-text-v1.5.Q4_K_M.gguf
-    # renovate-digest: datasource=git-refs depName=nomic-embed-text-v1.5 packageName=https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF
-    hf_revision: 0188c9bf409793f810680a5a431e7b899c46104c
-
-  # --- cpu-9b tier (llm_cpu_9b_group) — pool is scaled on demand, no host --
-  # -- declares this mount yet; kept declared so the seed is ready the ------
-  # -- moment one does. See the lane report for the gap. -------------------
-  - name: qwen3.5-9b
-    hf_repo: unsloth/Qwen3.5-9B-GGUF
-    gguf: Qwen3.5-9B-Q4_K_M.gguf
-    # renovate-digest: datasource=git-refs depName=qwen3.5-9b packageName=https://huggingface.co/unsloth/Qwen3.5-9B-GGUF
-    hf_revision: 3885219b6810b007914f3a7950a8d1b469d598a5
-
-  # --- cpu-moe tier (llm_cpu_moe_group) — same scaled-pool gap as above ---
-  - name: qwen3.6-35b-a3b
-    hf_repo: bartowski/Qwen_Qwen3.6-35B-A3B-GGUF
-    gguf: Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf
-    # renovate-digest: datasource=git-refs depName=qwen3.6-35b-a3b packageName=https://huggingface.co/bartowski/Qwen_Qwen3.6-35B-A3B-GGUF
-    hf_revision: 5c2410d71524f4f72b023ce8daf7a80528226d5f
-
-  # --- vllm tier (llm_vllm_group / llm-4080) — tagged llm-vllm, NOT --------
-  # -- llm-fast, so it is outside local.llm_fast_container_ids and carries --
-  # -- no declared models_mount_path today. Same gap as above, see report. -
-  - name: qwen3.8-27b
-    hf_repo: unsloth/Qwen3.8-27B-GGUF
-    gguf: Qwen3.8-27B-UD-IQ3_XXS.gguf
-    # renovate-digest: datasource=git-refs depName=qwen3.8-27b packageName=https://huggingface.co/unsloth/Qwen3.8-27B-GGUF
-    hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
+# The model list itself is NOT here. It lives in
+# dryvist.homelab.llm_model_catalog (dryvist/homelab-contracts), the single
+# catalog shared with ansible-proxmox-ai's llama_cpp role, as
+# `llm_model_catalog_models`. playbooks/site.yml includes that role
+# immediately before this one, in the same play, so its defaults are already
+# in scope by the time tasks/seed_node.yml reads them.
 
 # Timeout for the HF metadata lookup and the GGUF download itself, in
 # seconds. Multi-gigabyte files over a home internet connection, not a CDN

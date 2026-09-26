@@ -28,7 +28,7 @@ the backing volume, which is what this role does.
    `roles/pve_guest_evacuation_lxc_managed_volumes` already uses, because a
    managed mount_point's real backing dataset name only exists once Proxmox
    allocates it; it cannot be derived from the desired state alone.
-3. For every model in `llm_model_store_seed_models`, resolves its sha256 from
+3. For every model in `llm_model_catalog_models`, resolves its sha256 from
    HuggingFace's own LFS blob metadata at the model's pinned `hf_revision`,
    then fetches the GGUF with `ansible.builtin.get_url` and `checksum:` —
    idempotent (skipped once the destination already matches) and atomic
@@ -36,31 +36,28 @@ the backing volume, which is what this role does.
    a concurrent reader through the guest's own ro bind mount never sees a
    partial file).
 
-## Model catalog — a known, flagged duplicate
+## Model catalog
 
-`llm_model_store_seed_models` (`defaults/main.yml`) mirrors
-dryvist/ansible-proxmox-ai's `llama_cpp_models` declarations. It is a
-deliberate, documented duplicate, not a second source of truth by accident:
-the two repos are separate Ansible inventories with no automatic variable
-sharing, and there is no cross-repo-published registry to read instead
-today. `tests/llm_model_store_seed/test_model_catalog_contract.py` pins the
-known upstream list and fails if this catalog drops an entry, so drift is
-loud rather than silent. See the comment block at the top of
-`defaults/main.yml` for the recommended single-source fix
-(a shared catalog role in dryvist/homelab-contracts, alongside its existing
-`cribl_edge`/`cribl_packs` precedent) — not done in the PR that introduced
-this role.
+The model list is `llm_model_catalog_models`, from
+`dryvist.homelab.llm_model_catalog` (dryvist/homelab-contracts) — the single
+catalog shared with dryvist/ansible-proxmox-ai's `llama_cpp` role, which
+serves the same GGUFs this role downloads. `playbooks/site.yml` includes that
+role immediately before this one so the catalog is already in scope; this
+role declares no model list of its own.
 
 Each entry's `hf_revision` is the one Renovate-tracked var per model
 (`git-refs` datasource against the model's own HuggingFace git repo — see
-this repo's `renovate.json`). Bump it, and the sha256 + download both follow
-automatically at the next converge; nothing else in this role changes.
+`dryvist/homelab-contracts`' `renovate.json`). Bumping it there and pulling
+the resulting collection release is all that's needed for the sha256 and
+download to follow at the next converge.
 
 ## Installation
 
-No separate install step: this role ships in this repo's `roles/` and is
-already wired into `playbooks/site.yml` against the `proxmox` group, after
-`zfs_pools`/`nas_storage` (the backing volume must already exist).
+Ships in this repo's `roles/` and is already wired into `playbooks/site.yml`
+against the `proxmox` group, after `zfs_pools`/`nas_storage` (the backing
+volume must already exist) and after `dryvist.homelab.llm_model_catalog`
+(the model list). The catalog role comes from the `dryvist.homelab`
+collection — see `requirements.yml`.
 
 ```bash
 ansible-galaxy role list | grep llm_model_store_seed  # confirm it's present locally
@@ -79,6 +76,6 @@ doppler run -- ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `llm_model_store_seed_models` | see `defaults/main.yml` | Declared `{name, hf_repo, gguf, hf_revision}` catalog |
+| `llm_model_catalog_models` | see `llm_model_catalog`'s defaults | Declared `{name, hf_repo, gguf, hf_revision}` catalog (not this role's own) |
 | `llm_model_store_seed_timeout` | `3600` | Seconds allowed for the HF metadata lookup and the GGUF download |
 | `llm_model_store_seed_file_mode` | `"0644"` | Mode of a seeded GGUF file |

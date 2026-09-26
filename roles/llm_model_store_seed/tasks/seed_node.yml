@@ -106,7 +106,7 @@
     llm_model_store_seed_target_hostname: "{{ llm_model_store_seed_pair.0.item.hostname }}"
     llm_model_store_seed_target_path: "{{ llm_model_store_seed_pair.0.stdout | trim }}"
     llm_model_store_seed_model: "{{ llm_model_store_seed_pair.1 }}"
-  loop: "{{ llm_model_store_seed_paths_raw.results | product(llm_model_store_seed_models) | list }}"
+  loop: "{{ llm_model_store_seed_paths_raw.results | product(llm_model_catalog_models) | list }}"
   loop_control:
     loop_var: llm_model_store_seed_pair
     label: "{{ llm_model_store_seed_pair.0.item.hostname }}/{{ llm_model_store_seed_pair.1.name }}"
