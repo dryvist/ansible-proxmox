@@ -82,13 +82,12 @@
             > /dev/null 2>&1 || true
         fi
       fi
-      printf '%s\n' \
-        "# Managed by ansible-proxmox ssh_ca_trust (via pct) — OpenBao SSH client CA" \
-        "TrustedUserCAKeys {{ ssh_ca_trust_ca_file }}" \
-        "AuthorizedPrincipalsFile {{ ssh_ca_trust_principals_dir }}/%u" \
-        "PasswordAuthentication no" \
-        "KbdInteractiveAuthentication no" \
-        "AllowUsers {{ ssh_ca_trust_lxc_principals.keys() | join(' ') }}" \
+      {# Rendered from templates/lxc_sshd_hardening.conf.j2 — the SAME file
+         the ssh_ca_trust Molecule scenario renders directly onto a real
+         sshd, so a content regression here fails CI there. One printf arg
+         per line, same reasoning as the CA-keys/principals writes above:
+         join('\n') hands printf the two characters \n verbatim. #}
+      printf '%s\n' {% for line in lookup('template', 'lxc_sshd_hardening.conf.j2').splitlines() %}"{{ line }}" {% endfor %}\
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_dropin }} > /dev/null
       pct exec {{ item }} -- chmod 0644 {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}
       after=$(fingerprint)
@@ -117,6 +116,7 @@
         echo "$effective" | grep -qx 'passwordauthentication no' || fail=1
         echo "$effective" | grep -qx 'kbdinteractiveauthentication no' || fail=1
         echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}' || fail=1
+        echo "$effective" | grep -qx "allowusers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra) | join(' ') }}" || fail=1
         # ForceCommand has no on-wire "unset" value other than its absence or
         # the literal default "none" — either is fine, any real command is not.
         fc_line=$(echo "$effective" | grep -i '^forcecommand ' | head -n1 || true)

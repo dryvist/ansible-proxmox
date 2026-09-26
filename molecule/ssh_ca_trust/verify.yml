@@ -95,3 +95,32 @@
           AllowUsers must be derived from ssh_ca_trust_lxc_principals' keys,
           not hardcoded — a future second login-user must not be silently
           unreachable.
+
+    - name: Read the effective sshd config after converge's LXC hardening drop-in
+      ansible.builtin.command:
+        cmd: sshd -T
+      register: ssh_ca_trust_lxc_effective
+      changed_when: false
+
+    # Same 4 directives tasks/lxc.yml asserts via `pct exec ... sshd -T`, run
+    # here directly against this container's real sshd — the drop-in came
+    # from the SAME templates/lxc_sshd_hardening.conf.j2 tasks/lxc.yml
+    # renders, so a content or assert-logic regression there fails CI here.
+    # ssh_ca_trust_ca_file is NOT used below (that's the role's own default,
+    # untouched by this test) — the test converge task used a deliberately
+    # distinct path, repeated here.
+    - name: Assert the LXC hardening drop-in's effective config carries every directive
+      vars:
+        ssh_ca_trust_test_ca_file: /etc/ssh/molecule-test-ca-keys.pem
+      ansible.builtin.assert:
+        that:
+          - "'passwordauthentication no' in ssh_ca_trust_lxc_effective.stdout_lines"
+          - "'kbdinteractiveauthentication no' in ssh_ca_trust_lxc_effective.stdout_lines"
+          - ("trustedusercakeys " ~ ssh_ca_trust_test_ca_file) in ssh_ca_trust_lxc_effective.stdout
+          - "'allowusers root' in ssh_ca_trust_lxc_effective.stdout_lines"
+          - (ssh_ca_trust_lxc_effective.stdout_lines | select('match', '^forcecommand (?!none$)') | list) == []
+        fail_msg: >-
+          The LXC hardening drop-in's effective sshd config does not carry
+          the expected directives — a regression in
+          templates/lxc_sshd_hardening.conf.j2, or in what tasks/lxc.yml's
+          own effective-config assert checks for, would show up here.
