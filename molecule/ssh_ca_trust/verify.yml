@@ -9,6 +9,16 @@
 #    live/mocked OpenBao endpoint to exercise the real fetch/pct-push path,
 #    so a future edit to the boolean logic is what this assertion protects
 #    against. See PR description for what is/isn't covered.
+# 3. Asserts ssh_ca_trust_lxc_ready is a DEFINED, EMPTY structure — it comes
+#    from a role default (not a mid-task set_fact) specifically so it stays
+#    defined even here, where the activation gate never opens and lxc.yml
+#    never runs.
+# 4. Asserts the AllowUsers-from-principals-keys formula lxc.yml's hardened
+#    drop-in uses, against the same ssh_ca_trust_lxc_principals default —
+#    the one piece of the new LXC hardening this Docker-only scenario can
+#    exercise without a live `pct`/sshd. See PR description for what the
+#    live pct-exec hardening path (openssh-server install, the hardened
+#    drop-in content, the effective-config assert) does NOT get covered here.
 
 - name: Verify
   hosts: all
@@ -64,3 +74,53 @@
       vars:
         ca_fp: ""
         rollout: true
+
+    - name: Assert the LXC readiness fact is defined and empty when lxc.yml never ran
+      ansible.builtin.assert:
+        that:
+          - ssh_ca_trust_lxc_ready is defined
+          - ssh_ca_trust_lxc_ready is mapping
+          - ssh_ca_trust_lxc_ready | length == 0
+        fail_msg: >-
+          ssh_ca_trust_lxc_ready must be a defined, empty mapping when the
+          activation gate stays closed (both converge cases here) or
+          ssh_ca_trust_manage_lxc is false — a later consumer should never
+          have to special-case "undefined".
+
+    - name: Assert the hardened drop-in's AllowUsers is derived from the principals map's keys
+      ansible.builtin.assert:
+        that:
+          - (ssh_ca_trust_lxc_principals.keys() | join(' ')) == 'root'
+        fail_msg: >-
+          AllowUsers must be derived from ssh_ca_trust_lxc_principals' keys,
+          not hardcoded — a future second login-user must not be silently
+          unreachable.
+
+    - name: Read the effective sshd config after converge's LXC hardening drop-in
+      ansible.builtin.command:
+        cmd: sshd -T
+      register: ssh_ca_trust_lxc_effective
+      changed_when: false
+
+    # Same 4 directives tasks/lxc.yml asserts via `pct exec ... sshd -T`, run
+    # here directly against this container's real sshd — the drop-in came
+    # from the SAME templates/lxc_sshd_hardening.conf.j2 tasks/lxc.yml
+    # renders, so a content or assert-logic regression there fails CI here.
+    # ssh_ca_trust_ca_file is NOT used below (that's the role's own default,
+    # untouched by this test) — the test converge task used a deliberately
+    # distinct path, repeated here.
+    - name: Assert the LXC hardening drop-in's effective config carries every directive
+      vars:
+        ssh_ca_trust_test_ca_file: /etc/ssh/molecule-test-ca-keys.pem
+      ansible.builtin.assert:
+        that:
+          - "'passwordauthentication no' in ssh_ca_trust_lxc_effective.stdout_lines"
+          - "'kbdinteractiveauthentication no' in ssh_ca_trust_lxc_effective.stdout_lines"
+          - ("trustedusercakeys " ~ ssh_ca_trust_test_ca_file) in ssh_ca_trust_lxc_effective.stdout
+          - "'allowusers root' in ssh_ca_trust_lxc_effective.stdout_lines"
+          - (ssh_ca_trust_lxc_effective.stdout_lines | select('match', '^forcecommand (?!none$)') | list) == []
+        fail_msg: >-
+          The LXC hardening drop-in's effective sshd config does not carry
+          the expected directives — a regression in
+          templates/lxc_sshd_hardening.conf.j2, or in what tasks/lxc.yml's
+          own effective-config assert checks for, would show up here.
