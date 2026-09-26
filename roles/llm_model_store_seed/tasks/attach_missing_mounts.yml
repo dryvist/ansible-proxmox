@@ -8,12 +8,15 @@
 # published inventory picks it up, but the live guest never sees it without
 # this step.
 #
-# PVE docs (pct(1), the container config reference): mpN is a container BOOT
-# CONFIG key, not a hotpluggable device — a mount_point change only takes
-# effect on the container's next start. This matches the estate's own proven
-# convention (media_lxc_features/handlers/main.yml): every mount_point change
-# is followed by an explicit reboot (running) or start (stopped), never
-# assumed to hotplug.
+# A new mpN on a RUNNING LXC can hotplug live (pve-container source:
+# vmconfig_hotplug_pending -> apply_pending_mountpoint(..., running=1); the
+# failure path that forces a restart only fires for a change to an EXISTING
+# mp, not one newly added). So the restart below is evidence-driven, not
+# unconditional: check_mount_hotplug.yml reads each attached container's
+# /pending config and restarts only the ones where the new mpN is still
+# listed as pending, i.e. it did not take effect live. media_lxc_features
+# restarts unconditionally because it can also rewrite an EXISTING mp
+# (backup=/ro= flags), which is exactly the case the hotplug path excludes.
 #
 # Runs once per node, after the first read_mount_config.yml (so
 # llm_model_store_seed_mount_matches reflects the CURRENT live state) and
@@ -115,27 +118,55 @@
   notify: Restart changed llm model-store containers
   register: llm_model_store_seed_attach
 
-- name: Record which containers changed, for the restart handler
+- name: Read each attached target's pending-vs-applied config
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ llm_model_store_seed_node_name }}/lxc/{{ item.vmid }}/pending"
+      - --output-format
+      - json
+  loop: "{{ llm_model_store_seed_missing }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+  register: llm_model_store_seed_pending_after_attach
+  changed_when: false
+
+- name: Decide which attached mounts still need a restart
+  ansible.builtin.include_tasks: check_mount_hotplug.yml
+
+- name: Record which containers still need a restart, for the handler
   ansible.builtin.set_fact:
     llm_model_store_seed_changed: >-
-      {{ llm_model_store_seed_missing | map(attribute='vmid') | list }}
-  when: llm_model_store_seed_missing | length > 0
+      {{ llm_model_store_seed_still_pending | map(attribute='vmid') | list }}
+  when: llm_model_store_seed_still_pending | length > 0
 
 # Apply the restart NOW rather than at end-of-play: seed_model.yml (a later
 # include in this same run) does not depend on it -- pct set already
-# allocates the managed volume synchronously, before any start -- but the
-# guest itself will not see the new mount in its own filesystem until it
-# restarts, and doing that promptly (not deferred) keeps this role's own log
-# output the one place that shows it happened.
+# allocates the managed volume synchronously, before any start. Only the
+# containers in llm_model_store_seed_still_pending get restarted here; one
+# whose mount hotplugged live triggers no notify and the handler's own loop
+# never sees it, so an already-converged host performs zero restarts.
 - name: Apply the mount-attach restart immediately
   ansible.builtin.meta: flush_handlers
 
-- name: Log the mount-attach restart for each affected container
+- name: Log the mount-attach restart for each container whose mount was pending
   ansible.builtin.debug:
     msg: >-
       {{ item.hostname }} (vmid {{ item.vmid }}): attached
       {{ item.models_mount_storage }}:{{ item.models_mount_size }} at
-      {{ item.models_mount_path }} and restarted to apply it.
-  loop: "{{ llm_model_store_seed_missing }}"
+      {{ item.models_mount_path }}; it did not hotplug (still pending), so
+      the container was restarted to apply it.
+  loop: "{{ llm_model_store_seed_still_pending }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Log the mount-attach hotplug for each container needing no restart
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.hostname }} (vmid {{ item.vmid }}): attached
+      {{ item.models_mount_storage }}:{{ item.models_mount_size }} at
+      {{ item.models_mount_path }} and it hotplugged live; no restart needed.
+  loop: "{{ llm_model_store_seed_hotplugged }}"
   loop_control:
     label: "{{ item.hostname }}"

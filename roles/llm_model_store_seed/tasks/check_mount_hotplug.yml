@@ -1,0 +1,48 @@
+---
+# Given llm_model_store_seed_missing (containers a mount was just pct-set on),
+# llm_model_store_seed_next_mp_idx (each one's new mpN index), and
+# llm_model_store_seed_pending_after_attach (the registered result of reading
+# each one's /pending config, in the same loop order as llm_model_store_seed_
+# missing), decide which ones still need a restart.
+#
+# pct(1) has no --pending flag. The real, API-documented mechanism is the
+# /pending endpoint: a new mpN that hotplugged live is written straight into
+# the applied config, so its entry there carries only `value`. One that could
+# not hotplug is queued instead -- its entry carries `pending` (no `value`
+# yet). This matches pve-container's own source (vmconfig_hotplug_pending ->
+# apply_pending_mountpoint): a new mpN on a running LXC can hotplug; the
+# failure path forcing a restart only fires for a change to an EXISTING mp.
+
+- name: Reset the still-pending accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_still_pending: []
+
+- name: Identify targets whose new mount is still pending, not yet live
+  ansible.builtin.set_fact:
+    llm_model_store_seed_still_pending: >-
+      {{
+        llm_model_store_seed_still_pending + ([item.0] if (
+          (item.1.stdout | from_json)
+          | selectattr('key', 'equalto', 'mp' ~ llm_model_store_seed_next_mp_idx[item.0.hostname])
+          | selectattr('pending', 'defined')
+          | list | length > 0
+        ) else [])
+      }}
+  loop: "{{ llm_model_store_seed_missing | zip(llm_model_store_seed_pending_after_attach.results) | list }}"
+  loop_control:
+    label: "{{ item.0.hostname }}"
+
+- name: Reset the hotplugged-without-restart accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_hotplugged: []
+
+- name: Identify targets whose new mount hotplugged live (no restart needed)
+  ansible.builtin.set_fact:
+    llm_model_store_seed_hotplugged: >-
+      {{
+        llm_model_store_seed_hotplugged
+        + ([item] if item not in llm_model_store_seed_still_pending else [])
+      }}
+  loop: "{{ llm_model_store_seed_missing }}"
+  loop_control:
+    label: "{{ item.hostname }}"

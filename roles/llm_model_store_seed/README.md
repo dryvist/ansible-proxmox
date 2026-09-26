@@ -29,10 +29,11 @@ the backing volume, which is what this role does.
    already-created container) — attaches it natively from the inventory's
    `models_mount_storage`/`models_mount_size`/`models_mount_read_only`
    (`pct set --mpN <storage>:<size>,mp=<path>[,ro=1]`) at the next free `mpN`
-   index, then restarts the container (reboot if running, start if stopped —
-   `mpN` is a boot-time config key, not hotpluggable) so the guest itself
-   sees the new mount. Same idiom `roles/media_lxc_features` already uses for
-   its own root@pam-only mount changes.
+   index. A new `mpN` on a running container can hotplug live, so the role
+   then reads that container's `/pending` config and restarts it (reboot if
+   running, start if stopped — same idiom `roles/media_lxc_features` uses for
+   its own root@pam-only mount changes) only if the new entry is still
+   listed as pending; if it hotplugged, no restart happens.
 3. Resolves the (now-live, either way) mount to a real host filesystem path
    with `pvesm path` — the same native resolution
    `roles/pve_guest_evacuation_lxc_managed_volumes` already uses, because a
