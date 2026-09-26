@@ -82,3 +82,29 @@ ssh_ca_trust_ca_file: /etc/ssh/trusted-user-ca-keys.pem
 ssh_ca_trust_principals_dir: /etc/ssh/principals
 # Late-numbered so it wins over distro/local snippets in sshd_config.d.
 ssh_ca_trust_dropin: /etc/ssh/sshd_config.d/99-openbao-ca.conf
+
+# --- SSH host certificates (rollout gate, off by default) ----------------
+# Issues and installs a signed SSH HOST certificate on this guest — sshd then
+# PRESENTS it to connecting clients, who trust the CA instead of pinning a
+# per-host key (TOFU). A separate rollout gate from ssh_ca_trust_enabled
+# above so the two stage independently — but still nested under it in
+# tasks/main.yml, since it reuses the same pinned CA fingerprint fetch/verify.
+ssh_ca_trust_host_cert_enabled: false
+# Role on the ssh-client-ca mount (ansible-proxmox-apps) whose sign endpoint
+# issues host certs: <mount>/sign/<role>, cert_type host, 90d TTL.
+ssh_ca_trust_host_cert_role: host-cert
+# Re-sign once fewer than this many days remain before expiry. Only the "Nd"
+# form is parsed — see templates/host_cert_needs_signing.j2.
+ssh_ca_trust_host_cert_renew_before: 45d
+ssh_ca_trust_host_cert_path: /etc/ssh/ssh_host_ed25519_key-cert.pub
+# Same domain source roles/common already uses (tofu-published when the
+# inventory is loaded, else the node's own domain fact) — never a literal.
+ssh_ca_trust_host_cert_domain: >-
+  {{ hostvars['localhost'].tofu_data.domain
+     if hostvars['localhost'].tofu_data is defined
+     else ansible_domain }}
+ssh_ca_trust_host_cert_fqdn: "{{ inventory_hostname }}.{{ ssh_ca_trust_host_cert_domain }}"
+# The converge runner exports BAO_ADDR/BAO_TOKEN for exactly this (same
+# pattern as roles/nas_storage) — the guest itself never holds a token; the
+# sign call runs delegate_to: localhost.
+ssh_ca_trust_host_cert_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"

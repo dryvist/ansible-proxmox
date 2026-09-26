@@ -1,6 +1,9 @@
 # Managed by ansible-proxmox ssh_ca_trust (via pct) — OpenBao SSH client CA
 TrustedUserCAKeys {{ ssh_ca_trust_ca_file }}
 AuthorizedPrincipalsFile {{ ssh_ca_trust_principals_dir }}/%u
+{% if ssh_ca_trust_host_cert_enabled | default(false) | bool %}
+HostCertificate {{ ssh_ca_trust_host_cert_path }}
+{% endif %}
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 AllowUsers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra) | join(' ') }}

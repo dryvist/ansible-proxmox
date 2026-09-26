@@ -40,6 +40,92 @@
       did NOT receive CA trust — static-key retirement stays blocked for them.
   when: ssh_ca_trust_lxc_stopped | length > 0
 
+# --- SSH host certificates for running containers (rollout gate) ---------
+# Same shape as tasks/host_cert.yml's node path, over pct exec instead of a
+# direct connection: probe each container's own host key + existing cert,
+# decide via the SAME decision template tasks/host_cert.yml and this role's
+# tests render, sign on the CONTROLLER (never inside the container), then
+# push the signed cert back in — BEFORE the drop-in write below, which adds
+# the HostCertificate line `sshd -t -f` then validates.
+- name: Probe each running container's host key and existing host certificate
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -o pipefail
+      pubkey=$(pct exec {{ item }} -- cat /etc/ssh/ssh_host_ed25519_key.pub)
+      hostname=$(pct exec {{ item }} -- hostname)
+      if pct exec {{ item }} -- test -f {{ ssh_ca_trust_host_cert_path }}; then
+        probe=$(pct exec {{ item }} -- ssh-keygen -Lf {{ ssh_ca_trust_host_cert_path }})
+        present=1
+      else
+        probe=""
+        present=0
+      fi
+      printf 'PUBKEY=%s\n' "$pubkey"
+      printf 'HOSTNAME=%s\n' "$hostname"
+      printf 'PRESENT=%s\n' "$present"
+      printf 'PROBE_B64=%s\n' "$(printf '%s' "$probe" | base64 | tr -d '\n')"
+  loop: "{{ ssh_ca_trust_lxc_running }}"
+  register: ssh_ca_trust_lxc_host_cert_probe
+  changed_when: false
+  when: ssh_ca_trust_host_cert_enabled | bool
+
+- name: Decide whether each running container's host certificate needs (re)signing
+  ansible.builtin.set_fact:
+    ssh_ca_trust_lxc_host_cert_decisions: >-
+      {{ (ssh_ca_trust_lxc_host_cert_decisions | default([])) + [{
+           'ctid': item.item,
+           'pubkey': (item.stdout | regex_search('PUBKEY=(\S+)', '\\1') | first),
+           'principal': (item.stdout | regex_search('HOSTNAME=(\S+)', '\\1') | first) ~ '.' ~ ssh_ca_trust_host_cert_domain,
+           'needs_signing': (lookup('template', 'host_cert_needs_signing.j2', template_vars={
+               'ssh_ca_trust_host_cert_present': (item.stdout | regex_search('PRESENT=(\d)', '\\1') | first) == '1',
+               'ssh_ca_trust_host_cert_probe_text': ((item.stdout | regex_search('PROBE_B64=(\S*)', '\\1') | first) | default('', true) | b64decode),
+               'ssh_ca_trust_host_cert_expected_principal': (item.stdout | regex_search('HOSTNAME=(\S+)', '\\1') | first) ~ '.' ~ ssh_ca_trust_host_cert_domain,
+               'ssh_ca_trust_ca_trust_fetched_fp': ssh_ca_trust_fetched_fp.stdout,
+               'ssh_ca_trust_host_cert_now': ansible_date_time.date ~ 'T' ~ ansible_date_time.time,
+               'ssh_ca_trust_host_cert_renew_before_days': (ssh_ca_trust_host_cert_renew_before | regex_replace('d$', '') | int),
+             }) | trim | bool)
+         }] }}
+  loop: "{{ ssh_ca_trust_lxc_host_cert_probe.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: ssh_ca_trust_host_cert_enabled | bool
+
+- name: Sign new host certificates for containers that need one (controller)
+  ansible.builtin.uri:
+    url: "{{ ssh_ca_trust_bao_addr }}/v1/{{ ssh_ca_trust_mount }}/sign/{{ ssh_ca_trust_host_cert_role }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ ssh_ca_trust_host_cert_bao_token }}"
+    body_format: json
+    body:
+      cert_type: host
+      public_key: "{{ item.pubkey }}"
+      valid_principals: "{{ item.principal }}"
+    return_content: true
+  delegate_to: localhost
+  become: false
+  register: ssh_ca_trust_lxc_host_cert_signed
+  no_log: true
+  loop: "{{ ssh_ca_trust_lxc_host_cert_decisions | default([]) | selectattr('needs_signing') | list }}"
+  loop_control:
+    label: "{{ item.ctid }}"
+  when: ssh_ca_trust_host_cert_enabled | bool
+
+- name: Install each signed host certificate into its container (pct)
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      printf '%s' {{ item.json.data.signed_key | quote }} \
+        | pct exec {{ item.item.ctid }} -- tee {{ ssh_ca_trust_host_cert_path }} > /dev/null
+      pct exec {{ item.item.ctid }} -- chmod 0644 {{ ssh_ca_trust_host_cert_path }}
+  loop: "{{ ssh_ca_trust_lxc_host_cert_signed.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.ctid }}"
+  changed_when: true
+  when: ssh_ca_trust_host_cert_enabled | bool
+
 # One pct exec per container writes all three artifacts, best-effort installs
 # openssh-server on an apt-based guest that lacks it, writes the hardened
 # drop-in, and reloads sshd only when the guest actually runs one (LXCs are
@@ -132,6 +218,9 @@
         echo "$effective" | grep -qx 'kbdinteractiveauthentication no' || fail=1
         echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}' || fail=1
         echo "$effective" | grep -qx "allowusers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra) | join(' ') }}" || fail=1
+        {% if ssh_ca_trust_host_cert_enabled | bool %}
+        echo "$effective" | grep -qF 'hostcertificate {{ ssh_ca_trust_host_cert_path }}' || fail=1
+        {% endif %}
         # ForceCommand has no on-wire "unset" value other than its absence or
         # the literal default "none" — either is fine, any real command is not.
         fc_line=$(echo "$effective" | grep -i '^forcecommand ' | head -n1 || true)
