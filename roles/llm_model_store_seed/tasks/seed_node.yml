@@ -8,34 +8,16 @@
 # roles/pve_guest_evacuation_lxc_managed_volumes already uses for the same
 # problem (resolve_volumes.yml).
 
-- name: Read each model-store container's live LXC configuration
-  ansible.builtin.command:
-    argv:
-      - pvesh
-      - get
-      - "/nodes/{{ llm_model_store_seed_node_name }}/lxc/{{ item.vmid }}/config"
-      - --output-format
-      - json
-  loop: "{{ llm_model_store_seed_targets }}"
-  loop_control:
-    label: "{{ item.hostname }}"
-  register: llm_model_store_seed_configs
-  changed_when: false
+- name: Read the current live models-mount config for every target
+  ansible.builtin.include_tasks: read_mount_config.yml
 
-- name: Find the exact mpN entry backing each container's declared models mount
-  ansible.builtin.set_fact:
-    llm_model_store_seed_mount_matches: >-
-      {{
-        llm_model_store_seed_mount_matches | default([]) + [
-          ((item.1.stdout | from_json) | dict2items
-            | selectattr('key', 'match', '^mp[0-9]+$')
-            | selectattr('value', 'match', '(?:^|,)mp=' ~ (item.0.models_mount_path | regex_escape) ~ '(?:,|$)')
-            | list)
-        ]
-      }}
-  loop: "{{ llm_model_store_seed_targets | zip(llm_model_store_seed_configs.results) | list }}"
-  loop_control:
-    label: "{{ item.0.hostname }}"
+- name: Attach any declared models mount that is not yet live
+  ansible.builtin.include_tasks: attach_missing_mounts.yml
+  when: llm_model_store_seed_mount_matches | select('equalto', []) | list | length > 0
+
+- name: Re-read the live models-mount config after any attach
+  ansible.builtin.include_tasks: read_mount_config.yml
+  when: llm_model_store_seed_mount_matches | select('equalto', []) | list | length > 0
 
 - name: Require exactly one models-mount mpN entry per container
   ansible.builtin.assert:

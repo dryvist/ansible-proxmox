@@ -1,0 +1,26 @@
+---
+# llm_model_store_seed handlers
+#
+# A models-mount attach (attach_missing_mounts.yml) only takes effect in the
+# guest's own filesystem after a restart — pct's mpN is a boot-time config
+# key, not a hotpluggable device (see attach_missing_mounts.yml's PVE docs
+# note). Same idiom as media_lxc_features/handlers/main.yml: a running guest
+# is rebooted (apply pending), a stopped guest is started, so a mount added
+# while the guest happens to be down still lands. Nothing to restart notifies
+# nothing, so an already-converged host performs zero restarts.
+
+- name: Restart changed llm model-store containers
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      if pct status {{ item }} | grep -q 'status: running'; then
+        pct reboot {{ item }}
+      else
+        pct start {{ item }}
+      fi
+    executable: /bin/bash
+  loop: "{{ llm_model_store_seed_changed | default([]) | unique }}"
+  loop_control:
+    label: "container {{ item }}"
+  when: llm_model_store_seed_changed | default([]) | length > 0
+  changed_when: true

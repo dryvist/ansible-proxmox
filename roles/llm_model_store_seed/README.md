@@ -23,12 +23,22 @@ the backing volume, which is what this role does.
    list. A node with none does nothing.
 2. For each match, reads the container's live LXC configuration
    (`pvesh get .../lxc/<vmid>/config`) to find the exact `mpN` entry backing
-   that mount, and resolves it to a real host filesystem path with
-   `pvesm path` — the same native resolution
+   that mount. If none exists yet — `mount_point` is in
+   `modules/proxmox-container/main.tf`'s `ignore_changes` in tofu-proxmox
+   (root@pam-only, so terraform never applies a `mount_points` addition to an
+   already-created container) — attaches it natively from the inventory's
+   `models_mount_storage`/`models_mount_size`/`models_mount_read_only`
+   (`pct set --mpN <storage>:<size>,mp=<path>[,ro=1]`) at the next free `mpN`
+   index, then restarts the container (reboot if running, start if stopped —
+   `mpN` is a boot-time config key, not hotpluggable) so the guest itself
+   sees the new mount. Same idiom `roles/media_lxc_features` already uses for
+   its own root@pam-only mount changes.
+3. Resolves the (now-live, either way) mount to a real host filesystem path
+   with `pvesm path` — the same native resolution
    `roles/pve_guest_evacuation_lxc_managed_volumes` already uses, because a
    managed mount_point's real backing dataset name only exists once Proxmox
    allocates it; it cannot be derived from the desired state alone.
-3. For every model in `llm_model_catalog_models`, resolves its sha256 from
+4. For every model in `llm_model_catalog_models`, resolves its sha256 from
    HuggingFace's own LFS blob metadata at the model's pinned `hf_revision`,
    then fetches the GGUF with `ansible.builtin.get_url` and `checksum:` —
    idempotent (skipped once the destination already matches) and atomic
