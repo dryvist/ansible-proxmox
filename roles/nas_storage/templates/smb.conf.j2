@@ -5,6 +5,7 @@
    bind interfaces only = yes
    interfaces = 127.0.0.1/8{% if ansible_default_ipv4 is defined and ansible_default_ipv4.address is defined %} {{ ansible_default_ipv4.address }}/{{ ansible_default_ipv4.prefix | default('24') }}{% endif %}
    security = user
+   server min protocol = {{ nas_storage_smb_min_protocol }}
    map to guest = Never
    log file = /var/log/samba/log.%m
    max log size = 1000
