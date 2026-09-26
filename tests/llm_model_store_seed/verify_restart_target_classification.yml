@@ -1,0 +1,37 @@
+---
+# ---------------------------------------------------------------------------
+# Whether a changed container gets `pct reboot` or `pct start`. Drives the
+# handler's own decision task (classify_restart_targets.yml) against a fixed
+# /status/current fixture with one running and one stopped container, so
+# drift in that logic fails here.
+# ---------------------------------------------------------------------------
+- name: Verify the restart-target running-vs-stopped classification
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars:
+    # Shaped like the registered result of
+    # `pvesh get .../lxc/<vmid>/status/current --output-format json`.
+    llm_model_store_seed_restart_status:
+      results:
+        - item: 405001
+          stdout: '{"status": "running", "vmid": 405001}'
+        - item: 405002
+          stdout: '{"status": "stopped", "vmid": 405002}'
+
+  tasks:
+    - name: Run the running-vs-stopped classification
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/handlers/classify_restart_targets.yml
+
+    - name: Assert the running container is rebooted and the stopped one is started
+      ansible.builtin.assert:
+        that:
+          - (llm_model_store_seed_restart_running | default([])) == [405001]
+          - (llm_model_store_seed_restart_stopped | default([])) == [405002]
+        fail_msg: >-
+          Expected 405001 (status=running) routed to reboot and 405002
+          (status=stopped) routed to start. Got
+          running={{ llm_model_store_seed_restart_running | default([]) }}
+          stopped={{ llm_model_store_seed_restart_stopped | default([]) }}.
+        quiet: true

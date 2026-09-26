@@ -1,0 +1,47 @@
+---
+# Reads each changed container's live status, sorts it into running/stopped
+# (classify_restart_targets.yml, extracted so a test can drive it against a
+# fixture without a real pvesh call), then restarts each the way it needs:
+# reboot to apply a pending change to a running guest, start for one that's
+# already down.
+
+- name: Read live status of each changed llm model-store container
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ llm_model_store_seed_node_name }}/lxc/{{ item }}/status/current"
+      - --output-format
+      - json
+  loop: "{{ llm_model_store_seed_changed | default([]) | unique }}"
+  loop_control:
+    label: "container {{ item }}"
+  changed_when: false
+  register: llm_model_store_seed_restart_status
+
+- name: Sort each changed container into running or stopped
+  ansible.builtin.include_tasks: classify_restart_targets.yml
+
+- name: Reboot each changed container that is currently running
+  ansible.builtin.command:
+    argv:
+      - pct
+      - reboot
+      - "{{ item }}"
+  loop: "{{ llm_model_store_seed_restart_running | default([]) }}"
+  loop_control:
+    label: "container {{ item }}"
+  when: (llm_model_store_seed_restart_running | default([])) | length > 0
+  changed_when: true
+
+- name: Start each changed container that is currently stopped
+  ansible.builtin.command:
+    argv:
+      - pct
+      - start
+      - "{{ item }}"
+  loop: "{{ llm_model_store_seed_restart_stopped | default([]) }}"
+  loop_control:
+    label: "container {{ item }}"
+  when: (llm_model_store_seed_restart_stopped | default([])) | length > 0
+  changed_when: true

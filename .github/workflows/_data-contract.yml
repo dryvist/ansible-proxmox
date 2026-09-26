@@ -199,3 +199,11 @@ jobs:
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/llm_model_store_seed/verify_mount_hotplug_check.yml -i localhost, -c local
+
+      # Whether a changed container gets `pct reboot` or `pct start`. Drives
+      # the handler's own decision task against both outcomes.
+      - name: Verify llm_model_store_seed restart-target classification
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_restart_target_classification.yml -i localhost, -c local

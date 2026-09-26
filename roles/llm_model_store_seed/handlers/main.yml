@@ -4,25 +4,19 @@
 # A models-mount attach (attach_missing_mounts.yml) restarts only the
 # containers where the new mpN did NOT hotplug live — check_mount_hotplug.yml
 # decides that from each container's live /pending config, evidence-driven
-# rather than unconditional (see attach_missing_mounts.yml's comment). Same
-# idiom as media_lxc_features/handlers/main.yml for the restart itself: a
-# running guest is rebooted (apply pending), a stopped guest is started, so a
-# mount added while the guest happens to be down still lands. Nothing to
-# restart notifies nothing, so an already-converged host performs zero
-# restarts.
+# rather than unconditional (see attach_missing_mounts.yml's comment). The
+# restart itself: a running guest is rebooted (apply pending), a stopped
+# guest is started, so a mount added while the guest happens to be down
+# still lands. Nothing to restart notifies nothing, so an already-converged
+# host performs zero restarts.
+#
+# No embedded shell: restart_changed_containers.yml reads each changed
+# container's live status with `pvesh` (registered), classify_restart_
+# targets.yml sorts it into running/stopped, and restart_changed_
+# containers.yml routes each to `pct reboot` or `pct start` — never a shell
+# if/then/else.
 
 - name: Restart changed llm model-store containers
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      if pct status {{ item }} | grep -q 'status: running'; then
-        pct reboot {{ item }}
-      else
-        pct start {{ item }}
-      fi
-    executable: /bin/bash
-  loop: "{{ llm_model_store_seed_changed | default([]) | unique }}"
-  loop_control:
-    label: "container {{ item }}"
+  ansible.builtin.include_tasks: restart_changed_containers.yml
+  listen: Restart changed llm model-store containers
   when: llm_model_store_seed_changed | default([]) | length > 0
-  changed_when: true
