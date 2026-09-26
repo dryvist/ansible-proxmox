@@ -6,8 +6,10 @@
 # must be visible, never silent.
 #
 # Also hardens the pushed sshd config to PVE-node parity (no password/kbd-int
-# auth, AllowUsers scoped to the declared principal map) and, where sshd is
-# present, proves the EFFECTIVE config actually reflects that hardening —
+# auth, AllowUsers scoped to the declared principal map plus
+# ssh_ca_trust_lxc_allow_users_extra) and, where sshd is present, validates
+# the rendered drop-in standalone BEFORE it ever becomes the live file, then
+# proves the EFFECTIVE config actually reflects that hardening —
 # mirroring tasks/main.yml's node-level assert — before recording the
 # container as ready in ssh_ca_trust_lxc_ready (default: {} in
 # defaults/main.yml, so it's always defined even when this file never runs).
@@ -87,10 +89,17 @@
          sshd, so a content regression here fails CI there. One printf arg
          per line, same reasoning as the CA-keys/principals writes above:
          join('\n') hands printf the two characters \n verbatim. #}
+      {# Staged to a `.new` path, never straight to the live drop-in — a bad
+         render must never leave a broken config on disk for the next sshd
+         restart/reboot to trip over. Validated standalone (sshd -t -f, the
+         same pattern Ansible's own `template: validate:` uses — see the
+         Molecule converge.yml counterpart) before the atomic rename into
+         place; `set -euo pipefail` means a failed validate aborts this
+         script before the rename runs, so whatever was already live (or
+         nothing) is what's still on disk. #}
       printf '%s\n' {% for line in lookup('template', 'lxc_sshd_hardening.conf.j2').splitlines() %}"{{ line }}" {% endfor %}\
-        | pct exec {{ item }} -- tee {{ ssh_ca_trust_dropin }} > /dev/null
-      pct exec {{ item }} -- chmod 0644 {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}
-      after=$(fingerprint)
+        | pct exec {{ item }} -- tee {{ ssh_ca_trust_dropin }}.new > /dev/null
+      pct exec {{ item }} -- chmod 0644 {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}.new
       ready=0
       if pct exec {{ item }} -- sh -c 'command -v sshd' > /dev/null 2>&1; then
         # sshd -t needs the privilege-separation dir, which a bare `pct exec`
@@ -98,6 +107,12 @@
         # so the config test doesn't abort with "Missing privilege separation
         # directory: /run/sshd".
         pct exec {{ item }} -- mkdir -p /run/sshd
+        # Validate the STAGED file standalone before it ever becomes the live
+        # drop-in — a rendering bug must fail here, not brick the guest's
+        # sshd on its next restart.
+        pct exec {{ item }} -- sshd -t -f {{ ssh_ca_trust_dropin }}.new
+        pct exec {{ item }} -- mv {{ ssh_ca_trust_dropin }}.new {{ ssh_ca_trust_dropin }}
+        after=$(fingerprint)
         # Validate on every run: the trust config is what lets the CA in, so a
         # guest that would refuse to start sshd must surface now, not at the
         # next restart.
@@ -129,6 +144,11 @@
           exit 1
         fi
         ready=1
+      else
+        # No sshd to validate against — move the staged drop-in into place
+        # unvalidated, same as before this file ever had a staging step.
+        pct exec {{ item }} -- mv {{ ssh_ca_trust_dropin }}.new {{ ssh_ca_trust_dropin }}
+        after=$(fingerprint)
       fi
       if [ "$before" != "$after" ]; then echo "RESULT=changed"; else echo "RESULT=unchanged"; fi
       echo "READY=$ready"

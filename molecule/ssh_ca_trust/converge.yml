@@ -87,12 +87,18 @@
             mode: "0644"
 
         - name: Write the hardened sshd drop-in from templates/lxc_sshd_hardening.conf.j2
+          # validate tests the RENDERED TEMP FILE (sshd -t -f %s) before the
+          # module moves it into place — the same standalone-then-atomic-move
+          # guarantee tasks/lxc.yml's own `pct exec ... sshd -t -f
+          # {{ dropin }}.new` + `mv` gives the live pct-exec path, since that
+          # path can't use this module and has to do it by hand.
           ansible.builtin.template:
             src: ../../roles/ssh_ca_trust/templates/lxc_sshd_hardening.conf.j2
             dest: "{{ ssh_ca_trust_dropin }}"
             mode: "0644"
+            validate: "sshd -t -f %s"
 
-        - name: Syntax-check the rendered drop-in (same check tasks/lxc.yml runs)
+        - name: Syntax-check the MERGED sshd config after the drop-in lands (same check tasks/lxc.yml runs post-move)
           ansible.builtin.command:
             cmd: sshd -t
           changed_when: false

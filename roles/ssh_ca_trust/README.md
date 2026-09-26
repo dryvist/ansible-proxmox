@@ -56,4 +56,8 @@ accounts only where a group opts in via `ssh_ca_trust_principals` /
 
 See `defaults/main.yml` — notably `ssh_ca_trust_ca_fingerprint` (required,
 env `SSH_CA_FINGERPRINT`), `ssh_ca_trust_bao_addr` (env `BAO_ADDR`),
-`ssh_ca_trust_extra_ca_keys` (rotation), and the principals maps.
+`ssh_ca_trust_extra_ca_keys` (rotation), the principals maps, and
+`ssh_ca_trust_lxc_allow_users_extra` (default `[]`) — extra `AllowUsers`
+entries for a container that also has a non-root user logging in over SSH
+(git-over-ssh, sftp-only, rsync/backup-pull); set per-host/group in
+inventory, never in this role.
