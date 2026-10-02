@@ -1,0 +1,81 @@
+---
+# A single unreachable cluster peer must not fail cluster_ssh_trust's by-IP
+# reachability proof -- and therefore the whole site converge -- for every
+# OTHER node (the pve-w5900-down incident this guards against). This loads
+# the role's REAL defaults/main.yml, not a copy, so drift in the role fails
+# here instead of passing silently against a stale duplicate.
+#
+# Three real hosts are added so cluster_ssh_trust_peers (sourced from the
+# pve_cluster_members group, since PROXMOX_VE_NODES is unset here) and
+# hostvars.*.ansible_host are the REAL mechanisms the role reads, not stand-
+# ins for them. pve-b is made to fail a task -- the same consequence an
+# actually-unreachable host has: it drops out of ansible_play_hosts for the
+# rest of this play, which is exactly what ansible_play_hosts_all minus
+# ansible_play_hosts detects.
+#
+# Run: ansible-playbook tests/cluster_ssh_trust/verify_unreachable_peer_exclusion.yml -i localhost, -c local
+
+- name: Add fixture cluster peers
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add fixture hosts
+      ansible.builtin.add_host:
+        name: "{{ item.name }}"
+        groups:
+          - fixture
+          - pve_cluster_members
+        ansible_host: "{{ item.ip }}"
+        ansible_connection: local
+      loop:
+        - { name: pve-a, ip: 192.168.0.11 }
+        - { name: pve-b, ip: 192.168.0.12 }
+        - { name: pve-c, ip: 192.168.0.13 }
+      loop_control:
+        label: "{{ item.name }}"
+
+- name: Verify one unreachable peer is excluded, others stay verifiable
+  hosts: fixture
+  gather_facts: false
+
+  tasks:
+    # Models a real unreachable host: `meta: end_host` drops a host out of
+    # ansible_play_hosts for the rest of this play -- the same consequence a
+    # true connection-level UNREACHABLE has -- without itself registering as
+    # a failure, so the fixture (not a real outage) doesn't fail this test's
+    # own exit code. This is what the role's exclusion formula actually reads.
+    - name: Simulate pve-b being unreachable this run
+      ansible.builtin.meta: end_host
+      when: inventory_hostname == 'pve-b'
+
+    - name: Load the role's real defaults (not a copy)
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/cluster_ssh_trust/defaults/main.yml"
+      run_once: true
+
+    - name: Assert pve-b (the simulated-unreachable peer) is excluded, pve-a/pve-c are not
+      ansible.builtin.assert:
+        that:
+          - cluster_ssh_trust_unreachable_peers == ['pve-b']
+          - "'192.168.0.11' in cluster_ssh_trust_peer_ips"
+          - "'192.168.0.13' in cluster_ssh_trust_peer_ips"
+          - "'192.168.0.12' not in cluster_ssh_trust_peer_ips"
+        fail_msg: >-
+          unreachable={{ cluster_ssh_trust_unreachable_peers }}
+          peer_ips={{ cluster_ssh_trust_peer_ips }} -- pve-b should be
+          excluded from the by-IP reachability proof while pve-a/pve-c stay
+          in it; a regression here means one down node can abort the whole
+          site converge again.
+      run_once: true
+
+    # Negative case: with nobody excluded, every known peer must still be
+    # present -- proves the formula only drops a peer that actually left the
+    # play, never over-excludes.
+    - name: Assert nothing is excluded when every peer is reachable
+      ansible.builtin.assert:
+        that:
+          - (cluster_ssh_trust_peers | difference(['pve-b'])) | intersect(cluster_ssh_trust_unreachable_peers) == []
+        fail_msg: >-
+          pve-a/pve-c were reported unreachable ({{ cluster_ssh_trust_unreachable_peers }})
+          despite never failing -- the exclusion is over-firing.
+      run_once: true
