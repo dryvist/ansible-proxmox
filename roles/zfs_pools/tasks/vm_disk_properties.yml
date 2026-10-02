@@ -1,0 +1,31 @@
+---
+# Ad-hoc ZFS property overrides for Proxmox-owned VM/LXC disks (zvols this
+# role did not create — see zfs_pools_vm_disk_properties in defaults/main.yml).
+# Same idempotent "read, set if drifted" shape as dataset_properties.yml,
+# just keyed by the full dataset path instead of a pool/dataset pair, since
+# these are not part of the committed tofu node_storage contract.
+
+- name: "Read current ad-hoc properties for {{ zfs_pools_vmdisk.key }}"
+  ansible.builtin.command:
+    cmd: "zfs get -H -o value {{ item.key }} {{ zfs_pools_vmdisk.key }}"
+  register: zfs_pools_vmdisk_current
+  changed_when: false
+  loop: "{{ zfs_pools_vmdisk.value | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pools_vmdisk.key }} {{ item.key }}"
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
+
+- name: "Set drifted ad-hoc properties for {{ zfs_pools_vmdisk.key }}"
+  ansible.builtin.command:
+    cmd: "zfs set {{ item.key }}={{ item.value | string }} {{ zfs_pools_vmdisk.key }}"
+  loop: "{{ zfs_pools_vmdisk.value | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pools_vmdisk.key }} {{ item.key }}={{ item.value }}"
+    index_var: zfs_pools_vmdisk_idx
+  when: zfs_pools_vmdisk_current.results[zfs_pools_vmdisk_idx].stdout != (item.value | string)
+  changed_when: true
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
