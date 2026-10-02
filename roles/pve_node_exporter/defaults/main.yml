@@ -20,8 +20,8 @@ pve_node_exporter_download_url: >-
 # dest is absent).
 pve_node_exporter_checksum: >-
   sha256:{{ {
-    'amd64': 'becb950ee80daa8ae7331d77966d94a611af79ad0d3307380907e0ec08f5b4e8',
-    'arm64': '848f139986f63232ced83babe3cad1679efdbb26c694737edc1f4fbd27b96203',
+    'amd64': 'b51d8a76aa2a9156a55d501aca6276fae09e262259a5e4e831d2c2222f084e63',
+    'arm64': 'ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7',
   }[pve_node_exporter_arch] }}
 
 # GOARCH name derived from the host fact; covers the amd64/arm64 fleet.
