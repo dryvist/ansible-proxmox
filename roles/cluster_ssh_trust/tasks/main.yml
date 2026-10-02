@@ -250,6 +250,20 @@
 # by IP, no password, no prompt -- against every peer, from every node,
 # every converge. A failure here means the role is still incomplete for
 # that pair, not that this task is broken.
+- name: Warn about cluster peers excluded as unreachable
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ cluster_ssh_trust_unreachable_peers | join(', ') }} unreachable
+      this run and excluded from the by-IP reachability proof below. Their
+      known_hosts/authorized_keys entries are left untouched (never dropped) --
+      this converge is not proof their trust is still correct, only that it was
+      not re-verified.
+  when:
+    - cluster_ssh_trust_enabled | bool
+    - cluster_ssh_trust_unreachable_peers | length > 0
+  tags:
+    - cluster_ssh_trust
+
 - name: Verify SSH to every peer by IP actually succeeds
   ansible.builtin.command:
     cmd: ssh -n -o BatchMode=yes -o ConnectTimeout=5 root@{{ item }} true
