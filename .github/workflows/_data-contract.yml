@@ -177,6 +177,14 @@ jobs:
           ansible-playbook tests/guest_placement/verify.yml
           -i localhost, -c local
 
+      # One unreachable cluster peer must not abort the by-IP reachability
+      # proof -- and therefore the whole site converge -- for every other
+      # node. Loads the role's real defaults/main.yml against fixture hosts.
+      - name: Verify cluster_ssh_trust excludes an unreachable peer without aborting the play
+        run: >-
+          ansible-playbook tests/cluster_ssh_trust/verify_unreachable_peer_exclusion.yml
+          -i localhost, -c local
+
       - name: Verify snapshot-free guest archive safety contract
         run: python3 tests/pve_guest_evacuation/test_archive_contract.py
 

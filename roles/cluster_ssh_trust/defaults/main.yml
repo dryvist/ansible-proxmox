@@ -21,15 +21,36 @@ cluster_ssh_trust_peers: >-
     or (groups['pve_cluster_members'] | default([]))
   }}
 
+# Peers Ansible already marked unreachable gathering facts for THIS play.
+# `ansible_play_hosts_all` is every host the play originally targeted;
+# `ansible_play_hosts` is what remains after unreachable/failed hosts drop
+# out. Comparing the two (not just checking `ansible_play_hosts`) keeps
+# `--limit` working correctly: a host excluded by `--limit` is never in
+# `ansible_play_hosts_all` either, so it is never misreported as unreachable.
+# A single dead cluster member must not block the by-IP reachability proof
+# below -- and therefore the whole converge -- for every other node.
+cluster_ssh_trust_unreachable_peers: >-
+  {{
+    cluster_ssh_trust_peers
+    | intersect(ansible_play_hosts_all | default([])
+        | difference(ansible_play_hosts | default([])))
+  }}
+
 # Each peer's management IP, resolved from inventory (hostvars[peer].ansible_host)
 # when the peer is a known inventory host -- silently omitted otherwise (e.g. a
 # peer name from PROXMOX_VE_NODES that doesn't match any inventory_hostname).
 # qmigrate connects by IP, not by name, so known_hosts must carry both: a peer
 # resolvable by name but not by IP (observed live: pve-w5900 -> pve-r540) still
 # fails "Host key verification failed" on the address migration actually uses.
+#
+# Peers already known unreachable (above) are excluded here, so the by-IP
+# verification task below never attempts, and never fails closed over, a peer
+# that is simply offline. A peer that IS reachable but still fails that
+# verification is a real, unrelated trust break and must keep failing closed.
 cluster_ssh_trust_peer_ips: >-
   {{
     cluster_ssh_trust_peers
+    | difference(cluster_ssh_trust_unreachable_peers)
     | select('in', hostvars.keys() | list)
     | map('extract', hostvars)
     | map(attribute='ansible_host', default='')

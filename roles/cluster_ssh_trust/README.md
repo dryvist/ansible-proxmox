@@ -60,6 +60,15 @@ ansible-galaxy install -r requirements.yml
   above can both pass while one specific peer pair is still broken (that is
   exactly what `pve-w5900` -> `pve-r540` was), so this is the real proof,
   not an inference from the other two.
+- A peer that Ansible already found unreachable gathering facts for this run
+  (`cluster_ssh_trust_unreachable_peers`) is excluded from that by-IP proof,
+  with a logged warning, instead of failing the assert for every other node
+  in the cluster. One offline node must not abort the whole site converge.
+  Its `known_hosts`/`authorized_keys` entries are never dropped — the
+  `ssh-keyscan` seed only appends and de-duplicates, it never truncates — so
+  trust for that peer is simply left as-is, not re-verified. A peer that IS
+  reachable but still fails the by-IP check is a genuine, unrelated trust
+  break and keeps failing closed.
 - Skipped under Docker so molecule can converge.
 
 ## Variables
@@ -68,7 +77,8 @@ ansible-galaxy install -r requirements.yml
 | --- | --- | --- |
 | `cluster_ssh_trust_enabled` | `true` | Master enable |
 | `cluster_ssh_trust_peers` | from `PROXMOX_VE_NODES` (fallback: `pve_cluster_members`) | Peer hostnames |
-| `cluster_ssh_trust_peer_ips` | resolved from inventory | Peer management IPs (best-effort) |
+| `cluster_ssh_trust_unreachable_peers` | peers unreachable this run | Excluded from the by-IP reachability proof (warned, not failed) |
+| `cluster_ssh_trust_peer_ips` | resolved from inventory, minus unreachable peers | Peer management IPs (best-effort) |
 | `cluster_ssh_trust_scan_targets` | `peers + peer_ips`, de-duplicated | What `ssh-keyscan` actually scans |
 
 ## Usage
