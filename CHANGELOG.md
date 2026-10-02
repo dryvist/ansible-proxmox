@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.0](https://github.com/dryvist/ansible-proxmox/compare/v2.13.0...v2.14.0) (2026-10-02)
+
+
+### Features
+
+* **zfs_pools:** disable sync on docker-540's CI data disk ([#841](https://github.com/dryvist/ansible-proxmox/issues/841)) ([d081638](https://github.com/dryvist/ansible-proxmox/commit/d0816387ff43fe80924d6b198b5016db1853ebb9))
+
+
+### Bug Fixes
+
+* **cluster_ssh_trust:** exclude an unreachable peer instead of aborting the whole converge ([#842](https://github.com/dryvist/ansible-proxmox/issues/842)) ([10c8f71](https://github.com/dryvist/ansible-proxmox/commit/10c8f716fc4614f4cd259039e9c77cd27e1e533e))
+* **pve_node_exporter:** correct the v1.12.1 release checksums ([#843](https://github.com/dryvist/ansible-proxmox/issues/843)) ([e0a98be](https://github.com/dryvist/ansible-proxmox/commit/e0a98befb73b82fb9eac48a9c73f605babe3ce6d))
+
 ## [2.13.0](https://github.com/dryvist/ansible-proxmox/compare/v2.12.0...v2.13.0) (2026-09-26)
 
 
