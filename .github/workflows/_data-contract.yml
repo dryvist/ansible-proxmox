@@ -132,6 +132,13 @@ jobs:
       - name: Verify pve_quorum_guard parsing and arithmetic
         run: python3 tests/test_pve_quorum_guard_arithmetic.py
 
+      # pve_proxman_operator provisions a cluster identity and cannot be
+      # exercised by molecule (it needs a real cluster), so its gates and
+      # resume conditions are pinned by fixture-driven assertions pulled from
+      # the role's own task files instead.
+      - name: Verify pve_proxman_operator gates and resume conditions
+        run: python3 tests/test_proxman_operator.py
+
       # The drive artifact feeds a Nautobot sync that DELETES what it stops
       # seeing, so every failure here is silent and destructive: a filter that
       # stops excluding removable media churns the inventory every converge, and
