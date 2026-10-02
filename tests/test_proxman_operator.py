@@ -21,6 +21,16 @@ def evaluate(expression, **variables):
 
 
 class OperatorProvisioning(unittest.TestCase):
+    def test_capabilities_gate_accepts_both_native_response_shapes(self):
+        block = task("Preflight and retain the credential on the controller")["block"]
+        gate = next(t for t in block if t["name"] == "Require the complete exact-path publication grant")
+        expression = gate["ansible.builtin.assert"]["that"][0]
+        path = "secret/data/proxmox/main/proxman"
+        for capabilities, allowed in [(["read", "create", "update"], True), (["read"], False), (["deny"], False)]:
+            for body in [{path: capabilities}, {"data": {path: capabilities}}]:
+                with self.subTest(body=body):
+                    self.assertEqual(evaluate(expression, pve_proxman_operator_capabilities={"data": body}, pve_proxman_operator_mount="secret", pve_proxman_operator_path="proxmox/main/proxman"), allowed)
+
     def test_private_node_variable_controls_selection_and_gate(self):
         play = yaml.safe_load((ROOT / "playbooks/proxman.yml").read_text())[1]
         templar = Templar(loader=DataLoader(), variables={"pve_proxman_operator_provision_node": "example-node"})

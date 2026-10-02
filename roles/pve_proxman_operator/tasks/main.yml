@@ -52,7 +52,8 @@
         that:
           - >-
             ['read', 'create', 'update'] | difference(
-              pve_proxman_operator_capabilities.data[
+              (pve_proxman_operator_capabilities.data.get('data', {})
+               | combine(pve_proxman_operator_capabilities.data))[
                 pve_proxman_operator_mount ~ '/data/' ~ pve_proxman_operator_path]) | length == 0
         quiet: true
         fail_msg: The provisioning identity lacks the exact credential publication grant.
