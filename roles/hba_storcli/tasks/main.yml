@@ -47,26 +47,61 @@
               | map(attribute='item') | list | first) | default('', true)
           }}
 
-    - name: Fail loudly if perccli64 is absent and no local package is staged
-      ansible.builtin.fail:
-        msg: >-
-          perccli64 is not installed and hba_storcli_package_path is unset.
-          Stage a .deb (Dell's PERCCLI driver page; `alien -k -d <rpm>` if only an
-          RPM is offered) into the estate's binaries store and set
-          hba_storcli_package_path to its reachable path before converging this
-          role — see roles/hba_storcli/defaults/main.yml for why this cannot be
-          auto-downloaded.
-      when:
-        - hba_storcli_resolved_path | default('', true) | length == 0
-        - hba_storcli_package_path | default('', true) | length == 0
-
-    - name: Install perccli64 from the staged package
+    - name: Install perccli64 from the staged package override
       ansible.builtin.apt:
         deb: "{{ hba_storcli_package_path }}"
         state: present
       when:
         - hba_storcli_resolved_path | default('', true) | length == 0
         - hba_storcli_package_path | default('', true) | length > 0
+
+    - name: Download and install perccli64 from the pinned vendor archive
+      when:
+        - hba_storcli_resolved_path | default('', true) | length == 0
+        - hba_storcli_package_path | default('', true) | length == 0
+      block:
+        - name: Create a temp directory for the perccli archive
+          ansible.builtin.tempfile:
+            state: directory
+            suffix: hba_storcli
+          register: hba_storcli_tempdir
+
+        - name: Download the pinned perccli archive
+          ansible.builtin.get_url:
+            url: "{{ hba_storcli_archive_url }}"
+            dest: "{{ hba_storcli_tempdir.path }}/perccli.tar.gz"
+            checksum: "{{ hba_storcli_archive_checksum }}"
+            headers:
+              User-Agent: "{{ hba_storcli_download_user_agent }}"
+            mode: "0644"
+
+        - name: Unpack the perccli archive
+          ansible.builtin.unarchive:
+            src: "{{ hba_storcli_tempdir.path }}/perccli.tar.gz"
+            dest: "{{ hba_storcli_tempdir.path }}"
+            remote_src: true
+
+        - name: Install the perccli64 .deb from the unpacked archive
+          ansible.builtin.apt:
+            deb: "{{ hba_storcli_tempdir.path }}/{{ hba_storcli_archive_deb_member }}"
+            state: present
+
+      rescue:
+        - name: Fail loudly if the pinned archive could not be downloaded or installed
+          ansible.builtin.fail:
+            msg: >-
+              Failed to download or install perccli64 from
+              {{ hba_storcli_archive_url }}: {{ ansible_failed_result.msg
+              | default(ansible_failed_result, true) }}. If this host cannot
+              reach Dell's download server, stage a .deb locally and set
+              hba_storcli_package_path to its reachable path instead.
+
+      always:
+        - name: Remove the temp directory
+          ansible.builtin.file:
+            path: "{{ hba_storcli_tempdir.path }}"
+            state: absent
+          when: hba_storcli_tempdir.path is defined
 
     - name: Re-resolve the perccli64 path after install
       ansible.builtin.stat:
@@ -75,7 +110,6 @@
       register: hba_storcli_post_install_binary
       when:
         - hba_storcli_resolved_path | default('', true) | length == 0
-        - hba_storcli_package_path | default('', true) | length > 0
 
     - name: Finalize the resolved perccli64 path
       ansible.builtin.set_fact:
