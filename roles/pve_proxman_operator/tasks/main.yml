@@ -3,8 +3,8 @@
   ansible.builtin.assert:
     that:
       - ansible_play_hosts_all | length == 1
-      - lookup('ansible.builtin.env', 'PROXMAN_PROVISION_NODE') | length > 0
-      - inventory_hostname == lookup('ansible.builtin.env', 'PROXMAN_PROVISION_NODE')
+      - pve_proxman_operator_provision_node | length > 0
+      - inventory_hostname == pve_proxman_operator_provision_node
       - pve_proxman_operator_username is match('^[A-Za-z][A-Za-z0-9._-]*@pve$')
       - pve_proxman_operator_group is match('^[A-Za-z][A-Za-z0-9._-]*$')
       - pve_proxman_operator_bao_url is match('^https://')

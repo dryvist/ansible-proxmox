@@ -1,5 +1,6 @@
 ---
 # Required identities and designated cluster writer come from private inputs.
+pve_proxman_operator_provision_node: "{{ lookup('ansible.builtin.env', 'PROXMAN_PROVISION_NODE') }}"
 pve_proxman_operator_username: "{{ lookup('ansible.builtin.env', 'PROXMAN_USERNAME') }}"
 pve_proxman_operator_group: "{{ lookup('ansible.builtin.env', 'PROXMAN_GROUP') }}"
 pve_proxman_operator_bao_url: "{{ lookup('ansible.builtin.env', 'BAO_ADDR') }}"

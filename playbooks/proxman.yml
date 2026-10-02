@@ -3,7 +3,7 @@
   ansible.builtin.import_playbook: load_tofu.yml
 
 - name: Provision the application operator through one designated cluster node
-  hosts: "{{ lookup('ansible.builtin.env', 'PROXMAN_PROVISION_NODE') | default('localhost', true) }}"
+  hosts: "{{ pve_proxman_operator_provision_node | default('localhost', true) }}"
   gather_facts: false
   become: true
   serial: 1

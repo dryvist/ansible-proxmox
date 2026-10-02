@@ -21,6 +21,17 @@ def evaluate(expression, **variables):
 
 
 class OperatorProvisioning(unittest.TestCase):
+    def test_private_node_variable_controls_selection_and_gate(self):
+        play = yaml.safe_load((ROOT / "playbooks/proxman.yml").read_text())[1]
+        templar = Templar(loader=DataLoader(), variables={"pve_proxman_operator_provision_node": "example-node"})
+        self.assertEqual(templar.template(trust_as_template(play["hosts"])), "example-node")
+        assertions = task("Validate private provisioning inputs and single cluster writer")["ansible.builtin.assert"]["that"]
+        variables = {"pve_proxman_operator_provision_node": "example-node", "inventory_hostname": "example-node", "ansible_play_hosts_all": ["example-node"]}
+        for condition in assertions[:3]:
+            self.assertTrue(evaluate(condition, **variables))
+        self.assertFalse(evaluate(assertions[1], **{**variables, "pve_proxman_operator_provision_node": ""}))
+        self.assertFalse(evaluate(assertions[2], **{**variables, "inventory_hostname": "another-node"}))
+
     def test_denied_and_server_failures_cannot_generate(self):
         block = task("Preflight and retain the credential on the controller")["block"]
         gate = next(t for t in block if t["name"] == "Reject denied or unavailable reads")
