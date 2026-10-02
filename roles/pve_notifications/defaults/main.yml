@@ -16,9 +16,20 @@ pve_notifications_enabled: true
 pve_notifications_config_host: "{{ pve_cluster_primary_host | default(proxmox_node_names.primary, true) }}"
 
 pve_notifications_ntfy_target: ntfy-proxmox
-pve_notifications_ntfy_url: "https://ntfy.{{ domain_from_tofu }}/proxmox"
+# Sized off PROXMOX_SUBDOMAIN, not domain_from_tofu (the estate apex):
+# fronted services are only published under the ingress subdomain, same
+# pattern as pve_syslog_forwarder_target_host / idrac_kiosk_kvm_host.
+pve_notifications_ntfy_url: "https://ntfy.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}/proxmox"
 # Lowercase: the PVE API enum for this field is get|post|put -- "POST" 400s.
 pve_notifications_ntfy_method: post
+# Optional hub publish-token. Empty by default (auth is not enforced on the
+# hub yet). Not currently wired into the webhook target: PVE's webhook
+# `header` field supports Jinja-like templating against a separate
+# `secret` store whose exact pvesh syntax could not be confirmed without a
+# live cluster to test against, and writing the wrong shape risks
+# corrupting cluster-wide notifications.cfg. Revisit once that shape is
+# confirmed against a real PVE API.
+pve_notifications_ntfy_token: ""
 
 # PVE's built-in matchable notification classes (chapter 12, "Notifications",
 # in the PVE admin guide). Each entry becomes one `matcher` routed at the ntfy

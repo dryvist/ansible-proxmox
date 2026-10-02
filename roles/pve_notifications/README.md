@@ -43,11 +43,13 @@ matcher names it owns, so unrelated config is untouched.
 | `pve_notifications_enabled` | `true` | Set false to disable. |
 | `pve_notifications_config_host` | cluster primary | Single node the `pvesh` calls run on. |
 | `pve_notifications_ntfy_target` | `ntfy-proxmox` | Webhook target name. |
-| `pve_notifications_ntfy_url` | ntfy publish URL for topic `proxmox` | derived from `domain_from_tofu`. |
+| `pve_notifications_ntfy_url` | ntfy publish URL for topic `proxmox` | derived from the `PROXMOX_SUBDOMAIN` environment variable. |
+| `pve_notifications_ntfy_token` | `""` | Optional hub publish token. Not yet wired into the webhook target — see defaults/main.yml. |
 | `pve_notifications_matchers` | vzdump-failed, fencing, replication-failed, package-updates | `{name, type, severity?}` matchers routed at the target. |
 
-`domain_from_tofu` is injected by `playbooks/load_tofu.yml` on every proxmox
-host — run this role via `site.yml`, not standalone.
+`PROXMOX_SUBDOMAIN` is the same ingress-subdomain environment variable
+`pve_syslog_forwarder` and `idrac_kiosk` build their fronted FQDNs from
+(e.g. from Doppler) — asserted non-empty before this role's block runs.
 
 ## Verification
 

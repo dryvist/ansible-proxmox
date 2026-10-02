@@ -167,6 +167,17 @@ jobs:
           python3 tests/zfs_capacity_monitor/test_dropped_alert.py
           python3 tests/zfs_capacity_monitor/test_transport_contract.py
 
+      # The ntfy hub fan-out is the only alert path left for this fault
+      # signature; molecule never executes the script, only deploys it.
+      - name: Verify the zfs_fault_alert ntfy transport contract
+        run: python3 tests/zfs_fault_alert/test_transport_contract.py
+
+      # pve_notifications' whole task block (including the ntfy URL) is
+      # skipped under molecule's Docker scenario, so the apex-vs-ingress
+      # distinction is pinned here instead.
+      - name: Verify pve_notifications builds its ntfy URL from the ingress subdomain
+        run: python3 tests/pve_notifications/test_contract.py
+
       # Backup identity: every other signal a backup job produces asserts only
       # that it RAN, so a guest id recycled onto a different guest keeps every
       # check green. Molecule cannot present a plausible archive history on real
