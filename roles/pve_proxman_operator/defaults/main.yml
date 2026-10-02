@@ -1,0 +1,15 @@
+---
+# Required identities and designated cluster writer come from private inputs.
+pve_proxman_operator_username: "{{ lookup('ansible.builtin.env', 'PROXMAN_USERNAME') }}"
+pve_proxman_operator_group: "{{ lookup('ansible.builtin.env', 'PROXMAN_GROUP') }}"
+pve_proxman_operator_bao_url: "{{ lookup('ansible.builtin.env', 'BAO_ADDR') }}"
+pve_proxman_operator_bao_token: "{{ lookup('ansible.builtin.env', 'BAO_TOKEN') }}"
+pve_proxman_operator_mount: secret
+pve_proxman_operator_path: proxmox/main/proxman
+pve_proxman_operator_roles:
+  - name: ProxManObserve
+    path: /
+    privileges: [Sys.Audit, Datastore.Audit, Pool.Audit]
+  - name: ProxManGuestOperate
+    path: /vms
+    privileges: [VM.Audit, VM.PowerMgmt, VM.Console]

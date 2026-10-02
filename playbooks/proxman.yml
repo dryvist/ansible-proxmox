@@ -1,0 +1,11 @@
+---
+- name: Load published cluster inventory
+  ansible.builtin.import_playbook: load_tofu.yml
+
+- name: Provision the application operator through one designated cluster node
+  hosts: "{{ lookup('ansible.builtin.env', 'PROXMAN_PROVISION_NODE') | default('localhost', true) }}"
+  gather_facts: false
+  become: true
+  serial: 1
+  roles:
+    - pve_proxman_operator
