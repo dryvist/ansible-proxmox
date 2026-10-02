@@ -81,6 +81,31 @@ postgres_standby_jobs: >-
         'archive_dir': '/bulk/databases/postgres-ai'}
      ] }}
 
+# docker-540 (VMID 915100, the second GitHub Actions CI runner host — see
+# ansible-proxmox-apps inventory/host_vars/docker-host-540.yml) carries its
+# Docker + containerd data on this zvol. `sync=standard` (the pool default)
+# means every build-user creation during a Nix install does a synchronous
+# write through this node's HDD RAIDZ2 pool (`bulk`): 32 users took 2m39s in
+# a live microbenchmark on the unmodified disk. CI scratch on an ephemeral
+# runner disk is disposable — losing in-flight writes on an unclean power
+# loss costs nothing a fresh job wouldn't already redo — so fsync can be
+# skipped entirely. With sync=disabled the same microbenchmark took ~3.3s
+# (~48x) and a full Nix install was 18-28s (was consistently near the 16min
+# CI timeout); 6 concurrent installs on this host completed in ~65-69s with
+# no OOM or swap. Measured 2026-10-02, Vikunja #3731.
+#
+# vmid 915100 and the zvol name (bulk/vm-915100-disk-1) are hardcoded rather
+# than derived from vms_from_tofu: that dict's per-VM disk list exists to
+# avoid counting/guessing a volume name, but reading it generically here
+# would mean matching on datastore + slot, which this repo has no existing
+# helper for. Hardcoded and comment-pinned to the VM's description (`qm
+# config 915100`) until a guest's data disk is a first-class citizen of the
+# tofu contract. ponytail: literal vmid, re-derive from vms_from_tofu if a
+# second guest ever needs the same override.
+zfs_pools_vm_disk_properties:
+  bulk/vm-915100-disk-1:
+    sync: disabled
+
 # BMC address for the idrac_power role. This node has a BMC but carried no
 # address, so the role skipped it entirely -- including the chassis
 # power-restore policy, which is what brings a node back unattended when AC

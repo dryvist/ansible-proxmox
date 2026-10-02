@@ -137,6 +137,17 @@
   tags:
     - zfs_pools
 
+- name: Reconcile ad-hoc VM disk property overrides
+  ansible.builtin.include_tasks: vm_disk_properties.yml
+  loop: "{{ zfs_pools_vm_disk_properties | dict2items }}"
+  loop_control:
+    loop_var: zfs_pools_vmdisk
+    label: "{{ zfs_pools_vmdisk.key }}"
+  when: ansible_virtualization_type != 'docker'
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
+
 - name: Check existing Proxmox storage registrations
   ansible.builtin.command:
     cmd: "pvesh get /storage/{{ item.key }} --output-format json"

@@ -20,6 +20,14 @@ zfs_pools_config: >-
 # "ro=@10.0.0.0/8 ro=@192.168.0.0/16"; children inherit a parent's sharenfs.
 zfs_pools_map: "{{ zfs_pools_config.pools | default({}) }}"
 
+# Ad-hoc property overrides for datasets this role did not create and does not
+# otherwise manage — specifically Proxmox-owned VM/LXC disks (zvols named
+# vm-<vmid>-disk-N), which are provisioned by the tofu VM resource, not by
+# zfs_pools_map above. Keyed by full dataset path (pool/dataset). Declare in
+# host_vars next to the reason a specific guest's disk needs a property this
+# role's shared tofu-sourced contract has no slot for.
+zfs_pools_vm_disk_properties: {}
+
 # SAFETY: creating a zpool from raw devices is a destructive commissioning step
 # and the device list is host-specific (by-id paths), so it is NOT part of the
 # committed tofu contract. By default this role only manages datasets,
