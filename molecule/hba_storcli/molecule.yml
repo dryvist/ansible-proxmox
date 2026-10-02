@@ -7,3 +7,8 @@ platforms:
     tmpfs:
       - /run
       - /tmp
+
+provisioner:
+  config_options:
+    defaults:
+      roles_path: ${MOLECULE_SCENARIO_DIRECTORY}/../../roles

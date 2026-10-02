@@ -80,3 +80,71 @@
         success_msg: "empty output degrades safely"
       vars:
         hba_storcli_drive_query: "{{ fixture_empty }}"
+
+    - name: The pinned archive URL and checksum are wired
+      ansible.builtin.assert:
+        that:
+          - hba_storcli_archive_url is match('^https://dl\.dell\.com/.*\.tar\.gz$')
+          - hba_storcli_archive_checksum is match('^sha256:[0-9a-f]{64}$')
+          - hba_storcli_archive_deb_member is search('\.deb$')
+        fail_msg: "hba_storcli archive download vars are missing or malformed"
+        success_msg: "archive URL, checksum, and .deb member are wired"
+
+    # Proves the mechanism the role's download task relies on: get_url's
+    # checksum enforcement. Exercised against a local file:// fixture so it is
+    # hermetic (no network) rather than re-testing ansible.builtin.get_url
+    # itself; a tampered/mismatched download must fail the converge, never
+    # install silently.
+    - name: Create a temp directory for the checksum fixture
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: hba_storcli_checksum_test
+      register: hba_storcli_checksum_tempdir
+
+    - name: Create a checksum-fixture file
+      ansible.builtin.copy:
+        dest: "{{ hba_storcli_checksum_tempdir.path }}/fixture"
+        content: "hba_storcli checksum fixture\n"
+        mode: "0644"
+
+    - name: Compute the fixture's real checksum
+      ansible.builtin.stat:
+        path: "{{ hba_storcli_checksum_tempdir.path }}/fixture"
+        checksum_algorithm: sha256
+      register: hba_storcli_fixture_stat
+
+    - name: A correct checksum must succeed
+      ansible.builtin.get_url:
+        url: "file://{{ hba_storcli_checksum_tempdir.path }}/fixture"
+        dest: "{{ hba_storcli_checksum_tempdir.path }}/copy_good"
+        checksum: "sha256:{{ hba_storcli_fixture_stat.stat.checksum }}"
+        mode: "0644"
+
+    - name: A wrong checksum must fail the download
+      ansible.builtin.get_url:
+        url: "file://{{ hba_storcli_checksum_tempdir.path }}/fixture"
+        dest: "{{ hba_storcli_checksum_tempdir.path }}/copy_bad"
+        checksum: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        # force: a repeated test re-run against the same dest/url must still
+        # re-verify the checksum rather than treating the destination as
+        # already-downloaded and skipping the check.
+        force: true
+        mode: "0644"
+      register: hba_storcli_bad_checksum_download
+      # ignore_errors, not failed_when: false -- failed_when overrides the
+      # registered result's own "failed" key, so the assert below would never
+      # see the failure it's checking for. ignore_errors lets the play
+      # continue while the register still reports what really happened.
+      ignore_errors: true
+
+    - name: Confirm the wrong-checksum download was rejected
+      ansible.builtin.assert:
+        that:
+          - hba_storcli_bad_checksum_download is failed
+        fail_msg: "get_url accepted a mismatched checksum — the download guard would silently install a tampered file"
+        success_msg: "wrong checksum correctly failed the download"
+
+    - name: Remove the checksum-fixture temp directory
+      ansible.builtin.file:
+        path: "{{ hba_storcli_checksum_tempdir.path }}"
+        state: absent
