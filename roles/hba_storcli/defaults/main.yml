@@ -12,6 +12,8 @@
 # converge rather than installing silently. Dell rejects curl's default
 # User-Agent, so the download task sends a non-curl one. Bump deliberately —
 # re-verify the checksum on Dell's driver page before moving the version.
+# renovate: ignore — Dell's driver-details page has no Renovate datasource;
+# bump and re-verify the checksum manually.
 hba_storcli_archive_version: "7.2313.0_A14"
 hba_storcli_archive_url: "https://dl.dell.com/FOLDER09770976M/1/PERCCLI_{{ hba_storcli_archive_version }}_Linux.tar.gz"
 hba_storcli_archive_checksum: "sha256:db518857870e62ac3690ffdafcb16f55d8f69537c21eaa717c1daff4232e0a75"
