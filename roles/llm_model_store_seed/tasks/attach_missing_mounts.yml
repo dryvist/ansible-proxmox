@@ -115,8 +115,9 @@
       - sh
       - "{{ item.vmid }}"
       - "--mp{{ llm_model_store_seed_next_mp_idx[item.hostname] }}"
+      # pct allocates a new volume as <storage>:<GiB>; the inventory size is "120G".
       - >-
-        {{ item.models_mount_storage }}:{{ item.models_mount_size }},mp={{
+        {{ item.models_mount_storage }}:{{ item.models_mount_size | regex_replace('G$', '') }},mp={{
         item.models_mount_path }}{{ ',ro=1' if item.models_mount_read_only else '' }}
   loop: "{{ llm_model_store_seed_missing }}"
   loop_control:
