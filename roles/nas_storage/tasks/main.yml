@@ -194,7 +194,7 @@
     groups: "{{ item.unix_groups | default([nas_storage_group_name]) }}"
     append: true
     shell: "{{ item.shell | default('/usr/sbin/nologin') }}"
-    create_home: "{{ item.create_home | default(false) }}"
+    create_home: "{{ item.create_home | default(false, true) }}"
     password_lock: true
     system: true
   loop: "{{ nas_storage_resolved_users }}"
