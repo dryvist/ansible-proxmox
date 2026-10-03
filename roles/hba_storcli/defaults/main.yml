@@ -6,13 +6,19 @@
 # defeats ZFS's own error handling, so this must be verified, not inferred
 # from indirect smartctl behavior.
 #
-# NO AUTOMATED DOWNLOAD: Dell does not publish a stable, anonymously-fetchable
-# URL for perccli — it sits behind an interactive driver-details page, and the
-# package name/version changes per refresh. Fabricating a URL here would ship
-# a role that silently 404s on first run. Instead, stage the .deb once
-# (download from Dell's PERCCLI driver page, `alien -k -d <rpm>` if only an
-# RPM is offered) into RustFS's central binaries store, and point this role at
-# it via hba_storcli_package_path.
+# Pinned vendor download: Dell's PERCCLI driver page (driver id tdghn) behind
+# dl.dell.com. Checksum is the SHA-256 Dell itself publishes for this file;
+# get_url enforces it, so a tampered or mismatched download fails the
+# converge rather than installing silently. Dell rejects curl's default
+# User-Agent, so the download task sends a non-curl one. Bump deliberately —
+# re-verify the checksum on Dell's driver page before moving the version.
+# renovate: ignore — Dell's driver-details page has no Renovate datasource;
+# bump and re-verify the checksum manually.
+hba_storcli_archive_version: "7.2313.0_A14"
+hba_storcli_archive_url: "https://dl.dell.com/FOLDER09770976M/1/PERCCLI_{{ hba_storcli_archive_version }}_Linux.tar.gz"
+hba_storcli_archive_checksum: "sha256:db518857870e62ac3690ffdafcb16f55d8f69537c21eaa717c1daff4232e0a75"
+hba_storcli_archive_deb_member: "PERCCLI_{{ hba_storcli_archive_version }}_Linux/perccli_007.2313.0000.0000_all.deb"
+hba_storcli_download_user_agent: "ansible-proxmox/hba_storcli"
 
 hba_storcli_enabled: true
 
@@ -27,9 +33,8 @@ hba_storcli_acceptable_states:
   - JBOD
   - UGood
 
-# Locally-reachable .deb path (see note above for how to obtain one). Left
-# unset by default so the role fails loudly with instructions rather than
-# attempting a download that cannot exist.
+# Optional override for air-gapped hosts: a locally-reachable .deb path to
+# install from instead of downloading the pinned archive above.
 hba_storcli_package_path: ""
 hba_storcli_binary_name: perccli64
 hba_storcli_binary_search_paths:

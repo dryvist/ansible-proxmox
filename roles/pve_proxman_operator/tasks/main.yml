@@ -1,0 +1,204 @@
+---
+- name: Validate private provisioning inputs and single cluster writer
+  ansible.builtin.assert:
+    that:
+      - ansible_play_hosts_all | length == 1
+      - pve_proxman_operator_provision_node | length > 0
+      - inventory_hostname == pve_proxman_operator_provision_node
+      - pve_proxman_operator_username is match('^[A-Za-z][A-Za-z0-9._-]*@pve$')
+      - pve_proxman_operator_group is match('^[A-Za-z][A-Za-z0-9._-]*$')
+      - pve_proxman_operator_bao_url is match('^https://')
+      - pve_proxman_operator_bao_token | length > 0
+    quiet: true
+    fail_msg: Supply private operator inputs and a gated OpenBao token; select exactly one cluster node.
+  no_log: true
+
+- name: Preflight and retain the credential on the controller
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_become: false
+  block:
+    - name: Verify the authenticated OpenBao identity
+      community.hashi_vault.vault_read:
+        url: "{{ pve_proxman_operator_bao_url }}"
+        token: "{{ pve_proxman_operator_bao_token }}"
+        path: auth/token/lookup-self
+      register: pve_proxman_operator_identity
+      no_log: true
+
+    - name: Verify the token identifies a bounded automation policy
+      ansible.builtin.assert:
+        that:
+          - "'ansible-converge' in pve_proxman_operator_identity.data.data.policies"
+          - "'root' not in pve_proxman_operator_identity.data.data.policies"
+        quiet: true
+        fail_msg: Provisioning requires the bounded automation identity, not a root token.
+
+    - name: Read exact publication capabilities before changing the cluster
+      community.hashi_vault.vault_write:
+        url: "{{ pve_proxman_operator_bao_url }}"
+        token: "{{ pve_proxman_operator_bao_token }}"
+        path: sys/capabilities-self
+        data:
+          paths: ["{{ pve_proxman_operator_mount }}/data/{{ pve_proxman_operator_path }}"]
+      register: pve_proxman_operator_capabilities
+      no_log: true
+      changed_when: false
+      check_mode: false
+
+    - name: Require the complete exact-path publication grant
+      ansible.builtin.assert:
+        that:
+          - >-
+            ['read', 'create', 'update'] | difference(
+              (pve_proxman_operator_capabilities.data.get('data', {})
+               | combine(pve_proxman_operator_capabilities.data))[
+                pve_proxman_operator_mount ~ '/data/' ~ pve_proxman_operator_path]) | length == 0
+        quiet: true
+        fail_msg: The provisioning identity lacks the exact credential publication grant.
+
+    - name: Read the durable credential before generating anything
+      community.hashi_vault.vault_kv2_get:
+        url: "{{ pve_proxman_operator_bao_url }}"
+        token: "{{ pve_proxman_operator_bao_token }}"
+        engine_mount_point: "{{ pve_proxman_operator_mount }}"
+        path: "{{ pve_proxman_operator_path }}"
+      register: pve_proxman_operator_existing
+      failed_when: false
+      no_log: true
+
+    - name: Reject denied or unavailable reads
+      ansible.builtin.assert:
+        that:
+          - >-
+            pve_proxman_operator_existing.msg is not defined or
+            pve_proxman_operator_existing.msg is match('^Invalid or missing path')
+        quiet: true
+        fail_msg: Credential lookup failed; only a missing KV path permits generation.
+
+- name: Read cluster users without modifying pmxcfs
+  ansible.builtin.command:
+    argv: [pvesh, get, /access/users, --output-format, json]
+  register: pve_proxman_operator_users
+  changed_when: false
+  check_mode: false
+
+- name: Select the dedicated operator
+  ansible.builtin.set_fact:
+    pve_proxman_operator_user: >-
+      {{ pve_proxman_operator_users.stdout | from_json
+         | selectattr('userid', 'equalto', pve_proxman_operator_username) | list }}
+
+- name: Refuse to replace an existing identity whose credential is unknown
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_proxman_operator_user | length == 0 or
+        pve_proxman_operator_existing.secret is defined
+      - >-
+        pve_proxman_operator_existing.secret is not defined or
+        (pve_proxman_operator_existing.secret.username == pve_proxman_operator_username and
+         pve_proxman_operator_existing.secret.password | length >= 24)
+    quiet: true
+    fail_msg: Stored identity mismatch or missing credential; explicit recovery is required.
+  no_log: true
+
+- name: Publish a new credential before cluster mutation using create-only CAS
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ pve_proxman_operator_bao_url }}"
+    token: "{{ pve_proxman_operator_bao_token }}"
+    engine_mount_point: "{{ pve_proxman_operator_mount }}"
+    path: "{{ pve_proxman_operator_path }}"
+    cas: 0
+    data:
+      username: "{{ pve_proxman_operator_username }}"
+      password: "{{ lookup('ansible.builtin.password', '/dev/null', length=40, chars=['ascii_letters', 'digits']) }}"
+  when: pve_proxman_operator_existing.secret is not defined
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_become: false
+  no_log: true
+
+- name: Read existing ACLs before granting operator access
+  ansible.builtin.command:
+    argv: [pvesh, get, /access/acl, --output-format, json]
+  register: pve_proxman_operator_preflight_acls
+  changed_when: false
+  check_mode: false
+
+- name: Reject existing access outside the dedicated operator contract
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_proxman_operator_user | length == 0 or
+        pve_proxman_operator_user[0].groups | default('') == pve_proxman_operator_group
+      - >-
+        pve_proxman_operator_preflight_acls.stdout | from_json
+        | selectattr('type', 'equalto', 'user')
+        | selectattr('ugid', 'equalto', pve_proxman_operator_username) | list | length == 0
+      - >-
+        pve_proxman_operator_preflight_acls.stdout | from_json
+        | selectattr('type', 'equalto', 'group')
+        | selectattr('ugid', 'equalto', pve_proxman_operator_group)
+        | rejectattr('roleid', 'in', pve_proxman_operator_roles | map(attribute='name') | list) | list | length == 0
+    quiet: true
+    fail_msg: Existing identity or group access exceeds the dedicated operator contract; explicit recovery is required.
+
+- name: Read the published credential for resumable provisioning
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ pve_proxman_operator_bao_url }}"
+    token: "{{ pve_proxman_operator_bao_token }}"
+    engine_mount_point: "{{ pve_proxman_operator_mount }}"
+    path: "{{ pve_proxman_operator_path }}"
+  register: pve_proxman_operator_credential
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_become: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Read existing operator groups
+  ansible.builtin.command:
+    argv: [pvesh, get, /access/groups, --output-format, json]
+  register: pve_proxman_operator_groups
+  changed_when: false
+  check_mode: false
+
+- name: Create the dedicated group
+  ansible.builtin.command:
+    argv: [pveum, group, add, "{{ pve_proxman_operator_group }}"]
+  when: pve_proxman_operator_group not in (pve_proxman_operator_groups.stdout | from_json | map(attribute='groupid') | list)
+  changed_when: true
+
+- name: Create the operator disabled until password initialization completes
+  ansible.builtin.command:
+    argv: [pveum, user, add, "{{ pve_proxman_operator_username }}", --groups, "{{ pve_proxman_operator_group }}", --enable, '0']
+  when: pve_proxman_operator_user | length == 0
+  changed_when: true
+
+# pveum passwd reads two confirmations from non-terminal stdin natively.
+# A disabled account resumes from the retained password after interruption.
+- name: Initialize the disabled operator password without command-line exposure
+  ansible.builtin.command:
+    argv: [pveum, passwd, "{{ pve_proxman_operator_username }}"]
+    stdin: "{{ pve_proxman_operator_credential.secret.password }}\n{{ pve_proxman_operator_credential.secret.password }}"
+  when:
+    - not ansible_check_mode
+    - pve_proxman_operator_user | length == 0 or not (pve_proxman_operator_user[0].enable | bool)
+  changed_when: true
+  no_log: true
+
+- name: Reconcile bounded roles and group ACLs
+  ansible.builtin.include_tasks: role.yml
+  loop: "{{ pve_proxman_operator_roles }}"
+  loop_control:
+    loop_var: pve_proxman_operator_role
+
+- name: Enable the initialized operator
+  ansible.builtin.command:
+    argv: [pveum, user, modify, "{{ pve_proxman_operator_username }}", --enable, '1']
+  when: pve_proxman_operator_user | length == 0 or not (pve_proxman_operator_user[0].enable | bool)
+  changed_when: true

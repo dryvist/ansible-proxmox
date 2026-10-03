@@ -1,6 +1,7 @@
 # zfs_fault_alert
 
-Immediate Zammad ticket on a specific, already-proven-real ZFS fault
+Immediate publish to the homelab ntfy alert hub (topic `hardware`, which
+fans out to Slack and Zammad) on a specific, already-proven-real ZFS fault
 signature: a checksum error, an I/O delay past a threshold, or zed's own
 event queue overflowing ("Missed events" -- meaning this whole mechanism
 went blind for that window).
@@ -18,7 +19,7 @@ insufficient: Zammad #17242 found pve-w5900's rpool (single unmirrored
 consumer NVMe) threw a real, signature-matched corruption-plus-hang event
 three times in eight days, with SMART reading `PASSED` throughout. A log
 line nobody is actively reading is not a control for a fault at that
-severity -- so this fires a Zammad ticket directly from the host, in
+severity -- so this publishes to the ntfy hub directly from the host, in
 parallel with (not instead of) the syslog path.
 
 ## What it watches
@@ -46,26 +47,20 @@ Disabled everywhere by default. A host opts in via `host_vars`:
 zfs_fault_alert_enabled: true
 ```
 
-`zfs_fault_alert_openbao_addr` / `zfs_fault_alert_openbao_token` resolve on
-their own from the controller's `BAO_ADDR` / `BAO_TOKEN` environment -- the
-same pattern as `roles/zammad/tasks/publish_mcp.yml`'s
-`zammad_token_openbao_addr`/`token` (ansible-proxmox-apps). Reads the
-existing `zammad_hermes_api_token` (`secret/apps/zammad`) and the published
-Zammad URL (`secret/ai/mcp/zammad` -> `ZAMMAD_MCP_URL`) -- no new credential
-is minted for this one more consumer.
-
-No customer field is sent on the ticket -- the same convention as the
-`hermes`/`svc-splunk`/`svc-ntfy` service users in
-`roles/zammad/files/zammad_bootstrap.rb` (ansible-proxmox-apps): Zammad
-defaults an omitted customer to the API token's own user, and this role
-reuses the `hermes` token, whose user already carries the Customer role.
+`zfs_fault_alert_ntfy_url` resolves from the controller's `PROXMOX_SUBDOMAIN`
+environment -- the same pattern as `pve_syslog_forwarder_target_host` /
+`idrac_kiosk_kvm_host`: fronted services are only published under the
+ingress subdomain, never the estate apex. `zfs_fault_alert_ntfy_token` is an
+optional publish token (empty by default; the hub does not enforce auth
+yet) sent as a Bearer token when set.
 
 ## Verification
 
 The converge itself proves the wiring is live: after deploying the token,
-scripts, and timer, it runs `zfs-fault-alert.sh --self-check`, which
-authenticates to Zammad with the deployed token and fails the play if that
-does not succeed. Enabling a timer and dropping a zed.d script prove
-nothing about whether either can actually reach Zammad -- this closes that
-gap the same way `pve_health_telemetry` proves its own journal line reaches
-the tag it claims to.
+scripts, and timer, it runs `zfs-fault-alert.sh --self-check`, which hits
+the ntfy hub's own health endpoint and fails the play if that does not
+succeed. Enabling a timer and dropping a zed.d script prove nothing about
+whether either can actually reach the hub -- this closes that gap the same
+way `pve_health_telemetry` proves its own journal line reaches the tag it
+claims to. The self-check never publishes an alert, so it cannot page
+Slack/Zammad on a routine converge.

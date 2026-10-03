@@ -1,0 +1,46 @@
+---
+- name: Read existing roles
+  ansible.builtin.command:
+    argv: [pvesh, get, /access/roles, --output-format, json]
+  register: pve_proxman_operator_existing_roles
+  changed_when: false
+  check_mode: false
+
+- name: Select the application role
+  ansible.builtin.set_fact:
+    pve_proxman_operator_existing_role: >-
+      {{ pve_proxman_operator_existing_roles.stdout | from_json
+         | selectattr('roleid', 'equalto', pve_proxman_operator_role.name) | list }}
+
+- name: Reconcile only the declared privileges
+  ansible.builtin.command:
+    argv:
+      - pveum
+      - role
+      - "{{ 'add' if pve_proxman_operator_existing_role | length == 0 else 'modify' }}"
+      - "{{ pve_proxman_operator_role.name }}"
+      - --privs
+      - "{{ pve_proxman_operator_role.privileges | join(' ') }}"
+  when: >-
+    pve_proxman_operator_existing_role | length == 0 or
+    (pve_proxman_operator_existing_role[0].privs.split(',') | sort != pve_proxman_operator_role.privileges | sort)
+  changed_when: true
+
+- name: Read current ACLs
+  ansible.builtin.command:
+    argv: [pvesh, get, /access/acl, --output-format, json]
+  register: pve_proxman_operator_acls
+  changed_when: false
+  check_mode: false
+
+- name: Grant the role at its bounded path
+  ansible.builtin.command:
+    argv: [pveum, acl, modify, "{{ pve_proxman_operator_role.path }}", --groups, "{{ pve_proxman_operator_group }}", --roles, "{{ pve_proxman_operator_role.name }}", --propagate, '1']
+  when: >-
+    pve_proxman_operator_acls.stdout | from_json
+    | selectattr('type', 'equalto', 'group')
+    | selectattr('ugid', 'equalto', pve_proxman_operator_group)
+    | selectattr('path', 'equalto', pve_proxman_operator_role.path)
+    | selectattr('roleid', 'equalto', pve_proxman_operator_role.name)
+    | selectattr('propagate', 'equalto', 1) | list | length == 0
+  changed_when: true

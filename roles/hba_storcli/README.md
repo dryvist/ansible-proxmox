@@ -16,8 +16,8 @@ or invoked directly:
 ansible-playbook playbooks/site.yml --limit pve-r540,localhost --tags hba_storcli
 ```
 
-Staging the `perccli64` package (manual, one-time per estate) is required
-first — see "Why this exists" below.
+If `perccli64` is not already installed, the role downloads it itself from a
+pinned, checksum-verified Dell URL — no manual staging needed.
 
 ## Why this exists
 
@@ -26,28 +26,26 @@ Indirect evidence (a disk enumerating as `ata-*` by-id and answering a plain
 but a single-disk RAID0 virtual disk can present similarly depending on
 firmware. The only real confirmation is querying the controller itself.
 
-Dell does not publish a stable, anonymously-fetchable URL for `perccli` — it
-sits behind an interactive driver-details page on Dell's support site, and
-the package name/version changes per refresh. This role therefore does
-**not** attempt to auto-download it:
+## Installing perccli64
 
-1. Download the Linux PERCCLI `.tar.gz`/`.rpm` from Dell's PERCCLI driver
-   page (search "Dell PERCCLI Linux" — driver IDs `wd0r5` / `f48c2` at time
-   of writing).
-2. If only an RPM is offered: `alien -k -d <file>.rpm` to produce a `.deb`.
-3. Place the resulting `.deb` somewhere this role's target host can reach
-   (the estate's binaries/ISO store, or a path served over the existing
-   internal file distribution).
-4. Set `hba_storcli_package_path` to that reachable path.
+By default the role downloads `hba_storcli_archive_url` (Dell's PERCCLI
+driver page, driver id `tdghn`), verifies it against
+`hba_storcli_archive_checksum`, and installs the `.deb` it contains. Bump the
+pinned version deliberately — re-verify the checksum on Dell's driver page
+before moving it.
+
+For an air-gapped host, set `hba_storcli_package_path` to a locally-reachable
+`.deb` instead; this skips the download entirely.
 
 If the binary is already installed (checked at
-`hba_storcli_binary_search_paths`), staging is skipped entirely.
+`hba_storcli_binary_search_paths`), neither path runs.
 
 ## Variables
 
 See `defaults/main.yml`. Key ones:
 
-- `hba_storcli_package_path` — reachable `.deb` path (required unless already installed)
+- `hba_storcli_archive_url` / `hba_storcli_archive_checksum` — pinned vendor download (default path)
+- `hba_storcli_package_path` — reachable `.deb` path override (air-gapped hosts)
 - `hba_storcli_controller_index` — which `/cN` to query (default `0`)
 - `hba_storcli_acceptable_states` — drive states treated as true passthrough
 

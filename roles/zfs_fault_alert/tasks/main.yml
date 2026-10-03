@@ -1,67 +1,27 @@
 ---
 # Wires a specific ZFS fault signature (checksum error, long I/O delay, zed
-# queue overflow) directly to a Zammad ticket. See defaults/main.yml and the
-# templates for why: pve_health_telemetry's journal->syslog pipe is the
-# general-purpose path, and this role deliberately bypasses it for one
-# narrow, already-proven-real trigger, because a log nobody reads is not a
-# control (Zammad #17242 -- the pipe this would otherwise rely on has its
-# own known reliability gap).
+# queue overflow) directly to the ntfy alert hub (topic "hardware"), which
+# fans out to Slack and Zammad. See defaults/main.yml and the templates for
+# why: pve_health_telemetry's journal->syslog pipe is the general-purpose
+# path, and this role deliberately bypasses it for one narrow,
+# already-proven-real trigger, because a log nobody reads is not a control
+# (Zammad #17242 -- the pipe this would otherwise rely on has its own known
+# reliability gap).
 - name: Wire the ZFS fault alert
   when: zfs_fault_alert_enabled | bool
   tags:
     - zfs_fault_alert
   block:
-    - name: Assert the OpenBao address/token resolved
+    - name: Assert the ntfy hub target resolved
       ansible.builtin.assert:
         that:
-          - zfs_fault_alert_openbao_addr | length > 0
-          - zfs_fault_alert_openbao_token | length > 0
+          - lookup('env', 'PROXMOX_SUBDOMAIN') | length > 0
         fail_msg: >-
-          zfs_fault_alert is enabled but zfs_fault_alert_openbao_addr/token
-          did not resolve from the controller's BAO_ADDR/BAO_TOKEN
-          environment (see defaults/main.yml).
-
-    - name: Read the shared Zammad token from OpenBao
-      ansible.builtin.uri:
-        url: >-
-          {{ zfs_fault_alert_openbao_addr }}/v1/{{ zfs_fault_alert_openbao_mount }}/data/{{ zfs_fault_alert_openbao_path }}
-        headers:
-          X-Vault-Token: "{{ zfs_fault_alert_openbao_token }}"
-        return_content: true
-      register: zfs_fault_alert_bao_read
-      no_log: true
-
-    - name: Extract the token
-      ansible.builtin.set_fact:
-        zfs_fault_alert_zammad_token: >-
-          {{ (zfs_fault_alert_bao_read.json.data.data[zfs_fault_alert_openbao_key])
-             | mandatory('OpenBao key ' ~ zfs_fault_alert_openbao_key ~ ' not found at '
-                         ~ zfs_fault_alert_openbao_path) }}
-      no_log: true
-
-    # The Zammad base URL is internal topology and is never committed as a
-    # literal (same reason hermes_agent_zammad_url defaults to ""). Read the
-    # same published secret the Hermes agent already reads
-    # (secret/ai/mcp/zammad -> ZAMMAD_MCP_URL) rather than requiring a
-    # second manually-typed extra var for the same fact.
-    - name: Read the published Zammad URL from OpenBao
-      ansible.builtin.uri:
-        url: "{{ zfs_fault_alert_openbao_addr }}/v1/secret/data/ai/mcp/zammad"
-        headers:
-          X-Vault-Token: "{{ zfs_fault_alert_openbao_token }}"
-        return_content: true
-      register: zfs_fault_alert_bao_url_read
-      no_log: true
-      when: zfs_fault_alert_zammad_url | length == 0
-
-    - name: Set the resolved Zammad URL
-      ansible.builtin.set_fact:
-        zfs_fault_alert_zammad_url: >-
-          {{ (zfs_fault_alert_bao_url_read.json.data.data.ZAMMAD_MCP_URL
-              | regex_replace('/api/v1/?$', ''))
-             | mandatory('secret/ai/mcp/zammad has no ZAMMAD_MCP_URL -- Zammad may not be deployed yet') }}
-      when: zfs_fault_alert_zammad_url | length == 0
-      no_log: true
+          zfs_fault_alert is enabled but PROXMOX_SUBDOMAIN did not resolve
+          from the controller's environment (needed to build
+          zfs_fault_alert_ntfy_url). Run via doppler (doppler run --
+          ansible-playbook ...) or export PROXMOX_SUBDOMAIN.
+        quiet: true
 
     - name: Create the token directory
       ansible.builtin.file:
@@ -71,22 +31,26 @@
         group: root
         mode: "0700"
 
-    - name: Write the Zammad token (root-only, never logged)
+    - name: Write the ntfy publish token (root-only, never logged)
       ansible.builtin.copy:
-        content: "{{ zfs_fault_alert_zammad_token }}"
-        dest: /etc/zfs-fault-alert/zammad-token
+        content: "{{ zfs_fault_alert_ntfy_token }}"
+        dest: /etc/zfs-fault-alert/ntfy-token
         owner: root
         group: root
         mode: "0600"
       no_log: true
+      when: zfs_fault_alert_ntfy_token | length > 0
 
-    # jq builds the ticket payload in zfs-fault-alert.sh. Without it the
-    # converge self-check still passes (it only calls curl) while a real
-    # firing dies mid-payload -- an alert path that looks armed and is not.
-    - name: Install jq (required to build the Zammad ticket payload)
-      ansible.builtin.package:
-        name: jq
-        state: present
+    - name: Remove the ntfy publish token when unset
+      ansible.builtin.file:
+        path: /etc/zfs-fault-alert/ntfy-token
+        state: absent
+      when: zfs_fault_alert_ntfy_token | length == 0
+
+    - name: Remove the now-unused Zammad token from a previously converged host
+      ansible.builtin.file:
+        path: /etc/zfs-fault-alert/zammad-token
+        state: absent
 
     - name: Deploy the shared alert script
       ansible.builtin.template:
@@ -151,12 +115,13 @@
     - name: Flush handlers so units are current before enabling
       ansible.builtin.meta: flush_handlers
 
-    - name: Prove the alert path is actually live -- reaches Zammad with the deployed token
+    - name: Prove the alert path is actually live -- reaches the ntfy hub
       # Enabling the timer and dropping the zed.d script prove nothing about
-      # whether either can actually reach Zammad. --self-check validates the
-      # token and connectivity without filing a ticket. A converge that
-      # leaves this broken but "deployed" is worse than no alert at all --
-      # the operator would believe a trigger exists that does not fire.
+      # whether either can actually reach the hub. --self-check hits the
+      # hub's own health endpoint without publishing an alert. A converge
+      # that leaves this broken but "deployed" is worse than no alert at
+      # all -- the operator would believe a trigger exists that does not
+      # fire.
       ansible.builtin.command: /usr/local/bin/zfs-fault-alert.sh --self-check
       register: zfs_fault_alert_self_check
       changed_when: false
@@ -167,8 +132,8 @@
         var: zfs_fault_alert_self_check.stdout
 
 # Opting a host out has to actually disarm it. Without this, disabling the role
-# only skips the block above: the zedlets and the deployed Zammad token stay on
-# disk and keep filing tickets on every checksum/delay event forever.
+# only skips the block above: the zedlets and the deployed ntfy token stay on
+# disk and keep firing alerts on every checksum/delay event forever.
 - name: Disarm the ZFS fault alert on a host that has opted out
   when: not (zfs_fault_alert_enabled | bool)
   tags:

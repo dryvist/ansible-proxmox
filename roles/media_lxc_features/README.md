@@ -56,7 +56,7 @@ service, never a hardcoded VMID:
 | seerr | `/bulk/appdata/seerr`->`/opt/seerr/config` | yes | no |
 | sonarr | `/bulk/data`->`/data`, `/bulk/appdata/sonarr`->`/var/lib/sonarr` | no | no |
 | radarr | `/bulk/data`->`/data`, `/bulk/appdata/radarr`->`/var/lib/radarr` | no | no |
-| download-vpn | `/bulk/data`->`/data`, `/bulk/appdata/prowlarr`->`/var/lib/prowlarr` | yes | yes |
+| download-vpn | `/bulk/data`->`/data`, `/bulk/appdata/prowlarr`->`/var/lib/prowlarr`, `/bulk/data/seed`->`/data/seed` | yes | yes |
 
 Every mounted service gets the unified `bulk/data` dataset -> `/data`. One
 dataset (replacing the old separate `downloads` + `media` datasets/mounts) is
@@ -66,6 +66,11 @@ what lets qBittorrent and the *arrs **hardlink** between `/data/torrents/*` and
 by usage, not by mount flag). `/dev/net/tun` is char device **10:200** (verified
 on the primary node). Every service additionally gets a **persistent config
 mount** — see below.
+
+A child dataset under `bulk/data` (such as `bulk/data/seed`) needs its own
+mount entry. A Proxmox `mp` bind-mount is not recursive. Without the entry, the
+container sees only the parent's empty mountpoint directory, not the child
+dataset or its quota.
 
 A mount may carry `owner_user: <name>` (or `owner_uid`/`owner_gid` for an owner
 with no named user, e.g. seerr's Docker `node` uid 1000). That marks an
