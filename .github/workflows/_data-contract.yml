@@ -241,3 +241,11 @@ jobs:
 
       - name: Verify llm_model_store_seed attach on a protected container
         run: python3 tests/llm_model_store_seed/test_protected_attach.py
+
+      # The mount lookup must find a live `<storage>:<vol>,mp=<path>,...` value,
+      # and a surplus duplicate is removed only when it is role-named and empty.
+      - name: Verify llm_model_store_seed mount lookup and surplus removal
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_duplicate_removal.yml -i localhost, -c local

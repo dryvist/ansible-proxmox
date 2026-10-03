@@ -34,6 +34,12 @@ the backing volume, which is what this role does.
    running, start if stopped — same idiom `roles/media_lxc_features` uses for
    its own root@pam-only mount changes) only if the new entry is still
    listed as pending; if it hotplugged, no restart happens.
+   If a container ends up with more than one `mpN` at the models path, the
+   lowest-index entry is kept and each other entry is detached and destroyed
+   (`pct set --delete mpN`, then `--delete unusedN`) -- only when its volume is
+   named `<storage>:(subvol|vm)-<vmid>-disk-<n>` and its host path is an empty
+   real directory, checked before the detach and again before the destroy. Any
+   entry that fails either check fails the run and nothing is removed.
 3. Resolves the (now-live, either way) mount to a real host filesystem path
    with `pvesm path` — the same native resolution
    `roles/pve_guest_evacuation_lxc_managed_volumes` already uses, because a

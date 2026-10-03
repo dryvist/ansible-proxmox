@@ -15,7 +15,8 @@ import jinja2
 import yaml
 from ansible.plugins.filter.core import regex_replace
 
-TASK_FILE = Path(__file__).resolve().parents[2] / "roles/llm_model_store_seed/tasks/attach_missing_mounts.yml"
+ROLE = Path(__file__).resolve().parents[2] / "roles/llm_model_store_seed"
+TASK_FILE = ROLE / "tasks/attach_missing_mounts.yml"
 
 FAKE_PCT = """#!/bin/sh
 echo "$*" >> "$LOG"
@@ -31,7 +32,9 @@ exit 0
 tasks = yaml.safe_load(TASK_FILE.read_text())
 ATTACH = next(t for t in tasks if t.get("name") == "Attach each missing models mount (pct set)")
 ARGV = ATTACH["ansible.builtin.command"]["argv"]
-SCRIPT = ARGV[2]
+SCRIPT_VAR = "llm_model_store_seed_pct_set_script"
+assert ARGV[2] == "{{ " + SCRIPT_VAR + " }}", ARGV[2]
+SCRIPT = yaml.safe_load((ROLE / "defaults/main.yml").read_text())[SCRIPT_VAR]
 SPEC = ARGV[-1]
 
 

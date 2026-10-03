@@ -30,7 +30,7 @@
         llm_model_store_seed_mount_matches | default([]) + [
           ((item.1.stdout | from_json) | dict2items
             | selectattr('key', 'match', '^mp[0-9]+$')
-            | selectattr('value', 'match', '(?:^|,)mp=' ~ (item.0.models_mount_path | regex_escape) ~ '(?:,|$)')
+            | selectattr('value', 'search', '(?:^|,)mp=' ~ (item.0.models_mount_path | regex_escape) ~ '(?:,|$)')
             | list)
         ]
       }}

@@ -99,19 +99,13 @@
   loop_control:
     label: "{{ item.hostname }}"
 
-# protection=1 blocks even additive disk changes: lift it for the pct set, always restore.
+# llm_model_store_seed_pct_set_script lifts protection=1 for the call and always restores it.
 - name: Attach each missing models mount (pct set)
   ansible.builtin.command:
     argv:
       - sh
       - -c
-      - |
-        set -u
-        prot=$(pct config "$1" | sed -n 's/^protection: //p')
-        if [ "$prot" = 1 ]; then pct set "$1" --protection 0 || exit 1; fi
-        pct set "$1" "$2" "$3"; rc=$?
-        if [ "$prot" = 1 ]; then pct set "$1" --protection 1 || rc=1; fi
-        exit "$rc"
+      - "{{ llm_model_store_seed_pct_set_script }}"
       - sh
       - "{{ item.vmid }}"
       - "--mp{{ llm_model_store_seed_next_mp_idx[item.hostname] }}"

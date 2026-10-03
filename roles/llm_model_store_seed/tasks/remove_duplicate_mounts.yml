@@ -1,0 +1,192 @@
+---
+# A container with more than one mpN entry at its declared models_mount_path
+# keeps its lowest-index entry (the original: an attach always takes the next
+# free index, so a duplicate always sits above it) and loses the rest.
+#
+# Only a volume that is provably this role's own empty allocation is removed:
+# its name must be <storage>:(subvol|vm)-<vmid>-disk-<n>, and its host path
+# must be an existing real directory with no entries. Every check for every
+# surplus entry runs before the first removal, and again on the detached
+# volume right before it is destroyed. Any doubt fails the run and removes
+# nothing.
+#
+# Order: detach (pct set --delete mpN) -> restart only the containers where
+# the detach is still pending (a running guest cannot drop a mount live) ->
+# find the volume among the container's unusedN entries -> re-verify it empty
+# -> destroy it (pct set --delete unusedN) -> re-read the mount config.
+#
+# Reads llm_model_store_seed_targets and llm_model_store_seed_mount_matches
+# (same order), as left by read_mount_config.yml.
+
+- name: Reset the surplus accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_surplus: []
+
+- name: Collect every models-mount entry above the lowest-index one
+  ansible.builtin.set_fact:
+    llm_model_store_seed_surplus: >-
+      {{
+        llm_model_store_seed_surplus
+        + (item.1
+           | rejectattr('key', 'equalto', 'mp' ~ (item.1 | map(attribute='key') | map('regex_replace', '^mp', '') | map('int') | min))
+           | map('combine', {'hostname': item.0.hostname, 'vmid': item.0.vmid})
+           | list)
+      }}
+  loop: "{{ llm_model_store_seed_targets | zip(llm_model_store_seed_mount_matches) | list }}"
+  loop_control:
+    label: "{{ item.0.hostname }}"
+  when: item.1 | length > 1
+
+- name: Require every surplus entry to be a volume this role allocated
+  ansible.builtin.assert:
+    that:
+      - item.value is search('^[A-Za-z0-9][A-Za-z0-9._-]*:(subvol|vm)-' ~ item.vmid ~ '-disk-[0-9]+(,|$)')
+    fail_msg: >-
+      {{ item.hostname }} (vmid {{ item.vmid }}) has more than one entry at its
+      models mount, and {{ item.key }} ({{ item.value }}) is not named like a
+      volume this role allocates (<storage>:subvol-{{ item.vmid }}-disk-<n>).
+      Refusing to remove it.
+    quiet: true
+  loop: "{{ llm_model_store_seed_surplus }}"
+  loop_control:
+    label: "{{ item.hostname }} {{ item.key }}"
+
+- name: Require every surplus volume to be provably empty
+  ansible.builtin.include_tasks: assert_volumes_empty.yml
+  vars:
+    llm_model_store_seed_empty_check: "{{ llm_model_store_seed_surplus }}"
+
+- name: Log the decision for each surplus entry
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.hostname }} (vmid {{ item.vmid }}): {{ item.key }}
+      ({{ item.value | regex_replace(',.*$', '') }}) is role-named and empty;
+      detaching and destroying it. The lowest-index entry stays.
+  loop: "{{ llm_model_store_seed_surplus }}"
+  loop_control:
+    label: "{{ item.hostname }} {{ item.key }}"
+
+- name: Detach each surplus entry (pct set --delete)
+  ansible.builtin.command:
+    argv:
+      - sh
+      - -c
+      - "{{ llm_model_store_seed_pct_set_script }}"
+      - sh
+      - "{{ item.vmid }}"
+      - --delete
+      - "{{ item.key }}"
+  loop: "{{ llm_model_store_seed_surplus }}"
+  loop_control:
+    label: "{{ item.hostname }} {{ item.key }}"
+  changed_when: true
+  notify: Restart changed llm model-store containers
+
+- name: Read each affected container's pending-vs-applied config
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ llm_model_store_seed_node_name }}/lxc/{{ item }}/pending"
+      - --output-format
+      - json
+  loop: "{{ llm_model_store_seed_surplus | map(attribute='vmid') | unique | list }}"
+  loop_control:
+    label: "container {{ item }}"
+  register: llm_model_store_seed_surplus_pending
+  changed_when: false
+
+# A detach that applied live leaves no mpN key in /pending; one that is still
+# queued keeps listing it until the container restarts.
+- name: Reset the restart accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_changed: []
+
+- name: Record which containers still hold a detached entry until restart
+  ansible.builtin.set_fact:
+    llm_model_store_seed_changed: >-
+      {{
+        llm_model_store_seed_changed
+        + ([item.item] if (
+          llm_model_store_seed_surplus | selectattr('vmid', 'equalto', item.item) | map(attribute='key') | list
+          | intersect((item.stdout | from_json) | map(attribute='key') | list)
+        ) | length > 0 else [])
+      }}
+  loop: "{{ llm_model_store_seed_surplus_pending.results }}"
+  loop_control:
+    label: "container {{ item.item }}"
+
+- name: Apply the pending detach by restarting only those containers
+  ansible.builtin.meta: flush_handlers
+
+- name: Read each affected container's live configuration
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ llm_model_store_seed_node_name }}/lxc/{{ item }}/config"
+      - --output-format
+      - json
+  loop: "{{ llm_model_store_seed_surplus | map(attribute='vmid') | unique | list }}"
+  loop_control:
+    label: "container {{ item }}"
+  register: llm_model_store_seed_surplus_configs
+  changed_when: false
+
+- name: Reset the detached-volume accumulator
+  ansible.builtin.set_fact:
+    llm_model_store_seed_detached: []
+
+- name: Find each detached volume among its container's unusedN entries
+  ansible.builtin.set_fact:
+    llm_model_store_seed_detached: >-
+      {{
+        llm_model_store_seed_detached
+        + (live_config | dict2items
+           | selectattr('key', 'match', '^unused[0-9]+$')
+           | selectattr('value', 'equalto', item.value | regex_replace(',.*$', ''))
+           | map('combine', {'hostname': item.hostname, 'vmid': item.vmid})
+           | list)
+      }}
+  vars:
+    live_config: >-
+      {{
+        (llm_model_store_seed_surplus_configs.results
+         | selectattr('item', 'equalto', item.vmid) | map(attribute='stdout') | first) | from_json
+      }}
+  loop: "{{ llm_model_store_seed_surplus }}"
+  loop_control:
+    label: "{{ item.hostname }} {{ item.key }}"
+
+- name: Require every detached volume to be listed exactly once as unused
+  ansible.builtin.assert:
+    that:
+      - llm_model_store_seed_detached | length == llm_model_store_seed_surplus | length
+    fail_msg: >-
+      Detached {{ llm_model_store_seed_surplus | length }} surplus models-mount
+      entries but found {{ llm_model_store_seed_detached | length }} of them
+      among the containers' unused entries. Not destroying anything.
+    quiet: true
+
+- name: Require every detached volume to still be empty
+  ansible.builtin.include_tasks: assert_volumes_empty.yml
+  vars:
+    llm_model_store_seed_empty_check: "{{ llm_model_store_seed_detached }}"
+
+- name: Destroy each detached volume (pct set --delete unusedN)
+  ansible.builtin.command:
+    argv:
+      - sh
+      - -c
+      - "{{ llm_model_store_seed_pct_set_script }}"
+      - sh
+      - "{{ item.vmid }}"
+      - --delete
+      - "{{ item.key }}"
+  loop: "{{ llm_model_store_seed_detached }}"
+  loop_control:
+    label: "{{ item.hostname }} {{ item.key }} ({{ item.value }})"
+  changed_when: true
+
+- name: Re-read the live models-mount config after the removal
+  ansible.builtin.include_tasks: read_mount_config.yml

@@ -19,6 +19,10 @@
   ansible.builtin.include_tasks: read_mount_config.yml
   when: llm_model_store_seed_mount_matches | select('equalto', []) | list | length > 0
 
+- name: Remove surplus models-mount entries left by earlier attaches
+  ansible.builtin.include_tasks: remove_duplicate_mounts.yml
+  when: llm_model_store_seed_mount_matches | map('length') | select('gt', 1) | list | length > 0
+
 - name: Require exactly one models-mount mpN entry per container
   ansible.builtin.assert:
     that:
