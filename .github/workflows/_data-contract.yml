@@ -139,6 +139,11 @@ jobs:
       - name: Verify pve_proxman_operator gates and resume conditions
         run: python3 tests/test_proxman_operator.py
 
+      # pve_api_tokens mints cluster tokens and needs a real cluster, so its
+      # mint decision and OpenBao read gate are pinned the same way.
+      - name: Verify pve_api_tokens mint decision and read gate
+        run: python3 tests/test_pve_api_tokens.py
+
       # The drive artifact feeds a Nautobot sync that DELETES what it stops
       # seeing, so every failure here is silent and destructive: a filter that
       # stops excluding removable media churns the inventory every converge, and
