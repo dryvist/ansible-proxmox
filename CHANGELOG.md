@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.0](https://github.com/dryvist/ansible-proxmox/compare/v2.14.0...v2.15.0) (2026-10-03)
+
+
+### Features
+
+* **alerts:** publish zfs_fault_alert and pve_notifications through the ntfy hub ([#849](https://github.com/dryvist/ansible-proxmox/issues/849)) ([472d599](https://github.com/dryvist/ansible-proxmox/commit/472d599671a0da074d6fe0040585ea35b666f561))
+* **hba_storcli:** auto-download perccli from pinned vendor archive ([#848](https://github.com/dryvist/ansible-proxmox/issues/848)) ([051ebc6](https://github.com/dryvist/ansible-proxmox/commit/051ebc66394f554ecefde878c032b44306711cd4))
+
+
+### Bug Fixes
+
+* **media_lxc_features:** bind-mount the seed dataset into download-vpn ([3b3d72f](https://github.com/dryvist/ansible-proxmox/commit/3b3d72f04f0f03d930457fe7412a9873ce421b08))
+* **media_lxc_features:** bind-mount the seed dataset into download-vpn ([f92b7b9](https://github.com/dryvist/ansible-proxmox/commit/f92b7b954393fc27b9ff8991df274349df6667a9))
+
 ## [2.14.0](https://github.com/dryvist/ansible-proxmox/compare/v2.13.0...v2.14.0) (2026-10-02)
 
 
