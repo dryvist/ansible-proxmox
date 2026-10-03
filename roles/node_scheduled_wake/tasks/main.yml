@@ -173,9 +173,9 @@
     path: "{{ item.1 | format(item.0) }}"
     state: absent
   loop: "{{ node_scheduled_wake_orphans | default([])
-           | product(['/etc/systemd/system/node-scheduled-wake-%s.timer',
-                      '/etc/systemd/system/node-scheduled-wake-%s.service',
-                      '/etc/node-scheduled-wake/%s.env']) }}"
+    | product(['/etc/systemd/system/node-scheduled-wake-%s.timer',
+    '/etc/systemd/system/node-scheduled-wake-%s.service',
+    '/etc/node-scheduled-wake/%s.env']) }}"
   loop_control:
     label: "{{ item.1 | format(item.0) }}"
   when:

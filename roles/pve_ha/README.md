@@ -31,7 +31,7 @@ ansible-playbook -i inventory playbooks/ha.yml -e pve_ha_enabled=true
 When enabled it:
 
 1. Places each managed guest under HA (`ha-manager add ct:VMID` or `vm:VMID
-   --state started --max_restart 3`) with `--max_relocate` set from its
+--state started --max_restart 3`) with `--max_relocate` set from its
    **HA class** — see below. VMIDs resolve from the
    tofu inventory by hostname (containers, `pve_ha_ct_hostnames`) or by tofu
    vms-map key (VMs, `pve_ha_vm_names`), so a renumber flows through with no
@@ -86,29 +86,29 @@ No real service is touched.
 
 ## Key variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `pve_ha_enabled` | `false` | Master switch (inert until true). |
-| `pve_ha_config_host` | `pve` | Single node the ha-manager commands run on. |
-| `pve_ha_ct_hostnames` | tier-0 list | LXC guests to HA-manage (by hostname). |
-| `pve_ha_vm_names` | `[iac-platform]` | VMs to HA-manage (by tofu vms-map key), resolved/enrolled/pinned the same way as a container. |
-| `pve_ha_extra_sids` | `[]` | Verbatim SIDs for a guest the tofu maps miss. Never a tofu-known VM — those go in `pve_ha_vm_names`, which is also pinned. |
-| `pve_ha_anti_affinity_groups` | pairs | Redundant pairs to keep apart. |
-| `pve_ha_max_restart` / `pve_ha_max_relocate` | `3` / `1` | Restart bound for every guest; relocate bound for the singleton class only. |
-| `pve_ha_pinned_max_relocate` | `0` | Relocate bound for `application_ha` and `immovable` guests — nowhere to go. |
-| `pve_ha_replication_ct_hostnames` | *derived* | The singleton containers — HA-managed, in no anti-affinity group, not immovable. Not hand-maintained. |
-| `pve_ha_replication_vm_names` | *derived* | The singleton VMs, derived the same way. |
-| `pve_ha_immovable_guests` | `{plex: ...}` | Guests that cannot relocate for a structural reason, as `name: reason`. The only class that is declared. |
-| `pve_ha_class_application` | *derived* | Anti-affinity group members — the guests whose own service is redundant across nodes. |
-| `pve_ha_replication_schedule` | `*/5` | `pvesr` schedule (systemd-calendar subset). |
-| `pve_ha_replication_rate` | `""` | `pvesr` rate limit in MB/s; empty = unlimited. |
-| `pve_ha_replication_jobnum` | `0` | Job-number suffix in the `<vmid>-<jobnum>` job id. |
-| `pve_ha_replication_affinity_rule` | `apps-replication-nodes` | Name kept for the strict node-affinity rule over the pair currently carrying it live. |
-| `pve_ha_home_rule_prefix` | `pve-ha-home` | Prefix of the per-home-node strict pins applied to every replica-less HA guest. |
-| `pve_ha_shutdown_policy` | `freeze` | Cluster `shutdown_policy`, set via `pvesh`. `migrate` needs every guest to have a replica. |
-| `pve_ha_pvesh_bin` | `pvesh` | Override point so the offline test can point this at a mock binary. |
-| `pve_ha_datacenter_cfg_path` | `/etc/pve/datacenter.cfg` | Path to the cluster-wide config; a variable so the offline test can target a temp copy. |
-| `pve_ha_manage_all` | `false` | Also enroll the rest of the estate in HA. Widens enrollment only — the home pin applies either way. |
+| Variable                                     | Default                   | Purpose                                                                                                                    |
+| -------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `pve_ha_enabled`                             | `false`                   | Master switch (inert until true).                                                                                          |
+| `pve_ha_config_host`                         | See role defaults         | Single node the ha-manager commands run on.                                                                                |
+| `pve_ha_ct_hostnames`                        | tier-0 list               | LXC guests to HA-manage (by hostname).                                                                                     |
+| `pve_ha_vm_names`                            | See role defaults         | VMs to HA-manage (by tofu vms-map key), resolved/enrolled/pinned the same way as a container.                              |
+| `pve_ha_extra_sids`                          | `[]`                      | Verbatim SIDs for a guest the tofu maps miss. Never a tofu-known VM — those go in `pve_ha_vm_names`, which is also pinned. |
+| `pve_ha_anti_affinity_groups`                | pairs                     | Redundant pairs to keep apart.                                                                                             |
+| `pve_ha_max_restart` / `pve_ha_max_relocate` | `3` / `1`                 | Restart bound for every guest; relocate bound for the singleton class only.                                                |
+| `pve_ha_pinned_max_relocate`                 | `0`                       | Relocate bound for `application_ha` and `immovable` guests — nowhere to go.                                                |
+| `pve_ha_replication_ct_hostnames`            | _derived_                 | The singleton containers — HA-managed, in no anti-affinity group, not immovable. Not hand-maintained.                      |
+| `pve_ha_replication_vm_names`                | _derived_                 | The singleton VMs, derived the same way.                                                                                   |
+| `pve_ha_immovable_guests`                    | `{plex: ...}`             | Guests that cannot relocate for a structural reason, as `name: reason`. The only class that is declared.                   |
+| `pve_ha_class_application`                   | _derived_                 | Anti-affinity group members — the guests whose own service is redundant across nodes.                                      |
+| `pve_ha_replication_schedule`                | `*/5`                     | `pvesr` schedule (systemd-calendar subset).                                                                                |
+| `pve_ha_replication_rate`                    | `""`                      | `pvesr` rate limit in MB/s; empty = unlimited.                                                                             |
+| `pve_ha_replication_jobnum`                  | `0`                       | Job-number suffix in the `<vmid>-<jobnum>` job id.                                                                         |
+| `pve_ha_replication_affinity_rule`           | `apps-replication-nodes`  | Name kept for the strict node-affinity rule over the pair currently carrying it live.                                      |
+| `pve_ha_home_rule_prefix`                    | `pve-ha-home`             | Prefix of the per-home-node strict pins applied to every replica-less HA guest.                                            |
+| `pve_ha_shutdown_policy`                     | `freeze`                  | Cluster `shutdown_policy`, set via `pvesh`. `migrate` needs every guest to have a replica.                                 |
+| `pve_ha_pvesh_bin`                           | `pvesh`                   | Override point so the offline test can point this at a mock binary.                                                        |
+| `pve_ha_datacenter_cfg_path`                 | `/etc/pve/datacenter.cfg` | Path to the cluster-wide config; a variable so the offline test can target a temp copy.                                    |
+| `pve_ha_manage_all`                          | `false`                   | Also enroll the rest of the estate in HA. Widens enrollment only — the home pin applies either way.                        |
 
 ## Why `ha.yml` is imported by `site.yml` rather than left standalone
 

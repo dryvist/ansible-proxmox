@@ -4,8 +4,8 @@ Declaratively manage the **static human break-glass keys** in
 `/root/.ssh/authorized_keys` so they can be **rotated via IaC** instead of a
 manual one-off.
 
-This role manages static *authorized_keys*. The complementary `ssh_ca_trust`
-role distributes CA *trust* (see the `ssh-certificate-authority` ADR).
+This role manages static _authorized_keys_. The complementary `ssh_ca_trust`
+role distributes CA _trust_ (see the `ssh-certificate-authority` ADR).
 
 ## Design
 
@@ -20,11 +20,11 @@ role distributes CA *trust* (see the `ssh-certificate-authority` ADR).
 
 ## Variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `root_authorized_keys_enabled` | `false` | Opt in per host group. |
-| `root_authorized_keys_present` | `[]` | Full authorized-keys-format lines to ensure present. |
-| `root_authorized_keys_absent` | `[]` | Retired / leaked key(s) to ensure absent. |
+| Variable                       | Default | Purpose                                              |
+| ------------------------------ | ------- | ---------------------------------------------------- |
+| `root_authorized_keys_enabled` | `false` | Opt in per host group.                               |
+| `root_authorized_keys_present` | `[]`    | Full authorized-keys-format lines to ensure present. |
+| `root_authorized_keys_absent`  | `[]`    | Retired / leaked key(s) to ensure absent.            |
 
 ## Rotation flow (zero-downtime)
 

@@ -48,14 +48,14 @@ role inert.
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `git_mirror_enabled` | `false` | Master enable — set per-host |
-| `git_mirror_owners` | `[]` | Owner logins to mirror |
-| `git_mirror_archive_dir` | `/bulk/git-mirror` | Mirror destination |
-| `git_mirror_on_calendar` | `*-*-* 05:15:00` | `systemd` `OnCalendar` (daily) |
-| `git_mirror_persistent` | `true` | Run a missed schedule on next boot |
-| `git_mirror_healthcheck_url` | `""` | Optional healthchecks.io URL |
+| Variable                     | Default            | Description                        |
+| ---------------------------- | ------------------ | ---------------------------------- |
+| `git_mirror_enabled`         | `false`            | Master enable — set per-host       |
+| `git_mirror_owners`          | `[]`               | Owner logins to mirror             |
+| `git_mirror_archive_dir`     | `/bulk/git-mirror` | Mirror destination                 |
+| `git_mirror_on_calendar`     | `*-*-* 05:15:00`   | `systemd` `OnCalendar` (daily)     |
+| `git_mirror_persistent`      | `true`             | Run a missed schedule on next boot |
+| `git_mirror_healthcheck_url` | `""`               | Optional healthchecks.io URL       |
 
 ## Usage
 

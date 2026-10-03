@@ -1,6 +1,7 @@
 ---
 skill-groups: [core, git, homelab]
 ---
+
 # Ansible Proxmox - AI Agent Documentation
 
 Ansible automation for Proxmox VE host configuration.
@@ -36,7 +37,7 @@ point at it rather than restating its contents.
 **Direction, not current behaviour.** Nothing here reads Nautobot yet. Host
 identity still comes from the static `inventory/hosts.yml` and guest data from
 the published upstream inventory artifact described below; closing that gap is
-the work. Until it closes, do not add a *new* copy of a fact Nautobot models —
+the work. Until it closes, do not add a _new_ copy of a fact Nautobot models —
 read it from Nautobot or record the gap.
 
 ### Upstream inventory (read-only consumer)

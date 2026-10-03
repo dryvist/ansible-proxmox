@@ -16,7 +16,7 @@ repo's Nix dev shell (`direnv allow`); no `pip`/`galaxy` step is required.
 
 The BPG Proxmox provider's API token **cannot** set arbitrary device
 passthrough — Proxmox restricts `lxc.cgroup2.devices.allow` / `lxc.mount.entry`
-to `root@pam` *ticket* auth, so the token gets HTTP 403. So `tofu-proxmox`
+to `root@pam` _ticket_ auth, so the token gets HTTP 403. So `tofu-proxmox`
 creates the GPU LXC as a plain **shell**, and this role applies the device
 lines. Identical split to `media_lxc_features` (which passes `/dev/net/tun` to
 the download-vpn LXC).
@@ -42,12 +42,12 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 
 ## Feature map (keyed by service, not VMID)
 
-| Var | Default | Purpose |
-| --- | --- | --- |
-| `lxc_gpu_features_map` | `{ llm-fast: { dri: true, kfd: true } }` | Service → which device groups to bind |
-| `lxc_gpu_features_dri_major` | `226` | `/dev/dri` char major |
-| `lxc_gpu_features_kfd_major` | `235` | `/dev/kfd` char major |
-| `lxc_gpu_features_service_vmids` | from tofu inventory | Service → current vmid (auto) |
+| Var                              | Default                                  | Purpose                               |
+| -------------------------------- | ---------------------------------------- | ------------------------------------- |
+| `lxc_gpu_features_map`           | `{ llm-fast: { dri: true, kfd: true } }` | Service → which device groups to bind |
+| `lxc_gpu_features_dri_major`     | `226`                                    | `/dev/dri` char major                 |
+| `lxc_gpu_features_kfd_major`     | `235`                                    | `/dev/kfd` char major                 |
+| `lxc_gpu_features_service_vmids` | from tofu inventory                      | Service → current vmid (auto)         |
 
 The current vmid is resolved at run time from `tofu_inventory.json`, so a
 vmid renumber needs no change here.

@@ -63,11 +63,11 @@ ansible-playbook playbooks/site.yml --tags pve_host_network \
 
 ## Modes
 
-| Variable | Default | Effect |
-| --- | --- | --- |
-| `pve_host_network_fail_on_drift` | `true` | Fail the play when the address is not on the bridge. |
-| `pve_host_network_enforce` | `false` | Render `/etc/network/interfaces` from the template. |
-| `pve_host_network_apply` | `false` | Apply a rendered change live via `ifreload -a`. |
+| Variable                         | Default | Effect                                               |
+| -------------------------------- | ------- | ---------------------------------------------------- |
+| `pve_host_network_fail_on_drift` | `true`  | Fail the play when the address is not on the bridge. |
+| `pve_host_network_enforce`       | `false` | Render `/etc/network/interfaces` from the template.  |
+| `pve_host_network_apply`         | `false` | Apply a rendered change live via `ifreload -a`.      |
 
 Enforcement is off by default because a bad render disconnects a node with no
 remote way back in; writing the file and applying it are deliberately separate

@@ -58,16 +58,16 @@ restrict,command="rrsync -ro /var/lib/postgresql/backups" ssh-ed25519 AAAA... po
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `postgres_standby_enabled` | `true` | Master enable |
-| `postgres_standby_jobs` | `[]` | Jobs (see below) — inert until set |
-| `postgres_standby_s3_targets` | `[]` | Tier-2 targets (see below) |
-| `postgres_standby_on_calendar` | `*-*-* 04:00:00` | `systemd` `OnCalendar` (daily) |
-| `postgres_standby_persistent` | `true` | Run a missed schedule on next boot |
-| `postgres_standby_healthcheck_url` | `""` | healthchecks.io URL (`/fail` on error) |
-| `postgres_standby_run_now` | `false` | Opt-in: run immediately during the play |
-| `postgres_standby_ssh_key` | `/root/.ssh/id_postgres_standby` | Dedicated pull identity (see [SSH trust](#ssh-trust)) |
+| Variable                           | Default                          | Description                                           |
+| ---------------------------------- | -------------------------------- | ----------------------------------------------------- |
+| `postgres_standby_enabled`         | `true`                           | Master enable                                         |
+| `postgres_standby_jobs`            | `[]`                             | Jobs (see below) — inert until set                    |
+| `postgres_standby_s3_targets`      | `[]`                             | Tier-2 targets (see below)                            |
+| `postgres_standby_on_calendar`     | `*-*-* 04:00:00`                 | `systemd` `OnCalendar` (daily)                        |
+| `postgres_standby_persistent`      | `true`                           | Run a missed schedule on next boot                    |
+| `postgres_standby_healthcheck_url` | `""`                             | healthchecks.io URL (`/fail` on error)                |
+| `postgres_standby_run_now`         | `false`                          | Opt-in: run immediately during the play               |
+| `postgres_standby_ssh_key`         | `/root/.ssh/id_postgres_standby` | Dedicated pull identity (see [SSH trust](#ssh-trust)) |
 
 ### Job shape
 
@@ -75,7 +75,7 @@ restrict,command="rrsync -ro /var/lib/postgresql/backups" ssh-ed25519 AAAA... po
 postgres_standby_jobs:
   - name: "postgres"
     source_host: "root@<db-guest-fqdn>"
-    source_dir: "/"                          # see below
+    source_dir: "/" # see below
     archive_dir: "/bulk/databases/postgres"
 ```
 
@@ -89,10 +89,10 @@ what this key is allowed to see".
 
 ```yaml
 postgres_standby_s3_targets:
-  - name: "RUSTFS"                 # target name
+  - name: "RUSTFS" # target name
     bucket: "db-dr"
     prefix: "postgres"
-    endpoint_url: "https://..."    # omit for AWS S3
+    endpoint_url: "https://..." # omit for AWS S3
     access_key: "..."
     secret_key: "..."
 ```

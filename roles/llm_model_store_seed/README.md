@@ -91,8 +91,8 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 ### Variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `llm_model_catalog_models` | see `llm_model_catalog`'s defaults | Declared `{name, hf_repo, gguf, hf_revision}` catalog (not this role's own) |
-| `llm_model_store_seed_timeout` | `3600` | Seconds allowed for the HF metadata lookup and the GGUF download |
-| `llm_model_store_seed_file_mode` | `"0644"` | Mode of a seeded GGUF file |
+| Variable                         | Default                            | Purpose                                                                     |
+| -------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Declared `{name, hf_repo, gguf, hf_revision}` catalog (not this role's own) |
+| `llm_model_store_seed_timeout`   | `3600`                             | Seconds allowed for the HF metadata lookup and the GGUF download            |
+| `llm_model_store_seed_file_mode` | `"0644"`                           | Mode of a seeded GGUF file                                                  |

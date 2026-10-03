@@ -3,8 +3,7 @@
 Applies the **root-only LXC features** for the media stack that the BPG Proxmox
 Terraform provider's **API token cannot set**: host bind-mounts (`mp`), the
 `keyctl` feature, and `/dev/net/tun` device passthrough. Proxmox restricts all
-three to `root@pam` **ticket** authentication, so a BPG API token receives HTTP
-403. This role does them natively as `root` over SSH, idempotently.
+three to `root@pam` **ticket** authentication, so a BPG API token receives HTTP 403. This role does them natively as `root` over SSH, idempotently.
 
 ## Installation
 
@@ -24,11 +23,11 @@ ansible-galaxy install -r requirements.yml
 bits are deliberately removed from OpenTofu because the API token cannot apply
 them. This role realizes them after creation.
 
-| Layer | Owns |
-| --- | --- |
-| tofu-proxmox | Create the media LXCs (CPU, RAM, disk, network, `nesting`) + declare the `bulk/data` and `bulk/appdata` datasets (`node_storage`) |
-| **this role** | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough, shared `media` group + `/bulk/data` skeleton, per-app config ownership |
-| ansible-proxmox-apps | Converge the services inside each LXC |
+| Layer                | Owns                                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| tofu-proxmox         | Create the media LXCs (CPU, RAM, disk, network, `nesting`) + declare the `bulk/data` and `bulk/appdata` datasets (`node_storage`)         |
+| **this role**        | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough, shared `media` group + `/bulk/data` skeleton, per-app config ownership |
+| ansible-proxmox-apps | Converge the services inside each LXC                                                                                                     |
 
 `nesting=1` stays **OpenTofu-managed**. This role never drops it: `keyctl=1` is
 **merged** into the live `features` string (existing tokens preserved), not
@@ -50,19 +49,18 @@ Non-secret, committed in `defaults/main.yml` as `media_lxc_features_map`, keyed
 by **service name**. Each service's bind-mounts / keyctl / tun follow the
 service, never a hardcoded VMID:
 
-| service | bind-mounts (host -> container) | keyctl | /dev/net/tun |
-| --- | --- | --- | --- |
-| plex | `/bulk/data`->`/data`, `/bulk/appdata/plex`->`/var/lib/plexmediaserver` | no | no |
-| seerr | `/bulk/appdata/seerr`->`/opt/seerr/config` | yes | no |
-| sonarr | `/bulk/data`->`/data`, `/bulk/appdata/sonarr`->`/var/lib/sonarr` | no | no |
-| radarr | `/bulk/data`->`/data`, `/bulk/appdata/radarr`->`/var/lib/radarr` | no | no |
-| download-vpn | `/bulk/data`->`/data`, `/bulk/appdata/prowlarr`->`/var/lib/prowlarr`, `/bulk/data/seed`->`/data/seed` | yes | yes |
+| service      | bind-mounts (host -> container)                                                                       | keyctl | /dev/net/tun |
+| ------------ | ----------------------------------------------------------------------------------------------------- | ------ | ------------ |
+| plex         | `/bulk/data`->`/data`, `/bulk/appdata/plex`->`/var/lib/plexmediaserver`                               | no     | no           |
+| seerr        | `/bulk/appdata/seerr`->`/opt/seerr/config`                                                            | yes    | no           |
+| sonarr       | `/bulk/data`->`/data`, `/bulk/appdata/sonarr`->`/var/lib/sonarr`                                      | no     | no           |
+| radarr       | `/bulk/data`->`/data`, `/bulk/appdata/radarr`->`/var/lib/radarr`                                      | no     | no           |
+| download-vpn | `/bulk/data`->`/data`, `/bulk/appdata/prowlarr`->`/var/lib/prowlarr`, `/bulk/data/seed`->`/data/seed` | yes    | yes          |
 
 Every mounted service gets the unified `bulk/data` dataset -> `/data`. One
 dataset (replacing the old separate `downloads` + `media` datasets/mounts) is
-what lets qBittorrent and the *arrs **hardlink** between `/data/torrents/*` and
-`/data/media/*` — hardlinks cannot cross dataset boundaries. All bind-mounts are
-**read-write** (no `ro=1`), the role's existing convention (plex is read-mostly
+what lets qBittorrent and the arr applications **hardlink** between `/data/torrents/*` and `/data/media/*` — hardlinks cannot cross dataset boundaries. All bind-mounts are
+**read-write** (no`ro=1`), the role's existing convention (plex is read-mostly
 by usage, not by mount flag). `/dev/net/tun` is char device **10:200** (verified
 on the primary node). Every service additionally gets a **persistent config
 mount** — see below.
@@ -105,17 +103,17 @@ container **rebuild** wipes it. To stop that, each service bind-mounts a dedicat
 **off the rootfs** and survives any restart **or** rebuild. The app rebuilds
 itself from its own DB on startup — there is no export/replay step.
 
-| service | config dir | what persists |
-| --- | --- | --- |
-| plex | `/var/lib/plexmediaserver` | identity (`machineIdentifier` + claim + publish) + watch-history DB |
-| sonarr | `/var/lib/sonarr` | `sonarr.db` (series, history, queue, blocklist) + `config.xml` |
-| radarr | `/var/lib/radarr` | `radarr.db` + `config.xml` |
-| download-vpn | `/var/lib/prowlarr` | `prowlarr.db` (indexers, private-tracker auth, app-sync links) |
-| seerr | `/opt/seerr/config` | `settings.json` + `db.sqlite3` (users, requests, registrations) |
+| service      | config dir                 | what persists                                                       |
+| ------------ | -------------------------- | ------------------------------------------------------------------- |
+| plex         | `/var/lib/plexmediaserver` | identity (`machineIdentifier` + claim + publish) + watch-history DB |
+| sonarr       | `/var/lib/sonarr`          | `sonarr.db` (series, history, queue, blocklist) + `config.xml`      |
+| radarr       | `/var/lib/radarr`          | `radarr.db` + `config.xml`                                          |
+| download-vpn | `/var/lib/prowlarr`        | `prowlarr.db` (indexers, private-tracker auth, app-sync links)      |
+| seerr        | `/opt/seerr/config`        | `settings.json` + `db.sqlite3` (users, requests, registrations)     |
 
 - **Dataset**: `bulk/appdata` (parent) + one `bulk/appdata/<app>` child per
   service are declared in tofu-proxmox `node_storage` and realized by
-  `zfs_pools`. `bulk/appdata` is the home for app *config/state* (distinct from
+  `zfs_pools`. `bulk/appdata` is the home for app _config/state_ (distinct from
   `bulk/databases`, for database engines, and `bulk/data`, the re-acquirable
   media library).
 - **Snapshots + DR**: `bulk/appdata` gets the **`critical`** sanoid template
@@ -130,7 +128,7 @@ itself from its own DB on startup — there is no export/replay step.
   for named users; the ids are package-assigned, never hardcoded). download-vpn's
   Prowlarr config mount is owned by the `qbittorrent` user (both processes run
   under that user).
-- **Fresh-build ordering caveat**: on a *from-scratch* shell this role runs
+- **Fresh-build ordering caveat**: on a _from-scratch_ shell this role runs
   **before** the apps converge installs each app, so `id <app>` does not resolve
   yet and the ownership chown is skipped (non-fatal). Run order on a new build is:
   `media_lxc_features` (mount) → apps converge (installs the apps) →
@@ -167,7 +165,7 @@ the inventory resolve to nothing and are skipped.
 ## Idempotency
 
 Every change is gated on a config diff read from `pct config` / the live
-`.conf` file *before* acting:
+`.conf` file _before_ acting:
 
 - **Bind-mounts**: the desired `mpN: <src>,mp=<dst>[,ro=1]` string is compared
   against the current value of that `mpN` slot; `pct set --mpN` runs only on a

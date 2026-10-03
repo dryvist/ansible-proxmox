@@ -64,7 +64,6 @@ pve_backup_jobs_config_host: ""
 #       prune: keep-daily=7,keep-weekly=4
 pve_backup_jobs_jobs: []
 
-
 # --- Data-mount backup flags -------------------------------------------------
 # vzdump skips an LXC mount point with no backup=1 and still exits 0, so a guest
 # reads as covered while only its rootfs is in the archive. Roughly thirty

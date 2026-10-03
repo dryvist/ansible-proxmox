@@ -1,7 +1,6 @@
 ---
 # Monitoring configuration defaults
 
-
 # Healthchecks.io ping interval (minutes via cron)
 proxmox_monitoring_healthchecks_interval: 1
 

@@ -40,9 +40,9 @@ unless a group flips rollout on for that host class.
 
 ## Principals (default-deny)
 
-| Host class | User | Principals |
-| --- | --- | --- |
-| PVE node | root | `ansible`, `semaphore` |
+| Host class    | User | Principals             |
+| ------------- | ---- | ---------------------- |
+| PVE node      | root | `ansible`, `semaphore` |
 | LXC (via pct) | root | `ansible`, `semaphore` |
 
 `ai-agent` is **never** a hypervisor root principal; it reaches guest-level

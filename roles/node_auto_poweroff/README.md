@@ -41,9 +41,9 @@ running guests first.
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `node_auto_poweroff_enabled` | `false` | Opt-in master switch (set per host) |
+| Variable                         | Default          | Description                                                                      |
+| -------------------------------- | ---------------- | -------------------------------------------------------------------------------- |
+| `node_auto_poweroff_enabled`     | `false`          | Opt-in master switch (set per host)                                              |
 | `node_auto_poweroff_on_calendar` | `*-*-* 22:00:00` | systemd `OnCalendar` for the power-off; override per host for a different window |
 
 ## Usage

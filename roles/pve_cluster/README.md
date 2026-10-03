@@ -25,12 +25,12 @@ ansible-galaxy install -r requirements.yml
 Cluster formation is high-risk and effectively one-directional, so the role is
 **inert by default** and triple-guarded:
 
-| Guard | Effect |
-| --- | --- |
-| `pve_cluster_enabled` (default `false`) | Role does nothing unless explicitly enabled for the run. |
-| `pve_cluster_member_hosts` allow-list | Hard-asserts `inventory_hostname` is a declared member before acting. |
-| Secondary join params | A joining node aborts unless `master_ip` + `fingerprint` are supplied. |
-| Docker skip | All API/`proxmox_cluster` calls skip under `ansible_virtualization_type == 'docker'` for molecule. |
+| Guard                                   | Effect                                                                                             |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `pve_cluster_enabled` (default `false`) | Role does nothing unless explicitly enabled for the run.                                           |
+| `pve_cluster_member_hosts` allow-list   | Hard-asserts `inventory_hostname` is a declared member before acting.                              |
+| Secondary join params                   | A joining node aborts unless `master_ip` + `fingerprint` are supplied.                             |
+| Docker skip                             | All API/`proxmox_cluster` calls skip under `ansible_virtualization_type == 'docker'` for molecule. |
 
 ## No magic numbers
 
@@ -44,16 +44,16 @@ The role reads these address and API settings:
 ## Inputs
 
 ```yaml
-pve_cluster_enabled: false            # master switch — set true to act
-pve_cluster_name: homelab             # cluster name (primary creates it)
-pve_cluster_member_hosts: []          # allow-list, e.g. [node-a, node-b]
-pve_cluster_primary_host: node-a      # which inventory host creates the cluster
-pve_cluster_role: >-                  # auto: 'primary' on the primary, else 'secondary'
+pve_cluster_enabled: false # master switch — set true to act
+pve_cluster_name: homelab # cluster name (primary creates it)
+pve_cluster_member_hosts: [] # allow-list, e.g. [node-a, node-b]
+pve_cluster_primary_host: node-a # which inventory host creates the cluster
+pve_cluster_role: >- # auto: 'primary' on the primary, else 'secondary'
   {{ (inventory_hostname == pve_cluster_primary_host) | ternary('primary', 'secondary') }}
-pve_cluster_link0: "{{ ansible_host }}"   # corosync ring 0 (compute VLAN)
-pve_cluster_link1: ""                 # optional ring 1 (deferred to cluster v2)
+pve_cluster_link0: "{{ ansible_host }}" # corosync ring 0 (compute VLAN)
+pve_cluster_link1: "" # optional ring 1 (deferred to cluster v2)
 pve_cluster_master_ip: "{{ hostvars[pve_cluster_primary_host].ansible_host }}"
-pve_cluster_fingerprint: ""           # primary corosync cert fp — supply at run time
+pve_cluster_fingerprint: "" # primary corosync cert fp — supply at run time
 ```
 
 `pve_cluster_fingerprint` is host/cluster specific and changes on reinstall.

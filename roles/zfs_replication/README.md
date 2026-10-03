@@ -29,7 +29,7 @@ adds two things the existing roles do not:
 
 1. A **systemd-timer** schedule with an **explicit pre-flight reachability gate**
    — a replication run against a powered-off standby is decided to be a clean
-   SKIP *before* `syncoid` is invoked, rather than relying on `syncoid` itself
+   SKIP _before_ `syncoid` is invoked, rather than relying on `syncoid` itself
    failing-and-logging once the SSH connection times out.
 2. An optional **`vzdump`** backup leg.
 
@@ -49,7 +49,7 @@ which requires the target to be up.
 
 > The existing `syncoid` role uses a PULL model (run on the target, pull from
 > sources). This role uses PUSH (run on the source, gated on the target being
-> reachable) because the *source* is the always-on node here and the *target* is
+> reachable) because the _source_ is the always-on node here and the _target_ is
 > the intermittent one — so the gate has to be evaluated by the always-on side.
 > This divergence is one of the things a maintainer should reconcile.
 
@@ -62,34 +62,34 @@ and the role disables the timer again.
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `zfs_replication_enabled` | `true` | Master enable for the role |
-| `zfs_replication_target_host` | `""` | Standby host to replicate toward. Set in host_vars; never hard-code a real node name |
-| `zfs_replication_jobs` | `[]` | List of replication jobs — **inert until set** |
-| `zfs_replication_reachability_probe` | `true` | Probe the target before replicating; skip cleanly if down |
-| `zfs_replication_probe_method` | `ssh` | `ssh` (TCP connect) or `ping` (ICMP) |
-| `zfs_replication_probe_port` / `zfs_replication_probe_timeout` | `22` / `10` | Probe port and per-probe timeout (s) |
-| `zfs_replication_default_options` | `--recursive --no-sync-snap --quiet` | syncoid options when a job omits its own |
-| `zfs_replication_timer_enabled` | `true` | Enable/start the systemd timer |
-| `zfs_replication_on_calendar` | `*:0/15` | Replication cadence (every 15 min) |
-| `zfs_replication_randomized_delay_sec` | `120` | Timer jitter so sources don't all hit the standby at once |
-| `zfs_replication_timer_persistent` | `false` | Do NOT catch up a missed trigger on boot |
-| `zfs_replication_vzdump_enabled` | `false` | Enable the optional vzdump backup leg |
-| `zfs_replication_vzdump_storage` | `<backup-storage-id>` | Proxmox storage id vzdump writes to |
-| `zfs_replication_vzdump_guests` | `[]` | vmids to back up — inert until set |
-| `zfs_replication_vzdump_on_calendar` | `*-*-* 01:30:00` | vzdump cadence |
+| Variable                                                       | Default                              | Description                                                                          |
+| -------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------ |
+| `zfs_replication_enabled`                                      | `true`                               | Master enable for the role                                                           |
+| `zfs_replication_target_host`                                  | `""`                                 | Standby host to replicate toward. Set in host_vars; never hard-code a real node name |
+| `zfs_replication_jobs`                                         | `[]`                                 | List of replication jobs — **inert until set**                                       |
+| `zfs_replication_reachability_probe`                           | `true`                               | Probe the target before replicating; skip cleanly if down                            |
+| `zfs_replication_probe_method`                                 | `ssh`                                | `ssh` (TCP connect) or `ping` (ICMP)                                                 |
+| `zfs_replication_probe_port` / `zfs_replication_probe_timeout` | `22` / `10`                          | Probe port and per-probe timeout (s)                                                 |
+| `zfs_replication_default_options`                              | `--recursive --no-sync-snap --quiet` | syncoid options when a job omits its own                                             |
+| `zfs_replication_timer_enabled`                                | `true`                               | Enable/start the systemd timer                                                       |
+| `zfs_replication_on_calendar`                                  | `*:0/15`                             | Replication cadence (every 15 min)                                                   |
+| `zfs_replication_randomized_delay_sec`                         | `120`                                | Timer jitter so sources don't all hit the standby at once                            |
+| `zfs_replication_timer_persistent`                             | `false`                              | Do NOT catch up a missed trigger on boot                                             |
+| `zfs_replication_vzdump_enabled`                               | `false`                              | Enable the optional vzdump backup leg                                                |
+| `zfs_replication_vzdump_storage`                               | `<backup-storage-id>`                | Proxmox storage id vzdump writes to                                                  |
+| `zfs_replication_vzdump_guests`                                | `[]`                                 | vmids to back up — inert until set                                                   |
+| `zfs_replication_vzdump_on_calendar`                           | `*-*-* 01:30:00`                     | vzdump cadence                                                                       |
 
 Each job in `zfs_replication_jobs`:
 
-| Key | Required | Description |
-| --- | --- | --- |
-| `name` | yes | Human label, used in logs |
-| `source_dataset` | yes | Local source dataset (e.g. `bulk/data`) |
-| `target_dataset` | yes | Destination on the standby (e.g. `bulk/replica/proxmox-2/data`) |
-| `recursive` | no (`true`) | Replicate children |
-| `sync_snaps` | no (`false`) | Let syncoid make its own snapshots instead of shipping sanoid's |
-| `options` | no | Explicit syncoid option string; overrides `recursive`/`sync_snaps` |
+| Key              | Required     | Description                                                         |
+| ---------------- | ------------ | ------------------------------------------------------------------- |
+| `name`           | yes          | Human label, used in logs                                           |
+| `source_dataset` | yes          | Local source dataset (e.g. `bulk/data`)                             |
+| `target_dataset` | yes          | Destination on the standby (e.g. `bulk/replica/<source-node>/data`) |
+| `recursive`      | no (`true`)  | Replicate children                                                  |
+| `sync_snaps`     | no (`false`) | Let syncoid make its own snapshots instead of shipping sanoid's     |
+| `options`        | no           | Explicit syncoid option string; overrides `recursive`/`sync_snaps`  |
 
 ## Prerequisites (apply-time)
 
@@ -104,7 +104,7 @@ Each job in `zfs_replication_jobs`:
 
 ```yaml
 # inventory/host_vars/<always-on source node>.yml
-zfs_replication_target_host: "<target-node>"   # e.g. proxmox-3
+zfs_replication_target_host: "<target-node>"
 zfs_replication_jobs:
   - name: media-data
     source_dataset: "bulk/data"

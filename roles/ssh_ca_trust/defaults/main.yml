@@ -29,7 +29,6 @@ ssh_ca_trust_bao_addr: >-
   {{ lookup('env', 'BAO_ADDR')
      | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
 ssh_ca_trust_mount: ssh-client-ca
-
 # PINNED CA public-key fingerprint (the `ssh-keygen -l` SHA256:... form).
 # Empty leaves the role a no-op (see the activation gate): distributing trust
 # without a pin would be TOFU.
