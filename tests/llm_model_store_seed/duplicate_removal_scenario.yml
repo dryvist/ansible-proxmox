@@ -1,0 +1,118 @@
+---
+# One scenario of verify_duplicate_removal.yml: lay out the fake container and
+# its volumes, read the mount config with the role's own task, run the removal,
+# then check the outcome, the commands issued and what is left.
+
+- name: Start from no volumes
+  ansible.builtin.file:
+    path: "{{ fake_dir }}/vols"
+    state: absent
+
+- name: Lay out the volumes
+  ansible.builtin.file:
+    path: "{{ fake_dir }}/vols/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ scenario.volumes }}"
+
+- name: Put the scenario's files into the extra volume
+  ansible.builtin.copy:
+    content: "x"
+    dest: "{{ fake_dir }}/vols/subvol-503000-disk-1/{{ item }}"
+    mode: "0644"
+  loop: "{{ scenario.extra_files | default([]) }}"
+
+- name: Write the fake container state
+  ansible.builtin.copy:
+    content: "{{ state | to_json }}"
+    dest: "{{ fake_dir }}/state.json"
+    mode: "0644"
+  vars:
+    state:
+      vmid: 503000
+      protection: "{{ scenario.protection | default(0) }}"
+      status: running
+      detach_pending_while_running: "{{ scenario.queue_detach | default(false) }}"
+      root: "{{ fake_dir }}/vols"
+      config: "{{ scenario.config }}"
+      pending_delete: []
+
+- name: Clear the command log
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ fake_dir }}/log"
+    mode: "0644"
+
+- name: Read the container's mount config with the role's task
+  ansible.builtin.include_role:
+    name: llm_model_store_seed
+    tasks_from: read_mount_config.yml
+  vars:
+    llm_model_store_seed_node_name: pve-test
+    llm_model_store_seed_targets:
+      - hostname: llm-surplus
+        vmid: 503000
+        models_mount_path: /var/lib/llm
+
+- name: Assert the models mount was found the expected number of times
+  ansible.builtin.assert:
+    that:
+      - (llm_model_store_seed_mount_matches | map('length') | list) == [scenario.matches_before]
+    quiet: true
+
+- name: Run the surplus removal and check its outcome
+  when: scenario.run_removal | default(true)
+  block:
+    - name: Remove surplus entries
+      ansible.builtin.include_role:
+        name: llm_model_store_seed
+        tasks_from: remove_duplicate_mounts.yml
+      vars:
+        llm_model_store_seed_node_name: pve-test
+        llm_model_store_seed_targets:
+          - hostname: llm-surplus
+            vmid: 503000
+            models_mount_path: /var/lib/llm
+      register: removal
+
+    - name: Note that the removal succeeded
+      ansible.builtin.set_fact:
+        removal_outcome: ok
+
+  rescue:
+    - name: Note that the removal failed
+      ansible.builtin.set_fact:
+        removal_outcome: fail
+
+- name: Check what the removal did
+  when: scenario.run_removal | default(true)
+  block:
+    - name: Read what the fake CLIs recorded
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop: ["{{ fake_dir }}/log", "{{ fake_dir }}/state.json"]
+      register: recorded
+
+    - name: Find the volumes left on disk
+      ansible.builtin.find:
+        paths: "{{ fake_dir }}/vols"
+        file_type: directory
+      register: volumes_left
+
+    - name: Assert the outcome, the commands issued and the state left behind
+      ansible.builtin.assert:
+        that:
+          - removal_outcome == scenario.expect
+          - (scenario.log_has | default([]) | difference(log_lines)) == []
+          - (log_lines | select('search', lacks_pattern) | list) == []
+          - (final_state.config.keys() | sort | list) == (scenario.keys_after | sort)
+          - (volumes_left.files | map(attribute='path') | map('basename') | sort | list) == (scenario.volumes_after | sort)
+        fail_msg: >-
+          {{ scenario.name }}: outcome {{ removal_outcome }} (expected {{ scenario.expect }}),
+          log {{ log_lines }}, config keys {{ final_state.config.keys() | sort | list }},
+          volumes {{ volumes_left.files | map(attribute='path') | map('basename') | sort | list }}
+        quiet: true
+      vars:
+        log_lines: "{{ (recorded.results[0].content | b64decode).splitlines() }}"
+        final_state: "{{ recorded.results[1].content | b64decode | from_json }}"
+        lacks_pattern: "{{ (scenario.log_lacks | default([]) + ['<<none>>']) | map('regex_escape') | join('|') }}"

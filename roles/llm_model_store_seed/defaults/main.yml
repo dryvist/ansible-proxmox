@@ -21,3 +21,15 @@ llm_model_store_seed_timeout: 3600
 # guest's own service user, and this file is only ever reached read-only
 # through the fabric's ro bind mount.
 llm_model_store_seed_file_mode: "0644"
+
+# `pct set` on a container with protection=1 is refused even for additive disk
+# changes, so the script lifts protection for the call and always restores it.
+# Run as `sh -c <script> sh <vmid> <option> <value>` -- e.g. `--mp1 <spec>` to
+# attach a mount, or `--delete mp1` / `--delete unused0` to detach / destroy one.
+llm_model_store_seed_pct_set_script: |
+  set -u
+  prot=$(pct config "$1" | sed -n 's/^protection: //p')
+  if [ "$prot" = 1 ]; then pct set "$1" --protection 0 || exit 1; fi
+  pct set "$1" "$2" "$3"; rc=$?
+  if [ "$prot" = 1 ]; then pct set "$1" --protection 1 || rc=1; fi
+  exit "$rc"

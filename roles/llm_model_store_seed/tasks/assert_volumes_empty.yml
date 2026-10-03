@@ -1,0 +1,55 @@
+---
+# Requires every volume in llm_model_store_seed_empty_check (a list of
+# {hostname, key, value}; value is a volid, or a full mpN value whose first
+# comma-separated field is the volid) to resolve to an existing real
+# directory that holds no entries at all, hidden ones included. Anything
+# else -- a block device, a missing path, a symlink, one file -- fails the run.
+
+- name: Resolve each volume to its host path
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - path
+      - "{{ item.value | regex_replace(',.*$', '') }}"
+  loop: "{{ llm_model_store_seed_empty_check }}"
+  loop_control:
+    label: "{{ item.hostname }} {{ item.key }}"
+  register: llm_model_store_seed_empty_paths
+  changed_when: false
+
+- name: Read each resolved path
+  ansible.builtin.stat:
+    path: "{{ item.stdout | trim }}"
+  loop: "{{ llm_model_store_seed_empty_paths.results }}"
+  loop_control:
+    label: "{{ item.item.hostname }} {{ item.item.key }}"
+  register: llm_model_store_seed_empty_stats
+
+- name: List the entries directly under each resolved path
+  ansible.builtin.find:
+    paths: "{{ item.item.stdout | trim }}"
+    file_type: any
+    hidden: true
+  loop: "{{ llm_model_store_seed_empty_stats.results }}"
+  loop_control:
+    label: "{{ item.item.item.hostname }} {{ item.item.item.key }}"
+  register: llm_model_store_seed_empty_listing
+
+- name: Require every volume to be an empty real directory
+  ansible.builtin.assert:
+    that:
+      - item.0.stat.exists | default(false)
+      - item.0.stat.isdir | default(false)
+      - not (item.0.stat.islnk | default(false))
+      - item.1.matched == 0
+    fail_msg: >-
+      {{ item.0.item.item.hostname }} {{ item.0.item.item.key }}
+      ({{ item.0.item.item.value | regex_replace(',.*$', '') }}) at
+      {{ item.0.item.stdout | trim }} is not provably empty: it must be an existing
+      real directory with no entries, found {{ item.1.matched | default('n/a') }}
+      ({{ (item.1.files | default([]) | map(attribute='path') | map('basename') | list)[:5] }}).
+      Refusing to remove it.
+    quiet: true
+  loop: "{{ llm_model_store_seed_empty_stats.results | zip(llm_model_store_seed_empty_listing.results) | list }}"
+  loop_control:
+    label: "{{ item.0.item.item.hostname }} {{ item.0.item.item.key }}"
