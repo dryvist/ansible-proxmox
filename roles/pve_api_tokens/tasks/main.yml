@@ -16,8 +16,8 @@
           - pve_api_tokens_bao_addr | length > 0
           - pve_api_tokens_bao_token | length > 0
         fail_msg: >-
-          pve_api_tokens needs BAO_ADDR and BAO_TOKEN (exported by
-          scripts/run-ansible.sh) to publish the tokens it mints.
+          pve_api_tokens needs OpenBao access to publish the tokens it
+          mints.
         quiet: true
       no_log: true
 

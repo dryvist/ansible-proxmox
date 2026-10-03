@@ -9,7 +9,7 @@ engine, so the token is created here, on the cluster.
 The role is part of this repository and runs from `playbooks/site.yml`. It
 needs:
 
-- `BAO_ADDR` and `BAO_TOKEN`, exported by `scripts/run-ansible.sh`.
+- OpenBao access from the controller, the same as `nas_storage`.
 - An exact create/update/read grant on each `secret/data/apps/<app>` path in
   the ansible-converge policy (ansible-proxmox-apps
   `openbao_credential_publish_apps`).
