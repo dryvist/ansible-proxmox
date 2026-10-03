@@ -99,6 +99,12 @@ media_lxc_features_map:
     mounts:
       - { src: /bulk/data, dst: /data }
       - { src: /bulk/appdata/prowlarr, dst: /var/lib/prowlarr, owner_user: qbittorrent }
+      # The ratio dataset (bulk/data/seed) is a CHILD dataset of bulk/data. A
+      # Proxmox `mp` bind-mount is non-recursive, so the /data mount above
+      # exposes only the parent's empty mountpoint directory there, not the
+      # dataset and its quota. Mount it explicitly; kept last so the earlier
+      # mpN slots never shift.
+      - { src: /bulk/data/seed, dst: /data/seed }
     keyctl: true
     tun: true
     data_idmap: true

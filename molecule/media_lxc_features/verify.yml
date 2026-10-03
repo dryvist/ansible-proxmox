@@ -42,17 +42,19 @@
     - name: Assert every service persists its own config on an owned bulk/appdata mount
       ansible.builtin.assert:
         that:
-          # at least one app-config mount (anything that is not the shared /data)
+          # at least one app-config mount (anything outside the shared /bulk/data
+          # tree — its child datasets, e.g. bulk/data/seed, are shared data too)
           - >-
-            item.value.mounts | default([]) | selectattr('dst', 'ne', '/data') | list | length >= 1
+            item.value.mounts | default([]) | rejectattr('src', 'match', '^/bulk/data(/|$)')
+            | list | length >= 1
           # every app-config mount is owned by the app (owner_user or owner_uid)
           - >-
-            item.value.mounts | default([]) | selectattr('dst', 'ne', '/data')
+            item.value.mounts | default([]) | rejectattr('src', 'match', '^/bulk/data(/|$)')
             | rejectattr('owner_user', 'defined') | rejectattr('owner_uid', 'defined')
             | list | length == 0
           # and lives under the bulk/appdata tree
           - >-
-            item.value.mounts | default([]) | selectattr('dst', 'ne', '/data')
+            item.value.mounts | default([]) | rejectattr('src', 'match', '^/bulk/data(/|$)')
             | rejectattr('src', 'match', '^/bulk/appdata/') | list | length == 0
         fail_msg: "{{ item.key }}: needs an owned /bulk/appdata/<app> config mount"
       loop: "{{ media_lxc_features_map | dict2items }}"
