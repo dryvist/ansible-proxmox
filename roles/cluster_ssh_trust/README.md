@@ -37,9 +37,7 @@ ansible-galaxy install -r requirements.yml
 - Runs `ssh-keyscan` for each peer in `cluster_ssh_trust_scan_targets` (every
   peer name plus its resolved management IP) and merges the keys into
   `/root/.ssh/known_hosts`, de-duplicated.
-- Peer names come from the **`PROXMOX_VE_NODES`** Doppler variable — the
-  single source of truth for the cluster node list, shared by terraform and
-  ansible (e.g. `node-a,node-b,node-c`). The value is tokenised with
+- Peer names are read from **`PROXMOX_VE_NODES`**. The value is tokenised with
   `regex_findall`, so plain comma-separated, bracketed (`[node-a, node-b]`),
   or quoted forms all work. When the variable is absent (e.g. molecule), it
   falls back to the `pve_cluster_members` inventory group. Each peer's IP is
@@ -85,12 +83,10 @@ ansible-galaxy install -r requirements.yml
 
 ```bash
 # Applied automatically as part of site.yml; or target it directly:
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags cluster_ssh_trust
+./scripts/run-ansible.sh playbooks/site.yml --tags cluster_ssh_trust
 ```
 
-## Scope / follow-up
+## Scope
 
-This is the **interim** automation. Full per-host, generated-at-instantiation,
-encrypted-in-inventory, rotatable SSH **key** management (replacing the single
-shared Ansible key) is tracked as a separate design effort. This role only
-manages `known_hosts` trust, not the keypairs themselves.
+This role manages SSH trust and repairs shared authorization entries. It does
+not manage keypairs.

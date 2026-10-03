@@ -101,8 +101,7 @@ In the consumer repo's `inventory/group_vars/all.yml`:
 ntp_servers: "{{ lookup('env', 'PROXMOX_NTP_SERVERS') | split(',') | map('trim') | reject('equalto', '') | list }}"
 ```
 
-With `PROXMOX_NTP_SERVERS` injected via Doppler. An empty value falls back to
-the public pool, so the role stays safe if Doppler is unavailable.
+An empty `PROXMOX_NTP_SERVERS` value falls back to the public pool.
 
 ## Verification (server mode)
 

@@ -19,8 +19,7 @@
           - lookup('env', 'PROXMOX_SUBDOMAIN') | length > 0
         fail_msg: >-
           pve_notifications needs PROXMOX_SUBDOMAIN (for the ntfy ingress
-          hostname). Run via doppler (doppler run -- ansible-playbook ...)
-          or export PROXMOX_SUBDOMAIN.
+          hostname).
         quiet: true
 
     - name: Check whether the ntfy webhook target already exists

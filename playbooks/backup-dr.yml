@@ -38,7 +38,7 @@
 
     # Postgres dump archive pull + Tier-2 cloud upload — the Postgres consumer
     # of docs/DATABASE_DR_STANDARD.md. Inert until postgres_standby_jobs is set
-    # (per host). Tier-2 targets are env-wired (Doppler/SOPS); an unset key
+    # (per host). An unset access key
     # drops that target, leaving Tier 1 (sanoid + syncoid) intact.
     - role: postgres_standby
       tags:

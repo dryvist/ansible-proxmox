@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Ansible runner - loads SSH key into ssh-agent (in-memory only), runs playbook.
-# The key NEVER touches disk. Prefers PROXMOX_SSH_KEY_PATH (file path) when
-# available; falls back to loading PROXMOX_SSH_PRIVATE_KEY into ssh-agent.
 set -euo pipefail
 
 usage() {
@@ -42,13 +39,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --- Preferred auth: short-lived SSH certificate from the OpenBao CA --------
-# ssh-certificate-authority ADR: mint an ephemeral ed25519 keypair, sign it via
-# ssh-client-ca/sign/automation-{semaphore,ansible} (principal `semaphore` or
-# the shared `ansible`, cert TTL <=1h), and point the inventory at the key
-# (OpenSSH pairs id + id-cert.pub automatically). Requires BAO_ADDR + one of
-# the AppRole pairs in the ambient env (Doppler). With that env present, a
-# mint failure is fatal.
+# A configured certificate mint failure is fatal.
 bao_login() {
   jq -nc \
     '{role_id: env.CONVERGE_ROLE_ID, secret_id: env.CONVERGE_SECRET_ID}' |
@@ -89,8 +80,6 @@ mint_ssh_cert() {
   export PROXMOX_SSH_KEY_PATH="$CERT_DIR/id"
 
   if [[ -z ${BAO_TOKEN:-} ]]; then
-    # The inventory resolver and controller-side OpenBao reads share this
-    # short-lived token. Cleanup revokes it after ansible-playbook exits.
     export BAO_TOKEN=$RUNNER_BAO_TOKEN
   else
     # A caller-supplied token may carry broader human policy. Preserve it and
@@ -99,9 +88,6 @@ mint_ssh_cert() {
   fi
 }
 
-# Prefer the execution plane's own AppRole (principal `semaphore`) so its
-# cert is distinguishable from the shared `ansible` identity in sshd logs;
-# fall back to the shared ansible pair with a loud warning.
 CONVERGE_ROLE_ID="" CONVERGE_SECRET_ID="" CONVERGE_SIGN_ROLE="" CONVERGE_IDENTITY=""
 if [[ -n ${OPENBAO_APPROLE_SEMAPHORE_ROLE_ID:-} && -n ${OPENBAO_APPROLE_SEMAPHORE_SECRET_ID:-} ]]; then
   export CONVERGE_ROLE_ID=$OPENBAO_APPROLE_SEMAPHORE_ROLE_ID
@@ -123,19 +109,13 @@ fi
 if [[ -n ${BAO_ADDR:-} && -n $CONVERGE_ROLE_ID && -n $CONVERGE_SECRET_ID ]]; then
   # FAIL-LOUD: when the cert env is present, a mint failure is an error — never
   # silently ride the static key (that masked a dead cert path once already).
-  # Break-glass = unset BAO_ADDR and both AppRole pairs, and set the static
-  # key vars instead.
   if ! mint_ssh_cert; then
     echo "ERROR: OpenBao SSH cert mint FAILED and the cert env is present — refusing" >&2
-    echo "the silent static-key fallback. Fix the cert path, or unset BAO_ADDR and the" >&2
-    echo "OPENBAO_APPROLE_* env to deliberately use the static break-glass key." >&2
+    echo "the silent static-key fallback." >&2
     exit 1
   fi
   echo "Using a short-lived SSH certificate from the OpenBao CA ($CONVERGE_SIGN_ROLE)."
   echo "  authenticated as: $CONVERGE_IDENTITY"
-# If key file exists at PROXMOX_SSH_KEY_PATH, export expanded path for inventory.
-# Otherwise load key content into ssh-agent and unset PROXMOX_SSH_KEY_PATH so
-# inventory/hosts.yml omits ansible_ssh_private_key_file (Ansible uses the agent).
 elif [[ -n ${PROXMOX_SSH_KEY_PATH:-} ]] && [[ -f ${PROXMOX_SSH_KEY_PATH/#\~/$HOME} ]]; then
   export PROXMOX_SSH_KEY_PATH="${PROXMOX_SSH_KEY_PATH/#\~/$HOME}"
 elif [[ -n ${PROXMOX_SSH_PRIVATE_KEY:-} ]]; then
@@ -150,12 +130,10 @@ elif [[ -n ${PROXMOX_SSH_PRIVATE_KEY:-} ]]; then
   unset PROXMOX_SSH_KEY_PATH
 else
   echo "ERROR: No SSH key available."
-  echo "Set PROXMOX_SSH_KEY_PATH (file path) or PROXMOX_SSH_PRIVATE_KEY (key content) via Doppler."
+  echo "Requires PROXMOX_SSH_KEY_PATH (file path) or PROXMOX_SSH_PRIVATE_KEY (key content)."
   exit 1
 fi
 
-# Pin host identities: materialize the reviewed known_hosts (Doppler
-# SSH_KNOWN_HOSTS, harvested over authenticated channels) and verify strictly.
 # A rebuilt guest gets a new host key and fails closed until re-harvested.
 if [[ -n ${SSH_KNOWN_HOSTS:-} ]]; then
   if [[ -z $CERT_DIR ]]; then

@@ -9,7 +9,7 @@ wake, or sleep step anywhere in this procedure.
 > `proxmox-1` (always-on, infra + SIEM VM), `proxmox-2` (always-on, media +
 > the warm-standby `bulk/databases` + `bulk/appdata` namespaces on a `bulk`
 > ZFS pool), `proxmox-3` (always-on, second independent replica target).
-> `${PROXMOX_SUBDOMAIN}` is the internal subdomain (from Doppler).
+> `${PROXMOX_SUBDOMAIN}` is the internal subdomain.
 
 ## 1. How replication works
 

@@ -22,10 +22,10 @@ cluster-wide (`/etc/pve/ha/*`, replicated by pmxcfs).
 
 ```bash
 # Preview (asserts-out, no change — inert by default):
-doppler run -- ansible-playbook -i inventory playbooks/ha.yml
+ansible-playbook -i inventory playbooks/ha.yml
 
 # LIVE enable (gated — changes cluster HA behaviour for tier-0 guests):
-doppler run -- ansible-playbook -i inventory playbooks/ha.yml -e pve_ha_enabled=true
+ansible-playbook -i inventory playbooks/ha.yml -e pve_ha_enabled=true
 ```
 
 When enabled it:

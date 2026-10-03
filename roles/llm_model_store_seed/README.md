@@ -85,7 +85,7 @@ ansible-galaxy role list | grep llm_model_store_seed  # confirm it's present loc
 Runs with the rest of `site.yml`, or target just this role by tag:
 
 ```bash
-doppler run -- ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
   --limit proxmox,localhost --tags llm_model_store_seed
 ```
 

@@ -198,9 +198,9 @@ The pool list comes from `zfs_pools_present`, the same set derived from the
 
 ```bash
 # Dry run — storage tasks only
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools --check
+./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools --check
 # Apply
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools
+./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools
 ```
 
 ## Idempotency

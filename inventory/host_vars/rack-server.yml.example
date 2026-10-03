@@ -1,7 +1,7 @@
 ---
 # Example host_vars for a rack server — copy to
 # `inventory/host_vars/<node-name>.yml` (untracked by default) and fill in
-# real values. SOPS-encrypt the resulting file if it carries sensitive paths.
+# real values.
 #
 # Note: the existing `load_tofu.yml` only injects NAS `host_services`
 # and does NOT populate rack-server per-host vars. Wiring `terraform-proxmox`'s
@@ -28,7 +28,7 @@ rack_server_expected_cpu_sockets: 2
 # Cluster role flags
 rack_server_enable_nas_storage: false  # set true on the node that hosts the NAS ZFS dataset
 
-# Storage pools to import / verify (real device paths in SOPS-encrypted overrides)
+# Storage pools to import / verify
 rack_server_storage_pools:
   - name: local-zfs
     device: /dev/disk/by-id/CHANGE-ME

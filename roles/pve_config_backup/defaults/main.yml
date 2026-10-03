@@ -26,5 +26,5 @@ pve_config_backup_persistent: true
 pve_config_backup_retain_count: 14
 
 # Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" on
-# failure. Wired from the play (env-sourced), like the sibling standby roles.
+# failure.
 pve_config_backup_healthcheck_url: ""

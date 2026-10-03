@@ -12,9 +12,7 @@
 #
 # The CA public key is fetched from OpenBao's unauthenticated public_key
 # endpoint but is only trusted after its fingerprint matches the PINNED value
-# below — the pin comes from the trusted ceremony (the openbao converge prints
-# it under the human-gated bootstrap token; it is committed and human-reviewed
-# here). Fail-closed: no pin, or a mismatch, aborts the role. Never
+# below. Fail-closed: no pin, or a mismatch, aborts the role. Never
 # trust-on-first-use.
 
 # Two-condition activation gate. The role is a NO-OP unless BOTH a pinned CA
@@ -33,9 +31,7 @@ ssh_ca_trust_bao_addr: >-
 ssh_ca_trust_mount: ssh-client-ca
 
 # PINNED CA public-key fingerprint (the `ssh-keygen -l` SHA256:... form).
-# Recorded from the openbao converge's "SSH CA fingerprint" output — a
-# verified, human-gated session — and committed via group_vars/env. Empty
-# leaves the role a no-op (see the activation gate): distributing trust
+# Empty leaves the role a no-op (see the activation gate): distributing trust
 # without a pin would be TOFU.
 ssh_ca_trust_ca_fingerprint: "{{ lookup('env', 'SSH_CA_FINGERPRINT') | default('', true) }}"
 
@@ -109,7 +105,4 @@ ssh_ca_trust_host_cert_domain: >-
 # choose the identity a signed host certificate is issued for (see
 # tasks/lxc.yml's matching note for the pct-exec path).
 ssh_ca_trust_host_cert_fqdn: "{{ inventory_hostname }}.{{ ssh_ca_trust_host_cert_domain }}"
-# The converge runner exports BAO_ADDR/BAO_TOKEN for exactly this (same
-# pattern as roles/nas_storage) — the guest itself never holds a token; the
-# sign call runs delegate_to: localhost.
 ssh_ca_trust_host_cert_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"

@@ -27,8 +27,7 @@ syncoid_cron_minute: 17
 syncoid_extra_schedules: {}
 
 # Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" if any
-# job failed. Wire from the play (env-sourced), like postgres_standby/
-# sqlite_standby — without this, a failed dataset is exit-code-only (see the
+# job failed. Without this, a failed dataset is exit-code-only (see the
 # wrapper template), so set this to get an actual alert.
 syncoid_healthcheck_url: ""
 # Per-schedule-group healthcheck URLs, as {group: url}. One shared URL means a

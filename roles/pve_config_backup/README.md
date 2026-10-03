@@ -45,7 +45,7 @@ namespace — this role only fills it.
 ## Usage
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags pve_config_backup
+./scripts/run-ansible.sh playbooks/site.yml --tags pve_config_backup
 ```
 
 ## Restore

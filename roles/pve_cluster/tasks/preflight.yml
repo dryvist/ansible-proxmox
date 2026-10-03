@@ -48,9 +48,7 @@
     fail_msg: >-
       Joining node {{ inventory_hostname }} needs pve_cluster_master_ip (the
       primary's compute-VLAN IP) and pve_cluster_fingerprint (the primary's
-      corosync cert fingerprint, from `pvecm status` on the primary). Supply
-      them via -e or a SOPS var — they are host/cluster specific and not
-      committed.
+      corosync cert fingerprint).
     quiet: true
   when:
     - pve_cluster_role != 'primary'

@@ -19,8 +19,7 @@
         fail_msg: >-
           zfs_fault_alert is enabled but PROXMOX_SUBDOMAIN did not resolve
           from the controller's environment (needed to build
-          zfs_fault_alert_ntfy_url). Run via doppler (doppler run --
-          ansible-playbook ...) or export PROXMOX_SUBDOMAIN.
+          zfs_fault_alert_ntfy_url).
         quiet: true
 
     - name: Create the token directory

@@ -6,10 +6,10 @@
 # and is a no-op on the rest.
 #
 #   # Preview (nothing changes; role asserts-out because enabled=false):
-#   doppler run -- ansible-playbook -i inventory playbooks/ha.yml
+#   ansible-playbook -i inventory playbooks/ha.yml
 #
 #   # LIVE enable (gated — changes cluster HA behaviour for tier-0 guests):
-#   doppler run -- ansible-playbook -i inventory playbooks/ha.yml \
+#   ansible-playbook -i inventory playbooks/ha.yml \
 #     -e pve_ha_enabled=true
 #
 # See roles/pve_ha/README.md for the guest set, the anti-affinity model, and the

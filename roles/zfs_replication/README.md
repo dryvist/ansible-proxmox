@@ -113,7 +113,7 @@ zfs_replication_jobs:
 ```
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags zfs_replication
+./scripts/run-ansible.sh playbooks/site.yml --tags zfs_replication
 ```
 
 Package install, the systemd daemon-reload, and timer enablement are skipped

@@ -8,12 +8,8 @@ git history.
 
 ## Scope: public repositories only (v1)
 
-Repos are cloned/fetched **anonymously over HTTPS** — no credential of any
-kind. Mirroring a private repository needs a node-side credential path (an
-AppRole scoped to the `github/` engine, minted on this node) that does not
-exist yet, and inventing that plumbing under converge pressure is exactly
-the kind of unattended credential decision this estate reserves for a human.
-Deliberately not built here — tracked as an explicit follow-up.
+Repos are cloned/fetched **anonymously over HTTPS**. Private repositories
+are not supported.
 
 Public repos are also the IaC-critical ones (`tofu-proxmox`,
 `ansible-proxmox`, and everything else under the public tree), so this
@@ -44,21 +40,18 @@ made private) — a deleted-upstream repo's last-known mirror is exactly the
 scenario this role exists for. Removing a stale mirror directory is a
 manual, deliberate action, not something this timer does automatically.
 
-## Owner list — environment, not inventory
+## Owner list
 
-`git_mirror_owners` holds account names, which are operator-specific
-identity, and this repository is public. Inventory therefore reads them from
-`GIT_MIRROR_OWNERS` (whitespace-separated logins) rather than declaring them
-inline, the same treatment private hostnames get in this inventory. Unset
-means an empty list, which leaves the role inert instead of installing a
-timer that mirrors nothing.
+Inventory reads `GIT_MIRROR_OWNERS` (whitespace-separated logins) into
+`git_mirror_owners`. An unset value means an empty list, which leaves the
+role inert.
 
 ## Variables
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `git_mirror_enabled` | `false` | Master enable — set per-host |
-| `git_mirror_owners` | `[]` | Owner logins to mirror — env-sourced per-host, never written into this repo |
+| `git_mirror_owners` | `[]` | Owner logins to mirror |
 | `git_mirror_archive_dir` | `/bulk/git-mirror` | Mirror destination |
 | `git_mirror_on_calendar` | `*-*-* 05:15:00` | `systemd` `OnCalendar` (daily) |
 | `git_mirror_persistent` | `true` | Run a missed schedule on next boot |
@@ -67,7 +60,7 @@ timer that mirrors nothing.
 ## Usage
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags git_mirror
+./scripts/run-ansible.sh playbooks/site.yml --tags git_mirror
 ```
 
 ## Restore

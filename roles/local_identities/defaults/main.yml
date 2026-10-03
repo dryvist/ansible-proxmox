@@ -40,7 +40,7 @@ local_identities_sudoers_dir: /etc/sudoers.d
 # A service account for an off-box backup push. Unlike jevans and admin it is
 # NOT an administrative identity: no sudo, and its key carries a forced command
 # so the session cannot do anything but the one transfer. Deny-by-default; a
-# host opts in and supplies the key line from the secret store.
+# host opts in and specifies the key line.
 #
 # It exists so a backup push does not authenticate as root. Writing into a
 # directory is not an administrative act, and giving a scheduled unattended job

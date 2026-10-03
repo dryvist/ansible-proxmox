@@ -34,14 +34,12 @@ Cluster formation is high-risk and effectively one-directional, so the role is
 
 ## No magic numbers
 
-Every address comes from inventory or a Doppler/SOPS-injected var — never a
-literal in this role:
+The role reads these address and API settings:
 
-- `link0` defaults to the host's own `ansible_host` (its compute-VLAN
-  connection IP, itself env/SOPS-sourced).
+- `link0` defaults to the host's own `ansible_host`.
 - `master_ip` defaults to the primary's `ansible_host` via `hostvars`.
-- API auth (`api_host`/`api_user`/`api_token_*`/`validate_certs`) reads the same
-  `PROXMOX_VE_*` env vars Doppler injects for the rest of the pipeline.
+- API auth (`api_host`/`api_user`/`api_token_*`/`validate_certs`) reads
+  `PROXMOX_VE_*` environment variables.
 
 ## Inputs
 
@@ -58,9 +56,7 @@ pve_cluster_master_ip: "{{ hostvars[pve_cluster_primary_host].ansible_host }}"
 pve_cluster_fingerprint: ""           # primary corosync cert fp — supply at run time
 ```
 
-`pve_cluster_fingerprint` is host/cluster specific (changes on reinstall) and is
-**not committed** — read it from `pvecm status` on the primary and pass via `-e`
-or a SOPS-encrypted var.
+`pve_cluster_fingerprint` is host/cluster specific and changes on reinstall.
 
 ## Usage
 
@@ -74,7 +70,7 @@ cluster-group membership).
 
 ```bash
 # Form the cluster (enable + allow-list supplied at run time, fingerprint via -e)
-doppler run -- ansible-playbook -i inventory playbooks/cluster.yml \
+ansible-playbook -i inventory playbooks/cluster.yml \
   -e pve_cluster_enabled=true \
   -e pve_cluster_fingerprint="<primary fp from pvecm status>"
 ```

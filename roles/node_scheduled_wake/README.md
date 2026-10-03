@@ -14,10 +14,7 @@ few minutes its backup actually needs.
 - Installs one systemd **timer + oneshot service per target**. The service's
   `ExecStart` is a single `ipmitool -I lanplus -H <bmc> -U <user> -E chassis
   power on` — idempotent (a no-op if the target is already on), no custom script.
-- The BMC password is supplied through a root-only `0600` EnvironmentFile
-  (`/etc/node-scheduled-wake/<target>.env`); `ipmitool -E` reads
-  `$IPMITOOL_PASSWORD`, so it never appears on the command line or in
-  `systemctl cat`.
+- `ipmitool -E` reads `$IPMITOOL_PASSWORD`.
 - `Persistent=false`: a missed window is **not** caught up — wait for the next.
 
 Once the target boots it runs its own on-boot replication
@@ -32,8 +29,8 @@ power-on window — which is why the target replicates **on boot** instead.
 | --- | --- | --- |
 | `node_scheduled_wake_enabled` | `true` | Master switch. |
 | `node_scheduled_wake_on_calendar` | `["*-*-* 03:00:00", "*-*-* 15:00:00"]` | Default wake schedule (systemd `OnCalendar`, local time). |
-| `node_scheduled_wake_bmc_username` | `{{ env IDRAC_USERNAME }}` | BMC user (from Doppler). |
-| `node_scheduled_wake_bmc_password` | `{{ env IDRAC_PASSWORD }}` | BMC password (from Doppler; written to the EnvironmentFile only). |
+| `node_scheduled_wake_bmc_username` | `{{ env IDRAC_USERNAME }}` | BMC user. |
+| `node_scheduled_wake_bmc_password` | `{{ env IDRAC_PASSWORD }}` | BMC password. |
 | `node_scheduled_wake_targets` | `[]` | Targets to wake. **Empty ⇒ role is inert.** |
 
 Each `node_scheduled_wake_targets` entry:
@@ -41,7 +38,7 @@ Each `node_scheduled_wake_targets` entry:
 ```yaml
 node_scheduled_wake_targets:
   - name: <node>                       # target node name (unit naming)
-    bmc_host: "{{ lookup('env', 'X') }}" # BMC address — FQDN preferred (env/SOPS, never committed)
+    bmc_host: "{{ lookup('env', 'X') }}" # BMC address — FQDN preferred
     on_calendar:                       # optional per-target schedule override
       - "*-*-* 03:00:00"
       - "*-*-* 15:00:00"

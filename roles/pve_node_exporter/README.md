@@ -30,7 +30,7 @@ management VLAN.
 Runs with the rest of `site.yml`, or target just this role by tag:
 
 ```bash
-doppler run -- ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
   --limit proxmox,localhost --tags pve_node_exporter
 ```
 

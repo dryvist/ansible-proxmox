@@ -52,6 +52,6 @@ inventory injected by `playbooks/load_tofu.yml` — `splunk_vm_from_tofu` and
 hard-coding it, so a VMID renumber flows through with no edit.
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags sanoid
+./scripts/run-ansible.sh playbooks/site.yml --tags sanoid
 sanoid --monitor-snapshots   # health check after a few cycles
 ```

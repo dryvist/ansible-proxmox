@@ -47,7 +47,7 @@ as a canonical FQDN; it is accepted only when both names resolve on the source
 to a shared IPv4 address. Unapproved aliases remain rejected.
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/transfer_evacuated_lxc_managed_volumes.yml \
+./scripts/run-ansible.sh playbooks/transfer_evacuated_lxc_managed_volumes.yml \
   -e pve_guest_evacuation_lxc_managed_volumes_enabled=true \
   -e pve_guest_evacuation_lxc_managed_volumes_source_node=<source-inventory-key> \
   -e pve_guest_evacuation_lxc_managed_volumes_target_node=<target-inventory-key> \

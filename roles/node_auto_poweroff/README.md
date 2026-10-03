@@ -60,7 +60,7 @@ so the node must be online during the run (it comes up via the `idrac_power`
 auto-cycle, or power it on manually):
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml \
+./scripts/run-ansible.sh playbooks/site.yml \
   --limit <normally-off-node> --tags node_auto_poweroff
 ```
 

@@ -166,8 +166,7 @@ sanoid_datasets: "{{ sanoid_datasets_json | from_json }}"
 
 # Offline-DR wake controller. This node is always-on and can reach the BMC
 # subnet, so it runs the node_scheduled_wake timers that power a normally-off
-# DR node ON for its replication windows. The BMC address + credentials come
-# from the environment (Doppler), never committed. Default schedule (03:00 +
+# DR node ON for its replication windows. Default schedule (03:00 +
 # 15:00) lives in the role defaults.
 #
 # Empty: the only previous target is now always-on and no longer needs waking.
@@ -254,8 +253,6 @@ idrac_kiosk_url: "https://wall.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}/mc1/"
 # enforced property rather than a sender-side convention. Snapshots on
 # rpool/data/nas cover the other case, a client that overwrites in place.
 #
-# The line is read from the secret store, not committed, so the forced command
-# can be corrected without a repo round-trip.
 local_identities_backup_ingress_enabled: true
 local_identities_backup_ingress_dir: /mnt/nas/backups/workstation
 local_identities_backup_ingress_ssh_public_key: "{{ lookup('community.hashi_vault.vault_kv2_get',

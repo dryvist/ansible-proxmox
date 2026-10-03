@@ -41,7 +41,7 @@ loop at the host layer.
 Runs with the rest of `site.yml`, or target just this role by tag:
 
 ```bash
-doppler run -- ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
   --limit proxmox,localhost --tags pve_syslog_forwarder
 ```
 
@@ -55,8 +55,7 @@ doppler run -- ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 | `pve_syslog_forwarder_config_path` | `/etc/rsyslog.d/10-forward-cribl.conf` | Drop-in rule owned by this role. |
 | `pve_syslog_forwarder_queue_max_disk_space` | `256m` | Disk-queue cap so a receiver outage buffers instead of dropping. |
 
-The role asserts `PROXMOX_SUBDOMAIN` is set (injected via Doppler, like
-`PVEn_NODE_NAME`) so the real domain is never committed.
+The role asserts `PROXMOX_SUBDOMAIN` is set.
 
 ## Verification
 

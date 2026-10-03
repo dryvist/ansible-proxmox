@@ -198,7 +198,7 @@ restarts.
 
 ```bash
 # Dry run
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags media_lxc_features --check
+./scripts/run-ansible.sh playbooks/site.yml --tags media_lxc_features --check
 # Apply (after tofu creates the LXCs, before apps converge)
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags media_lxc_features
+./scripts/run-ansible.sh playbooks/site.yml --tags media_lxc_features
 ```

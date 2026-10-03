@@ -87,7 +87,7 @@ tofu inventory injected by `playbooks/load_tofu.yml` — `splunk_vm_from_tofu` a
 hard-coded, so a VMID renumber flows through with no edit.
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags syncoid
+./scripts/run-ansible.sh playbooks/site.yml --tags syncoid
 ```
 
 ## Why `syncoid_healthcheck_url` is load-bearing

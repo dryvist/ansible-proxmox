@@ -76,13 +76,13 @@ Auto-cycle is wired into `site.yml` and gated on `pve_power_managed: true` per
 host. To disable for a quick run:
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml -e idrac_power_autocycle=false --limit <always-on-hosts>
+./scripts/run-ansible.sh playbooks/site.yml -e idrac_power_autocycle=false --limit <always-on-hosts>
 ```
 
 To power a node on/off directly (e.g. during commissioning):
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags idrac_power
+./scripts/run-ansible.sh playbooks/site.yml --tags idrac_power
 ```
 
 ## Scope / follow-up

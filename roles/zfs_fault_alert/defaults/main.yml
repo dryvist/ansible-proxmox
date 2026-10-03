@@ -30,7 +30,7 @@ zfs_fault_alert_missed_events_check_interval: 2min
 
 # Publishes to the homelab ntfy alert hub (topic "hardware"), which fans out
 # to Slack and Zammad on its own -- this role no longer talks to Zammad
-# directly. Sized off PROXMOX_SUBDOMAIN (e.g. from Doppler), same pattern as
+# directly. Sized off PROXMOX_SUBDOMAIN, same pattern as
 # pve_syslog_forwarder_target_host / idrac_kiosk_kvm_host: fronted services
 # are only published under the ingress subdomain, never the estate apex
 # (domain_from_tofu).

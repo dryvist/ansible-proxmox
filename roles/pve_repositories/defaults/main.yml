@@ -13,8 +13,7 @@ pve_repositories_keyring: /usr/share/keyrings/proxmox-archive-keyring.gpg
 # Optional apt caching proxies (e.g. apt-cacher-ng) for HTTP repositories. Empty
 # disables proxying. When set, apt routes http:// fetches through the first
 # reachable entry, which caches packages and reaches upstream mirrors more
-# reliably than each node does. Real values are injected per environment (see
-# group_vars), never hardcoded here.
+# reliably than each node does.
 #
 # A LIST, because the cache is an HA pair: apt accepts exactly one
 # `Acquire::http::Proxy` value, so expressing a pair needs the

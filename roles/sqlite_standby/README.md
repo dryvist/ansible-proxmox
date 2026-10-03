@@ -92,7 +92,7 @@ sqlite_standby_jobs:
 ## Usage
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags sqlite_standby
+./scripts/run-ansible.sh playbooks/site.yml --tags sqlite_standby
 # Seed/refresh now (e.g. first run) without waiting for the timer:
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags sqlite_standby -e sqlite_standby_run_now=true
+./scripts/run-ansible.sh playbooks/site.yml --tags sqlite_standby -e sqlite_standby_run_now=true
 ```

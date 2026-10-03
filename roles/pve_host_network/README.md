@@ -79,9 +79,8 @@ rendered file contains an address line before installing it.
 
 ## Variables
 
-Addresses are supplied from inventory or the environment and are never
-committed to this repository. The uplink is resolved from facts unless
-overridden per host. See `defaults/main.yml`.
+The uplink is resolved from facts unless overridden per host. See
+`defaults/main.yml` for address and gateway inputs.
 
 ## Tags
 

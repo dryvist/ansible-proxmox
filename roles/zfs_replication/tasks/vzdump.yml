@@ -6,8 +6,7 @@
 
 # The S3 mirror leg needs the aws CLI and a root-only credentials file. Both are
 # gated on an endpoint being set, so the plain-vzdump case installs nothing extra
-# and stays inert. The env file is absent when S3 is off; the wrapper sources it
-# only if present, so the local vzdump is unaffected either way.
+# and stays inert.
 - name: Install awscli for the vzdump S3 mirror leg
   ansible.builtin.apt:
     name: awscli
