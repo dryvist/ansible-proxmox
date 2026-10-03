@@ -1,0 +1,43 @@
+---
+# pve_api_tokens — reconcile one read-only PVE API token per consumer app and
+# publish it to that app's OpenBao bucket. All pvesh/pveum calls skip under
+# Docker so the role stays molecule-safe without a live cluster.
+
+- name: Reconcile read-only API tokens from the single config host
+  when:
+    - inventory_hostname == pve_api_tokens_config_host
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_api_tokens
+  block:
+    - name: Assert the converge carries OpenBao access
+      ansible.builtin.assert:
+        that:
+          - pve_api_tokens_bao_addr | length > 0
+          - pve_api_tokens_bao_token | length > 0
+        fail_msg: >-
+          pve_api_tokens needs BAO_ADDR and BAO_TOKEN (exported by
+          scripts/run-ansible.sh) to publish the tokens it mints.
+        quiet: true
+      no_log: true
+
+    - name: Read cluster users
+      ansible.builtin.command:
+        argv: [pvesh, get, /access/users, --output-format, json]
+      register: pve_api_tokens_users
+      changed_when: false
+      check_mode: false
+
+    - name: Read cluster ACLs
+      ansible.builtin.command:
+        argv: [pvesh, get, /access/acl, --output-format, json]
+      register: pve_api_tokens_acls
+      changed_when: false
+      check_mode: false
+
+    - name: Reconcile each consumer's user, ACL, token and published credential
+      ansible.builtin.include_tasks: token.yml
+      loop: "{{ pve_api_tokens_consumers }}"
+      loop_control:
+        loop_var: pve_api_tokens_consumer
+        label: "{{ pve_api_tokens_consumer.app }}"

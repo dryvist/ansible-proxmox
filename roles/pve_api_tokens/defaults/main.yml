@@ -1,0 +1,36 @@
+---
+# Read-only PVE API tokens, one per consumer app, stored in that app's own
+# OpenBao bucket (secret/apps/<app>). OpenBao has no Proxmox secrets engine,
+# so the token is minted here, on the cluster, and published from the
+# controller with the converge's own short-lived BAO_TOKEN.
+#
+# Each consumer gets a dedicated <app>@pve user (no password, so it cannot log
+# in) holding pve_api_tokens_role at `/`, and one token that shares exactly the
+# user's privileges (privsep 0). Two fields are written into secret/apps/<app>:
+#   <field_prefix>_token_id      full identity, user@realm!token
+#   <field_prefix>_token_secret  the token value
+#
+# THE POLICY GRANT IS NOT IMPLICIT: every app here needs create/update/read on
+# its exact path in ansible-proxmox-apps' ansible-converge policy
+# (openbao_credential_publish_apps). Without it the write returns 403.
+pve_api_tokens_consumers:
+  - app: homarr
+    field_prefix: homarr_proxmox
+  - app: pve-exporter
+    field_prefix: pve_exporter
+
+pve_api_tokens_role: PVEAuditor
+pve_api_tokens_realm: pve
+pve_api_tokens_token_name: ro
+
+# The user list, ACLs and tokens are pmxcfs-replicated cluster-wide state, so
+# the role acts from exactly ONE node, same run_once idiom as pve_notifications.
+pve_api_tokens_config_host: "{{ pve_cluster_primary_host | default(proxmox_node_names.primary, true) }}"
+
+# Same controller-side OpenBao access nas_storage uses: the converge runner
+# exports BAO_ADDR and a short-lived BAO_TOKEN (scripts/run-ansible.sh).
+pve_api_tokens_bao_addr: >-
+  {{ lookup('env', 'BAO_ADDR')
+     | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
+pve_api_tokens_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
+pve_api_tokens_kv_mount: secret

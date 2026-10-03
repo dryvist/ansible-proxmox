@@ -271,6 +271,11 @@
           jevans: [jevans]
           admin: [admin]
 
+    # Read-only PVE API tokens for consumer apps, published to OpenBao.
+    - role: pve_api_tokens
+      tags:
+        - pve_api_tokens
+
 # Backup, disaster-recovery, and notification roles (syncoid, sqlite_standby,
 # postgres_standby, pve_config_backup, pve_notifications, git_mirror). Split
 # out of this file rather than left inline so site.yml stays inside its token
