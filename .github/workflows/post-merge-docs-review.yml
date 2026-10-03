@@ -25,7 +25,6 @@ jobs:
   #     - name: Re-trigger as workflow_dispatch
   #       env:
   #         WORKFLOW_NAME: ${{ github.workflow }}
-  #         GH_TOKEN: ${{ github.token }}
   #       run: |
   #         gh workflow run "$WORKFLOW_NAME" \
   #           --repo "${{ github.repository }}" \

@@ -9,12 +9,12 @@
 #
 # The role is inert unless enabled, so formation is an explicit, deliberate run:
 #
-#   doppler run -- ansible-playbook -i inventory playbooks/cluster.yml \
+#   ansible-playbook -i inventory playbooks/cluster.yml \
 #     -e pve_cluster_enabled=true \
 #     -e pve_cluster_fingerprint="<primary corosync fp from `pvecm status`>"
 #
 # All IPs (link0, master_ip, API host) resolve from inventory / PROXMOX_VE_* env
-# (Doppler) — no literals. See roles/pve_cluster/README.md.
+# variables. See roles/pve_cluster/README.md.
 
 - name: Create the cluster on the primary node
   hosts: pve_cluster_members

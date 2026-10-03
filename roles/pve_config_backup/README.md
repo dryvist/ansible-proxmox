@@ -32,20 +32,20 @@ namespace — this role only fills it.
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `pve_config_backup_enabled` | `false` | Master enable — set per-host |
-| `pve_config_backup_source_dir` | `/etc/pve` | Directory tarred |
-| `pve_config_backup_archive_dir` | `/bulk/databases/pve-etc` | Archive destination |
-| `pve_config_backup_on_calendar` | `*-*-* 04:15:00` | `systemd` `OnCalendar` (daily) |
-| `pve_config_backup_persistent` | `true` | Run a missed schedule on next boot |
-| `pve_config_backup_retain_count` | `14` | Archives kept before pruning oldest |
-| `pve_config_backup_healthcheck_url` | `""` | Optional healthchecks.io URL |
+| Variable                            | Default                   | Description                         |
+| ----------------------------------- | ------------------------- | ----------------------------------- |
+| `pve_config_backup_enabled`         | `false`                   | Master enable — set per-host        |
+| `pve_config_backup_source_dir`      | `/etc/pve`                | Directory tarred                    |
+| `pve_config_backup_archive_dir`     | `/bulk/databases/pve-etc` | Archive destination                 |
+| `pve_config_backup_on_calendar`     | `*-*-* 04:15:00`          | `systemd` `OnCalendar` (daily)      |
+| `pve_config_backup_persistent`      | `true`                    | Run a missed schedule on next boot  |
+| `pve_config_backup_retain_count`    | `14`                      | Archives kept before pruning oldest |
+| `pve_config_backup_healthcheck_url` | `""`                      | Optional healthchecks.io URL        |
 
 ## Usage
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags pve_config_backup
+./scripts/run-ansible.sh playbooks/site.yml --tags pve_config_backup
 ```
 
 ## Restore

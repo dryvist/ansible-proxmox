@@ -60,7 +60,7 @@ zfs_pools_map:
     datasets:
       backups:
         quota: "1T"
-        properties:                 # optional; any zfs property=value
+        properties: # optional; any zfs property=value
           recordsize: "1M"
           compression: "zstd"
           "com.sun:auto-snapshot": "false"
@@ -86,7 +86,7 @@ dataset over NFS — typically **read-only and LAN-scoped** for query access:
 ```yaml
 datasets:
   databases:
-    nfs_export: "ro=@10.0.0.0/8 ro=@192.168.0.0/16"  # space-separated clients
+    nfs_export: "" # space-separated clients
 ```
 
 Children **inherit** a parent's `sharenfs`, so exporting a namespace parent
@@ -106,12 +106,12 @@ dataset directly via `datastore_id`:
 datasets:
   fast-splunk:
     quota: "500G"
-    pvesm_id: fast-splunk  # register this dataset as its own zfspool storage
+    pvesm_id: fast-splunk # register this dataset as its own zfspool storage
 ```
 
 **Why a quota is not enough.** A `zfspool`-backed VM disk lands at the pool
 **root** by default (a sibling of any child dataset), so a plain `quota` on a
-child dataset does *not* confine a disk to it. Registering the dataset itself
+child dataset does _not_ confine a disk to it. Registering the dataset itself
 (`pvesm add zfspool <pvesm_id> -pool <pool>/<dataset>`) is what makes it a real,
 isolated storage target — the disk lives inside the dataset and is capped by its
 quota. This is the mechanism behind the `fast-splunk` and `bulk-splunk` tiers,
@@ -126,7 +126,7 @@ unset (the default) to skip registration.
 
 Unlike pool creation, this capability is **not** gated by
 `zfs_pools_allow_create` — it is non-destructive against an already-existing
-pool. Creating a *new* pool for a new tier (e.g. `bulk-splunk` on a fresh pool)
+pool. Creating a _new_ pool for a new tier (e.g. `bulk-splunk` on a fresh pool)
 still requires the existing `zfs_pools_allow_create: true` + `zfs_pools_devices`
 opt-in in untracked `host_vars`; only the dataset registration itself runs
 unconditionally on a present pool.
@@ -142,18 +142,18 @@ it carries engine-appropriate tuning, its own quota, snapshot policy, and
 
 **Tier → pool.** Pick the pool by latency need, not engine:
 
-| Role | Pool | Why |
-| --- | --- | --- |
-| hot / primary | `fast` (NVMe) | low-latency random I/O |
-| warm / standby / backup / archive | `bulk` (non-fast) | capacity over latency |
+| Role                              | Pool              | Why                    |
+| --------------------------------- | ----------------- | ---------------------- |
+| hot / primary                     | `fast` (NVMe)     | low-latency random I/O |
+| warm / standby / backup / archive | `bulk` (non-fast) | capacity over latency  |
 
 **Engine → `recordsize`.** Match ZFS `recordsize` to the engine's page/IO unit:
 
-| Engine | `recordsize` | Notes |
-| --- | --- | --- |
-| PostgreSQL | `8K`–`16K` | 8K page; consider a separate WAL dataset, `logbias=throughput` |
-| MySQL / MariaDB (InnoDB) | `16K` | 16K page |
-| SQLite | `32K`–`64K` | balances query reads vs. append writes |
+| Engine                   | `recordsize` | Notes                                                          |
+| ------------------------ | ------------ | -------------------------------------------------------------- |
+| PostgreSQL               | `8K`–`16K`   | 8K page; consider a separate WAL dataset, `logbias=throughput` |
+| MySQL / MariaDB (InnoDB) | `16K`        | 16K page                                                       |
+| SQLite                   | `32K`–`64K`  | balances query reads vs. append writes                         |
 
 Always pair with `compression: "zstd"` and `atime: "off"`. The namespace parent
 defaults to a neutral `recordsize: "16K"`; per-instance children override.
@@ -168,7 +168,7 @@ defaults to a neutral `recordsize: "16K"`; per-instance children override.
 
 The parent is snapshotted/replicated **recursively**, so adding a child instance
 inherits snapshots, the DR copy, and (on `bulk`) the read-only export with no
-extra wiring. Engine-specific *sync* mechanisms (e.g. the `sqlite_standby` role,
+extra wiring. Engine-specific _sync_ mechanisms (e.g. the `sqlite_standby` role,
 `pg_basebackup`, `mysqldump`) are separate consumers of this namespace.
 
 ## Boot-time import policy
@@ -185,11 +185,11 @@ both for the pools it finds present:
   started**. They run at boot; importing a pool mid-converge on a live
   hypervisor is not a decision this role makes.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `zfs_pools_manage_import` | `true` | Manage boot-time import at all. |
-| `zfs_pools_cachefile` | `/etc/zfs/zpool.cache` | Cache file recording which pools to import. |
-| `zfs_pools_import_units` | `[zfs-import-cache.service, zfs-import.target]` | Units enabled to perform the boot import. |
+| Variable                  | Default                                         | Purpose                                     |
+| ------------------------- | ----------------------------------------------- | ------------------------------------------- |
+| `zfs_pools_manage_import` | `true`                                          | Manage boot-time import at all.             |
+| `zfs_pools_cachefile`     | `/etc/zfs/zpool.cache`                          | Cache file recording which pools to import. |
+| `zfs_pools_import_units`  | `[zfs-import-cache.service, zfs-import.target]` | Units enabled to perform the boot import.   |
 
 The pool list comes from `zfs_pools_present`, the same set derived from the
 `node_storage` contract, so there is no second list of pools to keep in sync.
@@ -198,9 +198,9 @@ The pool list comes from `zfs_pools_present`, the same set derived from the
 
 ```bash
 # Dry run — storage tasks only
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools --check
+./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools --check
 # Apply
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools
+./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools
 ```
 
 ## Idempotency
@@ -210,7 +210,7 @@ doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags zfs_pools
 - Quotas: compared in **bytes** (`zfs get -Hp` vs `human_to_bytes(desired)`), so
   `1T` and `1024G` do not cause spurious changes.
 - Properties: each `properties` entry compared as a string (`zfs get -H -o
-  value`) and only `zfs set` when it differs.
+value`) and only `zfs set` when it differs.
 - Registration: `pvesm status --storage <pool>` gates `pvesm add`; the same
   check gates per-dataset `pvesm_id` registration.
 

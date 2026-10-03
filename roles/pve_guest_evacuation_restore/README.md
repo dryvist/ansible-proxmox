@@ -73,7 +73,7 @@ Supply every identity value from the previously verified archive evidence;
 placeholders below are intentional:
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/restore_evacuated_guest.yml \
+./scripts/run-ansible.sh playbooks/restore_evacuated_guest.yml \
   -e pve_guest_evacuation_restore_enabled=true \
   -e pve_guest_evacuation_restore_source_node=<source-inventory-key> \
   -e pve_guest_evacuation_restore_target_node=<target-inventory-key> \

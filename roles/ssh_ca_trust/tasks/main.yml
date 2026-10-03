@@ -10,8 +10,7 @@
       - ssh_ca_trust_ca_fingerprint | length > 0
       - ssh_ca_trust_bao_addr | length > 0
     fail_msg: >-
-      ssh_ca_trust needs SSH_CA_FINGERPRINT (the pinned CA fingerprint from
-      the openbao converge's trusted ceremony) and BAO_ADDR. Refusing to
+      ssh_ca_trust needs SSH_CA_FINGERPRINT and BAO_ADDR. Refusing to
       distribute trust without a pin — that would be trust-on-first-use.
   when: ssh_ca_trust_enabled | bool
   tags: [ssh_ca_trust]

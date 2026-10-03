@@ -28,7 +28,7 @@ sqlite_standby_on_calendar: "*-*-* 03:30:00"
 sqlite_standby_persistent: true
 
 # Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" on
-# failure. Wire from the play (env-sourced), like proxmox_monitoring.
+# failure.
 sqlite_standby_healthcheck_url: ""
 
 # Opt-in: run the sync immediately during the play (seed/refresh on demand) in

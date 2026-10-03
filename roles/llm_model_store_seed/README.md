@@ -85,14 +85,14 @@ ansible-galaxy role list | grep llm_model_store_seed  # confirm it's present loc
 Runs with the rest of `site.yml`, or target just this role by tag:
 
 ```bash
-doppler run -- ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
   --limit proxmox,localhost --tags llm_model_store_seed
 ```
 
 ### Variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `llm_model_catalog_models` | see `llm_model_catalog`'s defaults | Declared `{name, hf_repo, gguf, hf_revision}` catalog (not this role's own) |
-| `llm_model_store_seed_timeout` | `3600` | Seconds allowed for the HF metadata lookup and the GGUF download |
-| `llm_model_store_seed_file_mode` | `"0644"` | Mode of a seeded GGUF file |
+| Variable                         | Default                            | Purpose                                                                     |
+| -------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Declared `{name, hf_repo, gguf, hf_revision}` catalog (not this role's own) |
+| `llm_model_store_seed_timeout`   | `3600`                             | Seconds allowed for the HF metadata lookup and the GGUF download            |
+| `llm_model_store_seed_file_mode` | `"0644"`                           | Mode of a seeded GGUF file                                                  |

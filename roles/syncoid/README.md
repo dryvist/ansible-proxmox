@@ -36,15 +36,15 @@ set up out of band. The role schedules replication; it does not distribute keys.
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `syncoid_enabled` | `true` | Master enable |
-| `syncoid_jobs` | `[]` | List of `{ name, source, target, options?, schedule? }` — inert until set |
-| `syncoid_default_options` | `--recursive --no-sync-snap --quiet` | Applied when a job omits `options` |
-| `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17` | Schedule for the `default` group |
-| `syncoid_extra_schedules` | `{}` | Extra cadence groups (see below) |
-| `syncoid_user` | `root` | User that runs syncoid (needs SSH to sources) |
-| `syncoid_healthcheck_url` | `""` | healthchecks.io URL; pinged on success, `/fail` pinged if any job failed |
+| Variable                                    | Default                              | Description                                                               |
+| ------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------- |
+| `syncoid_enabled`                           | `true`                               | Master enable                                                             |
+| `syncoid_jobs`                              | `[]`                                 | List of `{ name, source, target, options?, schedule? }` — inert until set |
+| `syncoid_default_options`                   | `--recursive --no-sync-snap --quiet` | Applied when a job omits `options`                                        |
+| `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17`                           | Schedule for the `default` group                                          |
+| `syncoid_extra_schedules`                   | `{}`                                 | Extra cadence groups (see below)                                          |
+| `syncoid_user`                              | `root`                               | User that runs syncoid (needs SSH to sources)                             |
+| `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; pinged on success, `/fail` pinged if any job failed  |
 
 ## Usage
 
@@ -70,7 +70,7 @@ syncoid_extra_schedules:
 
 syncoid_jobs:
   - name: app-config
-    schedule: hourly          # omit to stay in `default`
+    schedule: hourly # omit to stay in `default`
     source: "root@node-a:rpool/data/vm-200-disk-2"
     target: "bulk/replica/node-a/vm-200-disk-2"
 ```
@@ -87,7 +87,7 @@ tofu inventory injected by `playbooks/load_tofu.yml` — `splunk_vm_from_tofu` a
 hard-coded, so a VMID renumber flows through with no edit.
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags syncoid
+./scripts/run-ansible.sh playbooks/site.yml --tags syncoid
 ```
 
 ## Why `syncoid_healthcheck_url` is load-bearing

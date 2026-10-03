@@ -19,7 +19,7 @@ use; no Proxmox API token is involved.
 ## Usage
 
 ```bash
-doppler run -- ansible-playbook -i inventory/hosts.yml \
+ansible-playbook -i inventory/hosts.yml \
   playbooks/container-start.yml \
   -e '{"container_start_services":["service-name"]}'
 ```

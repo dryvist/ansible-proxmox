@@ -12,8 +12,7 @@
       - pve_syslog_forwarder_target_port | string | length > 0
     fail_msg: >-
       pve_syslog_forwarder needs PROXMOX_SUBDOMAIN (for the syslog CNAME
-      target). Run via doppler (doppler run -- ansible-playbook ...) or export
-      PROXMOX_SUBDOMAIN.
+      target).
     quiet: true
   tags:
     - pve_syslog_forwarder

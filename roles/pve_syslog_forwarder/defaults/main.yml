@@ -6,7 +6,7 @@
 # systemd service (pveproxy, pvedaemon, corosync, ...).
 #
 # No literals: the target is the stable `syslog` CNAME (-> haproxy) sized off
-# the PROXMOX_SUBDOMAIN env var (e.g. from Doppler), mirroring how
+# the PROXMOX_SUBDOMAIN env var, mirroring how
 # proxmox_node_names keeps the real environment values out of the repo.
 
 # Stable syslog entry point: the `syslog` CNAME (-> the HAProxy VIP). Sized off

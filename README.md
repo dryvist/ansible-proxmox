@@ -83,8 +83,7 @@ order (first that resolves wins):
 1. `TOFU_INVENTORY_PATH` — an explicit local file (pin / override, e.g. tests).
 2. **RustFS published artifact** — the inventory JSON published by the
    tofu-proxmox Terrakube workspace. The shared resolver fetches it over the
-   homelab network with credentials read directly from OpenBao
-   `secret/platform/object-storage`; only `BAO_ADDR` and `BAO_TOKEN` are needed.
+   network; the resolver reads `BAO_ADDR` and `BAO_TOKEN`.
    Override the object with `TOFU_INVENTORY_S3_URI` when required.
 
 For the canonical resolution order, see the
@@ -93,21 +92,10 @@ For the canonical resolution order, see the
 The artifact is expected to already exist in RustFS; provisioning and
 publishing it is outside this repo's scope.
 
-Create the SOPS secrets file:
-
-```bash
-cp secrets.sops.yml.example secrets.sops.yml
-sops secrets.sops.yml
-```
-
-Set `NAS_HOMEASSISTANT_SMB_PASSWORD` in the secrets file before saving.
-
 ## Usage
 
-Converges run through Semaphore, the execution plane. Its template wrapper
-loads the run environment from OpenBao before the playbook starts. Playbooks
-read plain environment variables and are independent of the secrets manager:
-`.env`, Doppler, OpenBao or any other injector behaves identically.
+Converges run through Semaphore, the execution plane. Playbooks read
+environment variables.
 `scripts/run-ansible.sh` remains the runner the wrapper calls and the
 break-glass path from a workstation.
 
@@ -117,13 +105,13 @@ testing.
 Test the configuration (doesn't change anything):
 
 ```bash
-sops exec-env secrets.sops.yml 'doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --check --diff'
+./scripts/run-ansible.sh playbooks/site.yml --check --diff
 ```
 
 Apply the configuration:
 
 ```bash
-sops exec-env secrets.sops.yml 'doppler run -- ./scripts/run-ansible.sh playbooks/site.yml'
+./scripts/run-ansible.sh playbooks/site.yml
 ```
 
 ### Commissioning a new rack server (PVE 9.x)
@@ -156,7 +144,7 @@ root snapshot, not a guest backup, is the right rollback artifact. It then
 applies the `pve_repositories` role, which keeps the node on the
 no-subscription channel (deb822 `.sources`, enterprise repo disabled) without
 touching the Debian base repos. If `pve_repositories_apt_proxies` is non-empty
-(real URLs injected via the `APT_PROXY_URL` env var, e.g. apt-cacher-ng
+(URLs read from `APT_PROXY_URL`, e.g. apt-cacher-ng
 instances — several accepted, separated by commas and/or whitespace), apt
 `http://` fetches are routed through the first one that answers, or straight to
 upstream when none does. The selection is apt's own

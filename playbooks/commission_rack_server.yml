@@ -13,8 +13,7 @@
 #   ansible-playbook -i inventory playbooks/commission_rack_server.yml -l <node-name>
 #
 # Inventory: real per-host values for the `rack_servers` group come from
-# untracked `inventory/host_vars/<node-name>.yml` (or a SOPS-encrypted
-# overlay you decrypt at run time). See
+# untracked per-host inventory. See
 # `inventory/host_vars/rack-server.yml.example` for the schema.
 #
 # Note: this play deliberately does NOT import `load_tofu.yml` — that

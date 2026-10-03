@@ -30,13 +30,6 @@ common_dns_search_domain: >-
 # does not regress alerting — it only stops the pointless SMTP retries and the
 # unbounded mailq growth for general system mail.
 #
-# To make Mailpit forward to a REAL inbox (not just its web UI), a human must:
-#   1. Create an SMTP relay credential (e.g. a Gmail App Password, or another
-#      SMTP relay provider) — never invent/commit one here.
-#   2. Set MAILPIT_RELAY_HOST / MAILPIT_RELAY_PORT / MAILPIT_RELAY_USERNAME /
-#      MAILPIT_RELAY_PASSWORD (SOPS-backed env vars consumed by
-#      ansible-proxmox-apps' mailpit_docker role) and mailpit_docker_relay_all: true.
-#   That is a change in ansible-proxmox-apps, out of scope here.
 common_postfix_relay_enabled: true
 common_postfix_relay_host: "mailpit.{{ domain_from_tofu }}"
 # Pinned to 1025 (terraform-proxmox notification_ports.mailpit_smtp) since this

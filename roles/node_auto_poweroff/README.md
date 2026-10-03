@@ -41,9 +41,9 @@ running guests first.
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `node_auto_poweroff_enabled` | `false` | Opt-in master switch (set per host) |
+| Variable                         | Default          | Description                                                                      |
+| -------------------------------- | ---------------- | -------------------------------------------------------------------------------- |
+| `node_auto_poweroff_enabled`     | `false`          | Opt-in master switch (set per host)                                              |
 | `node_auto_poweroff_on_calendar` | `*-*-* 22:00:00` | systemd `OnCalendar` for the power-off; override per host for a different window |
 
 ## Usage
@@ -60,7 +60,7 @@ so the node must be online during the run (it comes up via the `idrac_power`
 auto-cycle, or power it on manually):
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml \
+./scripts/run-ansible.sh playbooks/site.yml \
   --limit <normally-off-node> --tags node_auto_poweroff
 ```
 

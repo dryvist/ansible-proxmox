@@ -2,9 +2,7 @@
 
 Create the named accounts that replace shared-`root` administration:
 
-- **`jevans`** — the human operator. Passwordless sudo, key-based SSH (the
-  same key already declared for VM cloud-init, plus the OpenBao SSH CA
-  principal wired in `site.yml`'s `ssh_ca_trust_principals`).
+- The human operator has passwordless sudo and key-based SSH.
 - **`admin`** — break-glass only. Created and sudo-capable, reachable
   **only** via the OpenBao SSH CA (no static key), so it is not a second
   standing door the way a static key would be.
@@ -38,9 +36,7 @@ Run against every Proxmox node. Idempotent — safe to re-run.
 ## Variables
 
 See `defaults/main.yml`. Key ones: `local_identities_jevans_ssh_public_key`
-(defaults from `VM_SSH_PUBLIC_KEY`, the same key already used for VM
-cloud-init — one identity, not a second key to rotate), and the
-`*_enabled` per-account toggles.
+(reads `VM_SSH_PUBLIC_KEY`), and the `*_enabled` per-account toggles.
 
 ## Molecule
 

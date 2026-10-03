@@ -8,8 +8,7 @@
 # window; pre-prune history is preserved by sanoid snapshots + syncoid
 # replication of the archive dataset (read a point-in-time view from
 # <dataset>/.zfs/snapshot/). Then upload the newest dump per database to each
-# Tier-2 S3 target. Credentials come from the systemd EnvironmentFile — never
-# echoed. A failed job/upload is logged and does NOT abort the others.
+# Tier-2 S3 target. A failed job/upload is logged and does NOT abort the others.
 set -uo pipefail
 
 LOG_DIR="{{ postgres_standby_log_dir }}"
