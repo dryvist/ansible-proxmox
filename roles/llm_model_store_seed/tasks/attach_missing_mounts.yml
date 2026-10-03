@@ -99,9 +99,7 @@
   loop_control:
     label: "{{ item.hostname }}"
 
-# A container declared with protection=1 refuses every disk change, this
-# purely additive one included. Lift protection for the one pct set and
-# always put it back, so the declared end state (tofu-proxmox) is unchanged.
+# protection=1 blocks even additive disk changes: lift it for the pct set, always restore.
 - name: Attach each missing models mount (pct set)
   ansible.builtin.command:
     argv:
@@ -109,9 +107,10 @@
       - -c
       - |
         set -u
-        if [ "$4" = 1 ]; then pct set "$1" --protection 0 || exit 1; fi
+        prot=$(pct config "$1" | sed -n 's/^protection: //p')
+        if [ "$prot" = 1 ]; then pct set "$1" --protection 0 || exit 1; fi
         pct set "$1" "$2" "$3"; rc=$?
-        if [ "$4" = 1 ]; then pct set "$1" --protection 1 || rc=1; fi
+        if [ "$prot" = 1 ]; then pct set "$1" --protection 1 || rc=1; fi
         exit "$rc"
       - sh
       - "{{ item.vmid }}"
@@ -119,10 +118,6 @@
       - >-
         {{ item.models_mount_storage }}:{{ item.models_mount_size }},mp={{
         item.models_mount_path }}{{ ',ro=1' if item.models_mount_read_only else '' }}
-      - >-
-        {{ ((llm_model_store_seed_configs.results
-             | selectattr('item.hostname', 'equalto', item.hostname) | first
-           ).stdout | from_json).protection | default(0) | int }}
   loop: "{{ llm_model_store_seed_missing }}"
   loop_control:
     label: >-
