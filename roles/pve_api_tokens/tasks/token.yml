@@ -131,3 +131,50 @@
       delegate_to: localhost
       become: false
       no_log: true
+
+- name: Read the latest credential for {{ pve_api_tokens_consumer.app }}
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ pve_api_tokens_bao_addr }}"
+    token: "{{ pve_api_tokens_bao_token }}"
+    engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
+    path: "apps/{{ pve_api_tokens_consumer.app }}"
+  register: pve_api_tokens_certificate_stored
+  failed_when: false
+  delegate_to: localhost
+  become: false
+  no_log: true
+  when: pve_api_tokens_consumer.certificate_field is defined
+
+- name: Reject a denied certificate read for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_api_tokens_certificate_stored.msg is not defined or
+        pve_api_tokens_certificate_stored.msg is match('^Invalid or missing path')
+    quiet: true
+    fail_msg: "OpenBao read of apps/{{ pve_api_tokens_consumer.app }} failed; check the publish grant."
+  when: pve_api_tokens_consumer.certificate_field is defined
+
+- name: Publish the cluster CA for {{ pve_api_tokens_consumer.app }}
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ pve_api_tokens_bao_addr }}"
+    token: "{{ pve_api_tokens_bao_token }}"
+    engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
+    path: "apps/{{ pve_api_tokens_consumer.app }}"
+    cas: "{{ pve_api_tokens_certificate_stored.metadata.version | default(0) }}"
+    data: >-
+      {{ pve_api_tokens_certificate_stored.secret | default({})
+         | combine({pve_api_tokens_consumer.certificate_field:
+                    pve_api_tokens_cluster_ca.content | b64decode}) }}
+  delegate_to: localhost
+  become: false
+  no_log: true
+  when:
+    - pve_api_tokens_consumer.certificate_field is defined
+    - not ansible_check_mode
+    - >-
+      pve_api_tokens_certificate_stored.secret | default({})
+      | dict2items
+      | selectattr('key', 'equalto', pve_api_tokens_consumer.certificate_field)
+      | map(attribute='value') | first | default('', true)
+      != pve_api_tokens_cluster_ca.content | b64decode

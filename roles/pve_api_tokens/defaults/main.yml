@@ -16,6 +16,7 @@
 pve_api_tokens_consumers:
   - app: homarr
     field_prefix: homarr_proxmox
+    certificate_field: homarr_proxmox_ca
   - app: pve-exporter
     field_prefix: pve_exporter
 

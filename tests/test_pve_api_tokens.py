@@ -10,6 +10,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = yaml.safe_load((ROOT / "roles/pve_api_tokens/tasks/token.yml").read_text())
+MAIN_TASKS = yaml.safe_load((ROOT / "roles/pve_api_tokens/tasks/main.yml").read_text())
+DEFAULTS = yaml.safe_load((ROOT / "roles/pve_api_tokens/defaults/main.yml").read_text())
 TOKEN_ID = "homarr@pve!ro"
 
 
@@ -66,6 +68,30 @@ class ReadGate(unittest.TestCase):
             with self.subTest(message=message):
                 self.assertEqual(evaluate(expression, pve_api_tokens_stored={"msg": message}), allowed)
         self.assertTrue(evaluate(expression, pve_api_tokens_stored={"secret": {}}))
+
+
+class CertificateDistribution(unittest.TestCase):
+    def test_homarr_requests_the_public_cluster_ca(self):
+        homarr = next(item for item in DEFAULTS["pve_api_tokens_consumers"] if item["app"] == "homarr")
+        self.assertEqual("homarr_proxmox_ca", homarr["certificate_field"])
+
+        read = next(
+            item
+            for item in MAIN_TASKS[0]["block"]
+            if item["name"].startswith("Read the cluster CA")
+        )
+        self.assertEqual("/etc/pve/pve-root-ca.pem", read["ansible.builtin.slurp"]["src"])
+        self.assertTrue(read["no_log"])
+
+    def test_ca_publish_merges_the_bucket_with_cas_and_is_censored(self):
+        read = next(item for item in TASKS if item["name"].startswith("Read the latest credential"))
+        publish = next(item for item in TASKS if item["name"].startswith("Publish the cluster CA"))
+
+        self.assertTrue(read["no_log"])
+        self.assertTrue(publish["no_log"])
+        self.assertIn("metadata.version", publish["community.hashi_vault.vault_kv2_write"]["cas"])
+        self.assertIn("pve_api_tokens_certificate_stored.secret", publish["community.hashi_vault.vault_kv2_write"]["data"])
+        self.assertIn("pve_api_tokens_cluster_ca.content | b64decode", publish["community.hashi_vault.vault_kv2_write"]["data"])
 
 
 if __name__ == "__main__":

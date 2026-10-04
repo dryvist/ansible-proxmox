@@ -31,6 +31,9 @@ and tokens are cluster-wide. For each entry in `pve_api_tokens_consumers` it:
    creates a new one with `--privsep 0`.
 4. Merges `<field_prefix>_token_id` and `<field_prefix>_token_secret` into the
    bucket, using check-and-set on the version just read.
+5. When `certificate_field` is set, publishes the cluster CA into that field
+   with a fresh read and check-and-set. The certificate is public; the token
+   remains hidden from task output.
 
 A converge where nothing is missing changes nothing. A mint whose publish fails
 is minted again on the next converge.
@@ -39,7 +42,7 @@ is minted again on the next converge.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `pve_api_tokens_consumers` | homarr, pve-exporter | Consumers: `app` (bucket and user name) and `field_prefix` |
+| `pve_api_tokens_consumers` | homarr, pve-exporter | Consumers: `app` (bucket and user name), `field_prefix`, and optional `certificate_field` |
 | `pve_api_tokens_role` | `PVEAuditor` | Role granted at `/` |
 | `pve_api_tokens_realm` | `pve` | Realm of the dedicated users |
 | `pve_api_tokens_token_name` | `ro` | Token name under each user |
