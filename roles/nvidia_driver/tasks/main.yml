@@ -40,6 +40,31 @@
   tags:
     - nvidia_driver
 
+# Guards against enabling a version pin (an "=" in the package spec) without
+# the matching NVIDIA pinning package: apt would then resolve nvidia-open's
+# OWN version correctly but leave its dependencies -- nvidia-persistenced and
+# whatever transitively provides nvidia-smi -- free to float onto the
+# repository's newest series. That is the exact host/guest version mismatch
+# this role exists to prevent, and nothing about it fails loudly on its own:
+# the install succeeds, the services start, and only an inference workload
+# fails later with "Driver/library version mismatch".
+- name: Fail loud when a pinned driver version has no matching apt pinning package
+  ansible.builtin.assert:
+    that:
+      - >-
+        (nvidia_driver_packages | select('search', '=') | list | length) == 0
+        or (nvidia_driver_packages | select('match', '^nvidia-driver-pinning-') | list | length) > 0
+    fail_msg: >-
+      nvidia_driver_packages pins an exact version (one entry contains "=")
+      but carries no nvidia-driver-pinning-<version> package. Add NVIDIA's
+      pinning package alongside the version pin, or apt will resolve
+      nvidia-open's dependencies against the repository's newest series
+      instead of the pinned one.
+  when:
+    - nvidia_driver_enabled | bool
+  tags:
+    - nvidia_driver
+
 - name: Blacklist the nouveau driver
   ansible.builtin.copy:
     dest: /etc/modprobe.d/blacklist-nouveau.conf
@@ -154,6 +179,38 @@
   when:
     - nvidia_driver_enabled | bool
     - nvidia_driver_device_nodes_unit_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+# Persistence mode and any power limit reset at every reboot and at every
+# driver unload/reload (nvidia-smi's own docs), so a cap is only durable as a
+# boot-time unit, not a one-shot task run at converge time. Installed
+# whenever a cap is set; a host with no cap gets no unit at all, rather than
+# an unapplied one, so `systemctl status` on an uncapped host shows nothing
+# to read the wrong conclusion from.
+- name: Install the boot-time NVIDIA power-limit unit
+  ansible.builtin.template:
+    src: nvidia-power-limit.service.j2
+    dest: /etc/systemd/system/nvidia-power-limit.service
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+  tags:
+    - nvidia_driver
+
+- name: Enable the boot-time NVIDIA power-limit unit
+  ansible.builtin.systemd_service:
+    name: nvidia-power-limit.service
+    enabled: true
+    daemon_reload: true
+    state: "{{ 'started' if 'nouveau' not in nvidia_driver_lsmod.stdout else omit }}"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
