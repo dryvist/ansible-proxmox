@@ -1,0 +1,41 @@
+---
+- name: Verify the model-store consumer projects only GGUF-backed catalog entries
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Load the pinned shared model catalog
+      ansible.builtin.include_role:
+        name: dryvist.homelab.llm_model_catalog
+        public: true
+
+    - name: Derive the models this consumer can seed
+      ansible.builtin.set_fact:
+        llm_model_store_seed_models: >-
+          {{ llm_model_catalog_models | selectattr('hf_repo', 'defined') | list }}
+
+    - name: Assert every selected model has the complete pinned GGUF artifact contract
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - llm_model_store_seed_models | length > 0
+          - item.gguf is defined
+          - item.hf_revision is defined
+      loop: "{{ llm_model_store_seed_models }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Assert non-GGUF serving models are outside the seed projection
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            (llm_model_store_seed_models | map(attribute='name') | list)
+            | difference(llm_model_catalog_models | map(attribute='name') | list)
+            | length == 0
+          - >-
+            (llm_model_catalog_models
+             | rejectattr('hf_repo', 'defined')
+             | map(attribute='name') | list)
+            | intersect(llm_model_store_seed_models | map(attribute='name') | list)
+            | length == 0

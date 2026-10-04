@@ -231,6 +231,14 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/llm_model_store_seed/verify_mount_hotplug_check.yml -i localhost, -c local
 
+      # The shared catalog now includes provider and non-GGUF serving models;
+      # only entries with a pinned GGUF artifact can be seeded onto the store.
+      - name: Verify llm_model_store_seed selects only catalogued GGUF artifacts
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_catalog_models.yml -i localhost, -c local
+
       # Whether a changed container gets `pct reboot` or `pct start`. Drives
       # the handler's own decision task against both outcomes.
       - name: Verify llm_model_store_seed restart-target classification
