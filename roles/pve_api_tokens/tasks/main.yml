@@ -35,6 +35,17 @@
       changed_when: false
       check_mode: false
 
+    - name: Read the cluster CA for consumers that need it
+      ansible.builtin.slurp:
+        src: /etc/pve/pve-root-ca.pem
+      register: pve_api_tokens_cluster_ca
+      changed_when: false
+      no_log: true
+      when: >-
+        pve_api_tokens_consumers
+        | selectattr('certificate_field', 'defined')
+        | list | length > 0
+
     - name: Reconcile each consumer's user, ACL, token and published credential
       ansible.builtin.include_tasks: token.yml
       loop: "{{ pve_api_tokens_consumers }}"
