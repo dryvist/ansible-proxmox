@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.0](https://github.com/dryvist/ansible-proxmox/compare/v2.15.0...v2.16.0) (2026-10-04)
+
+
+### Features
+
+* **pve_api_tokens:** mint read-only API tokens per consumer app ([#859](https://github.com/dryvist/ansible-proxmox/issues/859)) ([2b0645d](https://github.com/dryvist/ansible-proxmox/commit/2b0645d24234260acbb9f9f79578da7fb877bef2))
+
+
+### Bug Fixes
+
+* **llm_model_store_seed:** find the models mount anywhere in the mp value and remove surplus duplicates ([#861](https://github.com/dryvist/ansible-proxmox/issues/861)) ([a74d901](https://github.com/dryvist/ansible-proxmox/commit/a74d901aa3567839fa589fa4064a81c4fe89a5af))
+* **llm_model_store_seed:** pass the new mount size to pct in GiB ([#858](https://github.com/dryvist/ansible-proxmox/issues/858)) ([3a0fb0b](https://github.com/dryvist/ansible-proxmox/commit/3a0fb0baf9e1a8ba63f69ac7b375565d103fdbc4))
+* ssh_ca_trust, nas_storage and llm_model_store_seed converge fixes ([#857](https://github.com/dryvist/ansible-proxmox/issues/857)) ([b475917](https://github.com/dryvist/ansible-proxmox/commit/b4759176118229ea74d17b372a7043f081b104d2))
+
 ## [2.15.0](https://github.com/dryvist/ansible-proxmox/compare/v2.14.0...v2.15.0) (2026-10-03)
 
 
