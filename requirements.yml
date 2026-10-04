@@ -35,8 +35,8 @@ collections:
   # (splitting hypervisor syslog out of the os catch-all by host).
   # An immutable SHA, not a branch — a moving ref would let an unreviewed
   # contracts change reach a converge here without a PR in this repo.
-  # Now at homelab-contracts#110, which publishes the numeric model catalog
-  # consumed by model serving and seeding.
+  # Now at homelab-contracts#112, which publishes the shared JSON model
+  # catalog consumed by model serving and seeding.
   #
   # Earlier change: homelab-contracts#58 makes inventory_resolve report the
   # underlying error on every failure path, instead of naming one presumed
@@ -44,7 +44,7 @@ collections:
   # renovate: datasource=git-refs depName=https://github.com/dryvist/homelab-contracts.git currentValue=main
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: 3f613aadadc0c44e97b8a1e316e100ec085bd815
+    version: 8e669950f9387ab6e4597b0521ecf070af39b9cd
 
 # No `roles:` section — inventory_resolve comes from the collection above, by
 # FQCN, for the reason stated there. Its old git-scm `roles:` entry installed
