@@ -4,9 +4,7 @@
 #
 # The oneshot's ExecStart is a single `ipmitool ... chassis power on` (idempotent
 # — a no-op if the target is already on); there is no custom orchestration
-# script. The BMC password reaches the unit via a root-only 0600 EnvironmentFile
-# (ipmitool -E reads $IPMITOOL_PASSWORD) so it never lands on the command line or
-# in `systemctl cat`. The unit + credentials files always render (so molecule can
+# script. The unit + credentials files always render (so molecule can
 # verify the contract); the ipmitool install, daemon-reload, and timer enable are
 # skipped under Docker, matching the node_auto_poweroff / sanoid pattern.
 
@@ -175,9 +173,9 @@
     path: "{{ item.1 | format(item.0) }}"
     state: absent
   loop: "{{ node_scheduled_wake_orphans | default([])
-           | product(['/etc/systemd/system/node-scheduled-wake-%s.timer',
-                      '/etc/systemd/system/node-scheduled-wake-%s.service',
-                      '/etc/node-scheduled-wake/%s.env']) }}"
+    | product(['/etc/systemd/system/node-scheduled-wake-%s.timer',
+    '/etc/systemd/system/node-scheduled-wake-%s.service',
+    '/etc/node-scheduled-wake/%s.env']) }}"
   loop_control:
     label: "{{ item.1 | format(item.0) }}"
   when:

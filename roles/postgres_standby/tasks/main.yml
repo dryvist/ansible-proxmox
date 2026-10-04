@@ -116,8 +116,6 @@
   tags:
     - postgres_standby
 
-# Root-only credentials for the Tier-2 uploads. Rendered even with no targets
-# (empty file) so the service unit's EnvironmentFile= reference always resolves.
 - name: Render the Tier-2 S3 credentials file
   ansible.builtin.template:
     src: postgres-standby-s3.env.j2
@@ -215,7 +213,6 @@
     - postgres_standby
 
 # Opt-in immediate run (seed/refresh on demand) — mirrors sqlite_standby_run_now.
-# Via the service (not the script directly) so the S3 EnvironmentFile loads.
 - name: Run the standby sync now (opt-in seed/refresh)
   ansible.builtin.systemd:
     name: postgres-standby.service

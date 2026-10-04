@@ -21,7 +21,7 @@ idrac_power_action: status
 
 # Node that runs ipmitool (must reach the BMC subnet, be always-on, and NOT be
 # the target being powered). Derived — never hard-coded — from the shared
-# PROXMOX_VE_NODES Doppler list (same source of truth as cluster_ssh_trust):
+# PROXMOX_VE_NODES list (same source of truth as cluster_ssh_trust):
 # the first cluster node that is not this target. The list holds Proxmox NODE
 # names, which need not equal the Ansible inventory key, so the target is
 # excluded under BOTH identities — either one may appear in the list, and
@@ -46,13 +46,12 @@ idrac_power_controller: >-
 idrac_power_boot_timeout: 720
 idrac_power_off_retries: 60
 
-# BMC credentials — injected from the environment (Doppler), never committed.
 idrac_power_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
 idrac_power_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"
 
 # Per-host BMC address (ipmitool -H). FQDN preferred over an IP — a hostname
 # insulates this from BMC re-addressing (the golden rule). Set in host_vars/<node>
-# .yml from the environment (Doppler) / SOPS; never committed, no safe default.
+# .yml; no safe default.
 # idrac_power_bmc_host: "node-idrac.<subdomain>"
 
 # What the chassis does when AC returns after a power loss (IPMI "Power

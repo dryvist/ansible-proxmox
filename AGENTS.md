@@ -1,6 +1,7 @@
 ---
 skill-groups: [core, git, homelab]
 ---
+
 # Ansible Proxmox - AI Agent Documentation
 
 Ansible automation for Proxmox VE host configuration.
@@ -20,14 +21,6 @@ configured by `ansible-proxmox-apps` and `ansible-splunk`.
 
 ## Dependencies
 
-### External Services
-
-- **Doppler**: SSH credentials and API tokens
-
-### Internal Services
-
-- **OpenBao**: native secret paths, including RustFS inventory credentials
-
 ### Infrastructure
 
 - Physical Proxmox VE cluster (not provisioned by OpenTofu)
@@ -44,7 +37,7 @@ point at it rather than restating its contents.
 **Direction, not current behaviour.** Nothing here reads Nautobot yet. Host
 identity still comes from the static `inventory/hosts.yml` and guest data from
 the published upstream inventory artifact described below; closing that gap is
-the work. Until it closes, do not add a *new* copy of a fact Nautobot models —
+the work. Until it closes, do not add a _new_ copy of a fact Nautobot models —
 read it from Nautobot or record the gap.
 
 ### Upstream inventory (read-only consumer)
@@ -68,10 +61,8 @@ contract is documented once at
 
 ### Running Playbooks
 
-Converges run through Semaphore, the execution plane. Its template wrapper
-loads the run environment from OpenBao before the playbook starts. Playbooks
-read plain environment variables and are independent of the secrets manager:
-`.env`, Doppler, OpenBao or any other injector behaves identically.
+Converges run through Semaphore, the execution plane. Playbooks read
+environment variables.
 `scripts/run-ansible.sh` remains the runner the wrapper calls and the
 break-glass path from a workstation.
 
@@ -92,7 +83,7 @@ Ansible runs against the Proxmox hosts can be slow due to connection latency and
 
 1. **Parallel Execution (`--forks` or `ANSIBLE_FORKS`)**: Increase the
    concurrency from the default 5 hosts at once. Using `25` forks (e.g.
-   `doppler run -- ansible-playbook ... --forks 25`) runs significantly
+   `ansible-playbook ... --forks 25`) runs significantly
    faster across large fleets.
 2. **Targeted Runs (`--limit`)**: Restrict play scope to the target hosts and localhost (e.g., `--limit pve-nodes,localhost`).
 3. **Scoping via Tags (`--tags`)**: Use `--tags <tag-name>` to run only a subset of roles.
@@ -103,8 +94,6 @@ Ansible runs against the Proxmox hosts can be slow due to connection latency and
 - **Kernel tuning**: Updates sysctl parameters
 - **Swap management**: Configures swappiness and ZFS swap devices
 - **Monitoring setup**: Installs sysstat, atop, and crash-monitor
-
-Note: All playbooks use `doppler run` to inject secrets (SSH credentials, API tokens) from your Doppler config.
 
 ## Development Environment
 

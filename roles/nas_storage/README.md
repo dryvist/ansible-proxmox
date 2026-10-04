@@ -28,7 +28,7 @@ identical `rpool/data/nas` on every node.
 
 ## Where shares are declared
 
-Each share lives on the dataset it serves, and the node-level Samba *service*
+Each share lives on the dataset it serves, and the node-level Samba _service_
 settings sit beside the pools:
 
 ```hcl
@@ -67,35 +67,29 @@ nodes, not an error.
 ## Inputs
 
 - The resolved OpenTofu inventory must contain `node_storage`
-- Each managed account's `secret_prefix` selects two OpenBao fields at
-  `secret/apps/nas`: `<secret_prefix>_username` and `<secret_prefix>_password`.
-  Both are secrets -- a login name is half a credential and is not rotatable
-  once published, so it appears in neither the declaration nor the logs.
-- The converge AppRole needs an explicit read grant on that path. The policy
-  enumerates exact paths and has no `apps/*` wildcard, so a new consumer is a
-  new entry there; without it the read returns 403, which under `no_log` looks
-  exactly like a missing field.
+- Each managed account's `secret_prefix` selects the
+  `<secret_prefix>_username` and `<secret_prefix>_password` fields.
 - Shares authorize by group (`valid_users = "@nas"`). Samba reads a bare word
   as a username, so naming an account in a share would publish it again.
 
 ## Usage
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags nas_storage
+./scripts/run-ansible.sh playbooks/site.yml --tags nas_storage
 ```
 
 ## Role Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `nas_storage_config` | `node_storage.<node>` NAS projection | Injected by `playbooks/load_tofu.yml` |
-| `nas_storage_group_name` | `nas` | Unix/Samba group for shared access |
-| `nas_storage_smb_workgroup` | `WORKGROUP` | Samba workgroup |
-| `nas_storage_managed_users` | `[]` | Declarative Samba-backed service accounts |
-| `nas_storage_shares` | `[]` | Declarative Samba shares (no single-share fallback) |
-| `nas_storage_macos_optimized` | `true` | Global vfs_fruit tuning for macOS Finder/Time Machine |
-| `nas_storage_smb_min_protocol` | `SMB3` | Global protocol floor (`node_storage.<node>.smb.min_protocol` to override) |
-| `nas_storage_password_fingerprint_dir` | `/etc/samba/password-fingerprints` | Root-only password hash cache for idempotence |
+| Variable                               | Default                              | Description                                                                |
+| -------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------- |
+| `nas_storage_config`                   | `node_storage.<node>` NAS projection | Injected by `playbooks/load_tofu.yml`                                      |
+| `nas_storage_group_name`               | `nas`                                | Unix/Samba group for shared access                                         |
+| `nas_storage_smb_workgroup`            | `WORKGROUP`                          | Samba workgroup                                                            |
+| `nas_storage_managed_users`            | `[]`                                 | Declarative Samba-backed service accounts                                  |
+| `nas_storage_shares`                   | `[]`                                 | Declarative Samba shares (no single-share fallback)                        |
+| `nas_storage_macos_optimized`          | `true`                               | Global vfs_fruit tuning for macOS Finder/Time Machine                      |
+| `nas_storage_smb_min_protocol`         | `SMB3`                               | Global protocol floor (`node_storage.<node>.smb.min_protocol` to override) |
+| `nas_storage_password_fingerprint_dir` | `/etc/samba/password-fingerprints`   | Root-only password hash cache for idempotence                              |
 
 ## Apple clients (macOS, Time Machine, Infuse)
 
@@ -106,13 +100,13 @@ non-Apple clients.
 
 Per-share Apple options, set in the dataset's `smb` block:
 
-| Share field | Effect |
-| --- | --- |
-| `time_machine: true` | Adds `fruit:time machine = yes` — the share becomes a Time Machine target |
+| Share field                     | Effect                                                                                                                  |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `time_machine: true`            | Adds `fruit:time machine = yes` — the share becomes a Time Machine target                                               |
 | `time_machine_max_size: "600G"` | **Required** when `time_machine` is true — else the target grows until the pool is full. Tofu's schema rejects uncapped |
-| `read_only: true` | A read-only media share — e.g. for **Infuse** on Apple TV / iPhone to play directly over SMB alongside Plex |
+| `read_only: true`               | A read-only media share — e.g. for **Infuse** on Apple TV / iPhone to play directly over SMB alongside Plex             |
 
-Spotlight *search* over SMB additionally requires a server-side indexer
+Spotlight _search_ over SMB additionally requires a server-side indexer
 (Tracker/Elasticsearch) and is out of scope; Finder browsing and metadata work
 with `vfs_fruit` alone.
 

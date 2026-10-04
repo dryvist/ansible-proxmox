@@ -12,8 +12,7 @@
 #
 # Tier 2 (cloud/off-site): after the mirror, the newest dump per database is
 # uploaded to each configured S3-compatible target (on-prem RustFS and/or
-# AWS S3). Credentials land in a root-only EnvironmentFile — never in the
-# script, never logged.
+# AWS S3).
 #
 # Inert until postgres_standby_jobs is set. Prerequisite (out of band): the
 # source role's backup timer. SSH trust is now owned by this role — see
@@ -52,7 +51,7 @@ postgres_standby_on_calendar: "*-*-* 04:00:00"
 postgres_standby_persistent: true
 
 # Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" on
-# failure. Wire from the play (env-sourced), like sqlite_standby.
+# failure.
 postgres_standby_healthcheck_url: ""
 
 # Opt-in: run the sync immediately during the play (seed/refresh on demand) in
@@ -71,7 +70,7 @@ postgres_standby_jobs: []
 #     bucket: "db-dr"
 #     prefix: "postgres"                # object key prefix inside the bucket
 #     endpoint_url: "https://..."       # omit/empty for AWS S3
-#     access_key: "..."                 # wire env/SOPS-sourced, never a literal
+#     access_key: "..."
 #     secret_key: "..."
 postgres_standby_s3_targets: []
 postgres_standby_s3_env_file: /etc/postgres-standby-s3.env

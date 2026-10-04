@@ -63,7 +63,7 @@ the standby node's key to the guest's `authorized_keys`).
 ### 3. Ship the latest dump off-site (Tier 2, shared upload)
 
 A shared upload step pushes the newest archive dump to cloud/off-box object storage
-(RustFS `s3` and/or AWS S3), credentials from OpenBao/SOPS (`no_log`). One reusable
+(RustFS `s3` and/or AWS S3), with credential logging disabled (`no_log`). One reusable
 mechanism invoked by each engine's standby role — not reinvented per database.
 
 ### 4. Restore (the DB role, `dr_restore` tag)

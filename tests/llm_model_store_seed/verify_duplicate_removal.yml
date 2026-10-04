@@ -1,0 +1,133 @@
+---
+# ---------------------------------------------------------------------------
+# The role finds a container's models mount in its live LXC config and removes
+# surplus duplicates of it. Drives the role's OWN tasks (read_mount_config.yml,
+# remove_duplicate_mounts.yml and the restart handler) against fake pct / pvesh /
+# pvesm (fake_pve.py) holding realistic live mp values, so drift fails here:
+#
+#   - a value shaped `<storage>:<vol>,mp=/var/lib/llm,...` is found (an
+#     anchored regex test never matches one: the role then saw no mount at all
+#     and attached another on every converge);
+#   - an extra, role-named, empty entry is detached and destroyed, the
+#     original stays (also on a protected container, and when the detach is
+#     queued until a restart);
+#   - an extra that holds anything (hidden files included) or is not
+#     role-named fails the run and removes nothing.
+# ---------------------------------------------------------------------------
+- name: Install the fake PVE CLIs
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Create the scratch directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: llm-seed-fake-pve-
+      register: scratch
+
+    - name: Create the fake bin directory
+      ansible.builtin.file:
+        path: "{{ scratch.path }}/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Install wrappers named like the CLIs that run the fake
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          exec python3 "{{ playbook_dir }}/fake_pve.py" {{ item }} "$@"
+        dest: "{{ scratch.path }}/bin/{{ item }}"
+        mode: "0755"
+      loop: [pct, pvesh, pvesm]
+
+    - name: Keep the scratch path for the next play
+      ansible.builtin.set_fact:
+        fake_dir: "{{ scratch.path }}"
+
+- name: Verify mount lookup and surplus removal
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  environment:
+    PATH: "{{ fake_dir }}/bin:{{ lookup('ansible.builtin.env', 'PATH') }}"
+    FAKE_PVE_STATE: "{{ fake_dir }}/state.json"
+    FAKE_PVE_LOG: "{{ fake_dir }}/log"
+
+  vars:
+    original_mp: "fast:subvol-503000-disk-0,mp=/var/lib/llm,size=120G"
+    extra_mp: "fast:subvol-503000-disk-1,mp=/var/lib/llm,ro=1,size=120G"
+    base_config:
+      rootfs: "local-zfs:subvol-503000-disk-0,size=24G"
+      mp0: "{{ original_mp }}"
+    scenarios:
+      - name: a single live mount value is found
+        config: "{{ base_config }}"
+        run_removal: false
+        volumes: [subvol-503000-disk-0]
+        matches_before: 1
+
+      - name: empty role-named extra on a protected container is detached and destroyed
+        protection: 1
+        config: "{{ base_config | combine({'mp1': extra_mp}) }}"
+        matches_before: 2
+        volumes: [subvol-503000-disk-0, subvol-503000-disk-1]
+        expect: ok
+        log_has: ["protection 0", "detach mp1 fast:subvol-503000-disk-1", "destroy fast:subvol-503000-disk-1", "protection 1"]
+        log_lacks: ["reboot", "destroy fast:subvol-503000-disk-0"]
+        keys_after: [mp0, rootfs]
+        volumes_after: [subvol-503000-disk-0]
+
+      - name: extra whose detach is queued is applied by one restart, then destroyed
+        queue_detach: true
+        config: "{{ base_config | combine({'mp1': extra_mp}) }}"
+        matches_before: 2
+        volumes: [subvol-503000-disk-0, subvol-503000-disk-1]
+        expect: ok
+        log_has: ["detach-pending mp1", "reboot 503000", "destroy fast:subvol-503000-disk-1"]
+        log_lacks: ["destroy fast:subvol-503000-disk-0"]
+        keys_after: [mp0, rootfs]
+        volumes_after: [subvol-503000-disk-0]
+
+      - name: extra holding a file is refused and nothing is removed
+        config: "{{ base_config | combine({'mp1': extra_mp}) }}"
+        extra_files: [model.gguf]
+        matches_before: 2
+        volumes: [subvol-503000-disk-0, subvol-503000-disk-1]
+        expect: fail
+        log_lacks: ["detach", "destroy", "reboot"]
+        keys_after: [mp0, mp1, rootfs]
+        volumes_after: [subvol-503000-disk-0, subvol-503000-disk-1]
+
+      - name: extra holding only a hidden file is refused
+        config: "{{ base_config | combine({'mp1': extra_mp}) }}"
+        extra_files: [.partial]
+        matches_before: 2
+        volumes: [subvol-503000-disk-0, subvol-503000-disk-1]
+        expect: fail
+        log_lacks: ["detach", "destroy", "reboot"]
+        keys_after: [mp0, mp1, rootfs]
+        volumes_after: [subvol-503000-disk-0, subvol-503000-disk-1]
+
+      - name: empty extra that is not role-named is refused
+        config: "{{ base_config | combine({'mp1': 'fast:shared-media,mp=/var/lib/llm,size=1G'}) }}"
+        matches_before: 2
+        volumes: [subvol-503000-disk-0, shared-media]
+        expect: fail
+        log_lacks: ["detach", "destroy", "reboot"]
+        keys_after: [mp0, mp1, rootfs]
+        volumes_after: [subvol-503000-disk-0, shared-media]
+
+  tasks:
+    - name: Run every scenario
+      ansible.builtin.include_tasks: duplicate_removal_scenario.yml
+      loop: "{{ scenarios }}"
+      loop_control:
+        loop_var: scenario
+        label: "{{ scenario.name }}"
+
+    - name: Remove the scratch directory
+      ansible.builtin.file:
+        path: "{{ fake_dir }}"
+        state: absent

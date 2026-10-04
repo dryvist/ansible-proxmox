@@ -246,7 +246,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-* **nas_storage:** resolve SMB account names from OpenBao, not the declaration ([#691](https://github.com/dryvist/ansible-proxmox/issues/691)) ([1df995c](https://github.com/dryvist/ansible-proxmox/commit/1df995c19cae3985a5b78fc77a7ba5dd06c241b4))
 
 ## [1.79.0](https://github.com/dryvist/ansible-proxmox/compare/v1.78.3...v1.79.0) (2026-08-22)
 
@@ -267,7 +266,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Bug Fixes
 
 * **inventory:** key node references by role instead of composing a name ([#677](https://github.com/dryvist/ansible-proxmox/issues/677)) ([72d9a6e](https://github.com/dryvist/ansible-proxmox/commit/72d9a6e954c56ea777fcfa3f13612476f2a41c2d))
-* **nas_storage:** restore the OpenBao password-lookup variables ([97b28b1](https://github.com/dryvist/ansible-proxmox/commit/97b28b1cfa427de6879cae03200f349fe67dc519))
 
 ## [1.78.2](https://github.com/dryvist/ansible-proxmox/compare/v1.78.1...v1.78.2) (2026-08-22)
 
@@ -401,7 +399,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-* **nas_storage:** read managed-user Samba passwords from OpenBao ([#581](https://github.com/dryvist/ansible-proxmox/issues/581)) ([ed6c334](https://github.com/dryvist/ansible-proxmox/commit/ed6c334f12268b15307c3e5d23fc35b76598f64e))
 * **pve_ha:** enroll every container under HA pinned to its home node ([#583](https://github.com/dryvist/ansible-proxmox/issues/583)) ([23f0af1](https://github.com/dryvist/ansible-proxmox/commit/23f0af1ea7b7552f4610cba4b0be109de3f982c7))
 
 
@@ -591,8 +588,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Bug Fixes
 
-* **runner:** export minted OpenBao token ([5d83a46](https://github.com/dryvist/ansible-proxmox/commit/5d83a46a3129af6e7202729b967e849c6858d34c))
-* **runner:** export minted OpenBao token ([825db18](https://github.com/dryvist/ansible-proxmox/commit/825db18bc74fcec69c12648d4b7a0a5ee4bca130))
 
 ## [1.62.1](https://github.com/dryvist/ansible-proxmox/compare/v1.62.0...v1.62.1) (2026-07-22)
 
@@ -669,7 +664,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-* **scripts:** mint short-lived SSH certificates from the OpenBao CA in run-ansible.sh ([#412](https://github.com/dryvist/ansible-proxmox/issues/412)) ([23600ea](https://github.com/dryvist/ansible-proxmox/commit/23600eaf8ceb3776414802503958bfb85784d4d2))
 
 ## [1.54.0](https://github.com/dryvist/ansible-proxmox/compare/v1.53.0...v1.54.0) (2026-07-16)
 
@@ -683,7 +677,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-* consume RustFS inventory with OpenBao ([#406](https://github.com/dryvist/ansible-proxmox/issues/406)) ([fb4c998](https://github.com/dryvist/ansible-proxmox/commit/fb4c998b7bedb4a43497a997a7150adb88b58827))
 
 ## [1.52.0](https://github.com/dryvist/ansible-proxmox/compare/v1.51.1...v1.52.0) (2026-07-11)
 

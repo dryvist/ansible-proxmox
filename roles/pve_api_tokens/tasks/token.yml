@@ -1,0 +1,133 @@
+---
+# One consumer. A token secret is only ever returned at creation, so the stored
+# credential is the source of truth: a token is (re)minted whenever the bucket
+# does not hold a secret for this exact token id, or the token is gone from the
+# cluster. A mint whose publish then fails is simply re-minted next converge.
+
+- name: Name the identity for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.set_fact:
+    pve_api_tokens_user: "{{ pve_api_tokens_consumer.app }}@{{ pve_api_tokens_realm }}"
+    pve_api_tokens_id: >-
+      {{ pve_api_tokens_consumer.app }}@{{ pve_api_tokens_realm }}!{{ pve_api_tokens_token_name }}
+    pve_api_tokens_id_field: "{{ pve_api_tokens_consumer.field_prefix }}_token_id"
+    pve_api_tokens_secret_field: "{{ pve_api_tokens_consumer.field_prefix }}_token_secret"
+
+- name: Read the published credential for {{ pve_api_tokens_consumer.app }}
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ pve_api_tokens_bao_addr }}"
+    token: "{{ pve_api_tokens_bao_token }}"
+    engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
+    path: "apps/{{ pve_api_tokens_consumer.app }}"
+  register: pve_api_tokens_stored
+  failed_when: false
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+# Only a missing path permits writing from scratch. A denied read must stop
+# here: writing over a bucket we could not read would drop its other fields.
+- name: Reject a denied or unavailable read for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_api_tokens_stored.msg is not defined or
+        pve_api_tokens_stored.msg is match('^Invalid or missing path')
+    quiet: true
+    fail_msg: "OpenBao read of apps/{{ pve_api_tokens_consumer.app }} failed; check the publish grant."
+
+- name: Ensure the dedicated user exists for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv:
+      - pveum
+      - user
+      - add
+      - "{{ pve_api_tokens_user }}"
+      - --comment
+      - "Read-only API identity for {{ pve_api_tokens_consumer.app }} (ansible-proxmox pve_api_tokens)"
+  when: >-
+    pve_api_tokens_user not in
+    (pve_api_tokens_users.stdout | from_json | map(attribute='userid') | list)
+  changed_when: true
+
+- name: Grant the read-only role at the root for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv: [pveum, acl, modify, /, --users, "{{ pve_api_tokens_user }}", --roles, "{{ pve_api_tokens_role }}"]
+  when: >-
+    pve_api_tokens_acls.stdout | from_json
+    | selectattr('path', 'equalto', '/')
+    | selectattr('type', 'equalto', 'user')
+    | selectattr('ugid', 'equalto', pve_api_tokens_user)
+    | selectattr('roleid', 'equalto', pve_api_tokens_role)
+    | list | length == 0
+  changed_when: true
+
+- name: Read the user's tokens for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv: [pvesh, get, "/access/users/{{ pve_api_tokens_user }}/token", --output-format, json]
+  register: pve_api_tokens_tokens
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether a fresh token is needed for {{ pve_api_tokens_consumer.app }}
+  vars:
+    pve_api_tokens_bucket: "{{ pve_api_tokens_stored.secret | default({}) }}"
+    pve_api_tokens_existing: >-
+      {{ (pve_api_tokens_tokens.stdout | from_json | map(attribute='tokenid') | list)
+         if pve_api_tokens_tokens.rc == 0 else [] }}
+  ansible.builtin.set_fact:
+    pve_api_tokens_token_exists: "{{ pve_api_tokens_existing is contains(pve_api_tokens_token_name) }}"
+    pve_api_tokens_mint: >-
+      {{ pve_api_tokens_bucket.get(pve_api_tokens_id_field, '') != pve_api_tokens_id
+         or pve_api_tokens_bucket.get(pve_api_tokens_secret_field, '') | length == 0
+         or pve_api_tokens_existing is not contains(pve_api_tokens_token_name) }}
+  no_log: true
+
+- name: Mint and publish a fresh token for {{ pve_api_tokens_consumer.app }}
+  when:
+    - pve_api_tokens_mint | bool
+    - not ansible_check_mode
+  block:
+    # Nobody holds this token's secret, so removing it breaks no consumer.
+    - name: Remove the unpublished token for {{ pve_api_tokens_consumer.app }}
+      ansible.builtin.command:
+        argv: [pveum, user, token, remove, "{{ pve_api_tokens_user }}", "{{ pve_api_tokens_token_name }}"]
+      when: pve_api_tokens_token_exists | bool
+      changed_when: true
+
+    - name: Create the token for {{ pve_api_tokens_consumer.app }}
+      ansible.builtin.command:
+        argv:
+          - pveum
+          - user
+          - token
+          - add
+          - "{{ pve_api_tokens_user }}"
+          - "{{ pve_api_tokens_token_name }}"
+          - --privsep
+          - "0"
+          - --comment
+          - "Published to OpenBao apps/{{ pve_api_tokens_consumer.app }}"
+          - --output-format
+          - json
+      register: pve_api_tokens_created
+      changed_when: true
+      no_log: true
+
+    # Read-merge-write with check-and-set on the version just read, so the
+    # bucket's other fields survive and a concurrent writer fails this run
+    # instead of being overwritten.
+    - name: Publish the token to apps/{{ pve_api_tokens_consumer.app }}
+      community.hashi_vault.vault_kv2_write:
+        url: "{{ pve_api_tokens_bao_addr }}"
+        token: "{{ pve_api_tokens_bao_token }}"
+        engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
+        path: "apps/{{ pve_api_tokens_consumer.app }}"
+        cas: "{{ pve_api_tokens_stored.metadata.version | default(0) }}"
+        data: >-
+          {{ pve_api_tokens_stored.secret | default({})
+             | combine({pve_api_tokens_id_field: pve_api_tokens_id,
+                        pve_api_tokens_secret_field: (pve_api_tokens_created.stdout | from_json).value}) }}
+      delegate_to: localhost
+      become: false
+      no_log: true

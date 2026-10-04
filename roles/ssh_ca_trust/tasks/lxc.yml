@@ -138,7 +138,8 @@
         # next restart.
         pct exec {{ item }} -- sshd -t
         if [ "$before" != "$after" ]; then
-          pct exec {{ item }} -- sh -c 'systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true'
+          # try-restart: a reload's SIGHUP re-exec cannot rebind a socket-activated sshd's port.
+          pct exec {{ item }} -- sh -c 'systemctl try-restart ssh 2>/dev/null || systemctl try-restart sshd 2>/dev/null || true'
         fi
         # `sshd -t` only proves syntax; assert the EFFECTIVE config actually
         # carries the hardening — a competing drop-in or main-file directive,

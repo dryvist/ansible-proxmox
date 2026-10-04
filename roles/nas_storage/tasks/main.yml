@@ -36,8 +36,7 @@
 
 # A managed account is declared by ROLE (secret_prefix), never by login name:
 # the name is half of a credential and, once written into desired state or a
-# log, cannot be un-published. Both the username and the password are read from
-# OpenBao below. `item` is deliberately NOT rendered in fail_msg here -- the
+# log, cannot be un-published. `item` is deliberately NOT rendered in fail_msg here -- the
 # declaration is name-free today, and echoing it would re-open the hole the
 # moment anyone adds a field.
 - name: Validate managed Samba users
@@ -153,11 +152,9 @@
       - nas_storage_secrets[item.secret_prefix ~ nas_storage_password_field_suffix] | default('', true) | length > 0
     fail_msg: >-
       Managed Samba account "{{ item.secret_prefix }}" is missing a username or
-      a password. Both are read from {{ nas_storage_bao_path }}, fields
+      a password. Required fields are
       {{ item.secret_prefix }}{{ nas_storage_username_field_suffix }} and
-      {{ item.secret_prefix }}{{ nas_storage_password_field_suffix }}. Check
-      that the converge has BAO_ADDR and BAO_TOKEN, that the AppRole policy
-      grants a read on that path, and that both fields exist.
+      {{ item.secret_prefix }}{{ nas_storage_password_field_suffix }}.
   loop: "{{ nas_storage_managed_users }}"
   loop_control:
     label: "{{ item.secret_prefix }}"
@@ -194,7 +191,7 @@
     groups: "{{ item.unix_groups | default([nas_storage_group_name]) }}"
     append: true
     shell: "{{ item.shell | default('/usr/sbin/nologin') }}"
-    create_home: "{{ item.create_home | default(false) }}"
+    create_home: "{{ item.create_home | default(false, true) }}"
     password_lock: true
     system: true
   loop: "{{ nas_storage_resolved_users }}"

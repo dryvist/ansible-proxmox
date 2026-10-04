@@ -5,10 +5,6 @@
 # sqlite_standby/postgres_standby/pve_config_backup, applied to git history.
 #
 # v1 scope: PUBLIC repositories only, cloned/fetched anonymously over HTTPS.
-# Mirroring private repositories needs a node-side credential path (an
-# AppRole scoped to the github/ engine, minted on this node) that does not
-# exist yet — deliberately not built here to avoid inventing new credential
-# plumbing under converge pressure. Tracked as an explicit follow-up.
 #
 # Inert by default — enable per-host in inventory, on the node that already
 # owns the <pool>/git-mirror dataset, and set git_mirror_owners there.
@@ -21,8 +17,6 @@ git_mirror_enabled: false
 #
 # Empty by default, and the values are NEVER written into this repository:
 # an account name is operator-specific identity, and this repo is public.
-# Inventory sources them from the environment (see the archive node's
-# host_vars), the same way private hostnames are handled here.
 git_mirror_owners: []
 
 git_mirror_archive_dir: /bulk/git-mirror
@@ -32,7 +26,7 @@ git_mirror_on_calendar: "*-*-* 05:15:00"
 git_mirror_persistent: true
 
 # Optional healthchecks.io URL; "<url>" pinged on success, "<url>/fail" on
-# failure. Wired from the play (env-sourced), like the sibling archive roles.
+# failure.
 git_mirror_healthcheck_url: ""
 
 git_mirror_log_dir: /var/log/git-mirror

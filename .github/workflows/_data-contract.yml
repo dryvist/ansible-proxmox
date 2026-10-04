@@ -139,6 +139,11 @@ jobs:
       - name: Verify pve_proxman_operator gates and resume conditions
         run: python3 tests/test_proxman_operator.py
 
+      # pve_api_tokens mints cluster tokens and needs a real cluster, so its
+      # mint decision and OpenBao read gate are pinned the same way.
+      - name: Verify pve_api_tokens mint decision and read gate
+        run: python3 tests/test_pve_api_tokens.py
+
       # The drive artifact feeds a Nautobot sync that DELETES what it stops
       # seeing, so every failure here is silent and destructive: a filter that
       # stops excluding removable media churns the inventory every converge, and
@@ -233,3 +238,14 @@ jobs:
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/llm_model_store_seed/verify_restart_target_classification.yml -i localhost, -c local
+
+      - name: Verify llm_model_store_seed attach on a protected container
+        run: python3 tests/llm_model_store_seed/test_protected_attach.py
+
+      # The mount lookup must find a live `<storage>:<vol>,mp=<path>,...` value,
+      # and a surplus duplicate is removed only when it is role-named and empty.
+      - name: Verify llm_model_store_seed mount lookup and surplus removal
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_duplicate_removal.yml -i localhost, -c local

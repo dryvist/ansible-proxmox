@@ -21,7 +21,7 @@ Per job, daily (`systemd` timer):
 
 1. **Consistent copy** — `sqlite3 '<src>' ".backup '<tmp>'"` on the source over
    SSH (safe for a live WAL database), pulled back with binary `rsync`.
-2. **Seed (first run)** — the consistent copy *becomes* the archive verbatim, so
+2. **Seed (first run)** — the consistent copy _becomes_ the archive verbatim, so
    the full schema and **primary keys** are preserved (required for dedupe).
 3. **Insert-only append (subsequent runs)** — per configured table:
 
@@ -52,15 +52,15 @@ others; a failure pings `<healthcheck>/fail`.
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `sqlite_standby_enabled` | `true` | Master enable |
-| `sqlite_standby_jobs` | `[]` | Jobs (see below) — inert until set |
-| `sqlite_standby_on_calendar` | `*-*-* 03:30:00` | `systemd` `OnCalendar` (daily) |
-| `sqlite_standby_persistent` | `true` | Run a missed schedule on next boot |
-| `sqlite_standby_healthcheck_url` | `""` | healthchecks.io URL (`/fail` on error) |
-| `sqlite_standby_run_now` | `false` | Opt-in: run immediately during the play |
-| `sqlite_standby_staging_dir` | `/var/lib/sqlite-standby` | Pulled-copy staging |
+| Variable                         | Default                   | Description                             |
+| -------------------------------- | ------------------------- | --------------------------------------- |
+| `sqlite_standby_enabled`         | `true`                    | Master enable                           |
+| `sqlite_standby_jobs`            | `[]`                      | Jobs (see below) — inert until set      |
+| `sqlite_standby_on_calendar`     | `*-*-* 03:30:00`          | `systemd` `OnCalendar` (daily)          |
+| `sqlite_standby_persistent`      | `true`                    | Run a missed schedule on next boot      |
+| `sqlite_standby_healthcheck_url` | `""`                      | healthchecks.io URL (`/fail` on error)  |
+| `sqlite_standby_run_now`         | `false`                   | Opt-in: run immediately during the play |
+| `sqlite_standby_staging_dir`     | `/var/lib/sqlite-standby` | Pulled-copy staging                     |
 
 ### Job shape
 
@@ -71,7 +71,7 @@ sqlite_standby_jobs:
     source_path: "/var/lib/app/live.db"
     archive_path: "/bulk/databases/events/archive.db"
     tables:
-      - { name: "events", key: "id" }      # key MUST be monotonic per table
+      - { name: "events", key: "id" } # key MUST be monotonic per table
       - { name: "samples", key: "ts" }
 ```
 
@@ -92,7 +92,7 @@ sqlite_standby_jobs:
 ## Usage
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags sqlite_standby
+./scripts/run-ansible.sh playbooks/site.yml --tags sqlite_standby
 # Seed/refresh now (e.g. first run) without waiting for the timer:
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags sqlite_standby -e sqlite_standby_run_now=true
+./scripts/run-ansible.sh playbooks/site.yml --tags sqlite_standby -e sqlite_standby_run_now=true
 ```

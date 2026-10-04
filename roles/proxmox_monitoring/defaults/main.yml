@@ -1,14 +1,13 @@
 ---
 # Monitoring configuration defaults
 
-
 # Healthchecks.io ping interval (minutes via cron)
 proxmox_monitoring_healthchecks_interval: 1
 
 # Log retention (days)
 proxmox_monitoring_log_retention_days: 90
 
-# Healthchecks.io ping URL (set via vault/external variable - DO NOT commit tokens)
+# Healthcheck ping URL
 # Example: https://hc-ping.com/your-uuid-here
 proxmox_monitoring_healthchecks_ping_url: ""
 
@@ -54,9 +53,7 @@ proxmox_monitoring_zfs_capacity_thresholds: [50, 75, 85, 90, 94]
 # failing at the quota wall.
 proxmox_monitoring_zfs_dataset_capacity_thresholds: [85, 90]
 
-# Deadman URL for the capacity monitor, e.g.
-# https://hc-ping.com/<key>/zfs-capacity. Set via vault/external variable — DO
-# NOT commit a real URL. Empty disables the capacity monitor entirely, because a
+# Deadman URL for the capacity monitor. Empty disables it entirely, because a
 # sensor that cannot reach anyone is indistinguishable from a healthy pool.
 #
 # A deadman rather than a push endpoint, deliberately. The monitor runs on the

@@ -4,11 +4,8 @@ Declaratively manage the **static human break-glass keys** in
 `/root/.ssh/authorized_keys` so they can be **rotated via IaC** instead of a
 manual one-off.
 
-This role governs only the operator keys that must survive an OpenBao CA
-outage. Automation does not use these — it authenticates with short-TTL
-certificates from the OpenBao SSH client CA (see the `ssh_ca_trust` role and the
-`ssh-certificate-authority` ADR). The two are complementary: `ssh_ca_trust`
-distributes CA *trust*, this role manages the static *authorized_keys*.
+This role manages static _authorized_keys_. The complementary `ssh_ca_trust`
+role distributes CA _trust_ (see the `ssh-certificate-authority` ADR).
 
 ## Design
 
@@ -23,11 +20,11 @@ distributes CA *trust*, this role manages the static *authorized_keys*.
 
 ## Variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `root_authorized_keys_enabled` | `false` | Opt in per host group. |
-| `root_authorized_keys_present` | `[]` | Full authorized-keys-format lines to ensure present. Populate from the secrets store per group_vars — never commit a real key. |
-| `root_authorized_keys_absent` | `[]` | Retired / leaked key(s) to ensure absent. |
+| Variable                       | Default | Purpose                                              |
+| ------------------------------ | ------- | ---------------------------------------------------- |
+| `root_authorized_keys_enabled` | `false` | Opt in per host group.                               |
+| `root_authorized_keys_present` | `[]`    | Full authorized-keys-format lines to ensure present. |
+| `root_authorized_keys_absent`  | `[]`    | Retired / leaked key(s) to ensure absent.            |
 
 ## Rotation flow (zero-downtime)
 

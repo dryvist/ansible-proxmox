@@ -9,7 +9,7 @@ wake, or sleep step anywhere in this procedure.
 > `proxmox-1` (always-on, infra + SIEM VM), `proxmox-2` (always-on, media +
 > the warm-standby `bulk/databases` + `bulk/appdata` namespaces on a `bulk`
 > ZFS pool), `proxmox-3` (always-on, second independent replica target).
-> `${PROXMOX_SUBDOMAIN}` is the internal subdomain (from Doppler).
+> `${PROXMOX_SUBDOMAIN}` is the internal subdomain.
 
 ## 1. How replication works
 
@@ -32,13 +32,13 @@ wake, or sleep step anywhere in this procedure.
 
 ## 2. What is on `proxmox-3` (and what is not)
 
-| Dataset (on `proxmox-3`) | Source | Class | Notes |
-| --- | --- | --- | --- |
-| `bulk/replica/proxmox-1/vm-<id>-disk-0` | SIEM VM OS disk | P0 | Whole-disk zvol |
-| `bulk/replica/proxmox-1/vm-<id>-disk-2` | SIEM VM `/opt/splunk` | P0 config / P3 index | Config **and** indexes share this disk — see note |
-| `bulk/replica/proxmox-1/subvol-<id>-disk-1` | object-storage (RustFS) | P0 | The app-tarball store |
-| `bulk/replica/proxmox-2/databases` (recursive) | `bulk/databases` | P0 | Postgres/SQLite archive namespace |
-| `bulk/replica/proxmox-2/appdata` (recursive) | `bulk/appdata` | P1 | App config/state (incl. media app identity) |
+| Dataset (on the replica target)                    | Source                  | Class                | Notes                                             |
+| -------------------------------------------------- | ----------------------- | -------------------- | ------------------------------------------------- |
+| `bulk/replica/<source-node>/vm-<id>-disk-0`        | SIEM VM OS disk         | P0                   | Whole-disk zvol                                   |
+| `bulk/replica/<source-node>/vm-<id>-disk-2`        | SIEM VM `/opt/splunk`   | P0 config / P3 index | Config **and** indexes share this disk — see note |
+| `bulk/replica/<source-node>/subvol-<id>-disk-1`    | object-storage (RustFS) | P0                   | The app-tarball store                             |
+| `bulk/replica/<source-node>/databases` (recursive) | `bulk/databases`        | P0                   | Postgres/SQLite archive namespace                 |
+| `bulk/replica/<source-node>/appdata` (recursive)   | `bulk/appdata`          | P1                   | App config/state (incl. media app identity)       |
 
 **Not replicated to `proxmox-3`** (by design — see
 [`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md) for the full
@@ -103,7 +103,6 @@ genuinely down (avoid split-brain — one writer, always).
 3. **Promote the guest on `proxmox-3`.** Because guest **configs are not
    replicated**, recreate the definition, then attach the cloned replica
    data:
-
    - **VM (zvol-backed, e.g. the SIEM VM):** clone the latest replica
      snapshot of each disk into a runnable, storage-registered dataset under
      `proxmox-3`'s pool using the expected `vm-<id>-disk-<n>` name, then
@@ -183,10 +182,10 @@ Set it to power on **unconditionally**, not to restore the previous state. A
 down, and — where the firmware records the state at the moment of loss rather
 than the last commanded one — can leave a node that was running down as well.
 
-| Node has | How it is set | Where |
-| --- | --- | --- |
-| A BMC | `ipmitool chassis policy always-on` — applied immediately, no reboot | Converged by [`idrac_power`](../roles/idrac_power/README.md) |
-| No BMC | BIOS/UEFI: "AC Power Recovery" (Dell) or "Restore AC Power Loss" (consumer boards) → **On** | At the console, during commissioning |
+| Node has | How it is set                                                                               | Where                                                        |
+| -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| A BMC    | `ipmitool chassis policy always-on` — applied immediately, no reboot                        | Converged by [`idrac_power`](../roles/idrac_power/README.md) |
+| No BMC   | BIOS/UEFI: "AC Power Recovery" (Dell) or "Restore AC Power Loss" (consumer boards) → **On** | At the console, during commissioning                         |
 
 Verify on a BMC-bearing node with `ipmitool ... chassis status` and read back
 the `Power Restore Policy` line. On a node with no BMC the setting can only be

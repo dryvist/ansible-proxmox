@@ -25,15 +25,11 @@ node_scheduled_wake_on_calendar:
   - "*-*-* 03:00:00"
   - "*-*-* 15:00:00"
 
-# BMC credentials for ipmitool — injected from the environment (Doppler), never
-# committed. Same source as the idrac_power role. The password reaches the unit
-# via a root-only EnvironmentFile (ipmitool -E reads $IPMITOOL_PASSWORD), so it
-# never appears on the command line or in `systemctl cat`.
 node_scheduled_wake_bmc_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
 node_scheduled_wake_bmc_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"
 
 # Targets to wake (empty => the role is inert). Each entry:
 #   - name: <node>            # target node name (used for unit naming)
-#     bmc_host: "{{ ... }}"   # target BMC address — FQDN preferred (env/SOPS, never committed)
+#     bmc_host: "{{ ... }}"   # target BMC address
 #     on_calendar: [...]      # optional per-target schedule override
 node_scheduled_wake_targets: []

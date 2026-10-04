@@ -13,16 +13,12 @@ mkdir -p "$LOG_DIR"
 log="$LOG_DIR/vzdump-$(date +%Y-%m-%d).log"
 say() { echo "$(date +%H:%M:%S) $*" >>"$log"; }
 
-# S3 config + credentials live in a root-only env file (0600). Sourcing here
-# means a manual run works exactly like the systemd run. Absent file => S3 off.
 S3_ENV="/etc/default/zfs-replication-vzdump-s3"
 # shellcheck disable=SC1090
 [ -r "$S3_ENV" ] && . "$S3_ENV"
 S3_ENDPOINT="${GUEST_BACKUP_S3_ENDPOINT:-}"
 S3_BUCKET="${GUEST_BACKUP_S3_BUCKET:-}"
 S3_PREFIX="${GUEST_BACKUP_S3_PREFIX:-guests}"
-# aws reads AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION from
-# the sourced env; only the endpoint is a per-command flag.
 AWS_ARGS="--endpoint-url ${S3_ENDPOINT}"
 
 # Probe the endpoint ONCE per run. curl exits 0 on any HTTP response (RustFS

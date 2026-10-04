@@ -21,7 +21,7 @@ Enabled by default (`pve_notifications_enabled: true`) and additive-only, so
 no explicit opt-in is required:
 
 ```bash
-doppler run -- ansible-playbook -i inventory playbooks/site.yml --tags pve_notifications
+ansible-playbook -i inventory playbooks/site.yml --tags pve_notifications
 ```
 
 Runs on a **single** node (`pve_notifications_config_host`) because
@@ -38,18 +38,16 @@ matcher names it owns, so unrelated config is untouched.
 
 ## Variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `pve_notifications_enabled` | `true` | Set false to disable. |
-| `pve_notifications_config_host` | cluster primary | Single node the `pvesh` calls run on. |
-| `pve_notifications_ntfy_target` | `ntfy-proxmox` | Webhook target name. |
-| `pve_notifications_ntfy_url` | ntfy publish URL for topic `proxmox` | derived from the `PROXMOX_SUBDOMAIN` environment variable. |
-| `pve_notifications_ntfy_token` | `""` | Optional hub publish token. Not yet wired into the webhook target — see defaults/main.yml. |
-| `pve_notifications_matchers` | vzdump-failed, fencing, replication-failed, package-updates | `{name, type, severity?}` matchers routed at the target. |
+| Variable                        | Default                                                     | Purpose                                                                                    |
+| ------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `pve_notifications_enabled`     | `true`                                                      | Set false to disable.                                                                      |
+| `pve_notifications_config_host` | cluster primary                                             | Single node the `pvesh` calls run on.                                                      |
+| `pve_notifications_ntfy_target` | `ntfy-proxmox`                                              | Webhook target name.                                                                       |
+| `pve_notifications_ntfy_url`    | ntfy publish URL for topic `proxmox`                        | derived from the `PROXMOX_SUBDOMAIN` environment variable.                                 |
+| `pve_notifications_ntfy_token`  | `""`                                                        | Optional hub publish token. Not yet wired into the webhook target — see defaults/main.yml. |
+| `pve_notifications_matchers`    | vzdump-failed, fencing, replication-failed, package-updates | `{name, type, severity?}` matchers routed at the target.                                   |
 
-`PROXMOX_SUBDOMAIN` is the same ingress-subdomain environment variable
-`pve_syslog_forwarder` and `idrac_kiosk` build their fronted FQDNs from
-(e.g. from Doppler) — asserted non-empty before this role's block runs.
+The role asserts `PROXMOX_SUBDOMAIN` is non-empty before its task block runs.
 
 ## Verification
 

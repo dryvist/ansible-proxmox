@@ -27,12 +27,12 @@ ansible-galaxy install -r requirements.yml
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `sanoid_enabled` | `true` | Master enable for the role |
-| `sanoid_timer_enabled` | `true` | Enable/start `sanoid.timer` |
-| `sanoid_templates` | critical / media / scratch | Retention templates by criticality tier |
-| `sanoid_datasets` | `{}` | Map of `dataset => { use_template, recursive, … }` |
+| Variable               | Default                    | Description                                        |
+| ---------------------- | -------------------------- | -------------------------------------------------- |
+| `sanoid_enabled`       | `true`                     | Master enable for the role                         |
+| `sanoid_timer_enabled` | `true`                     | Enable/start `sanoid.timer`                        |
+| `sanoid_templates`     | critical / media / scratch | Retention templates by criticality tier            |
+| `sanoid_datasets`      | `{}`                       | Map of `dataset => { use_template, recursive, … }` |
 
 Quote `yes`/`no` values — sanoid wants literal `yes`/`no`, and unquoted YAML
 coerces them to booleans.
@@ -43,7 +43,7 @@ coerces them to booleans.
 sanoid_datasets:
   "rpool/data/nas": { use_template: critical, recursive: "yes" }
   "nvme1/siem/splunk-hot": { use_template: critical }
-  "nvme1/siem/cribl-pq": { use_template: scratch }   # transient, no snapshots
+  "nvme1/siem/cribl-pq": { use_template: scratch } # transient, no snapshots
 ```
 
 Where a dataset name embeds a guest VMID, derive it at runtime from the S3 tofu
@@ -52,6 +52,6 @@ inventory injected by `playbooks/load_tofu.yml` — `splunk_vm_from_tofu` and
 hard-coding it, so a VMID renumber flows through with no edit.
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags sanoid
+./scripts/run-ansible.sh playbooks/site.yml --tags sanoid
 sanoid --monitor-snapshots   # health check after a few cycles
 ```

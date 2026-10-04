@@ -1,9 +1,7 @@
 # ssh_ca_trust
 
 Distribute trust in the OpenBao SSH client CA (the `ssh-certificate-authority`
-ADR): automation authenticates with short-TTL SSH certificates signed by the
-CA at `ssh-client-ca/`; humans stay on static `authorized_keys` so a CA outage
-can never lock a human out.
+ADR) while preserving static `authorized_keys` access.
 
 ## Installation
 
@@ -14,7 +12,7 @@ unless a group flips rollout on for that host class.
 ## Usage
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags ssh_ca_trust
+./scripts/run-ansible.sh playbooks/site.yml --tags ssh_ca_trust
 ```
 
 ## What it does
@@ -22,8 +20,7 @@ doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags ssh_ca_trust
 1. Preflights: pinned CA fingerprint + `BAO_ADDR` present, clock
    NTP-synchronized (certificate validity is time-bound).
 2. Fetches the CA public key and verifies it against the **pinned
-   fingerprint** (`SSH_CA_FINGERPRINT`, recorded from the openbao converge's
-   trusted-ceremony output). Fail-closed — never trust-on-first-use.
+   fingerprint** (`SSH_CA_FINGERPRINT`). Fail-closed — never trust-on-first-use.
 3. Writes `/etc/ssh/trusted-user-ca-keys.pem` (multi-key: CA rotation appends
    the new issuer via `ssh_ca_trust_extra_ca_keys` first, drops the old after
    cert-TTL drain), the per-user `AuthorizedPrincipalsFile` map under
@@ -43,9 +40,9 @@ doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags ssh_ca_trust
 
 ## Principals (default-deny)
 
-| Host class | User | Principals |
-| --- | --- | --- |
-| PVE node | root | `ansible`, `semaphore` |
+| Host class    | User | Principals             |
+| ------------- | ---- | ---------------------- |
+| PVE node      | root | `ansible`, `semaphore` |
 | LXC (via pct) | root | `ansible`, `semaphore` |
 
 `ai-agent` is **never** a hypervisor root principal; it reaches guest-level

@@ -115,7 +115,7 @@
 
     # Ship every node's journal/syslog to the central pipeline (HAProxy syslog
     # VIP -> Cribl Edge -> Splunk os index). Target CNAME comes from
-    # PROXMOX_SUBDOMAIN (Doppler); the port default mirrors terraform-proxmox
+    # PROXMOX_SUBDOMAIN; the port default mirrors terraform-proxmox
     # pipeline_constants.syslog_ports.linux (see the role defaults).
     - role: pve_syslog_forwarder
       tags:
@@ -270,6 +270,11 @@
           root: [ansible, semaphore]
           jevans: [jevans]
           admin: [admin]
+
+    # Read-only PVE API tokens for consumer apps, published to OpenBao.
+    - role: pve_api_tokens
+      tags:
+        - pve_api_tokens
 
 # Backup, disaster-recovery, and notification roles (syncoid, sqlite_standby,
 # postgres_standby, pve_config_backup, pve_notifications, git_mirror). Split

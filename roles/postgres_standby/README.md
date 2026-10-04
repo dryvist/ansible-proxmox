@@ -25,8 +25,7 @@ Per job, daily (`systemd` timer, after the source's own backup window):
    retention window; pre-prune history is preserved by sanoid snapshots of the
    archive dataset (read a point-in-time view from `<dataset>/.zfs/snapshot/`).
 2. **Tier-2 upload** — the newest dump per database (`<db>-<utc-stamp>.dump`)
-   is `aws s3 cp`'d to every configured target. Credentials live in a
-   root-only `EnvironmentFile` rendered with `no_log` — never in the script.
+   is `aws s3 cp`'d to every configured target.
 
 A failed job or upload is logged to `/var/log/postgres-standby/` and does
 **not** abort the others; any failure pings `<healthcheck>/fail`.
@@ -42,15 +41,10 @@ A failed job or upload is logged to `/var/log/postgres-standby/` and does
 
 ## SSH trust
 
-The pull is an unattended 04:00 timer, so it needs a credential already on
-disk. This role generates a **dedicated ed25519 keypair** (default
+This role generates a **dedicated ed25519 keypair** (default
 `/root/.ssh/id_postgres_standby`, generate-if-absent, never rotated in place)
 and the sync script uses it with `IdentitiesOnly=yes` so nothing else is
 offered.
-
-A certificate from the SSH CA is not usable here: certificates are minted at
-use time, and a timer has no way to mint one. A dedicated key scoped to a
-single read-only directory is the narrower credential for this job.
 
 The guest side (`postgres` role, `ansible-proxmox-apps`) authorises the public
 half under a forced command, so the key cannot open a shell or write:
@@ -62,21 +56,18 @@ restrict,command="rrsync -ro /var/lib/postgresql/backups" ssh-ed25519 AAAA... po
 `rrsync` ships with the `rsync` package. Prefer it over pinning an exact
 `rsync --server --sender` argv, which breaks silently when flags change.
 
-The converge prints the public key to copy; take it from there rather than
-transcribing it.
-
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `postgres_standby_enabled` | `true` | Master enable |
-| `postgres_standby_jobs` | `[]` | Jobs (see below) — inert until set |
-| `postgres_standby_s3_targets` | `[]` | Tier-2 targets (see below) |
-| `postgres_standby_on_calendar` | `*-*-* 04:00:00` | `systemd` `OnCalendar` (daily) |
-| `postgres_standby_persistent` | `true` | Run a missed schedule on next boot |
-| `postgres_standby_healthcheck_url` | `""` | healthchecks.io URL (`/fail` on error) |
-| `postgres_standby_run_now` | `false` | Opt-in: run immediately during the play |
-| `postgres_standby_ssh_key` | `/root/.ssh/id_postgres_standby` | Dedicated pull identity (see [SSH trust](#ssh-trust)) |
+| Variable                           | Default                          | Description                                           |
+| ---------------------------------- | -------------------------------- | ----------------------------------------------------- |
+| `postgres_standby_enabled`         | `true`                           | Master enable                                         |
+| `postgres_standby_jobs`            | `[]`                             | Jobs (see below) — inert until set                    |
+| `postgres_standby_s3_targets`      | `[]`                             | Tier-2 targets (see below)                            |
+| `postgres_standby_on_calendar`     | `*-*-* 04:00:00`                 | `systemd` `OnCalendar` (daily)                        |
+| `postgres_standby_persistent`      | `true`                           | Run a missed schedule on next boot                    |
+| `postgres_standby_healthcheck_url` | `""`                             | healthchecks.io URL (`/fail` on error)                |
+| `postgres_standby_run_now`         | `false`                          | Opt-in: run immediately during the play               |
+| `postgres_standby_ssh_key`         | `/root/.ssh/id_postgres_standby` | Dedicated pull identity (see [SSH trust](#ssh-trust)) |
 
 ### Job shape
 
@@ -84,7 +75,7 @@ transcribing it.
 postgres_standby_jobs:
   - name: "postgres"
     source_host: "root@<db-guest-fqdn>"
-    source_dir: "/"                          # see below
+    source_dir: "/" # see below
     archive_dir: "/bulk/databases/postgres"
 ```
 
@@ -98,11 +89,11 @@ what this key is allowed to see".
 
 ```yaml
 postgres_standby_s3_targets:
-  - name: "RUSTFS"                 # env-var prefix in the credentials file
+  - name: "RUSTFS" # target name
     bucket: "db-dr"
     prefix: "postgres"
-    endpoint_url: "https://..."    # omit for AWS S3
-    access_key: "..."              # wire env/SOPS-sourced, never a literal
+    endpoint_url: "https://..." # omit for AWS S3
+    access_key: "..."
     secret_key: "..."
 ```
 
@@ -115,7 +106,7 @@ a Tier-2 copy. The mandatory restore drill is defined in the DR standard.
 ## Usage
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags postgres_standby
+./scripts/run-ansible.sh playbooks/site.yml --tags postgres_standby
 # Seed/refresh now (e.g. first run) without waiting for the timer:
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags postgres_standby -e postgres_standby_run_now=true
+./scripts/run-ansible.sh playbooks/site.yml --tags postgres_standby -e postgres_standby_run_now=true
 ```

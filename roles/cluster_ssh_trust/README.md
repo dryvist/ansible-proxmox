@@ -6,7 +6,7 @@ cluster. Two independent halves of that trust, both repaired here:
 - Seeds each node's `/root/.ssh/known_hosts` with the **current** host keys
   of every cluster peer, by **both hostname and management IP**. Without
   this, root SSH between nodes (syncoid replication, `pvecm`, live migration)
-  fails with *Host key verification failed* — after a node rename/reinstall
+  fails with _Host key verification failed_ — after a node rename/reinstall
   (`pve` renamed to `node-a`), or when a peer is trusted by name but native
   migration connects by IP (observed live: `pve-w5900` -> `pve-r540` failed
   by IP, worked by name).
@@ -17,8 +17,8 @@ cluster. Two independent halves of that trust, both repaired here:
   shared file. If a node's entry silently disappears from it — observed
   live on `pve-w1700`, `id_rsa` itself untouched — the node can no longer
   authenticate outbound or be authenticated to, and native `qmigrate` fails
-  with *Permission denied (publickey,password)* / *Can't connect to
-  destination address using public key*.
+  with _Permission denied (publickey,password)_ / _Can't connect to
+  destination address using public key_.
 
 ## Installation
 
@@ -37,9 +37,7 @@ ansible-galaxy install -r requirements.yml
 - Runs `ssh-keyscan` for each peer in `cluster_ssh_trust_scan_targets` (every
   peer name plus its resolved management IP) and merges the keys into
   `/root/.ssh/known_hosts`, de-duplicated.
-- Peer names come from the **`PROXMOX_VE_NODES`** Doppler variable — the
-  single source of truth for the cluster node list, shared by terraform and
-  ansible (e.g. `node-a,node-b,node-c`). The value is tokenised with
+- Peer names are read from **`PROXMOX_VE_NODES`**. The value is tokenised with
   `regex_findall`, so plain comma-separated, bracketed (`[node-a, node-b]`),
   or quoted forms all work. When the variable is absent (e.g. molecule), it
   falls back to the `pve_cluster_members` inventory group. Each peer's IP is
@@ -73,24 +71,22 @@ ansible-galaxy install -r requirements.yml
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `cluster_ssh_trust_enabled` | `true` | Master enable |
-| `cluster_ssh_trust_peers` | from `PROXMOX_VE_NODES` (fallback: `pve_cluster_members`) | Peer hostnames |
-| `cluster_ssh_trust_unreachable_peers` | peers unreachable this run | Excluded from the by-IP reachability proof (warned, not failed) |
-| `cluster_ssh_trust_peer_ips` | resolved from inventory, minus unreachable peers | Peer management IPs (best-effort) |
-| `cluster_ssh_trust_scan_targets` | `peers + peer_ips`, de-duplicated | What `ssh-keyscan` actually scans |
+| Variable                              | Default                                                   | Description                                                     |
+| ------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
+| `cluster_ssh_trust_enabled`           | `true`                                                    | Master enable                                                   |
+| `cluster_ssh_trust_peers`             | from `PROXMOX_VE_NODES` (fallback: `pve_cluster_members`) | Peer hostnames                                                  |
+| `cluster_ssh_trust_unreachable_peers` | peers unreachable this run                                | Excluded from the by-IP reachability proof (warned, not failed) |
+| `cluster_ssh_trust_peer_ips`          | resolved from inventory, minus unreachable peers          | Peer management IPs (best-effort)                               |
+| `cluster_ssh_trust_scan_targets`      | `peers + peer_ips`, de-duplicated                         | What `ssh-keyscan` actually scans                               |
 
 ## Usage
 
 ```bash
 # Applied automatically as part of site.yml; or target it directly:
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags cluster_ssh_trust
+./scripts/run-ansible.sh playbooks/site.yml --tags cluster_ssh_trust
 ```
 
-## Scope / follow-up
+## Scope
 
-This is the **interim** automation. Full per-host, generated-at-instantiation,
-encrypted-in-inventory, rotatable SSH **key** management (replacing the single
-shared Ansible key) is tracked as a separate design effort. This role only
-manages `known_hosts` trust, not the keypairs themselves.
+This role manages SSH trust and repairs shared authorization entries. It does
+not manage keypairs.

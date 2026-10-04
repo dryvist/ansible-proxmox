@@ -36,9 +36,8 @@ ssh_ca_trust_rollout_enabled: true
 # Node naming: node names are hardware-keyed, so a name can no longer be composed
 # from a prefix plus an ordinal — the old `<prefix><N>` scheme could only ever
 # produce the retired ordinal names, and every reference built that way rendered a
-# host that does not resolve. Each node this repo references BY ROLE is injected at
-# runtime from its own env var (e.g. from Doppler); the committed defaults below are
-# neutral EXAMPLES only and must never carry a real name.
+# host that does not resolve. The committed defaults below are neutral
+# EXAMPLES only and must never carry a real name.
 #
 # Node identity, resolved from the OpenTofu desired state (deployment.json) via
 # playbooks/load_tofu.yml. These were previously environment variables naming
@@ -142,9 +141,7 @@ common_packages:
 pve_node_exporter_extra_args:
   - "--collector.drm"
 
-# apt caching proxies (apt-cacher-ng) for Proxmox nodes. Real URLs are injected
-# via the APT_PROXY_URL env var (e.g. from Doppler), like http://<acng>:3142, so
-# no environment-specific address is committed. Empty disables proxying.
+# apt caching proxies read APT_PROXY_URL. Empty disables proxying.
 #
 # The cache is an HA pair, so APT_PROXY_URL accepts several URLs separated by
 # commas and/or whitespace; one URL is still a valid value. Order is the

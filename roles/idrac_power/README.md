@@ -58,17 +58,17 @@ during commissioning. See `docs/DR_RUNBOOK.md`.
 
 ## Variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `idrac_power_enabled` | `true` | Master enable |
-| `idrac_power_autocycle` | `true` | site.yml auto power on/off around the run |
-| `idrac_power_action` | `status` | `status` / `on` / `off` (set per caller) |
-| `idrac_power_controller` | first non-target node from `PROXMOX_VE_NODES` | Always-on node that runs ipmitool; derived, never hard-coded |
-| `idrac_power_boot_timeout` | `720` | Seconds to wait for SSH after power-on (old hardware boots slowly) |
-| `idrac_power_off_retries` | `60` | Poll budget (×10s ⇒ 10 min) for graceful off |
-| `idrac_power_username` / `_password` | `IDRAC_USERNAME` / `IDRAC_PASSWORD` env | BMC creds (no_log) |
-| `idrac_power_bmc_host` | _(unset)_ | Per-host BMC address — FQDN preferred over IP (host_vars / env) |
-| `idrac_power_restore_policy` | `always-on` | Chassis state when AC returns; `""` leaves it alone |
+| Variable                             | Default                                       | Description                                                        |
+| ------------------------------------ | --------------------------------------------- | ------------------------------------------------------------------ |
+| `idrac_power_enabled`                | `true`                                        | Master enable                                                      |
+| `idrac_power_autocycle`              | `true`                                        | site.yml auto power on/off around the run                          |
+| `idrac_power_action`                 | `status`                                      | `status` / `on` / `off` (set per caller)                           |
+| `idrac_power_controller`             | first non-target node from `PROXMOX_VE_NODES` | Always-on node that runs ipmitool; derived, never hard-coded       |
+| `idrac_power_boot_timeout`           | `720`                                         | Seconds to wait for SSH after power-on (old hardware boots slowly) |
+| `idrac_power_off_retries`            | `60`                                          | Poll budget (×10s ⇒ 10 min) for graceful off                       |
+| `idrac_power_username` / `_password` | `IDRAC_USERNAME` / `IDRAC_PASSWORD` env       | BMC creds (no_log)                                                 |
+| `idrac_power_bmc_host`               | _(unset)_                                     | Per-host BMC address — FQDN preferred over IP (host_vars / env)    |
+| `idrac_power_restore_policy`         | `always-on`                                   | Chassis state when AC returns; `""` leaves it alone                |
 
 ## Usage
 
@@ -76,13 +76,13 @@ Auto-cycle is wired into `site.yml` and gated on `pve_power_managed: true` per
 host. To disable for a quick run:
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml -e idrac_power_autocycle=false --limit <always-on-hosts>
+./scripts/run-ansible.sh playbooks/site.yml -e idrac_power_autocycle=false --limit <always-on-hosts>
 ```
 
 To power a node on/off directly (e.g. during commissioning):
 
 ```bash
-doppler run -- ./scripts/run-ansible.sh playbooks/site.yml --tags idrac_power
+./scripts/run-ansible.sh playbooks/site.yml --tags idrac_power
 ```
 
 ## Scope / follow-up

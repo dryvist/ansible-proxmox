@@ -18,8 +18,6 @@
   vars:
     nas_validate_shares: "{{ (nas_storage_from_tofu | default({}, true)).shares | default([], true) }}"
     nas_validate_user: "{{ ((nas_storage_from_tofu | default({}, true)).managed_users | default([], true) | first) | default({}, true) }}"
-    # Same identity source as the role: a login name is a secret, so it is
-    # resolved from OpenBao rather than read out of the declaration.
     nas_validate_bao_addr: >-
       {{ lookup('env', 'BAO_ADDR')
          | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
@@ -73,9 +71,6 @@
       loop_control:
         label: "{{ item.name }}"
 
-    # Resolve the managed account's credentials from OpenBao. Skipped rather
-    # than failed when the converge has no token, so the config checks above
-    # still run without credentials.
     - name: Read the managed-account identity from OpenBao
       ansible.builtin.uri:
         url: "{{ nas_validate_bao_addr }}/v1/{{ nas_validate_bao_path }}"
