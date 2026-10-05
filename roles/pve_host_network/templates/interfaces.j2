@@ -11,8 +11,8 @@ iface {{ pve_host_network_uplink }} inet manual
 
 auto {{ pve_host_network_bridge }}
 iface {{ pve_host_network_bridge }} inet static
-    address {{ pve_host_network_address }}
-    gateway {{ pve_host_network_gateway }}
+    address {{ pve_host_network_address_resolved }}
+    gateway {{ pve_host_network_gateway_resolved }}
     bridge-ports {{ pve_host_network_uplink }}
     bridge-stp off
     bridge-fd 0

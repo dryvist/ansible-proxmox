@@ -26,8 +26,8 @@ pve_host_network_uplink_mac: ""
 pve_host_network_vlan_aware: true
 pve_host_network_vids: "2-4094"
 
-# Management address (CIDR) and gateway. Both required when enforcing.
-# Supplied from inventory or the environment; never committed here.
+# Optional management address (CIDR) and gateway overrides. Empty values use
+# the current default-route interface address and gathered gateway facts.
 pve_host_network_address: ""
 pve_host_network_gateway: ""
 

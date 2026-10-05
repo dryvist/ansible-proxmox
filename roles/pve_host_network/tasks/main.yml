@@ -44,17 +44,53 @@
 - name: Enforce the pinned host uplink and bridge configuration
   when: pve_host_network_enforce | bool
   block:
-    - name: Require a pinned uplink MAC and complete network settings
+    - name: Require a pinned uplink identity
       ansible.builtin.assert:
         that:
           - pve_host_network_uplink is match('^nic[0-9]+$')
           - pve_host_network_uplink_mac is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
-          - pve_host_network_address | length > 0
-          - pve_host_network_gateway | length > 0
         fail_msg: >-
           Refusing to enforce host networking without a nicN uplink name, its
-          permanent MAC, an explicit address and a gateway. The MAC is required
-          before any network file is written.
+          permanent MAC. The MAC is required before any network file is written.
+
+    - name: Read the current management address when no override is configured
+      ansible.builtin.command:
+        argv:
+          - ip
+          - -o
+          - -4
+          - addr
+          - show
+          - dev
+          - "{{ pve_host_network_primary_iface }}"
+      register: pve_host_network_address_listing
+      changed_when: false
+      when:
+        - pve_host_network_address | default('', true) | trim | length == 0
+        - pve_host_network_primary_iface | length > 0
+
+    - name: Resolve management address and gateway
+      ansible.builtin.set_fact:
+        pve_host_network_address_resolved: >-
+          {{ pve_host_network_address | default('', true) | trim
+             or ((pve_host_network_address_listing | default({'stdout': ''})).stdout
+                 | default('', true)
+                 | regex_findall('inet +([0-9.]+/[0-9]+)')
+                 | first | default('', true)) }}
+        pve_host_network_gateway_resolved: >-
+          {{ pve_host_network_gateway | default('', true) | trim
+             or (ansible_facts.default_ipv4 | default({})).gateway
+                | default('', true) }}
+
+    - name: Require the management address and gateway before writing files
+      ansible.builtin.assert:
+        that:
+          - pve_host_network_address_resolved | trim | length > 0
+          - pve_host_network_gateway_resolved | trim | length > 0
+        fail_msg: >-
+          Refusing to write host network files without a current management
+          address and gateway. Set explicit inventory overrides when the
+          default-route facts do not describe the desired bridge configuration.
 
     - name: Ensure the Proxmox link-file directory exists
       ansible.builtin.file:

@@ -58,7 +58,7 @@ class PveHostNetworkContractTest(unittest.TestCase):
         task_names = [task["name"] for task in block]
 
         self.assertEqual(
-            task_names[0], "Require a pinned uplink MAC and complete network settings"
+            task_names[0], "Require a pinned uplink identity"
         )
         self.assertIn("Render the MAC-pinned uplink name", task_names)
         self.assertIn("Render the interfaces file", task_names)
@@ -123,6 +123,26 @@ class PveHostNetworkContractTest(unittest.TestCase):
         self.assertIn("cmd: ip -o link", serialized)
         self.assertIn("wol_enable_interface_resolved", serialized)
         self.assertIn('ATTR{address}=="{{ wol_enable_mac | lower }}"', template)
+
+    def test_enforcement_resolves_network_settings_before_writing(self):
+        tasks = read_yaml(ROOT / "roles/pve_host_network/tasks/main.yml")
+        enforcement = next(
+            task["block"]
+            for task in tasks
+            if task.get("name") == "Enforce the pinned host uplink and bridge configuration"
+        )
+        names = [task.get("name") for task in enforcement]
+        self.assertLess(
+            names.index("Resolve management address and gateway"),
+            names.index("Render the interfaces file"),
+        )
+        serialized = yaml.safe_dump(enforcement)
+        template = (ROOT / "roles/pve_host_network/templates/interfaces.j2").read_text()
+        self.assertIn("ip", serialized)
+        self.assertIn("pve_host_network_primary_iface", serialized)
+        self.assertIn("ansible_facts.default_ipv4", serialized)
+        self.assertIn("pve_host_network_address_resolved", template)
+        self.assertIn("pve_host_network_gateway_resolved", template)
 
 
 if __name__ == "__main__":

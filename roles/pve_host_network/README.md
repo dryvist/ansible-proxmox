@@ -10,10 +10,13 @@ configures the management bridge to use that same name.
   is `nic0`.
 - The role writes the `.link` file and `/etc/network/interfaces` in the same
   enforcement run. It rebuilds initramfs if the `.link` changes.
+- The current management address and default gateway come from gathered host
+  facts when explicit `pve_host_network_address` or
+  `pve_host_network_gateway` overrides are absent.
 - A reboot is required before the new name and bridge configuration take
   effect. The role does not reload networking or reboot the host.
-- Missing or invalid MACs, uplink names, addresses, or gateways fail before
-  network files are written.
+- Missing MACs, uplink names, addresses, or gateways fail before network files
+  are written.
 
 ## Proxmox interface-pinning tool
 
@@ -92,8 +95,8 @@ ansible-playbook playbooks/site.yml --tags pve_host_network \
 | `pve_host_network_bridge` | `vmbr0` | Management bridge. |
 | `pve_host_network_uplink` | `nic0` | Stable pinned interface name; must match `nicN`. |
 | `pve_host_network_uplink_mac` | empty | Required permanent MAC for the pinned interface. |
-| `pve_host_network_address` | empty | Management address in CIDR form; required for enforcement. |
-| `pve_host_network_gateway` | empty | Management gateway; required for enforcement. |
+| `pve_host_network_address` | current host fact | Management address in CIDR form; set an override when required. |
+| `pve_host_network_gateway` | current host fact | Management gateway; set an override when required. |
 
 ## Tags
 
