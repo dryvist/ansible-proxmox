@@ -1,7 +1,8 @@
 # lxc_gpu_features
 
-Binds AMD GPU device nodes (`/dev/dri`, `/dev/kfd`) into GPU LXC containers over
-native `root@pam` SSH, idempotently. Companion to `media_lxc_features`.
+Binds GPU device nodes (AMD `/dev/dri`/`/dev/kfd`, NVIDIA `/dev/nvidia*`) into
+GPU LXC containers over native `root@pam` SSH, idempotently. Companion to
+`media_lxc_features`.
 
 ## Installation
 
@@ -23,10 +24,13 @@ the download-vpn LXC).
 
 ## Ordering
 
-1. `tofu-proxmox` — creates `llm-fast` as a privileged shell.
-2. **this role** — binds `/dev/dri` (226) + `/dev/kfd` (235), reboots on change.
-3. `ansible-proxmox-apps` (role `llama_cpp`) — installs llama.cpp + llama-swap +
-   ROCm, adds the service user to `render`/`video`, stages the GGUF models.
+1. `tofu-proxmox` — creates the GPU LXC as a privileged shell.
+2. **this role** — binds the device nodes a service asks for in
+   `lxc_gpu_features_map` (`/dev/dri` + `/dev/kfd` for an AMD compute service,
+   `/dev/nvidia*` for an NVIDIA one), reboots on change.
+3. `ansible-proxmox-apps` (role `llama_cpp`) — installs llama.cpp + llama-swap
+   and the matching GPU userspace (ROCm or CUDA/Vulkan), adds the service user
+   to the needed groups, stages the GGUF models.
 
 ## What it writes
 
@@ -42,12 +46,12 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 
 ## Feature map (keyed by service, not VMID)
 
-| Var                              | Default                                  | Purpose                               |
-| -------------------------------- | ---------------------------------------- | ------------------------------------- |
-| `lxc_gpu_features_map`           | `{ llm-fast: { dri: true, kfd: true } }` | Service → which device groups to bind |
-| `lxc_gpu_features_dri_major`     | `226`                                    | `/dev/dri` char major                 |
-| `lxc_gpu_features_kfd_major`     | `235`                                    | `/dev/kfd` char major                 |
-| `lxc_gpu_features_service_vmids` | from tofu inventory                      | Service → current vmid (auto)         |
+| Var                              | Default                          | Purpose                               |
+| -------------------------------- | -------------------------------- | ------------------------------------- |
+| `lxc_gpu_features_map`           | `{ llm-4080: { nvidia: true } }` | Service → which device groups to bind |
+| `lxc_gpu_features_dri_major`     | `226`                            | `/dev/dri` char major                 |
+| `lxc_gpu_features_kfd_major`     | `235`                            | `/dev/kfd` char major                 |
+| `lxc_gpu_features_service_vmids` | from tofu inventory              | Service → current vmid (auto)         |
 
 The current vmid is resolved at run time from `tofu_inventory.json`, so a
 vmid renumber needs no change here.
@@ -70,9 +74,10 @@ inventory resolves no GPU services.
 ./scripts/run-ansible.sh playbooks/site.yml --limit <node> --tags lxc_gpu_features
 ```
 
-Verify the devices landed inside the container (substitute the `llm-fast`
-vmid the tofu inventory resolved):
+Verify the devices landed inside the container (substitute the vmid the tofu
+inventory resolved for the service):
 
 ```bash
-pct exec <vmid> -- ls -l /dev/dri /dev/kfd
+pct exec <vmid> -- ls -l /dev/dri /dev/kfd       # an AMD compute service
+pct exec <vmid> -- ls -l /dev/nvidia*            # an NVIDIA service
 ```

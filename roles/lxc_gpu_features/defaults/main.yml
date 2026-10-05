@@ -20,10 +20,13 @@
 # needs no change here. Only vmids present on the host are acted on; every task
 # is skipped under Docker virtualization (molecule). No IPs, no secrets.
 lxc_gpu_features_map:
-  llm-fast:  # llama.cpp + llama-swap + ROCm on the AMD card (privileged LXC)
-    dri: true
-    kfd: true
-  llm-4080:  # llama.cpp + llama-swap + Vulkan on the NVIDIA card (privileged LXC)
+  # llm-fast (AMD RX 6800, dri+kfd) retired 2026-10: the card was removed
+  # when the RTX 4080 SUPER physically replaced it on pve-w1700. Dropped
+  # here rather than disabled per-node because this map is global and
+  # service-keyed, not node-scoped (see the file header) -- a stale entry
+  # for a service with no vmid in the tofu inventory is already inert, but
+  # a map that still lists retired hardware is misleading to read.
+  llm-4080: # llama.cpp + llama-swap + Vulkan on the NVIDIA card (privileged LXC)
     dri: false
     kfd: false
     nvidia: true

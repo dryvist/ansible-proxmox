@@ -30,11 +30,29 @@
 wol_enable_enabled: true
 wol_enable_interface: enp6s0
 
-# The only node in the estate with an NVIDIA card. Installs the host driver
-# from NVIDIA's own apt repository so LXC guests can be given the GPU via
-# device passthrough; see roles/nvidia_driver/README.md for why not Debian's
-# non-free packaging, and for the reboot the driver switch requires.
+# One of two nodes in the estate with an NVIDIA card (pve-w1700 is the
+# other, since 2026-10 — the RTX 4080 SUPER moved off this node to there).
+# This node is being rebuilt to take an RTX PRO 6000 Blackwell instead.
+# Installs the host driver from NVIDIA's own apt repository so LXC guests
+# can be given the GPU via device passthrough; see
+# roles/nvidia_driver/README.md for why not Debian's non-free packaging,
+# and for the reboot the driver switch requires.
+#
+# Blackwell REQUIRES the open kernel modules (NVIDIA's own README), which is
+# what nvidia_driver_packages already installs (nvidia-open) — no override
+# needed here. The version pin and the pinning package that keeps
+# nvidia-persistenced/nvidia-smi aligned with it live in the role defaults,
+# not per-host, because host and guest userspace must match exactly and a
+# per-host override would let this node's pin drift from pve-w1700's.
 nvidia_driver_enabled: true
+
+# Max-Q-class card: cap board power so it fits this chassis's continuous
+# power/thermal budget. Persistence mode and any power limit RESET at every
+# reboot and at every driver unload/reload (nvidia-smi docs), which is why
+# this is a boot-time systemd unit (roles/nvidia_driver) rather than a
+# one-time `nvidia-smi -pl` call. Undefined (the role default) is a no-op;
+# set only on a card that actually needs a cap below its factory default.
+nvidia_driver_power_limit_w: 300
 
 # Cribl Edge (playbooks/cribl_edge.yml, every Proxmox host) collects GPU
 # metrics from this node's card via nvidia-smi (installed above). Opt-in
@@ -121,7 +139,6 @@ sanoid_datasets_json: >-
   {%- endfor -%}
   }
 sanoid_datasets: "{{ sanoid_datasets_json | from_json }}"
-
 # Snapshot-only: no syncoid pull job replicates either dataset off-node yet.
 # Any pull job belongs in another node's host_vars naming this node as the
 # source, never here -- see the no-hardcoded-node-names rule.

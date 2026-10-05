@@ -43,19 +43,46 @@ nvidia_driver_repo_key_url: >-
   https://developer.download.nvidia.com/compute/cuda/repos/debian{{
   ansible_distribution_major_version }}/x86_64/8793F200.pub
 
+# Exact driver series this role installs. Deliberately NOT a floating
+# "latest" — this role's whole reason to exist is that the container's
+# userland must match the HOST's kernel module version exactly, and NVIDIA's
+# apt repository serves more than one series at once: as of this pin,
+# nvidia-open itself is at 595.91.07-1, while nvidia-persistenced and
+# nvidia-smi (pulled in transitively, see below) are packaged separately at
+# 615.71.09-2 and would resolve there on a plain `apt install nvidia-open`
+# with no pin. Bump deliberately, together with every guest image that pulls
+# the same repository, and re-verify both package versions on NVIDIA's repo
+# before moving this.
+# renovate: ignore — NVIDIA's own apt repo (nvidia_driver_repo_uri above) has
+# no Renovate datasource; bump by hand and re-verify against the repo.
+nvidia_driver_version: "595.91.07"
+
 # Driver packages. `nvidia-open` is NVIDIA's own meta-package for the open
-# kernel modules (Turing and newer, so Ada/Ampere/Blackwell cards are covered);
-# it pulls nvidia-kernel-open-dkms, the CUDA userland, and nvidia-persistenced.
+# kernel modules (Turing and newer, so Ada/Ampere/Blackwell cards are
+# covered -- Blackwell in particular REQUIRES the open modules, per NVIDIA's
+# own driver README; there is no closed-source option for it). It pulls
+# nvidia-kernel-open-dkms, the CUDA userland, and nvidia-persistenced.
+#
+# `nvidia-driver-pinning-<version>` is NVIDIA's own package for this exact
+# problem: it ships apt preferences that hold the WHOLE nvidia dependency
+# chain -- including nvidia-persistenced and whatever transitively provides
+# nvidia-smi -- to this series, so a plain `apt upgrade` cannot drift any of
+# them onto the repo's newer default series while nvidia-open itself stays
+# pinned below. Order matters: it must be present so apt's resolver sees the
+# preference before (or in the same transaction as) resolving nvidia-open's
+# dependencies.
 #
 # It is also where `nvidia-smi` comes from, and that is not obvious from the
-# dependency chain: no package in it is NAMED nvidia-smi. `nvidia-driver-cuda`
-# both Provides and Conflicts the standalone `nvidia-smi` package, so adding
-# that package here to "make sure" the tool is present makes the whole install
-# unsolvable — apt cannot satisfy nvidia-open and nvidia-smi at once. Verify a
-# provider with `apt-cache show`'s Provides field before adding a package to
-# this list; reading only the Depends chain is what got it added.
+# dependency chain: no package in this list is NAMED nvidia-smi. `nvidia-
+# driver-cuda` both Provides and Conflicts the standalone `nvidia-smi`
+# package, so adding that package here to "make sure" the tool is present
+# makes the whole install unsolvable — apt cannot satisfy nvidia-open and
+# nvidia-smi at once. Verify a provider with `apt-cache show`'s Provides
+# field before adding a package to this list; reading only the Depends
+# chain is what got it added.
 nvidia_driver_packages:
-  - nvidia-open
+  - "nvidia-driver-pinning-{{ nvidia_driver_version }}"
+  - "nvidia-open={{ nvidia_driver_version }}-1"
 
 # Kernel headers DKMS builds the module against. The running kernel's headers
 # make the module build now; the metapackage makes it keep building after a
@@ -98,3 +125,15 @@ nvidia_driver_persistenced_enabled: true
 # major off the node, never hardcode it.
 nvidia_driver_device_nodes_unit_enabled: true
 nvidia_driver_device_nodes_unit_name: nvidia-device-nodes.service
+
+# Optional per-host power cap in watts (e.g. a Max-Q-class card whose factory
+# board power exceeds what a given chassis/PSU should sustain continuously).
+# Undefined (the default) is a no-op -- the unit below is installed but does
+# nothing differently; it is only the applied cap that is skipped.
+#
+# This is a boot-time systemd unit rather than a one-shot `nvidia-smi -pl`
+# task because both persistence mode and any power limit RESET at every
+# reboot and at every driver unload/reload (nvidia-smi's own docs) -- a task
+# that only ran once at role-apply time would silently stop holding the cap
+# after the very next reboot, with nothing reporting it.
+nvidia_driver_power_limit_w: null

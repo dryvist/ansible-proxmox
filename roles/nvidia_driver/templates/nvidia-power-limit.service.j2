@@ -1,0 +1,21 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Set persistence mode and the GPU power limit at boot
+# Ordered after persistenced so the driver is already resident and the GPU is
+# enumerable; this unit does not depend on it to function, but running before
+# it would race nvidia-smi against a card the driver has not bound yet.
+After=nvidia-persistenced.service
+Before=pve-guests.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Both persistence mode and any power limit reset at every reboot and at
+# every driver unload/reload (nvidia-smi's own docs), so both are reapplied
+# here rather than set once at install time.
+ExecStart=/usr/bin/nvidia-smi -pm 1
+ExecStart=/usr/bin/nvidia-smi -pl {{ nvidia_driver_power_limit_w }}
+
+[Install]
+WantedBy=multi-user.target
