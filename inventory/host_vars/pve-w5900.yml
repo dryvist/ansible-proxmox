@@ -55,10 +55,11 @@ pve_upgrade_kernel_packages:
 nvidia_driver_header_packages:
   - proxmox-headers-7.0.14-8-pve
 
-# CUDA stress tooling lives beside the model cache; CUDA 13.2 supports this
-# Blackwell GPU, and its virtual compute capability is 12.0.
+# GPU stress and disk benchmark tooling lives beside the model cache; CUDA 13.2
+# supports this Blackwell GPU, and its virtual compute capability is 12.0.
 nvidia_driver_packages_extra:
   - stress-ng
+  - fio
   - git
   - build-essential
   - cuda-toolkit-13-2
