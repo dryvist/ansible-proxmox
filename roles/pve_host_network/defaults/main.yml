@@ -14,22 +14,20 @@
 # explicitly enabled: a bad render disconnects the node with no remote way back.
 pve_host_network_enforce: false
 
-# Apply a written change live via ifupdown2. Requires the enforce flag. Kept
-# separate so writing the file and applying it stay two deliberate decisions.
-pve_host_network_apply: false
-
 # Bridge that must carry the host management address, untagged. Guests still
 # tag freely: the bridge stays VLAN-aware.
 pve_host_network_bridge: vmbr0
 
-# Physical uplink enslaved to the bridge. Resolved from facts when empty.
-pve_host_network_uplink: ""
+# Stable physical uplink name. Inventory supplies its permanent MAC; the role
+# writes the matching systemd .link and bridge config together.
+pve_host_network_uplink: nic0
+pve_host_network_uplink_mac: ""
 
 pve_host_network_vlan_aware: true
 pve_host_network_vids: "2-4094"
 
-# Management address (CIDR) and gateway. Both required when enforcing.
-# Supplied from inventory or the environment; never committed here.
+# Optional management address (CIDR) and gateway overrides. Empty values use
+# the current default-route interface address and gathered gateway facts.
 pve_host_network_address: ""
 pve_host_network_gateway: ""
 

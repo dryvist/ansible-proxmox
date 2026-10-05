@@ -144,6 +144,11 @@ jobs:
       - name: Verify pve_api_tokens mint decision and read gate
         run: python3 tests/test_pve_api_tokens.py
 
+      # Interface pinning and bridge ports are one inventory contract. Keep
+      # kernel-slot names from returning in the rendered bridge configuration.
+      - name: Verify pve_host_network MAC pinning contract
+        run: python3 tests/test_pve_host_network_contract.py
+
       # The drive artifact feeds a Nautobot sync that DELETES what it stops
       # seeing, so every failure here is silent and destructive: a filter that
       # stops excluding removable media churns the inventory every converge, and

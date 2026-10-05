@@ -1,4 +1,8 @@
 ---
+# Live Ethernet MAC recorded 2026-10-05; pin identity rather than PCI slot.
+pve_host_network_uplink: nic0
+pve_host_network_uplink_mac: "00:26:b9:2b:47:94"
+
 # Host vars for this node (the R710).
 #
 # This node is always-on:
