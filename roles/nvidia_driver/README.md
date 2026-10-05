@@ -127,6 +127,16 @@ GPU's reported minimum and maximum; after starting it, the role reads back and
 asserts each live limit matches within 1 W. An unsupported value fails loudly
 instead of relying on the driver to clamp it.
 
+## Optional CUDA stress utility
+
+`nvidia_driver_gpu_burn_enabled` defaults to false. When enabled, the role
+checks out a pinned GPU Burn revision under
+`/var/lib/llm-cache/bin/gpu-burn` and builds it for
+`nvidia_driver_gpu_burn_compute` using
+`nvidia_driver_gpu_burn_cuda_path`. Use `nvidia_driver_packages_extra` for the
+host's build and stress packages; these settings are supplied through
+host_vars.
+
 ## Test coverage limits
 
 The molecule scenario covers the **inert** path only: it converges with the
