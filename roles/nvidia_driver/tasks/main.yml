@@ -154,28 +154,12 @@
   tags:
     - nvidia_driver
 
-- name: Checkout the pinned GPU Burn source
-  ansible.builtin.git:
-    repo: https://github.com/wilicc/gpu-burn.git
-    dest: "{{ nvidia_driver_gpu_burn_dir }}"
-    version: "{{ nvidia_driver_gpu_burn_version }}"
-    update: true
-  register: nvidia_driver_gpu_burn_checkout
-  when:
-    - nvidia_driver_enabled | bool
-    - nvidia_driver_gpu_burn_enabled | bool
-    - ansible_virtualization_type | default('') != 'docker'
-  tags:
-    - nvidia_driver
-
-- name: Build GPU Burn for this GPU's compute capability
-  ansible.builtin.command:
-    cmd: >-
-      make COMPUTE={{ nvidia_driver_gpu_burn_compute | replace('.', '') }}
-      CUDAPATH={{ nvidia_driver_gpu_burn_cuda_path }}
-    chdir: "{{ nvidia_driver_gpu_burn_dir }}"
-  register: nvidia_driver_gpu_burn_build
-  changed_when: "'Nothing to be done' not in nvidia_driver_gpu_burn_build.stdout"
+- name: Manage the optional GPU Burn tool
+  ansible.builtin.include_tasks:
+    file: gpu_burn.yml
+    apply:
+      tags:
+        - nvidia_driver
   when:
     - nvidia_driver_enabled | bool
     - nvidia_driver_gpu_burn_enabled | bool
