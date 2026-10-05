@@ -13,9 +13,9 @@ block-level copy of its disk.
 
 | Class | Derived from | `max_relocate` | `pvesr` replica |
 | --- | --- | --- | --- |
-| `application_ha` | membership of a `pve_ha_anti_affinity_groups` entry | `0` | none |
-| `immovable` | a key of `pve_ha_immovable_guests` (the one explicit class) | `0` | none |
-| `singleton` | neither of the above — the default | `pve_ha_max_relocate` | **required** |
+| `application_ha` | `pve_ha_anti_affinity_groups` | `0` | none |
+| `immovable` | `pve_ha_immovable_guests` | `0` | none |
+| `singleton` | default | `pve_ha_max_relocate` | **required** |
 
 **`application_ha`** — the service provides its own redundancy across nodes: a
 Raft quorum member, a DNS secondary with zone transfer, a keepalived VRRP
@@ -100,6 +100,14 @@ Because a `pvesr` job is node-local (`pvesr create-local-job` runs on the guest'
 source node), the replication tasks run on **every** node and each creates jobs
 only for the guests homed on it; the cluster-wide HA config still runs once on
 `pve_ha_config_host`.
+
+The role compares each local job's source/target pair with its declared pair in
+either direction, preserving Proxmox's automatic direction reversal after a
+migration. It re-enables a disabled job when the pair still matches. A stale
+target is replaced only when the job is disabled, idle, and still sourced from
+its declared home. Forced removal drops the job configuration and retains the
+old replicated volumes. Other target drift fails with the job details for
+review instead of changing a running or relocated job.
 
 Before any `pvesr` job is created, the role hard-fails the converge if a job's
 target node lacks a storage id used by the guest's volumes. `pvesr` replicates
