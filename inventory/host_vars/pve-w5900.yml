@@ -48,6 +48,17 @@ pve_host_network_uplink: enp6s0
 # per-host override would let this node's pin drift from pve-w1700's.
 nvidia_driver_enabled: true
 
+# CUDA stress tooling lives beside the model cache; CUDA 13.2 supports this
+# Blackwell GPU, and its virtual compute capability is 12.0.
+nvidia_driver_packages_extra:
+  - stress-ng
+  - git
+  - build-essential
+  - cuda-toolkit-13-2
+nvidia_driver_gpu_burn_enabled: true
+nvidia_driver_gpu_burn_compute: "120"
+nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda-13.2
+
 # Max-Q-class card: cap board power so it fits this chassis's continuous
 # power/thermal budget. Persistence mode and any power limit RESET at every
 # reboot and at every driver unload/reload (nvidia-smi docs), which is why

@@ -84,6 +84,20 @@ nvidia_driver_packages:
   - "nvidia-driver-pinning-{{ nvidia_driver_version }}"
   - "nvidia-open={{ nvidia_driver_version }}-1"
 
+# Host-specific packages for optional validation or workload tooling.
+nvidia_driver_packages_extra: []
+
+# Optional CUDA stress utility, built in the cache dataset so its source and
+# executable stay out of the root filesystem. The immutable source revision
+# keeps the build repeatable; select the GPU's virtual compute capability per
+# host when enabling it.
+nvidia_driver_gpu_burn_enabled: false
+# renovate: datasource=git-refs depName=https://github.com/wilicc/gpu-burn versioning=git
+nvidia_driver_gpu_burn_version: 0d19c94dcb2e9b6858b7586a4c327674cd67113b
+nvidia_driver_gpu_burn_compute: "75"
+nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda
+nvidia_driver_gpu_burn_dir: /var/lib/llm-cache/bin/gpu-burn
+
 # Kernel headers DKMS builds the module against. The running kernel's headers
 # make the module build now; the metapackage makes it keep building after a
 # kernel upgrade, without which the GPU quietly disappears on the next reboot.
