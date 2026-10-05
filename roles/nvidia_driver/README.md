@@ -125,7 +125,25 @@ The unit runs after `nvidia-persistenced.service` and before
 Before starting the unit, the role asserts the requested value is within every
 GPU's reported minimum and maximum; after starting it, the role reads back and
 asserts each live limit matches within 1 W. An unsupported value fails loudly
-instead of relying on the driver to clamp it.
+instead of relying on the driver to clamp it. Use
+`--tags nvidia_driver_power_limit` to apply and verify the power limit by itself;
+that tag selects only GPU discovery and driver-state checks plus the power-limit
+unit and its readback. It does not select driver installation, reboot reporting,
+or graphics-clock tasks.
+
+## Optional maximum graphics clock
+
+`nvidia_driver_graphics_clock_max_mhz` defaults to null, so graphics clocks are
+unlocked unless a host explicitly sets a positive integer MHz value. When set,
+the role installs and enables a separate `nvidia-graphics-clock.service` that
+runs `nvidia-smi -lgc 0,<max>` at boot before Proxmox starts guests. The NVIDIA
+role requires a positive integer and checks it against every GPU's reported
+maximum before installing the unit. NVIDIA applies the closest supported
+frequency to the requested maximum. This setting is independent of the power
+cap; `--tags nvidia_driver_graphics_clock` selects the clock-lock path. Removing
+the setting stops and disables that unit, resets graphics clocks when the
+NVIDIA module is loaded, removes the unit, and reloads systemd. The
+power-limit-only tag does not run clock-lock or cleanup tasks.
 
 ## Optional CUDA stress utility
 

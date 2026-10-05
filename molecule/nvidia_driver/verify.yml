@@ -12,6 +12,7 @@
       loop:
         - /etc/modprobe.d/blacklist-nouveau.conf
         - /etc/apt/sources.list.d/nvidia-cuda.sources
+        - /etc/systemd/system/nvidia-graphics-clock.service
       loop_control:
         label: "{{ item }}"
 
@@ -57,6 +58,14 @@
         fail_msg: >-
           nvidia_driver added its apt repository inside a container -- the
           ansible_virtualization_type guard is not holding.
+
+    - name: Assert graphics-clock locking is off by default
+      ansible.builtin.assert:
+        that:
+          - not (nvidia_driver_artifacts.results[2].stat.exists)
+        fail_msg: >-
+          nvidia_driver installed a graphics-clock unit without an explicit
+          nvidia_driver_graphics_clock_max_mhz value.
 
     - name: Assert nvidia packages were not installed
       ansible.builtin.command:

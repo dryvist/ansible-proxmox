@@ -140,6 +140,10 @@ nvidia_driver_persistenced_enabled: true
 nvidia_driver_device_nodes_unit_enabled: true
 nvidia_driver_device_nodes_unit_name: nvidia-device-nodes.service
 
+# Optional maximum graphics clock in MHz. Null leaves the GPU clock unlocked.
+# A configured value is applied at boot by a separate unit from the power cap.
+nvidia_driver_graphics_clock_max_mhz: null
+
 # Optional per-host power cap in watts (e.g. a Max-Q-class card whose factory
 # board power exceeds what a given chassis/PSU should sustain continuously).
 # Undefined (the default) is a no-op -- the unit below is installed but does

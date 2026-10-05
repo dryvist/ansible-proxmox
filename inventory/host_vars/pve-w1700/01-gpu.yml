@@ -22,4 +22,4 @@
 # is removed at its source in that same defaults file instead of disabled
 # per-node, for the identical reason: it is not node-scoped to begin with.
 nvidia_driver_enabled: true
-nvidia_driver_power_limit_w: 250
+nvidia_driver_power_limit_w: 200
