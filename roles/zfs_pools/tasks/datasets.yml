@@ -70,6 +70,22 @@
 # Optional read-only/scoped NFS export (zfs sharenfs). Children inherit a
 # parent's sharenfs, so exporting a namespace parent (e.g. bulk/databases) makes
 # every dataset under it queryable read-only without per-child config.
+- name: "Require an NFS export when dataset export permissions are declared in {{ zfs_pool.key }}"
+  ansible.builtin.assert:
+    that:
+      - item.value.nfs_export is defined
+      - item.value.nfs_export | string | length > 0
+    fail_msg: >-
+      nfs_export_permissions applies only to a dataset with a non-empty
+      nfs_export declaration.
+    quiet: true
+  loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}/{{ item.key }}"
+  when: item.value.nfs_export_permissions is defined
+  tags:
+    - zfs_pools
+
 - name: "Apply NFS exports in pool {{ zfs_pool.key }}"
   ansible.builtin.include_tasks: nfs_export.yml
   loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"

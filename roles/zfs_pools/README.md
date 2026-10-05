@@ -79,14 +79,15 @@ under `properties`.
 
 ### Per-dataset NFS export
 
-`datasets.<name>.nfs_export` (optional) is the exact ZFS `sharenfs` value, set
-verbatim and compared with `zfs get -H -o value sharenfs`. Use it to expose a
-dataset over NFS — typically **read-only and LAN-scoped** for query access:
+`datasets.<name>.nfs_export` (optional) is the exact comma-separated OpenZFS
+`sharenfs` option string, set verbatim and compared with
+`zfs get -H -o value sharenfs`. Use `ro` or `rw` host-list options to scope
+client access; read-only is the safer default for query access:
 
 ```yaml
 datasets:
   databases:
-    nfs_export: "" # space-separated clients
+    nfs_export: "ro,root_squash"
 ```
 
 Children **inherit** a parent's `sharenfs`, so exporting a namespace parent
@@ -95,6 +96,12 @@ without per-child config; a child can opt out with `sharenfs: "off"` under
 `properties`. When any dataset declares `nfs_export`, the role ensures
 `nfs-kernel-server` is installed and running. Leave it `null` (the default) for
 no export.
+
+For a deliberately root-squashed writable export, `datasets.<name>.nfs_export_permissions`
+can set the dataset root's `owner`, `group`, and four-digit octal `mode`. The
+role applies these permissions only after setting the declared export options;
+the export must still scope write access to its intended clients and retain
+root squashing. This does not enable `no_root_squash`.
 
 ### Per-dataset Proxmox storage registration (`pvesm_id`)
 
