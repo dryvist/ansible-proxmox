@@ -461,12 +461,24 @@
 # =============================================================================
 # PANIC DUMP FORWARDING (systemd-pstore)
 # =============================================================================
-# By default systemd-pstore only copies EFI/ACPI ERST panic dumps to
-# /var/lib/systemd/pstore/, a file that is never shipped to Splunk. Setting
-# Storage=journal makes it log the dump content into the journal at boot,
-# which the existing pve_syslog_forwarder role already forwards.
+# `Storage=external` archives captured EFI/ACPI ERST panic dumps under
+# /var/lib/systemd/pstore/ and logs their contents into the journal, which the
+# existing pve_syslog_forwarder role already forwards.
 
-- name: Ensure pstore.conf.d drop-in directory exists
+- name: Assert pstore drop-in uses systemd's native configuration directory
+  ansible.builtin.assert:
+    that:
+      - crash_diagnostics_pstore_conf_dropin is match('^/etc/systemd/pstore\.conf\.d/.+\.conf$')
+    fail_msg: >-
+      crash_diagnostics_pstore_conf_dropin must be a .conf under
+      /etc/systemd/pstore.conf.d/, the systemd-pstore drop-in directory.
+    quiet: true
+  when: ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - crash_diagnostics
+    - pstore
+
+- name: Ensure systemd pstore drop-in directory exists
   ansible.builtin.file:
     path: "{{ crash_diagnostics_pstore_conf_dropin | dirname }}"
     state: directory
@@ -478,13 +490,36 @@
     - crash_diagnostics
     - pstore
 
-- name: Deploy systemd-pstore journal-storage drop-in
+- name: Deploy systemd-pstore external-storage drop-in
   ansible.builtin.template:
-    src: pstore-journal.conf.j2
+    src: pstore-storage.conf.j2
     dest: "{{ crash_diagnostics_pstore_conf_dropin }}"
     owner: root
     group: root
     mode: "0644"
+  when: ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - crash_diagnostics
+    - pstore
+
+- name: Read back the systemd-pstore storage drop-in
+  ansible.builtin.slurp:
+    src: "{{ crash_diagnostics_pstore_conf_dropin }}"
+  register: crash_diagnostics_pstore_conf_persisted
+  when: ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
+  tags:
+    - crash_diagnostics
+    - pstore
+
+- name: Assert pstore records are archived locally and written to the journal
+  ansible.builtin.assert:
+    that:
+      - crash_diagnostics_pstore_conf_persisted.content | b64decode is search('(?m)^\[PStore\]$')
+      - crash_diagnostics_pstore_conf_persisted.content | b64decode is search('(?m)^Storage=external$')
+    fail_msg: >-
+      systemd-pstore must archive captures to /var/lib/systemd/pstore/ and
+      write their contents to the journal for the existing log forwarder.
+    quiet: true
   when: ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host'
   tags:
     - crash_diagnostics

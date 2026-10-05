@@ -1,0 +1,6 @@
+# {{ ansible_managed }}
+# systemd-pstore Storage=external archives records under
+# /var/lib/systemd/pstore/ and logs their contents to the journal. The existing
+# pve_syslog_forwarder sends the journal records through the configured log path.
+[PStore]
+Storage=external

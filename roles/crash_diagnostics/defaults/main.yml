@@ -236,5 +236,5 @@ crash_diagnostics_mce_monitor_script: /usr/local/bin/mce-monitor.sh
 # PANIC DUMP FORWARDING (systemd-pstore)
 # =============================================================================
 
-# Drop-in so the package-managed /etc/pstore.conf is never overwritten.
-crash_diagnostics_pstore_conf_dropin: /etc/pstore.conf.d/10-journal.conf
+# Drop-in so the package-managed /etc/systemd/pstore.conf is never overwritten.
+crash_diagnostics_pstore_conf_dropin: /etc/systemd/pstore.conf.d/10-storage.conf
