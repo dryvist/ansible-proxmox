@@ -22,6 +22,8 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
+    - nvidia_driver_graphics_clock
 
 # Fail loud rather than silently install a driver for absent hardware: an
 # opt-in on the wrong host would otherwise pull DKMS and a kernel module onto a
@@ -39,6 +41,8 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
+    - nvidia_driver_graphics_clock
 
 # Guards against enabling a version pin (an "=" in the package spec) without
 # the matching NVIDIA pinning package: apt would then resolve nvidia-open's
@@ -189,6 +193,14 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
+    - nvidia_driver_graphics_clock
+
+- name: Configure the optional NVIDIA graphics-clock lock
+  ansible.builtin.import_tasks: graphics_clock.yml
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
 
 # Keeps the driver resident between clients.
 #
@@ -254,6 +266,7 @@
     - nvidia_driver_power_limit_w is not none
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
 
 - name: Read the supported NVIDIA GPU power-limit ranges
   ansible.builtin.command:
@@ -267,6 +280,7 @@
     - "'nouveau' not in nvidia_driver_lsmod.stdout"
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
 
 - name: Require nvidia-smi to report supported GPU power limits
   ansible.builtin.assert:
@@ -282,6 +296,7 @@
     - "'nouveau' not in nvidia_driver_lsmod.stdout"
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
 
 - name: Reject NVIDIA power limits outside each GPU's supported range
   ansible.builtin.assert:
@@ -302,6 +317,7 @@
     - "'nouveau' not in nvidia_driver_lsmod.stdout"
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
 
 - name: Enable the boot-time NVIDIA power-limit unit
   ansible.builtin.systemd_service:
@@ -315,6 +331,7 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
 
 - name: Read back the live NVIDIA GPU power limits
   ansible.builtin.command:
@@ -328,6 +345,7 @@
     - "'nouveau' not in nvidia_driver_lsmod.stdout"
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
 
 - name: Require nvidia-smi to report live GPU power limits
   ansible.builtin.assert:
@@ -343,6 +361,7 @@
     - "'nouveau' not in nvidia_driver_lsmod.stdout"
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
 
 - name: Assert the live NVIDIA GPU power limits match the requested cap
   ansible.builtin.assert:
@@ -361,6 +380,7 @@
     - "'nouveau' not in nvidia_driver_lsmod.stdout"
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
 
 # Surfaced, not acted on. Rebooting a hypervisor evacuates or interrupts every
 # guest on it, so that is an operator decision taken inside a maintenance

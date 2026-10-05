@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Lock the maximum NVIDIA GPU graphics clock
+After=nvidia-persistenced.service
+Before=pve-guests.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nvidia-smi -lgc 0,{{ nvidia_driver_graphics_clock_max_mhz }}
+
+[Install]
+WantedBy=multi-user.target
