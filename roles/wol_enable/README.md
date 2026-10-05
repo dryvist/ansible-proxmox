@@ -17,13 +17,18 @@ surviving node can wake any other by name.
 
 The address is discovered on the node itself (`ethtool -P`, the permanent
 hardware address, falling back to the runtime address when the NIC reports no
-permanent one), so no real hardware identifier is committed to this repository.
+permanent one). When inventory already owns a pinned-uplink MAC, set
+`wol_enable_mac` from that variable so the bridge, WoL lookup, and udev rule
+share the same device identity. With a configured MAC, the role resolves the
+current kernel interface name at converge time and matches the udev rule by
+MAC instead of a kernel slot name.
 
 Inert by default. Opt a host in via host_vars:
 
 ```yaml
 wol_enable_enabled: true
-wol_enable_interface: enp5s0   # the physical NIC, not the bridge
+wol_enable_interface: nic0     # stable physical NIC alias, not the bridge
+wol_enable_mac: "{{ pve_host_network_uplink_mac }}"
 ```
 
 Fails loud at converge time if the interface doesn't advertise magic-packet
@@ -35,9 +40,9 @@ resolved for the interface.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `wol_enable_enabled` | `false` | Master switch. |
-| `wol_enable_interface` | `""` | Physical NIC, not the bridge. Required when enabled. |
+| `wol_enable_interface` | `""` | Stable alias for the physical NIC, not the bridge. Required when enabled. |
 | `wol_enable_node_config` | `true` | Publish this node's `wakeonlan` key. Set false on a non-Proxmox host. |
-| `wol_enable_mac` | `""` | Override the discovered MAC. Empty ⇒ discovered on the node. |
+| `wol_enable_mac` | `""` | MAC identity override; empty discovers on-node, populated resolves the current interface and udev match by MAC. |
 
 ## Installation
 

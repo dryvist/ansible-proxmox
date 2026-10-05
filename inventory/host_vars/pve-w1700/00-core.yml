@@ -184,6 +184,7 @@ node_scheduled_wake_targets: []
 # readback was unavailable during this change.
 wol_enable_enabled: true
 wol_enable_interface: nic0
+wol_enable_mac: "{{ pve_host_network_uplink_mac }}"
 pve_host_network_uplink: nic0
 pve_host_network_uplink_mac: "60:45:cb:9a:4b:1f"
 

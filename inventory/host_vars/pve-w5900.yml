@@ -14,9 +14,10 @@
 # would not rescan).
 #
 # The onboard uplink is pinned by permanent MAC to nic0. The bridge and
-# Wake-on-LAN udev rule use the same stable name after the required reboot.
+# Wake-on-LAN role resolves the current kernel name from the same MAC.
 wol_enable_enabled: true
 wol_enable_interface: nic0
+wol_enable_mac: "{{ pve_host_network_uplink_mac }}"
 pve_host_network_uplink: nic0
 pve_host_network_uplink_mac: "10:ff:e0:c4:32:db"
 

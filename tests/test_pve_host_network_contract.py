@@ -111,6 +111,18 @@ class PveHostNetworkContractTest(unittest.TestCase):
                         values["wol_enable_interface"],
                         values["pve_host_network_uplink"],
                     )
+                    self.assertEqual(
+                        values["wol_enable_mac"], "{{ pve_host_network_uplink_mac }}"
+                    )
+
+    def test_wake_on_lan_resolves_the_current_name_from_the_pinned_mac(self):
+        tasks = read_yaml(ROOT / "roles/wol_enable/tasks/main.yml")
+        serialized = yaml.safe_dump(tasks)
+        template = (ROOT / "roles/wol_enable/templates/99-wol-enable.rules.j2").read_text()
+
+        self.assertIn("cmd: ip -o link", serialized)
+        self.assertIn("wol_enable_interface_resolved", serialized)
+        self.assertIn('ATTR{address}=="{{ wol_enable_mac | lower }}"', template)
 
 
 if __name__ == "__main__":

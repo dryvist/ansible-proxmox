@@ -14,9 +14,10 @@
 # wol_enable_interface in its host_vars.
 wol_enable_enabled: false
 
-# The physical NIC to enable Wake-on-LAN on, e.g. enp5s0. Not the bridge
-# (vmbr0): a Linux bridge device does not itself support Wake-on-LAN, only the
-# physical interface enslaved to it. Required (fails loud) when enabled.
+# Stable alias for the physical NIC to enable Wake-on-LAN on, not the bridge
+# (vmbr0). When `wol_enable_mac` is set, the role resolves the current kernel
+# name from that MAC so PCI or systemd renames do not strand the udev rule.
+# Required (fails loud) when enabled.
 wol_enable_interface: ""
 
 # Publish the interface's MAC into this Proxmox node's own config as the
@@ -26,9 +27,8 @@ wol_enable_interface: ""
 # every node and readable by whichever node is still up.
 wol_enable_node_config: true
 
-# MAC address the magic packet is sent to. Left empty on purpose: the node
+# MAC address the magic packet is sent to. Left empty by default: the node
 # discovers its own NIC's permanent hardware address at converge time
 # (`ethtool -P`, falling back to the runtime address when the NIC reports no
-# permanent one). Real hardware identifiers therefore never enter this
-# repository. Set it in host_vars only to override the discovered value.
+# permanent one). A host can reference its single-sourced pinned-uplink MAC.
 wol_enable_mac: ""
