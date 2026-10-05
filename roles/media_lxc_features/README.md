@@ -94,6 +94,16 @@ Hosts without the data root (no bulk pool, or `zfs_pools` not yet applied)
 skip these tasks entirely; the role never invents a plain directory on the
 root filesystem.
 
+## Node-declared NFS mounts
+
+The role also mounts client filesystems declared in the published
+`node_storage.<node>.nfs_mounts` inventory. `playbooks/load_tofu.yml` injects
+that node entry as `zfs_pools_from_tofu`, which supplies the role's
+`media_lxc_features_nfs_mounts` default. Each item uses `src`, `path`, and
+optional `opts` fields. Storage endpoints and mount paths stay in the private
+deployment object instead of host variables in this public repository. Use
+read-only mount options for model libraries and other shared source data.
+
 ## App config persistence (`bulk/appdata/<app>`)
 
 Every media app keeps its **own database + settings** under a single config

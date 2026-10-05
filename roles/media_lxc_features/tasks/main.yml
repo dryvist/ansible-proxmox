@@ -163,11 +163,10 @@
     - media_lxc_features
 
 # ---------------------------------------------------------------------------
-# NFS client mounts (media relocation prereq — issue #395)
+# NFS client mounts (media relocation and shared model libraries)
 # ---------------------------------------------------------------------------
-# Mounts the storage node's ro library export at the same path the bind-mount
-# map uses, so a relocated container's `mounts` entries work unchanged. No-op
-# wherever media_lxc_features_nfs_mounts is empty (the default).
+# Mounts declared shared filesystems at the host path later consumed by LXC
+# bind-mounts. No-op when the node has no NFS client mounts.
 
 - name: Install the NFS client for library mounts
   ansible.builtin.apt:
@@ -179,7 +178,7 @@
   tags:
     - media_lxc_features
 
-- name: Mount the media library over NFS
+- name: Mount node-declared filesystems over NFS
   ansible.posix.mount:
     src: "{{ item.src }}"
     path: "{{ item.path }}"
@@ -187,7 +186,7 @@
     # nofail + _netdev keep a host reboot from hanging when the storage node
     # is offline: _netdev defers the mount until networking is up, nofail lets
     # boot proceed if the export is still unreachable.
-    opts: "{{ item.opts | default('ro,soft,timeo=150,nofail,_netdev') }}"
+    opts: "{{ item.opts | default('ro,soft,timeo=150,nofail,_netdev', true) }}"
     state: mounted
   loop: "{{ media_lxc_features_nfs_mounts | default([]) }}"
   loop_control:
