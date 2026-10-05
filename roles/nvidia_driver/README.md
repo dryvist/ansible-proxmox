@@ -120,6 +120,12 @@ sustain continuously (e.g. a Max-Q card) and the role installs a
 `nvidia-smi -pl <watts>`. Both persistence mode and any power limit reset at
 every reboot and at every driver unload/reload — that is why this is a
 boot-time unit rather than a one-shot task run at converge time.
+The unit runs after `nvidia-persistenced.service` and before
+`pve-guests.service`, so it completes before Proxmox starts on-boot guests.
+Before starting the unit, the role asserts the requested value is within every
+GPU's reported minimum and maximum; after starting it, the role reads back and
+asserts each live limit matches within 1 W. An unsupported value fails loudly
+instead of relying on the driver to clamp it.
 
 ## Test coverage limits
 

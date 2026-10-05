@@ -5,6 +5,7 @@ Description=Set persistence mode and the GPU power limit at boot
 # enumerable; this unit does not depend on it to function, but running before
 # it would race nvidia-smi against a card the driver has not bound yet.
 After=nvidia-persistenced.service
+Before=pve-guests.service
 Wants=nvidia-persistenced.service
 
 [Service]

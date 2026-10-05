@@ -196,9 +196,58 @@
     owner: root
     group: root
     mode: "0644"
+  register: nvidia_driver_power_limit_unit_file
   when:
     - nvidia_driver_enabled | bool
     - nvidia_driver_power_limit_w is not none
+  tags:
+    - nvidia_driver
+
+- name: Read the supported NVIDIA GPU power-limit ranges
+  ansible.builtin.command:
+    cmd: nvidia-smi --query-gpu=power.min_limit,power.max_limit --format=csv,noheader,nounits
+  register: nvidia_driver_power_limit_range
+  changed_when: false
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+
+- name: Require nvidia-smi to report supported GPU power limits
+  ansible.builtin.assert:
+    that:
+      - nvidia_driver_power_limit_range.stdout_lines | length > 0
+    fail_msg: >-
+      nvidia-smi returned no GPU power-limit ranges; refusing to apply the
+      requested NVIDIA power limit.
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+
+- name: Reject NVIDIA power limits outside each GPU's supported range
+  ansible.builtin.assert:
+    that:
+      - (item.split(',') | first | trim | float) <= (nvidia_driver_power_limit_w | float)
+      - (item.split(',') | last | trim | float) >= (nvidia_driver_power_limit_w | float)
+    fail_msg: >-
+      Requested NVIDIA power limit {{ nvidia_driver_power_limit_w }} W is
+      outside this GPU's supported range ({{ item | trim }} W, min,max);
+      refusing to rely on the driver to clamp the value.
+  loop: "{{ nvidia_driver_power_limit_range.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item | trim }} W (min,max)"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
   tags:
     - nvidia_driver
 
@@ -207,11 +256,57 @@
     name: nvidia-power-limit.service
     enabled: true
     daemon_reload: true
-    state: "{{ 'started' if 'nouveau' not in nvidia_driver_lsmod.stdout else omit }}"
+    state: "{{ ('restarted' if nvidia_driver_power_limit_unit_file.changed else 'started') if 'nouveau' not in nvidia_driver_lsmod.stdout else omit }}"
   when:
     - nvidia_driver_enabled | bool
     - nvidia_driver_power_limit_w is not none
     - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+- name: Read back the live NVIDIA GPU power limits
+  ansible.builtin.command:
+    cmd: nvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits
+  register: nvidia_driver_power_limit_readback
+  changed_when: false
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+
+- name: Require nvidia-smi to report live GPU power limits
+  ansible.builtin.assert:
+    that:
+      - nvidia_driver_power_limit_readback.stdout_lines | length > 0
+    fail_msg: >-
+      nvidia-smi returned no live GPU power limits after starting the
+      power-limit unit.
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+
+- name: Assert the live NVIDIA GPU power limits match the requested cap
+  ansible.builtin.assert:
+    that:
+      - ((item | float) - (nvidia_driver_power_limit_w | float)) | abs <= 1
+    fail_msg: >-
+      nvidia-smi reports a GPU power limit of {{ item | trim }} W; expected
+      {{ nvidia_driver_power_limit_w }} W within 1 W.
+  loop: "{{ nvidia_driver_power_limit_readback.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item | trim }} W"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
   tags:
     - nvidia_driver
 
