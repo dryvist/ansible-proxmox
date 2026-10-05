@@ -1,3 +1,4 @@
+---
 # NVIDIA GPU settings for pve-w1700.
 #
 # Split out of the single host_vars file, which reached the repository per-file
