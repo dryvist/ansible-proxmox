@@ -25,6 +25,11 @@ proxmox_user: "{{ [proxmox_user_from_tofu | default('')] | reject('equalto', '')
 # assert on every converge — caught live 2026-08-15.
 pve_ha_enabled: true
 
+# Cribl Edge's native GPU metrics require NVIDIA's nvidia-smi utility. Reuse
+# the existing driver opt-in so only NVIDIA-enabled hosts collect per-GPU data.
+cribl_edge_gpu_mode: >-
+  {{ 'custom' if (nvidia_driver_enabled | default(false) | bool) else 'disabled' }}
+
 # Trust the OpenBao SSH client CA on the PVE nodes and (via pct) their LXC
 # containers (ssh-certificate-authority ADR). Additive + lockout-guarded (a
 # static break-glass key must still authenticate before the role finishes) and
