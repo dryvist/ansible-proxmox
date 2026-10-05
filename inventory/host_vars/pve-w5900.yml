@@ -29,6 +29,8 @@
 # name and reconcile this line before relying on a wake.
 wol_enable_enabled: true
 wol_enable_interface: enp6s0
+# The Proxmox bridge role consumes the same physical uplink declaration.
+pve_host_network_uplink: enp6s0
 
 # One of two nodes in the estate with an NVIDIA card (pve-w1700 is the
 # other, since 2026-10 — the RTX 4080 SUPER moved off this node to there).
