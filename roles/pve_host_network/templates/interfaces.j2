@@ -7,13 +7,13 @@
 auto lo
 iface lo inet loopback
 
-iface {{ pve_host_network_uplink_resolved }} inet manual
+iface {{ pve_host_network_uplink }} inet manual
 
 auto {{ pve_host_network_bridge }}
 iface {{ pve_host_network_bridge }} inet static
     address {{ pve_host_network_address }}
     gateway {{ pve_host_network_gateway }}
-    bridge-ports {{ pve_host_network_uplink_resolved }}
+    bridge-ports {{ pve_host_network_uplink }}
     bridge-stp off
     bridge-fd 0
 {% if pve_host_network_vlan_aware | bool %}

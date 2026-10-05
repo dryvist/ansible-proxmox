@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+[Match]
+MACAddress={{ pve_host_network_uplink_mac }}
+Type=ether
+
+[Link]
+Name={{ pve_host_network_uplink }}

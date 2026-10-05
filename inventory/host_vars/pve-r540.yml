@@ -1,4 +1,8 @@
 ---
+# Live Ethernet MAC recorded 2026-10-05; pin identity rather than PCI slot.
+pve_host_network_uplink: nic0
+pve_host_network_uplink_mac: "d0:94:66:3e:ae:81"
+
 # Host vars for the replacement storage node — now the primary home for
 # persistent application state and the database dump archive, and the source
 # the DR leg pulls from.

@@ -178,10 +178,14 @@ node_scheduled_wake_targets: []
 # is not -- the driver resets Wake-on to its hardware default on every
 # interface bring-up, so it is one reboot from gone and nothing reports it.
 #
-# The name below is matched literally (KERNEL==) and does not track a rename;
-# see the longer note in pve-w5900.yml, where the two had already diverged.
+# Wake-on-LAN and the bridge both use the MAC-pinned nic0 alias, so PCIe slot
+# enumeration does not change the udev interface match.
+# MAC from the latest available gathered hardware facts (2026-09-09); live
+# readback was unavailable during this change.
 wol_enable_enabled: true
-wol_enable_interface: enp8s0
+wol_enable_interface: nic0
+pve_host_network_uplink: nic0
+pve_host_network_uplink_mac: "60:45:cb:9a:4b:1f"
 
 # Clear the CPU C6-state enable MSR bits at boot (kernel_tuning role);
 # the cmdline max_cstate limit alone does not cover this idle state.
