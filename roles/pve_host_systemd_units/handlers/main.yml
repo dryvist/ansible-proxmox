@@ -2,3 +2,15 @@
 - name: Reload systemd unit definitions
   ansible.builtin.systemd:
     daemon_reload: true
+
+- name: Restart supplied systemd services after package changes
+  ansible.builtin.systemd:
+    name: "{{ item.name }}"
+    state: restarted
+  loop: >-
+    {{ pve_host_systemd_units_contracts
+       | selectattr('python_packages', 'defined')
+       | selectattr('python_packages') | list }}
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.state | default('stopped') == 'started'
