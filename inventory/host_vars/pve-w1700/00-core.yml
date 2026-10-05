@@ -259,21 +259,3 @@ local_identities_backup_ingress_ssh_public_key: "{{ lookup('community.hashi_vaul
   engine_mount_point='config',
   url=lookup('env', 'BAO_ADDR'),
   token=lookup('env', 'BAO_TOKEN')).secret.authorized_key_line }}"
-
-# --- GPU: NVIDIA card arrives 2026-10 -----------------------------------
-# The RTX 4080 SUPER moves here (physically, from pve-w5900) to replace the
-# RX 6800 that served the llm-fast LXC. Installs the host driver so this
-# node's /dev/nvidia* character devices exist for passthrough; see
-# roles/nvidia_driver/README.md for why NVIDIA's own apt repo, not Debian's
-# non-free packaging, and for the reboot the driver switch requires.
-#
-# No per-node GPU passthrough mapping belongs here: lxc_gpu_features_map
-# (roles/lxc_gpu_features/defaults/main.yml) is keyed by SERVICE NAME, not by
-# node, and the role only acts on services whose vmid is actually PRESENT on
-# the host it is converging (`pct list`). So once the llm-4080 LXC (nvidia:
-# true in that map) is migrated here, this node's own run of the role picks
-# it up automatically -- no mapping edit, here or in pve-w5900.yml, moves
-# with the container. The AMD dri/kfd entry for the retired llm-fast service
-# is removed at its source in that same defaults file instead of disabled
-# per-node, for the identical reason: it is not node-scoped to begin with.
-nvidia_driver_enabled: true
