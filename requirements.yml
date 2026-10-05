@@ -44,7 +44,7 @@ collections:
   # renovate: datasource=git-refs depName=https://github.com/dryvist/homelab-contracts.git currentValue=main
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: 76ae3729c3dfecf65c3438796c3d79a851af8142
+    version: 2dd80c425347daa98fc581a486f43142fb827d6a
 
 # No `roles:` section — inventory_resolve comes from the collection above, by
 # FQCN, for the reason stated there. Its old git-scm `roles:` entry installed
