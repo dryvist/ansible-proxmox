@@ -1,0 +1,49 @@
+---
+- name: Validate supplied systemd unit contracts
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[A-Za-z0-9_.@-]+[.]service$')
+      - item.content is string
+      - item.content | length > 0
+      - item.content is regex('(?m)^\\[Unit\\]$')
+      - item.content is regex('(?m)^\\[Service\\]$')
+      - item.content is regex('(?m)^ExecStart=.+$')
+      - item.state | default('stopped') in ['started', 'stopped']
+      - item.enabled | default(false) | type_debug == 'bool'
+    fail_msg: "Systemd unit contract {{ item.name | default('unnamed') }} is invalid."
+    quiet: true
+  loop: "{{ pve_host_systemd_units_contracts }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+  tags:
+    - pve_host_systemd_units
+
+- name: Install supplied systemd unit contracts
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "/etc/systemd/system/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ pve_host_systemd_units_contracts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Reload systemd unit definitions
+  tags:
+    - pve_host_systemd_units
+
+- name: Apply unit definitions before managing service state
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - pve_host_systemd_units
+
+- name: Manage supplied systemd services
+  ansible.builtin.systemd:
+    name: "{{ item.name }}"
+    enabled: "{{ item.enabled | default(false) }}"
+    state: "{{ item.state | default('stopped') }}"
+  loop: "{{ pve_host_systemd_units_contracts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  tags:
+    - pve_host_systemd_units
