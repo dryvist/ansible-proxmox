@@ -1,0 +1,158 @@
+---
+# Optional NVIDIA graphics-clock lock and cleanup.
+
+- name: Check whether the optional graphics-clock unit exists
+  ansible.builtin.stat:
+    path: /etc/systemd/system/nvidia-graphics-clock.service
+  register: nvidia_driver_graphics_clock_existing_unit
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Stop and disable the graphics-clock unit when its setting is removed
+  ansible.builtin.systemd_service:
+    name: nvidia-graphics-clock.service
+    state: stopped
+    enabled: false
+    daemon_reload: true
+  when:
+    - nvidia_driver_graphics_clock_max_mhz is none
+    - nvidia_driver_graphics_clock_existing_unit.stat.exists
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Check loaded modules before resetting a removed graphics-clock lock
+  ansible.builtin.command:
+    cmd: lsmod
+  register: nvidia_driver_graphics_clock_cleanup_lsmod
+  changed_when: false
+  when:
+    - nvidia_driver_graphics_clock_max_mhz is none
+    - nvidia_driver_graphics_clock_existing_unit.stat.exists
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Reset graphics clocks when the optional setting is removed
+  ansible.builtin.command:
+    cmd: nvidia-smi -rgc
+  changed_when: true
+  when:
+    - nvidia_driver_graphics_clock_max_mhz is none
+    - nvidia_driver_graphics_clock_existing_unit.stat.exists
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nvidia' in nvidia_driver_graphics_clock_cleanup_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Remove the graphics-clock unit when its setting is removed
+  ansible.builtin.file:
+    path: /etc/systemd/system/nvidia-graphics-clock.service
+    state: absent
+  notify: Reload systemd after removing the graphics-clock unit
+  when:
+    - nvidia_driver_graphics_clock_max_mhz is none
+    - nvidia_driver_graphics_clock_existing_unit.stat.exists
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Validate the optional NVIDIA graphics-clock maximum
+  ansible.builtin.assert:
+    that:
+      - nvidia_driver_enabled | bool
+      - ansible_virtualization_type | default('') != 'docker'
+      - (nvidia_driver_graphics_clock_max_mhz | type_debug) == 'int'
+      - (nvidia_driver_graphics_clock_max_mhz | int) > 0
+      - "'nouveau' not in (nvidia_driver_lsmod.stdout | default(''))"
+    fail_msg: >-
+      nvidia_driver_graphics_clock_max_mhz must be a positive integer in MHz
+      and requires an enabled, loaded NVIDIA driver on a physical host so the
+      requested value can be checked against the GPU.
+  when:
+    - nvidia_driver_graphics_clock_max_mhz is not none
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Read the supported maximum NVIDIA graphics clocks
+  ansible.builtin.command:
+    cmd: nvidia-smi --query-gpu=clocks.max.graphics --format=csv,noheader,nounits
+  register: nvidia_driver_graphics_clock_range
+  changed_when: false
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_graphics_clock_max_mhz is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Require nvidia-smi to report supported graphics-clock maxima
+  ansible.builtin.assert:
+    that:
+      - nvidia_driver_graphics_clock_range.stdout_lines | length > 0
+    fail_msg: >-
+      nvidia-smi returned no graphics-clock maximum; refusing to install the
+      requested NVIDIA graphics-clock lock.
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_graphics_clock_max_mhz is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Reject graphics-clock maxima above any GPU's supported maximum
+  ansible.builtin.assert:
+    that:
+      - (nvidia_driver_graphics_clock_max_mhz | int) <= (item | int)
+    fail_msg: >-
+      Requested NVIDIA graphics-clock maximum
+      {{ nvidia_driver_graphics_clock_max_mhz }} MHz exceeds a GPU's reported
+      maximum ({{ item | trim }} MHz).
+  loop: "{{ nvidia_driver_graphics_clock_range.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item | trim }} MHz"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_graphics_clock_max_mhz is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Install the boot-time NVIDIA graphics-clock unit
+  ansible.builtin.template:
+    src: nvidia-graphics-clock.service.j2
+    dest: /etc/systemd/system/nvidia-graphics-clock.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: nvidia_driver_graphics_clock_unit_file
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_graphics_clock_max_mhz is not none
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
+
+- name: Enable the boot-time NVIDIA graphics-clock unit
+  ansible.builtin.systemd_service:
+    name: nvidia-graphics-clock.service
+    enabled: true
+    daemon_reload: true
+    state: "{{ ('restarted' if nvidia_driver_graphics_clock_unit_file.changed else 'started') if 'nouveau' not in nvidia_driver_lsmod.stdout else omit }}"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_graphics_clock_max_mhz is not none
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
