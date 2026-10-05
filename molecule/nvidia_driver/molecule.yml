@@ -7,3 +7,11 @@ platforms:
     tmpfs:
       - /run
       - /tmp
+
+driver:
+  name: docker
+
+provisioner:
+  config_options:
+    defaults:
+      roles_path: ${MOLECULE_SCENARIO_DIRECTORY}/../../roles

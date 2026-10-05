@@ -81,10 +81,14 @@ one host, `nvidia-uvm` moved 507 → 510 and the `nvidia-caps` nodes moved
 
 ## Kernel upgrades
 
-DKMS rebuilds the module against each new kernel, which is why
-`proxmox-default-headers` is installed alongside the running kernel's headers.
-Without the metapackage the build silently stops happening after a kernel
-upgrade and the GPU disappears on the next reboot.
+GPU hosts declare `pve_upgrade_kernel_version` in host_vars. The upgrade role
+keeps that exact kernel installed, and this role pins it with
+`proxmox-boot-tool` and installs only its matching
+`proxmox-headers-<version>` package. This keeps the selected boot kernel,
+DKMS build headers, and installed module on one ABI instead of following a
+rolling default-kernel header metapackage. Before an upgrade reboot, the
+upgrade role requires the kernel pin and an installed NVIDIA DKMS module for
+that exact kernel.
 
 ## Version pin — and why the driver must not auto-upgrade
 

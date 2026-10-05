@@ -57,6 +57,15 @@ nvidia_driver_repo_key_url: >-
 # no Renovate datasource; bump by hand and re-verify against the repo.
 nvidia_driver_version: "595.91.07"
 
+# The Proxmox ABI pinned for this host. pve_upgrade_kernel_version is declared
+# in host_vars and is shared with the upgrade role so DKMS headers, boot
+# selection, and the pre-reboot check all use one version.
+nvidia_driver_kernel_version: "{{ pve_upgrade_kernel_version | default(ansible_kernel, true) }}"
+
+# Apt metadata must be fresh before resolving NVIDIA's version-pinning package;
+# otherwise a previously cached index can make the package appear unavailable.
+nvidia_driver_apt_cache_valid_time: 0
+
 # Driver packages. `nvidia-open` is NVIDIA's own meta-package for the open
 # kernel modules (Turing and newer, so Ada/Ampere/Blackwell cards are
 # covered -- Blackwell in particular REQUIRES the open modules, per NVIDIA's
@@ -87,6 +96,10 @@ nvidia_driver_packages:
 # Host-specific packages for optional validation or workload tooling.
 nvidia_driver_packages_extra: []
 
+# Remove only DKMS series explicitly found in host_vars; the empty default
+# leaves every other NVIDIA installation untouched.
+nvidia_driver_dkms_versions_to_remove: []
+
 # Optional CUDA stress utility, built in the cache dataset so its source and
 # executable stay out of the root filesystem. The immutable source revision
 # keeps the build repeatable; select the GPU's virtual compute capability per
@@ -98,12 +111,10 @@ nvidia_driver_gpu_burn_compute: "75"
 nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda
 nvidia_driver_gpu_burn_dir: /var/lib/llm-cache/bin/gpu-burn
 
-# Kernel headers DKMS builds the module against. The running kernel's headers
-# make the module build now; the metapackage makes it keep building after a
-# kernel upgrade, without which the GPU quietly disappears on the next reboot.
+# Install headers only for the kernel selected for boot. A floating header
+# metapackage can build DKMS against a different kernel than the one pinned.
 nvidia_driver_header_packages:
-  - "proxmox-headers-{{ ansible_kernel }}"
-  - proxmox-default-headers
+  - "proxmox-headers-{{ nvidia_driver_kernel_version }}"
 
 # nouveau is the in-tree open-source driver. It binds the card at boot and the
 # NVIDIA module cannot load while it holds the device, so it is blacklisted and
