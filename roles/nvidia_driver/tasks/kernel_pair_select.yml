@@ -37,7 +37,9 @@
     - ansible_virtualization_type | default('') != 'docker'
     - >-
       nvidia_driver_kernel_list.stdout is not search(
-        '(?m)^Pinned kernel: ' ~ (nvidia_driver_kernel_version | regex_escape) ~ '$'
+        '(?ms)^Manually selected kernels:\n'
+        ~ '(?:(?!^Automatically selected kernels:).)*^\s*'
+        ~ (nvidia_driver_kernel_version | regex_escape) ~ '\s*$'
       )
   tags:
     - nvidia_driver

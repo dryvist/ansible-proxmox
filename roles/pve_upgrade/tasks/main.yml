@@ -131,8 +131,9 @@
         that:
           - >-
             pve_upgrade_kernel_list.stdout is search(
-              '(?m)^Pinned kernel: '
-              ~ (pve_upgrade_kernel_version | regex_escape) ~ '$'
+              '(?ms)^Manually selected kernels:\n'
+              ~ '(?:(?!^Automatically selected kernels:).)*^\s*'
+              ~ (pve_upgrade_kernel_version | regex_escape) ~ '\s*$'
             )
           - >-
             pve_upgrade_dkms_status.stdout_lines
