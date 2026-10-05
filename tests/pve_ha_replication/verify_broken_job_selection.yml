@@ -15,6 +15,7 @@
     # Stands in for pve_ha_this_pve_node — the role runs this per node and each
     # node may only delete jobs it is the SOURCE of (pvesr jobs are node-local).
     pve_ha_test_node: "node-a"
+    pve_ha_this_pve_node: "node-a"
 
     # Synthetic `pvesh get /nodes/<node>/replication` output, shaped from a live
     # cluster read. Healthy jobs carry no `error` key at all, which is why the
@@ -45,6 +46,23 @@
         fail_count: 3
         error: "command 'ssh' failed: connection timed out"
 
+    pve_ha_replication_jobs:
+      - {id: "700100-0", node: "node-a", target: "node-b"}
+      - {id: "700200-0", node: "node-c", target: "node-d"}
+      - {id: "700300-0", node: "node-c", target: "node-d"}
+      - {id: "700400-0", node: "node-c", target: "node-d"}
+    pve_ha_existing_replication_ids:
+      - "700100-0"
+      - "700200-0"
+      - "700300-0"
+      - "700400-0"
+    pve_ha_replication_status_raw:
+      stdout: >-
+        [{"id":"700100-0","source":"node-a","target":"node-x","disable":1},
+         {"id":"700200-0","source":"node-d","target":"node-c","disable":1},
+         {"id":"700300-0","source":"node-c","target":"node-d","disable":0},
+         {"id":"700400-0","source":"node-c","target":"node-d","disable":0}]
+
   tasks:
     - name: Resolve permanently-broken jobs sourced from this node
       ansible.builtin.set_fact:
@@ -64,3 +82,87 @@
         success_msg: >-
           selects only 605000-0 — leaves the healthy job, the other node's job,
           and the transiently-failing job untouched.
+
+    - name: Include the real replication-pair reconciliation logic
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_reconciliation.yml
+
+    - name: Assert stale disabled jobs are replaced and valid reversed jobs are preserved
+      ansible.builtin.assert:
+        that:
+          - pve_ha_replication_retarget_ids == ['700100-0']
+          - pve_ha_replication_enable_ids | length == 0
+          - pve_ha_replication_unsafe_retargets | length == 0
+        fail_msg: >-
+          replication reconciliation was wrong: retarget={{ pve_ha_replication_retarget_ids }},
+          enable={{ pve_ha_replication_enable_ids }}, unsafe={{ pve_ha_replication_unsafe_retargets }}
+        success_msg: >-
+          this source replaces its disabled stale job and selects no other
+          source's replication writes.
+
+    - name: Resolve the reversed pair from its current source node
+      ansible.builtin.set_fact:
+        pve_ha_this_pve_node: "node-d"
+
+    - name: Include reconciliation on the reversed pair's source node
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_reconciliation.yml
+
+    - name: Assert a valid reversed pair is enabled on its current source
+      ansible.builtin.assert:
+        that:
+          - pve_ha_replication_retarget_ids | length == 0
+          - pve_ha_replication_enable_ids == ['700200-0']
+          - pve_ha_replication_unsafe_retargets | length == 0
+        fail_msg: >-
+          reversed-pair reconciliation was wrong:
+          retarget={{ pve_ha_replication_retarget_ids }},
+          enable={{ pve_ha_replication_enable_ids }}
+        success_msg: "a disabled reversed pair is enabled without changing its direction."
+
+    - name: Resolve the same status snapshot from a non-source node
+      ansible.builtin.set_fact:
+        pve_ha_this_pve_node: "node-b"
+
+    - name: Include reconciliation on the non-source node
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_reconciliation.yml
+
+    - name: Assert non-source nodes receive no replication mutation IDs
+      ansible.builtin.assert:
+        that:
+          - pve_ha_replication_retarget_ids | length == 0
+          - pve_ha_replication_enable_ids | length == 0
+          - pve_ha_replication_unsafe_retargets | length == 0
+        fail_msg: >-
+          a non-source node selected replication writes:
+          retarget={{ pve_ha_replication_retarget_ids }},
+          enable={{ pve_ha_replication_enable_ids }}
+        success_msg: "only the source node selects a replication write."
+
+    - name: Prepare an enabled job with an undeclared target
+      ansible.builtin.set_fact:
+        pve_ha_this_pve_node: "node-a"
+        pve_ha_replication_jobs:
+          - {id: "700500-0", node: "node-a", target: "node-b"}
+        pve_ha_existing_replication_ids:
+          - "700500-0"
+        pve_ha_replication_status_raw:
+          stdout: '[{"id":"700500-0","source":"node-a","target":"node-x","disable":0}]'
+
+    - name: Refuse to replace enabled target drift
+      block:
+        - name: Include the real replication-pair reconciliation logic
+          ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_reconciliation.yml
+
+        - name: Require unsafe target drift to stop the converge
+          ansible.builtin.fail:
+            msg: "the reconciliation accepted enabled target drift"
+      rescue:
+        - name: Assert the reconciliation guard stopped the converge
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Refuse replication target drift that cannot be replaced safely'
+              - pve_ha_replication_unsafe_retargets | map(attribute='id') | list == ['700500-0']
+            fail_msg: >-
+              the unsafe-drift guard did not fail as expected:
+              {{ ansible_failed_task.name }} / {{ pve_ha_replication_unsafe_retargets }}
+            success_msg: >-
+              enabled target drift stops before any replacement command runs.

@@ -53,6 +53,32 @@
       {{ (pve_ha_replication_raw.stdout | from_json)
          | map(attribute='id') | list }}
 
+# Target changes require replacing the job: pvesr update does not accept a
+# target. The resolver compares the live source/target pair with the declared
+# pair and preserves the reversed pair Proxmox creates after migration.
+- name: Resolve replication jobs that need reconciliation
+  ansible.builtin.include_tasks: replication_job_reconciliation.yml
+
+- name: Replace a disabled job whose target no longer matches the declared pair
+  ansible.builtin.command: "pvesr delete {{ item }} --force 1"
+  loop: "{{ pve_ha_replication_retarget_ids | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: true
+
+- name: Enable declared replication jobs that are disabled but have the right pair
+  ansible.builtin.command: "pvesr enable {{ item }}"
+  loop: "{{ pve_ha_replication_enable_ids | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: true
+
+- name: Remove retargeted jobs from the existing-id set
+  ansible.builtin.set_fact:
+    pve_ha_existing_replication_ids: >-
+      {{ pve_ha_existing_replication_ids
+         | difference(pve_ha_replication_retarget_ids | default([])) }}
+
 - name: Create a pvesr job on each guest's source node (only if absent)
   ansible.builtin.command: >-
     pvesr create-local-job {{ item.id }} {{ item.target }}

@@ -1,0 +1,82 @@
+---
+# Match each local job against the unordered declared pair. Proxmox reverses
+# replication direction when a replicated guest migrates, so the same two-node
+# pair remains valid in either direction.
+- name: Initialize replication reconciliation results
+  ansible.builtin.set_fact:
+    pve_ha_replication_pair_drift: []
+    pve_ha_replication_retarget_ids: []
+    pve_ha_replication_enable_ids: []
+    pve_ha_replication_unsafe_retargets: []
+
+- name: Find local jobs whose source and target differ from the declared pair
+  ansible.builtin.set_fact:
+    pve_ha_replication_pair_drift: >-
+      {{ pve_ha_replication_pair_drift + [ {
+           'id': item.id,
+           'source': item.source | default(''),
+           'target': item.target | default(''),
+           'desired_source': desired_job.node,
+           'desired_target': desired_job.target,
+           'disabled': item.disable | default(false) | bool,
+           'running': (item.pid | default(0) | int) > 0
+         } ] }}
+  loop: "{{ pve_ha_replication_status_raw.stdout | from_json }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    desired_job: >-
+      {{ pve_ha_replication_jobs | selectattr('id', 'equalto', item.id)
+         | list | first | default({}) }}
+    live_pair: "{{ [item.source | default(''), item.target | default('')] | sort }}"
+    desired_pair: "{{ [desired_job.node | default(''), desired_job.target | default('')] | sort }}"
+  when:
+    - item.id in pve_ha_existing_replication_ids
+    - item.id not in pve_ha_broken_replication_ids
+    - item.source == pve_ha_this_pve_node
+    - desired_job.id is defined
+    - live_pair != desired_pair
+
+- name: Classify replication target drift by whether replacement is safe
+  ansible.builtin.set_fact:
+    pve_ha_replication_retarget_ids: >-
+      {{ pve_ha_replication_retarget_ids
+         + ([item.id] if item.source == item.desired_source
+             and item.disabled and not item.running else []) }}
+    pve_ha_replication_unsafe_retargets: >-
+      {{ pve_ha_replication_unsafe_retargets
+         + ([item] if item.source != item.desired_source
+             or not item.disabled or item.running else []) }}
+  loop: "{{ pve_ha_replication_pair_drift }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Refuse replication target drift that cannot be replaced safely
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: replication job pair drift needs operator review before converge:
+      {{ pve_ha_replication_unsafe_retargets }}. Automatic replacement requires
+      a disabled, idle job still sourced from its declared home node.
+  when: pve_ha_replication_unsafe_retargets | length > 0
+
+- name: Find disabled jobs whose source and target still match the declared pair
+  ansible.builtin.set_fact:
+    pve_ha_replication_enable_ids: >-
+      {{ pve_ha_replication_enable_ids + [item.id] }}
+  loop: "{{ pve_ha_replication_status_raw.stdout | from_json }}"
+  loop_control:
+    label: "{{ item.id }}"
+  vars:
+    desired_job: >-
+      {{ pve_ha_replication_jobs | selectattr('id', 'equalto', item.id)
+         | list | first | default({}) }}
+    live_pair: "{{ [item.source | default(''), item.target | default('')] | sort }}"
+    desired_pair: "{{ [desired_job.node | default(''), desired_job.target | default('')] | sort }}"
+  when:
+    - item.id in pve_ha_existing_replication_ids
+    - item.id not in pve_ha_broken_replication_ids
+    - item.source == pve_ha_this_pve_node
+    - desired_job.id is defined
+    - live_pair == desired_pair
+    - item.disable | default(false) | bool
+    - (item.pid | default(0) | int) == 0
