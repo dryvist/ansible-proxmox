@@ -97,7 +97,60 @@
       ansible.builtin.apt:
         name: "{{ pve_upgrade_kernel_packages }}"
         state: present
+      register: pve_upgrade_kernel_packages_result
       when: pve_upgrade_kernel_packages | length > 0
+
+    - name: Require an explicit kernel version for an opted-in NVIDIA host
+      ansible.builtin.assert:
+        that:
+          - pve_upgrade_kernel_version is string
+          - pve_upgrade_kernel_version | length > 0
+        fail_msg: >-
+          nvidia_driver_enabled is true but pve_upgrade_kernel_version is not
+          declared; refusing a reboot without a selected GPU-compatible kernel.
+      when: nvidia_driver_enabled | default(false) | bool
+
+    - name: Read the Proxmox kernel pin before reboot
+      ansible.builtin.command:
+        cmd: proxmox-boot-tool kernel list
+      register: pve_upgrade_kernel_list
+      changed_when: false
+      check_mode: false
+      when: nvidia_driver_enabled | default(false) | bool
+
+    - name: Read NVIDIA DKMS status before reboot
+      ansible.builtin.command:
+        cmd: dkms status
+      register: pve_upgrade_dkms_status
+      changed_when: false
+      check_mode: false
+      when: nvidia_driver_enabled | default(false) | bool
+
+    - name: Require NVIDIA DKMS to be installed for the pinned kernel before reboot
+      ansible.builtin.assert:
+        that:
+          - >-
+            pve_upgrade_kernel_list.stdout is search(
+              '(?m)^Pinned kernel: '
+              ~ (pve_upgrade_kernel_version | regex_escape) ~ '$'
+            )
+          - >-
+            pve_upgrade_dkms_status.stdout_lines
+            | select(
+                'search',
+                '^nvidia/[^,]+, '
+                ~ (pve_upgrade_kernel_version | regex_escape)
+                ~ ', [^:]+: installed$'
+              )
+            | list
+            | length > 0
+        success_msg: >-
+          NVIDIA DKMS is installed for pinned kernel
+          {{ pve_upgrade_kernel_version }}; reboot precondition passed.
+        fail_msg: >-
+          NVIDIA DKMS is not installed for the pinned kernel
+          {{ pve_upgrade_kernel_version }}; refusing to reboot.
+      when: nvidia_driver_enabled | default(false) | bool
 
     - name: Reboot when packages changed (new kernel takes effect on reboot)
       ansible.builtin.reboot:
@@ -105,7 +158,9 @@
         msg: Reboot triggered by ansible pve_upgrade role
       when:
         - pve_upgrade_reboot | bool
-        - pve_upgrade_result is changed
+        - >-
+          pve_upgrade_result is changed
+          or pve_upgrade_kernel_packages_result is changed
 
     # pveversion is read-only, but skip the verify in check mode: a dry run has
     # not actually upgraded anything, so asserting the new version would falsely

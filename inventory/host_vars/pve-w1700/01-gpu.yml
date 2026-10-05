@@ -22,4 +22,6 @@
 # is removed at its source in that same defaults file instead of disabled
 # per-node, for the identical reason: it is not node-scoped to begin with.
 nvidia_driver_enabled: true
-nvidia_driver_power_limit_w: 200
+nvidia_driver_power_limit_w: 250
+# renovate: ignore — hold the NVIDIA-tested kernel ABI until a later DKMS pair is validated.
+pve_upgrade_kernel_version: "7.0.14-8-pve"

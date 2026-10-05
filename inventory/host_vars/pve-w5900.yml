@@ -48,12 +48,10 @@ pve_host_network_uplink: enp6s0
 # per-host override would let this node's pin drift from pve-w1700's.
 nvidia_driver_enabled: true
 
-# Build DKMS for the cluster-matched kernel only; the rolling kernel may be
-# newer than the pinned driver series supports.
-pve_upgrade_kernel_packages:
-  - proxmox-kernel-7.0.14-8-pve-signed
-nvidia_driver_header_packages:
-  - proxmox-headers-7.0.14-8-pve
+# Keep the boot kernel, its headers, and DKMS build on the same tested ABI.
+pve_upgrade_kernel_version: "7.0.14-8-pve"
+nvidia_driver_dkms_versions_to_remove:
+  - "615.71.09"
 
 # GPU stress and disk benchmark tooling lives beside the model cache; CUDA 13.2
 # supports this Blackwell GPU, and its virtual compute capability is 12.0.
