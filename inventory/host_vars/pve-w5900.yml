@@ -49,6 +49,7 @@ pve_host_network_uplink: enp6s0
 nvidia_driver_enabled: true
 
 # Keep the boot kernel, its headers, and DKMS build on the same tested ABI.
+# renovate: ignore — hold the NVIDIA-tested kernel ABI until a later DKMS pair is validated.
 pve_upgrade_kernel_version: "7.0.14-8-pve"
 nvidia_driver_dkms_versions_to_remove:
   - "615.71.09"
