@@ -150,23 +150,11 @@
   tags:
     - media_lxc_features
 
-- name: Apply root-only features to each present media container
-  ansible.builtin.include_tasks: configure_container.yml
-  loop: "{{ media_lxc_features_resolved | default({}) | dict2items }}"
-  loop_control:
-    loop_var: media_ct
-    label: "container {{ media_ct.key }}"
-  when:
-    - ansible_virtualization_type | default('') != 'docker'
-    - media_ct.key in media_lxc_features_present | default([])
-  tags:
-    - media_lxc_features
-
 # ---------------------------------------------------------------------------
 # NFS client mounts (media relocation and shared model libraries)
 # ---------------------------------------------------------------------------
-# Mounts declared shared filesystems at the host path later consumed by LXC
-# bind-mounts. No-op when the node has no NFS client mounts.
+# Mounts declared shared filesystems on the host before the LXC bind-mount
+# preflight checks that each host source exists.
 
 - name: Install the NFS client for library mounts
   ansible.builtin.apt:
@@ -192,5 +180,17 @@
   loop_control:
     label: "{{ item.path }}"
   when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - media_lxc_features
+
+- name: Apply root-only features to each present media container
+  ansible.builtin.include_tasks: configure_container.yml
+  loop: "{{ media_lxc_features_resolved | default({}) | dict2items }}"
+  loop_control:
+    loop_var: media_ct
+    label: "container {{ media_ct.key }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - media_ct.key in media_lxc_features_present | default([])
   tags:
     - media_lxc_features
