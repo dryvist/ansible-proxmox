@@ -113,6 +113,13 @@ nvidia_driver_gpu_burn_dir: /var/lib/llm-cache/bin/gpu-burn
 
 # Install headers only for the kernel selected for boot. A floating header
 # metapackage can build DKMS against a different kernel than the one pinned.
+
+# Optional NVIDIA host-to-device and device-to-host bandwidth benchmark.
+nvidia_driver_nvbandwidth_enabled: false
+# renovate: datasource=git-refs depName=https://github.com/NVIDIA/nvbandwidth versioning=git
+nvidia_driver_nvbandwidth_version: 82fc4e8c6afa0babb8687793678f615b3b8d793e
+nvidia_driver_nvbandwidth_dir: /var/lib/llm-cache/bin/nvbandwidth
+
 nvidia_driver_header_packages:
   - "proxmox-headers-{{ nvidia_driver_kernel_version }}"
 

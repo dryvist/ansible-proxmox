@@ -124,7 +124,9 @@
 
 - name: Install NVIDIA host support and build packages
   ansible.builtin.apt:
-    name: "{{ nvidia_driver_packages_extra }}"
+    name: >-
+      {{ nvidia_driver_packages_extra +
+      (['cmake'] if nvidia_driver_nvbandwidth_enabled | bool else []) }}
     state: present
   when:
     - nvidia_driver_enabled | bool
@@ -132,6 +134,7 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+    - nvidia_driver_nvbandwidth
 
 - name: Install the NVIDIA driver packages at the declared version
   ansible.builtin.apt:
@@ -179,6 +182,24 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+
+- name: Build optional NVIDIA nvbandwidth utility
+  ansible.builtin.include_tasks:
+    file: nvbandwidth.yml
+    apply:
+      environment:
+        PATH: >-
+          {{ nvidia_driver_gpu_burn_cuda_path }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      tags:
+        - nvidia_driver
+        - nvidia_driver_nvbandwidth
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_nvbandwidth_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+    - nvidia_driver_nvbandwidth
 
 - name: Check whether nouveau is still holding the GPU
   ansible.builtin.command:
