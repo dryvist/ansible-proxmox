@@ -93,6 +93,12 @@
       ansible.builtin.apt:
         autoremove: true
 
+    - name: Keep explicitly declared kernel packages installed
+      ansible.builtin.apt:
+        name: "{{ pve_upgrade_kernel_packages }}"
+        state: present
+      when: pve_upgrade_kernel_packages | length > 0
+
     - name: Reboot when packages changed (new kernel takes effect on reboot)
       ansible.builtin.reboot:
         reboot_timeout: "{{ pve_upgrade_reboot_timeout | int }}"

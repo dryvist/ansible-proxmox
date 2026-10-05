@@ -6,6 +6,11 @@
 # a chosen window.
 pve_upgrade_reboot: true
 
+# Additional exact-version kernels to keep installed alongside the channel's
+# rolling kernel. A one-time proxmox-boot-tool pin is still needed when the
+# installed kernel is not the newest boot entry.
+pve_upgrade_kernel_packages: []
+
 # Seconds to wait for the node to come back after the reboot.
 pve_upgrade_reboot_timeout: 600
 

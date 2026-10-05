@@ -50,6 +50,8 @@ nvidia_driver_enabled: true
 
 # Build DKMS for the cluster-matched kernel only; the rolling kernel may be
 # newer than the pinned driver series supports.
+pve_upgrade_kernel_packages:
+  - proxmox-kernel-7.0.14-8-pve-signed
 nvidia_driver_header_packages:
   - proxmox-headers-7.0.14-8-pve
 
