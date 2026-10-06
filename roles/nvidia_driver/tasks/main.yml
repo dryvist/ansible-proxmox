@@ -124,7 +124,9 @@
 
 - name: Install NVIDIA host support and build packages
   ansible.builtin.apt:
-    name: "{{ nvidia_driver_packages_extra }}"
+    name: >-
+      {{ nvidia_driver_packages_extra +
+      (['cmake'] if nvidia_driver_nvbandwidth_enabled | bool else []) }}
     state: present
   when:
     - nvidia_driver_enabled | bool
@@ -132,6 +134,7 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+    - nvidia_driver_nvbandwidth
 
 - name: Install the NVIDIA driver packages at the declared version
   ansible.builtin.apt:
@@ -151,13 +154,12 @@
   tags:
     - nvidia_driver
 
-- name: Checkout the pinned GPU Burn source
-  ansible.builtin.git:
-    repo: https://github.com/wilicc/gpu-burn.git
-    dest: "{{ nvidia_driver_gpu_burn_dir }}"
-    version: "{{ nvidia_driver_gpu_burn_version }}"
-    update: true
-  register: nvidia_driver_gpu_burn_checkout
+- name: Manage the optional GPU Burn tool
+  ansible.builtin.include_tasks:
+    file: gpu_burn.yml
+    apply:
+      tags:
+        - nvidia_driver
   when:
     - nvidia_driver_enabled | bool
     - nvidia_driver_gpu_burn_enabled | bool
@@ -165,20 +167,23 @@
   tags:
     - nvidia_driver
 
-- name: Build GPU Burn for this GPU's compute capability
-  ansible.builtin.command:
-    cmd: >-
-      make COMPUTE={{ nvidia_driver_gpu_burn_compute | replace('.', '') }}
-      CUDAPATH={{ nvidia_driver_gpu_burn_cuda_path }}
-    chdir: "{{ nvidia_driver_gpu_burn_dir }}"
-  register: nvidia_driver_gpu_burn_build
-  changed_when: "'Nothing to be done' not in nvidia_driver_gpu_burn_build.stdout"
+- name: Build optional NVIDIA nvbandwidth utility
+  ansible.builtin.include_tasks:
+    file: nvbandwidth.yml
+    apply:
+      environment:
+        PATH: >-
+          {{ nvidia_driver_gpu_burn_cuda_path }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      tags:
+        - nvidia_driver
+        - nvidia_driver_nvbandwidth
   when:
     - nvidia_driver_enabled | bool
-    - nvidia_driver_gpu_burn_enabled | bool
+    - nvidia_driver_nvbandwidth_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+    - nvidia_driver_nvbandwidth
 
 - name: Check whether nouveau is still holding the GPU
   ansible.builtin.command:

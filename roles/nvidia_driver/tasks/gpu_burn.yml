@@ -1,0 +1,17 @@
+---
+- name: Checkout the pinned GPU Burn source
+  ansible.builtin.git:
+    repo: https://github.com/wilicc/gpu-burn.git
+    dest: "{{ nvidia_driver_gpu_burn_dir }}"
+    version: "{{ nvidia_driver_gpu_burn_version }}"
+    update: true
+  register: nvidia_driver_gpu_burn_checkout
+
+- name: Build GPU Burn for this GPU's compute capability
+  ansible.builtin.command:
+    cmd: >-
+      make COMPUTE={{ nvidia_driver_gpu_burn_compute | replace('.', '') }}
+      CUDAPATH={{ nvidia_driver_gpu_burn_cuda_path }}
+    chdir: "{{ nvidia_driver_gpu_burn_dir }}"
+  register: nvidia_driver_gpu_burn_build
+  changed_when: "'Nothing to be done' not in nvidia_driver_gpu_burn_build.stdout"

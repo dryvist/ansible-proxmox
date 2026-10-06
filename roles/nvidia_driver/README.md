@@ -159,6 +159,14 @@ checks out a pinned GPU Burn revision under
 host's build and stress packages; these settings are supplied through
 host_vars.
 
+## Optional CUDA bandwidth utility
+
+`nvidia_driver_nvbandwidth_enabled` defaults to false. When enabled, the role
+adds CMake to the host support packages, checks out a pinned NVIDIA
+nvbandwidth revision, and builds the executable at
+`/var/lib/llm-cache/bin/nvbandwidth/build/nvbandwidth`, using the CUDA toolkit
+configured by `nvidia_driver_gpu_burn_cuda_path`.
+
 ## Test coverage limits
 
 The molecule scenario covers the **inert** path only: it converges with the
