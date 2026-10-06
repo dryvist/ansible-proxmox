@@ -36,7 +36,7 @@ def test_root_squashed_directory_permissions_follow_the_export_restriction():
     set_permissions = next(
         index
         for index, task in enumerate(EXPORT_TASKS)
-        if task["name"].startswith("Set root directory permissions")
+        if task["name"].startswith("Set the dataset root directory permissions")
     )
 
     assert set_export < validate < set_permissions
@@ -44,7 +44,7 @@ def test_root_squashed_directory_permissions_follow_the_export_restriction():
     assert all(
         task["check_mode"] is False
         for task in EXPORT_TASKS
-        if task["name"].startswith(("Read mountpoint for", "Read mounted state for"))
+        if task["name"].startswith(("Read the dataset mountpoint", "Read the dataset mounted state"))
     )
     assert EXPORT_TASKS[validate]["ansible.builtin.assert"]["that"] == [
         "zfs_dataset.value.nfs_export_permissions is mapping",

@@ -42,7 +42,7 @@
 # without granting no_root_squash. Apply after setting sharenfs so a previously
 # broader export is restricted before its dataset root becomes writable to the
 # anonymous identity.
-- name: "Read mountpoint for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }} export permissions"
+- name: "Read the dataset mountpoint for NFS export permissions on {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
   ansible.builtin.command:
     cmd: "zfs get -H -o value mountpoint {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
   register: zfs_pools_nfs_mountpoint
@@ -52,7 +52,7 @@
   tags:
     - zfs_pools
 
-- name: "Read mounted state for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }} export permissions"
+- name: "Read the dataset mounted state for NFS export permissions on {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
   ansible.builtin.command:
     cmd: "zfs get -H -o value mounted {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
   register: zfs_pools_nfs_mounted
@@ -62,7 +62,7 @@
   tags:
     - zfs_pools
 
-- name: "Inspect mountpoint for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }} export permissions"
+- name: "Inspect the dataset mountpoint for NFS export permissions on {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
   ansible.builtin.stat:
     path: "{{ zfs_pools_nfs_mountpoint.stdout | trim }}"
     follow: false
@@ -95,7 +95,7 @@
   tags:
     - zfs_pools
 
-- name: "Set root directory permissions for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }} NFS export"
+- name: "Set the dataset root directory permissions for NFS export on {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
   ansible.builtin.file:
     path: "{{ zfs_pools_nfs_mountpoint.stdout | trim }}"
     state: directory
