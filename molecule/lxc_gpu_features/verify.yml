@@ -6,6 +6,7 @@
 
   vars:
     nvidia_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-4080'] }}.conf"
+    nvidia_6000_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-6000'] }}.conf"
     amd_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-fast'] }}.conf"
 
     # The exact lines the role must have written for the NVIDIA container.
@@ -34,6 +35,11 @@
         src: "{{ nvidia_conf }}"
       register: nvidia_raw
 
+    - name: Read the second NVIDIA container's rendered config
+      ansible.builtin.slurp:
+        src: "{{ nvidia_6000_conf }}"
+      register: nvidia_6000_raw
+
     - name: Read the AMD container's rendered config
       ansible.builtin.slurp:
         src: "{{ amd_conf }}"
@@ -43,6 +49,25 @@
       ansible.builtin.set_fact:
         nvidia_lines: "{{ (nvidia_raw.content | b64decode).splitlines() | select('truthy') | list }}"
         amd_lines: "{{ (amd_raw.content | b64decode).splitlines() | select('truthy') | list }}"
+
+    - name: Assert the second NVIDIA container received the same passthrough lines
+      ansible.builtin.assert:
+        that:
+          - item in nvidia_6000_lines
+        fail_msg: >-
+          Missing from {{ nvidia_6000_conf }}: "{{ item }}".
+          Rendered: {{ nvidia_6000_lines }}
+      loop: "{{ expected_nvidia_lines }}"
+      vars:
+        nvidia_6000_lines: "{{ (nvidia_6000_raw.content | b64decode).splitlines() | select('truthy') | list }}"
+
+    - name: Assert the second NVIDIA container received no AMD device bindings
+      ansible.builtin.assert:
+        that:
+          - nvidia_6000_lines | select('search', '/dev/dri|/dev/kfd|226:|235:') | list | length == 0
+        fail_msg: AMD device lines leaked into {{ nvidia_6000_conf }}
+      vars:
+        nvidia_6000_lines: "{{ (nvidia_6000_raw.content | b64decode).splitlines() | select('truthy') | list }}"
 
     # --- 1. every expected NVIDIA line is present, verbatim -------------------
     - name: Assert every expected NVIDIA passthrough line was written
@@ -167,5 +192,5 @@
       ansible.builtin.debug:
         msg: >-
           lxc_gpu_features verify ran
-          {{ (expected_nvidia_lines | length) + (expected_amd_lines | length) + 7 }}
-          assertions across {{ 2 }} rendered container configs.
+          {{ (expected_nvidia_lines | length) + (expected_amd_lines | length) + 7 + (expected_nvidia_lines | length) + 1 }}
+          assertions across {{ 3 }} rendered container configs.

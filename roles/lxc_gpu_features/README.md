@@ -48,7 +48,7 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 
 | Var                              | Default                          | Purpose                               |
 | -------------------------------- | -------------------------------- | ------------------------------------- |
-| `lxc_gpu_features_map`           | `{ llm-4080: { nvidia: true } }` | Service → which device groups to bind |
+| `lxc_gpu_features_map`           | `{ llm-4080, llm-6000: { nvidia: true } }` | Service → which device groups to bind |
 | `lxc_gpu_features_dri_major`     | `226`                            | `/dev/dri` char major                 |
 | `lxc_gpu_features_kfd_major`     | `235`                            | `/dev/kfd` char major                 |
 | `lxc_gpu_features_service_vmids` | from tofu inventory              | Service → current vmid (auto)         |
