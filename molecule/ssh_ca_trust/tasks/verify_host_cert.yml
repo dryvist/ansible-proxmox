@@ -116,6 +116,21 @@
       could otherwise choose the principal a signed host certificate is
       issued for.
 
+# Pubkey parse regression: an OpenSSH public key line contains spaces
+# ("<type> <base64> <comment>"); a `\S+` capture kept only the key type, so
+# every container signing request carried an invalid public_key.
+- name: Assert the container public key is captured whole, not just its type
+  vars:
+    ssh_ca_trust_lxc_host_cert_tasks_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/lxc_host_cert.yml') }}"
+    ssh_ca_trust_sample_probe: "PUBKEY=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample root@ct\nHOSTNAME=ct-example\n"
+  ansible.builtin.assert:
+    that:
+      - "\"regex_search('PUBKEY=(.+)'\" in ssh_ca_trust_lxc_host_cert_tasks_text"
+      - "(ssh_ca_trust_sample_probe | regex_search('PUBKEY=(.+)', '\\\\1') | first) == 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample root@ct'"
+    fail_msg: >-
+      tasks/lxc_host_cert.yml must capture the whole public key line after
+      PUBKEY= (type, key and comment), stopping at the newline.
+
 # Reload regression: a cert-only renewal (dropin/CA/principals unchanged)
 # must still reload sshd, or the container keeps serving the old/no
 # certificate. lxc.yml's "Push CA trust" task drives that reload from a
