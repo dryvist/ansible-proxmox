@@ -12,6 +12,7 @@
     cmd: "zfs get -H -o value {{ item.key }} {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
   register: zfs_pools_ds_prop
   changed_when: false
+  check_mode: false
   loop: "{{ zfs_dataset.value.properties | dict2items }}"
   loop_control:
     label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }} {{ item.key }}"

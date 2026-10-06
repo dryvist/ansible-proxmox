@@ -20,6 +20,7 @@
     label: "{{ zfs_pool.key }}.{{ item.key }}"
   register: zfs_pools_prop_current
   changed_when: false
+  check_mode: false
   failed_when: false
 
 # Compare before setting so the task is genuinely idempotent and a converge on an
@@ -55,6 +56,7 @@
     executable: /bin/bash
   register: zfs_pools_topology
   changed_when: false
+  check_mode: false
   failed_when: false
   when: zfs_pool.value.topology | default({}, true) | length > 0
 
@@ -94,6 +96,7 @@
         argv: [zpool, get, -H, -o, value, ashift, "{{ zfs_pool.key }}"]
       register: zfs_pools_ashift
       changed_when: false
+      check_mode: false
 
     - name: Compare ashift
       ansible.builtin.assert:
