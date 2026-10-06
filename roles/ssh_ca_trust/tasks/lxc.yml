@@ -67,7 +67,7 @@
       # on that path then just contributes nothing (stderr swallowed).
       fingerprint() {
         pct exec {{ item }} -- sh -c \
-          'cat {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }} {{ ssh_ca_trust_principals_dir }}/* {{ ssh_ca_trust_host_cert_path }} 2>/dev/null | md5sum' \
+          'cat {{ ssh_ca_trust_fingerprint_files }} 2>/dev/null | md5sum' \
           2>/dev/null || echo absent
       }
       # A cert-only renewal already wrote the new cert (the "Install each
