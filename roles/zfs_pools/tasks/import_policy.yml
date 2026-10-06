@@ -17,6 +17,7 @@
   loop: "{{ zfs_pools_present | default([]) }}"
   register: zfs_pools_cachefile_current
   changed_when: false
+  check_mode: false
   failed_when: false
 
 # `zpool get cachefile` reports "-" while the property is at its default, so an

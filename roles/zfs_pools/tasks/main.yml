@@ -22,6 +22,7 @@
     cmd: "zpool list -H -o name {{ item.key }}"
   register: zfs_pools_existing
   changed_when: false
+  check_mode: false
   failed_when: false
   loop: "{{ zfs_pools_map | dict2items }}"
   loop_control:
@@ -153,6 +154,7 @@
     cmd: "pvesh get /storage/{{ item.key }} --output-format json"
   register: zfs_pools_pvesm_check
   changed_when: false
+  check_mode: false
   failed_when: false
   loop: "{{ zfs_pools_map | dict2items }}"
   loop_control:
