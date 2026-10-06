@@ -20,6 +20,7 @@ provisioner:
         lxc_gpu_features_test_service_vmids:
           llm-fast: 90101
           llm-4080: 90102
+          llm-6000: 90103
 
         # Device fixture for the NVIDIA line-construction test. These stand in
         # for what `stat -c %t` reports on a real GPU host, and they are

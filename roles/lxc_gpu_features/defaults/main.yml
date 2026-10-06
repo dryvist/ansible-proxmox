@@ -30,6 +30,10 @@ lxc_gpu_features_map:
     dri: false
     kfd: false
     nvidia: true
+  llm-6000: # vLLM + llama.cpp on the RTX PRO 6000 Blackwell (privileged LXC)
+    dri: false
+    kfd: false
+    nvidia: true
 
 # AMD GPU character-device majors, verified live on the host that holds the
 # card: /dev/dri/card0 = 226:0, /dev/dri/renderD128 = 226:128, /dev/kfd = 235:0.
