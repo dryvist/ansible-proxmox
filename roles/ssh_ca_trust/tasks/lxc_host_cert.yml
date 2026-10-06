@@ -58,7 +58,7 @@
     ssh_ca_trust_lxc_host_cert_decisions: >-
       {{ (ssh_ca_trust_lxc_host_cert_decisions | default([])) + [{
            'ctid': item.item,
-           'pubkey': (item.stdout | regex_search('PUBKEY=(\S+)', '\\1') | first),
+           'pubkey': (item.stdout | regex_search('PUBKEY=(.+)', '\\1') | first),
            'principal': (item.stdout | regex_search('HOSTNAME=(\S+)', '\\1') | first) ~ '.' ~ ssh_ca_trust_host_cert_domain,
            'pre_fp': (item.stdout | regex_search('PREFP=(\S+)', '\\1') | first),
            'needs_signing': (lookup('template', 'host_cert_needs_signing.j2', template_vars={
