@@ -2,10 +2,9 @@
 # Idempotently export a single dataset over NFS via the ZFS `sharenfs` property.
 # Included per-dataset from datasets.yml when `nfs_export` is set; `zfs_pool` and
 # `zfs_dataset` (dict2items entries) are in scope. `nfs_export` is the exact ZFS
-# `sharenfs` value — e.g. "ro=@10.0.0.0/8 ro=@192.168.0.0/16" for a LAN-scoped
-# read-only export. Space-separated client specs, comma-separated options per
-# client, mirroring exports(5). This whole path is already Docker-skipped via the
-# datasets.yml include gate in main.yml, so no per-task docker guard is needed.
+# `sharenfs` value — a comma-separated OpenZFS option string. This whole path is
+# already Docker-skipped via the datasets.yml include gate in main.yml, so no
+# per-task docker guard is needed.
 
 - name: "Ensure nfs-kernel-server is installed for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
   ansible.builtin.apt:
@@ -36,5 +35,73 @@
     cmd: "zfs set sharenfs={{ zfs_dataset.value.nfs_export | quote }} {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
   when: zfs_pools_sharenfs_cur.stdout != (zfs_dataset.value.nfs_export | string)
   changed_when: true
+  tags:
+    - zfs_pools
+
+# Optional directory permissions support root-squashed, all-squashed exports
+# without granting no_root_squash. Apply after setting sharenfs so a previously
+# broader export is restricted before its dataset root becomes writable to the
+# anonymous identity.
+- name: "Read the dataset mountpoint for NFS export permissions on {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.command:
+    cmd: "zfs get -H -o value mountpoint {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
+  register: zfs_pools_nfs_mountpoint
+  changed_when: false
+  check_mode: false
+  when: zfs_dataset.value.nfs_export_permissions is defined
+  tags:
+    - zfs_pools
+
+- name: "Read the dataset mounted state for NFS export permissions on {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.command:
+    cmd: "zfs get -H -o value mounted {{ zfs_pool.key }}/{{ zfs_dataset.key }}"
+  register: zfs_pools_nfs_mounted
+  changed_when: false
+  check_mode: false
+  when: zfs_dataset.value.nfs_export_permissions is defined
+  tags:
+    - zfs_pools
+
+- name: "Inspect the dataset mountpoint for NFS export permissions on {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.stat:
+    path: "{{ zfs_pools_nfs_mountpoint.stdout | trim }}"
+    follow: false
+  register: zfs_pools_nfs_mountpoint_stat
+  when: zfs_dataset.value.nfs_export_permissions is defined
+  tags:
+    - zfs_pools
+
+- name: "Validate NFS export permissions for {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.assert:
+    that:
+      - zfs_dataset.value.nfs_export_permissions is mapping
+      - zfs_dataset.value.nfs_export_permissions.owner is defined
+      - zfs_dataset.value.nfs_export_permissions.owner | string | length > 0
+      - zfs_dataset.value.nfs_export_permissions.group is defined
+      - zfs_dataset.value.nfs_export_permissions.group | string | length > 0
+      - zfs_dataset.value.nfs_export_permissions.mode is defined
+      - zfs_dataset.value.nfs_export_permissions.mode | string is match('^[0-7]{4}$')
+      - zfs_pools_nfs_mountpoint.stdout | trim is match('^/')
+      - zfs_pools_nfs_mountpoint.stdout | trim != '/'
+      - zfs_pools_nfs_mounted.stdout | trim == 'yes'
+      - zfs_pools_nfs_mountpoint_stat.stat.exists
+      - zfs_pools_nfs_mountpoint_stat.stat.isdir
+      - not zfs_pools_nfs_mountpoint_stat.stat.islnk
+    fail_msg: >-
+      nfs_export_permissions must declare a mounted dataset root, explicit
+      owner and group values, and a four-digit octal mode.
+    quiet: true
+  when: zfs_dataset.value.nfs_export_permissions is defined
+  tags:
+    - zfs_pools
+
+- name: "Set the dataset root directory permissions for NFS export on {{ zfs_pool.key ~ '/' ~ zfs_dataset.key }}"
+  ansible.builtin.file:
+    path: "{{ zfs_pools_nfs_mountpoint.stdout | trim }}"
+    state: directory
+    owner: "{{ zfs_dataset.value.nfs_export_permissions.owner }}"
+    group: "{{ zfs_dataset.value.nfs_export_permissions.group }}"
+    mode: "{{ zfs_dataset.value.nfs_export_permissions.mode }}"
+  when: zfs_dataset.value.nfs_export_permissions is defined
   tags:
     - zfs_pools
