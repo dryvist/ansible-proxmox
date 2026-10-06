@@ -77,6 +77,11 @@ ssh_ca_trust_ca_file: /etc/ssh/trusted-user-ca-keys.pem
 ssh_ca_trust_principals_dir: /etc/ssh/principals
 # Late-numbered so it wins over distro/local snippets in sshd_config.d.
 ssh_ca_trust_dropin: /etc/ssh/sshd_config.d/99-openbao-ca.conf
+# Files whose combined content fingerprints a container's CA trust state; the
+# pre-signing probe and the reload decision must hash the same list.
+ssh_ca_trust_fingerprint_files: >-
+  {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}
+  {{ ssh_ca_trust_principals_dir }}/* {{ ssh_ca_trust_host_cert_path }}
 
 # --- SSH host certificates (rollout gate, off by default) ----------------
 # Issues and installs a signed SSH HOST certificate on this guest — sshd then
@@ -91,6 +96,9 @@ ssh_ca_trust_host_cert_role: host-cert
 # Re-sign once fewer than this many days remain before expiry. Only the "Nd"
 # form is parsed — see templates/host_cert_needs_signing.j2.
 ssh_ca_trust_host_cert_renew_before: 45d
+# Controller-side "now" in the same frame ssh-keygen -Lf prints; a default so
+# molecule can pin it.
+ssh_ca_trust_host_cert_now: "{{ ansible_date_time.date ~ 'T' ~ ansible_date_time.time }}"
 ssh_ca_trust_host_cert_path: /etc/ssh/ssh_host_ed25519_key-cert.pub
 # Same domain source roles/common already uses (tofu-published when the
 # inventory is loaded, else the node's own domain fact) — never a literal.

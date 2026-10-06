@@ -51,7 +51,7 @@
            'ssh_ca_trust_host_cert_probe_text': ssh_ca_trust_host_cert_probe.stdout | default(''),
            'ssh_ca_trust_host_cert_expected_principal': ssh_ca_trust_host_cert_fqdn,
            'ssh_ca_trust_ca_trust_fetched_fp': ssh_ca_trust_fetched_fp.stdout,
-           'ssh_ca_trust_host_cert_now': ansible_date_time.date ~ 'T' ~ ansible_date_time.time,
+           'ssh_ca_trust_host_cert_now': ssh_ca_trust_host_cert_now,
            'ssh_ca_trust_host_cert_renew_before_days': (ssh_ca_trust_host_cert_renew_before | regex_replace('d$', '') | int),
          }) | trim | bool }}
   tags: [ssh_ca_trust]
