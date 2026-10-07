@@ -14,6 +14,7 @@
             pve_full_system_stress run={{ pve_full_system_stress_run_id }}
             event=campaign_start start_utc={{ pve_full_system_stress_campaign_started_at }}
             profile={{ pve_full_system_stress_profile }}
+            memory_ecc={{ pve_full_system_stress_memory_ecc | ternary('true', 'false') }}
             duration_seconds={{ pve_full_system_stress_memory_minutes | int * 60
               + pve_full_system_stress_cpu_minutes | int * 60
               + pve_full_system_stress_storage_minutes | int * 60

@@ -1,0 +1,14 @@
+---
+- name: Verify stress-role EDAC preflight on ECC and non-ECC hosts
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    pve_full_system_stress_memory_ecc: "{{ lookup('env', 'PVE_FULL_SYSTEM_STRESS_MEMORY_ECC') | bool }}"
+    pve_full_system_stress_run_id: edac-test-run
+    pve_full_system_stress_stage: memory
+    pve_full_system_stress_ue_count_files: "{{ lookup('env', 'PVE_FULL_SYSTEM_STRESS_UE_COUNT_FILES') }}"
+  tasks:
+    - name: Run the role's EDAC preflight tasks
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/tasks/edac_preflight.yml"

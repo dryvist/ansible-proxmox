@@ -1,0 +1,55 @@
+---
+- name: Read SMBIOS memory-array ECC capability
+  ansible.builtin.command:
+    argv: [dmidecode, --type, '16']
+  register: pve_full_system_stress_memory_ecc_smbios
+  changed_when: false
+  failed_when: false
+
+- name: Parse SMBIOS memory-array ECC capability
+  ansible.builtin.set_fact:
+    pve_full_system_stress_memory_ecc_types: >-
+      {{ pve_full_system_stress_memory_ecc_smbios.stdout | default('')
+         | regex_findall('Error Correction Type: (.+)')
+         | map('trim') | map('lower') | unique | list }}
+
+- name: Classify the SMBIOS memory ECC result
+  ansible.builtin.set_fact:
+    pve_full_system_stress_memory_ecc_detected: >-
+      {{ pve_full_system_stress_memory_ecc_smbios.rc == 0
+         and pve_full_system_stress_memory_ecc_types | default([]) | length > 0
+         and pve_full_system_stress_memory_ecc_types
+             | reject('in', ['none', 'parity', 'crc', 'single-bit ecc', 'multi-bit ecc'])
+             | list | length == 0 }}
+    pve_full_system_stress_memory_ecc: >-
+      {{ pve_full_system_stress_memory_ecc_smbios.rc == 0
+         and pve_full_system_stress_memory_ecc_types
+             | select('in', ['single-bit ecc', 'multi-bit ecc']) | list | length > 0 }}
+    pve_full_system_stress_memory_ecc_source: smbios_type_16
+
+- name: Log the SMBIOS memory ECC detection decision
+  ansible.builtin.command:
+    argv:
+      - logger
+      - -t
+      - pve-full-system-stress
+      - -p
+      - "{{ 'daemon.info' if pve_full_system_stress_memory_ecc_detected | bool else 'daemon.err' }}"
+      - --
+      - >-
+        pve_full_system_stress run={{ pve_full_system_stress_run_id }}
+        stage={{ pve_full_system_stress_stage }} event=memory_capability
+        decision={{ 'recognized' if pve_full_system_stress_memory_ecc_detected | bool else 'rejected' }}
+        memory_ecc={{ pve_full_system_stress_memory_ecc | ternary('true', 'false') }}
+        source={{ pve_full_system_stress_memory_ecc_source }}
+        types={{ pve_full_system_stress_memory_ecc_types | default([]) | join(',') | replace(' ', '_') }}
+  changed_when: false
+
+- name: Require a recognized SMBIOS memory-array ECC capability
+  ansible.builtin.assert:
+    that:
+      - pve_full_system_stress_memory_ecc_detected | bool
+    fail_msg: >-
+      SMBIOS type 16 must report None, Single-bit ECC, or Multi-bit ECC;
+      the stress run cannot proceed when ECC capability is unknown.
+    quiet: true

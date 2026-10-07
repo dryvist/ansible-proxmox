@@ -227,6 +227,11 @@ jobs:
         # a newly added one silently never runs.
         run: python -m pytest tests/pve_guest_evacuation_lxc_managed_volumes/
 
+      # ECC detection and EDAC enforcement execute from the role's own tasks
+      # and guard library against SMBIOS and counter fixtures.
+      - name: Verify full-system stress ECC and EDAC paths
+        run: python3 tests/pve_full_system_stress/test_memory_ecc.py
+
       # A new mpN can hotplug live on a running LXC; restarting unconditionally
       # to apply it takes the serving guest down for nothing when it already
       # did. Drives the role's own decision task against both outcomes.

@@ -40,6 +40,19 @@
       else
         printf 'journal_lines=none\n'
       fi
+      memory_ecc=$(printf '%s\n' "$journal" | awk '
+        /event=campaign_start/ {
+          for (i = 1; i <= NF; i++) {
+            if ($i ~ /^memory_ecc=/) {
+              sub(/^memory_ecc=/, "", $i)
+              print $i
+              exit
+            }
+          }
+        }
+      ')
+      [[ "$memory_ecc" == true || "$memory_ecc" == false ]] || memory_ecc=unavailable
+      printf 'memory_ecc=%s\n' "$memory_ecc"
       printf '%s\n' "$journal" | awk '
         function record_max(key, value) {
           if (value ~ /^[0-9]+([.][0-9]+)?$/ && (!(key in peak) || value + 0 > peak[key])) {
@@ -78,23 +91,27 @@
           else printf "campaign_start_utc=not-recorded\n"
         }
       '
-      ce=0 ue=0 found_ue=0
-      shopt -s nullglob
-      for file in /sys/devices/system/edac/mc/*/ce_count; do
-        [[ -r "$file" ]] || continue
-        value=$(cat "$file")
-        [[ "$value" =~ ^[0-9]+$ ]]
-        ce=$((ce + value))
-      done
-      for file in /sys/devices/system/edac/mc/*/ue_count; do
-        [[ -r "$file" ]] || continue
-        value=$(cat "$file")
-        [[ "$value" =~ ^[0-9]+$ ]]
-        ue=$((ue + value))
-        found_ue=1
-      done
-      if ((found_ue == 1)); then printf 'edac_ce_current=%s\nedac_ue_current=%s\n' "$ce" "$ue"
-      else printf 'edac_current=unavailable\n'
+      if [[ "$memory_ecc" == false ]]; then
+        printf 'edac_current=not_applicable\n'
+      else
+        ce=0 ue=0 found_ue=0
+        shopt -s nullglob
+        for file in /sys/devices/system/edac/mc/*/ce_count; do
+          [[ -r "$file" ]] || continue
+          value=$(cat "$file")
+          [[ "$value" =~ ^[0-9]+$ ]]
+          ce=$((ce + value))
+        done
+        for file in /sys/devices/system/edac/mc/*/ue_count; do
+          [[ -r "$file" ]] || continue
+          value=$(cat "$file")
+          [[ "$value" =~ ^[0-9]+$ ]]
+          ue=$((ue + value))
+          found_ue=1
+        done
+        if ((found_ue == 1)); then printf 'edac_ce_current=%s\nedac_ue_current=%s\n' "$ce" "$ue"
+        else printf 'edac_current=unavailable\n'
+        fi
       fi
       start_utc=$(printf '%s\n' "$journal" | awk '
         /event=campaign_start/ {

@@ -41,3 +41,6 @@ second run while the campaign lock or any stress unit is active.
 
 The `smoke` profile is the default. It uses the same start and status sequence
 with `pve_full_system_stress_profile: smoke`.
+
+The role detects memory ECC from SMBIOS type 16 and reports `memory_ecc` in
+the campaign journal and status output. Unknown SMBIOS values stop the run.

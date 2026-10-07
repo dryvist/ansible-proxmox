@@ -65,6 +65,7 @@
             pve_full_system_stress_scratch_file | default(''),
             pve_full_system_stress_active_path,
             pve_full_system_stress_guard_script_path,
+            pve_full_system_stress_memory_ecc | ternary('true', 'false'),
             '--component']
          + [pve_full_system_stress_components[0].cwd | default('')]
          + pve_full_system_stress_components[0].argv }}

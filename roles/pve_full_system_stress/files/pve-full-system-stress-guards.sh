@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # Hardware, serving-unit, and telemetry guards for the detached stage supervisor.
 edac_counts() {
+  local memory_ecc=${1:-true} root=${2:-/sys/devices/system/edac/mc}
   local file value ce=0 ue=0 found_ue=0
+  [[ "$memory_ecc" == true || "$memory_ecc" == false ]] || return 2
+  if [[ "$memory_ecc" == false ]]; then
+    printf 'not_applicable\n'
+    return 0
+  fi
   shopt -s nullglob
-  for file in /sys/devices/system/edac/mc/*/ce_count; do
+  for file in "$root"/*/ce_count; do
     [[ -r "$file" ]] || continue
     value=$(cat "$file") || return 2
     [[ "$value" =~ ^[0-9]+$ ]] || return 2
     ce=$((ce + value))
   done
-  for file in /sys/devices/system/edac/mc/*/ue_count; do
+  for file in "$root"/*/ue_count; do
     [[ -r "$file" ]] || continue
     value=$(cat "$file") || return 2
     [[ "$value" =~ ^[0-9]+$ ]] || return 2
@@ -120,10 +126,14 @@ sample_nvme() {
   done <<< "$leaves"
 }
 guard_sample() {
-  local edac mce_count=0 xid_count=0 rc
-  edac=$(edac_counts) || { abort edac_counters_unavailable; }
-  read -r current_ce current_ue <<< "$edac"
-  ((current_ue == 0)) || { abort edac_ue; }
+  local edac mce_count=0 xid_count=0 rc edac_decision=clear
+  edac=$(edac_counts "$memory_ecc") || { abort edac_counters_unavailable; }
+  if [[ "$edac" == not_applicable ]]; then
+    current_ce=unavailable current_ue=unavailable edac_decision=not_applicable
+  else
+    read -r current_ce current_ue <<< "$edac"
+    ((current_ue == 0)) || { abort edac_ue; }
+  fi
   kernel_counts || { abort kernel_journal_unavailable; }
   ((mce_count == 0)) || { abort mce_detected; }
   ((xid_count == 0)) || { abort xid_detected; }
@@ -147,9 +157,9 @@ guard_sample() {
   fi
   logger -t pve-full-system-stress -p daemon.info -- \
     "pve_full_system_stress run=${run_id} stage=${stage}" \
-    "event=sample edac_ce_count=${current_ce} edac_ue_count=${current_ue}" \
+    "event=sample memory_ecc=${memory_ecc} edac_ce_count=${current_ce} edac_ue_count=${current_ue}" \
     "mce_count=${mce_count} xid_count=${xid_count}"
   log daemon.info \
-    "event=guard_decisions edac=clear mce=clear xid=clear cpu_temp=clear" \
+    "event=guard_decisions edac=${edac_decision} mce=clear xid=clear cpu_temp=clear" \
     "serving=${serving_decision} gpu_temp=${gpu_decision} nvme=${nvme_decision}"
 }
