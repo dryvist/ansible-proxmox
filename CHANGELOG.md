@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.0](https://github.com/dryvist/ansible-proxmox/compare/v2.18.0...v2.19.0) (2026-10-07)
+
+
+### Features
+
+* add opt-in full-system stress sequence ([#918](https://github.com/dryvist/ansible-proxmox/issues/918)) ([fd697c1](https://github.com/dryvist/ansible-proxmox/commit/fd697c10d690139c02df0eaecbc37b6607a1991e))
+* **ansible:** manage GPU engine guest handoff ([19b9a84](https://github.com/dryvist/ansible-proxmox/commit/19b9a84370fe4721c6c2ca965ff6387caf9d0805))
+* enable GPU telemetry by capability tag ([#933](https://github.com/dryvist/ansible-proxmox/issues/933)) ([09716c6](https://github.com/dryvist/ansible-proxmox/commit/09716c63c5de239a6c29e61ddd20f37568b7b68b))
+* **nvidia_driver:** cap the 4080 node's GPU at 200 W ([#921](https://github.com/dryvist/ansible-proxmox/issues/921)) ([44b6751](https://github.com/dryvist/ansible-proxmox/commit/44b6751e8ee7d71dace26f9d39ca2fd33313d5ea))
+* **nvidia_driver:** return the GPU to its default power limit when no cap is declared ([#917](https://github.com/dryvist/ansible-proxmox/issues/917)) ([7445582](https://github.com/dryvist/ansible-proxmox/commit/7445582203fb0cf2e2e122928da8977fae3305a9))
+* **placement:** verify guest memory budgets ([b65b7db](https://github.com/dryvist/ansible-proxmox/commit/b65b7dbd111ee060700a8630112f25de41edab65))
+* **placement:** verify live guest memory budgets ([b1019df](https://github.com/dryvist/ansible-proxmox/commit/b1019df1012e866baad628141e61e0953cb7dcda))
+* **pve_full_system_stress:** allow selected stages ([#928](https://github.com/dryvist/ansible-proxmox/issues/928)) ([bf1f7e2](https://github.com/dryvist/ansible-proxmox/commit/bf1f7e27855b1417c5a5aa5ad9d0b23f01eb1077))
+
+
+### Bug Fixes
+
+* **ansible:** declare temporary GPU power cap ([#931](https://github.com/dryvist/ansible-proxmox/issues/931)) ([96feac4](https://github.com/dryvist/ansible-proxmox/commit/96feac4e7f73db5935f07303849346158f2b4d48))
+* **ansible:** set temporary GPU power limit to 270 W ([aa032e8](https://github.com/dryvist/ansible-proxmox/commit/aa032e87907a9f7e0247631b116aef9b339ccd75))
+* **ansible:** set temporary GPU power limit to 270 W ([52fd54e](https://github.com/dryvist/ansible-proxmox/commit/52fd54e84b1dab76657ae5fabbb22cf0d1c6d1e3))
+* **ansible:** set temporary GPU power limit to 275 W ([#937](https://github.com/dryvist/ansible-proxmox/issues/937)) ([d29e704](https://github.com/dryvist/ansible-proxmox/commit/d29e704b97d771c1748e511f87866c6a405d541b))
+* **ci:** pin merged shared workflow ([#944](https://github.com/dryvist/ansible-proxmox/issues/944)) ([6496a39](https://github.com/dryvist/ansible-proxmox/commit/6496a3973cdc25b6cf592eeb6cee773696f1daa5))
+* **ci:** scope molecule matrix and gate results ([6058e3e](https://github.com/dryvist/ansible-proxmox/commit/6058e3ec840effb79b347ba2ad2b6539c2b15580))
+* **cribl_edge:** pin homelab-contracts with the in-role Edge restart ([c2c1961](https://github.com/dryvist/ansible-proxmox/commit/c2c1961814cc167c36aca186c038ce33275be551))
+* **cribl_edge:** pin homelab-contracts with the in-role Edge restart ([59a98d7](https://github.com/dryvist/ansible-proxmox/commit/59a98d729d91030037d58be8447d8bf3ec148fe0))
+* **gpu:** resolve passthrough and stress targets from tags ([e56cc2c](https://github.com/dryvist/ansible-proxmox/commit/e56cc2c567bb212b6052d1bb274edbbc8c0715d4))
+* **ha:** admit relocation before cluster writes ([#936](https://github.com/dryvist/ansible-proxmox/issues/936)) ([c0b28d3](https://github.com/dryvist/ansible-proxmox/commit/c0b28d377d6ef55cc743507ba0307d3b7f44ad9b))
+* **inventory:** reject unresolved nesting capability targets ([2b1d832](https://github.com/dryvist/ansible-proxmox/commit/2b1d8322d3c1004a3aa09e3a7dd3a615d89bd084))
+* keep full-system stress guards active for long runs ([#920](https://github.com/dryvist/ansible-proxmox/issues/920)) ([4c22e2e](https://github.com/dryvist/ansible-proxmox/commit/4c22e2e5569449d129bbef9e6087c3bc0807da34))
+* **kernel_tuning:** render the CPU governor entry from a template ([2bf8d0d](https://github.com/dryvist/ansible-proxmox/commit/2bf8d0d1a8af6177786c4f4b1c5c2e04513ff73a))
+* **kernel_tuning:** render the CPU governor entry from a template ([7fa9051](https://github.com/dryvist/ansible-proxmox/commit/7fa9051bbc12f08a442623097290f740531d36d1))
+* **kernel_tuning:** write the CPU governor entry without ansible_managed ([5032e10](https://github.com/dryvist/ansible-proxmox/commit/5032e104d1b3d772099c8fbcef18da5b8fa6c823))
+* **proxy:** consume shared cache URLs from inventory ([3d34fd5](https://github.com/dryvist/ansible-proxmox/commit/3d34fd5cc843015a1041b6a624ae8059fb6e1d53))
+* **proxy:** read APT cache URLs from published inventory ([1b8c174](https://github.com/dryvist/ansible-proxmox/commit/1b8c174df4462a7414d59475b537fee08c17adb4))
+* **pve_full_system_stress:** gate EDAC checks by ECC capability ([#922](https://github.com/dryvist/ansible-proxmox/issues/922)) ([50bd640](https://github.com/dryvist/ansible-proxmox/commit/50bd64076c7a1fd33a6f55259c41c6871e9d5bfb))
+* **pve-full-system-stress:** derive GPU limit from T.Limit headroom ([#927](https://github.com/dryvist/ansible-proxmox/issues/927)) ([9c78071](https://github.com/dryvist/ansible-proxmox/commit/9c78071a43b6b56d71c76a8f060ec6b49b2fd0b5))
+* **pve-full-system-stress:** read NVMe temperature from JSON smart-log ([#923](https://github.com/dryvist/ansible-proxmox/issues/923)) ([8f0030f](https://github.com/dryvist/ansible-proxmox/commit/8f0030f79a48cfbdc9bea3843a5b823608886b89))
+
 ## [2.18.0](https://github.com/dryvist/ansible-proxmox/compare/v2.17.0...v2.18.0) (2026-10-07)
 
 
