@@ -63,6 +63,9 @@ nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda-13.2
 # set only on a card that actually needs a cap below its factory default.
 nvidia_driver_power_limit_w: 300
 
+# Every core runs the performance governor.
+kernel_tuning_cpu_governor: performance
+
 # Cribl Edge (playbooks/cribl_edge.yml, every Proxmox host) collects GPU
 # metrics from this node's card via nvidia-smi (installed above). Opt-in
 # per-host — cribl_edge_gpu_mode defaults to disabled everywhere else.
