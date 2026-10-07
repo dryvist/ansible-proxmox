@@ -55,13 +55,12 @@ nvidia_driver_gpu_burn_enabled: true
 nvidia_driver_gpu_burn_compute: "120"
 nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda-13.2
 
-# Max-Q-class card: cap board power so it fits this chassis's continuous
-# power/thermal budget. Persistence mode and any power limit RESET at every
+# Max-Q-class card at the driver's maximum board power (range 250-325 W,
+# factory default 300 W). Persistence mode and any power limit RESET at every
 # reboot and at every driver unload/reload (nvidia-smi docs), which is why
 # this is a boot-time systemd unit (roles/nvidia_driver) rather than a
-# one-time `nvidia-smi -pl` call. Undefined (the role default) is a no-op;
-# set only on a card that actually needs a cap below its factory default.
-nvidia_driver_power_limit_w: 300
+# one-time `nvidia-smi -pl` call. Undefined (the role default) is a no-op.
+nvidia_driver_power_limit_w: 325
 
 # Every core runs the performance governor.
 kernel_tuning_cpu_governor: performance
