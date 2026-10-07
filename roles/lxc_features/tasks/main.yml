@@ -20,7 +20,7 @@
     lxc_features_present: >-
       {{
         lxc_features_pct_list.stdout_lines | default([])
-        | map('regex_search', '^\\d+')
+        | map('regex_search', '^\d+')
         | select('truthy')
         | list
       }}

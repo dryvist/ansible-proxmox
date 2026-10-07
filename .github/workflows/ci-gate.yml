@@ -39,6 +39,10 @@ jobs:
         contract_only:
           - 'roles/pve_full_system_stress/**'
           - 'tests/pve_full_system_stress/**'
+          - 'tests/capability_tags/**'
+          - 'tests/guest_placement/**'
+          - 'tests/inventory_load/**'
+          - 'tests/pve_ha_relocation/**'
           - '.github/workflows/ci-gate.yml'
           - '.github/workflows/molecule.yml'
           - 'tests/workflow_policy/**'
@@ -73,6 +77,9 @@ jobs:
         lxc_gpu_features:
           - 'roles/lxc_gpu_features/**'
           - 'molecule/lxc_gpu_features/**'
+        lxc_features:
+          - 'roles/lxc_features/**'
+          - 'molecule/lxc_features/**'
         media_lxc_features:
           - 'roles/media_lxc_features/**'
           - 'molecule/media_lxc_features/**'

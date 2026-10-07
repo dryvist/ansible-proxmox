@@ -1,0 +1,25 @@
+---
+driver:
+  name: docker
+
+platforms:
+  - name: proxmox-lxc-features-test
+    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    pre_build_image: true
+    privileged: true
+    tmpfs:
+      - /run
+      - /tmp
+
+provisioner:
+  config_options:
+    defaults:
+      roles_path: ${MOLECULE_SCENARIO_DIRECTORY}/../../roles
+  inventory:
+    group_vars:
+      all:
+        lxc_features_test_service_vmids:
+          fixture-container: 90110
+
+verifier:
+  name: ansible
