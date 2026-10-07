@@ -1,0 +1,5 @@
+---
+# Collect detailed NVIDIA GPU metrics and local hwmon fan/temperature series
+# on every node carrying the existing nvidia-gpu capability tag.
+cribl_edge_gpu_detail: true
+cribl_edge_node_exporter_scrape_enabled: true

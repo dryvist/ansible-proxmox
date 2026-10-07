@@ -22,6 +22,14 @@
           - not (hostvars['test-cpu-node'].nvidia_driver_enabled | bool)
           - hostvars['test-gpu-node'].cribl_edge_gpu_mode == 'custom'
           - hostvars['test-cpu-node'].cribl_edge_gpu_mode == 'disabled'
+          - hostvars['test-gpu-node'].cribl_edge_gpu_detail | bool
+          - >-
+            not (hostvars['test-cpu-node'].cribl_edge_gpu_detail
+            | default(false) | bool)
+          - hostvars['test-gpu-node'].cribl_edge_node_exporter_scrape_enabled | bool
+          - >-
+            not (hostvars['test-cpu-node'].cribl_edge_node_exporter_scrape_enabled
+            | default(false) | bool)
           - >-
             hostvars['test-gpu-node'].lxc_gpu_features_nvidia_vmids_from_tofu
             == {'nvidia-guest': 101001}
