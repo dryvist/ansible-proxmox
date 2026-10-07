@@ -82,7 +82,7 @@
         name: lxc_gpu_features
         tasks_from: configure_container
       loop:
-        - key: "{{ lxc_gpu_features_test_service_vmids['llm-4080'] }}"
+        - key: "{{ lxc_gpu_features_test_service_vmids['llm-ada-lovelace-6X-16'] }}"
           value:
             dri: false
             kfd: false
