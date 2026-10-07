@@ -1,4 +1,5 @@
 ---
+# Temporary PR used to measure changed-role Molecule selection.
 # hba_storcli tasks — install perccli64 (once staged, see defaults) and assert
 # every physical drive is Non-RAID/JBOD passthrough. Skipped in Docker and on
 # any node with no MegaRAID/PERC-family RAID controller on its PCI bus.
