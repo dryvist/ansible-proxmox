@@ -1,0 +1,270 @@
+[
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "mem": 181325824,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10010
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "mem": 210993152,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10015
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "mem": 291127296,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10024
+  },
+  {
+    "type": "lxc",
+    "maxmem": 6442450944,
+    "mem": 5227847680,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10031
+  },
+  {
+    "type": "lxc",
+    "maxmem": 12884901888,
+    "mem": 42827776,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10032
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "mem": 1345998848,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10033
+  },
+  {
+    "type": "lxc",
+    "maxmem": 8589934592,
+    "mem": 43020288,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10053
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "mem": 567545856,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10055
+  },
+  {
+    "type": "lxc",
+    "maxmem": 3221225472,
+    "mem": 120733696,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10059
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "mem": 0,
+    "template": 0,
+    "status": "stopped",
+    "node": "server-a",
+    "vmid": 10061
+  },
+  {
+    "type": "lxc",
+    "maxmem": 8589934592,
+    "mem": 443613184,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10063
+  },
+  {
+    "type": "qemu",
+    "maxmem": 34359738368,
+    "mem": 1669693440,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10065
+  },
+  {
+    "type": "lxc",
+    "maxmem": 3221225472,
+    "mem": 1171443712,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10073
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "mem": 39948288,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10075
+  },
+  {
+    "type": "lxc",
+    "maxmem": 536870912,
+    "mem": 74391552,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10077
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "mem": 85184512,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10079
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "mem": 109498368,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10090
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "mem": 341831680,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10091
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "mem": 187088896,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10092
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "mem": 505217024,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10093
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "mem": 319692800,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10094
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "mem": 132849664,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10095
+  },
+  {
+    "type": "qemu",
+    "maxmem": 51539607552,
+    "mem": 10472706048,
+    "template": 0,
+    "status": "running",
+    "node": "server-a",
+    "vmid": 10099
+  },
+  {
+    "type": "qemu",
+    "maxmem": 8589934592,
+    "mem": 0,
+    "template": 1,
+    "status": "stopped",
+    "node": "server-a",
+    "vmid": 10101
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "mem": 0,
+    "template": 1,
+    "status": "stopped",
+    "node": "server-a",
+    "vmid": 10102
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "mem": 0,
+    "template": 1,
+    "status": "stopped",
+    "node": "server-a",
+    "vmid": 10103
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "mem": 0,
+    "template": 0,
+    "status": "stopped",
+    "node": "server-a",
+    "vmid": 10105
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "mem": 0,
+    "template": 0,
+    "status": "stopped",
+    "node": "server-a",
+    "vmid": 10106
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "mem": 0,
+    "template": 0,
+    "status": "stopped",
+    "node": "server-a",
+    "vmid": 10107
+  },
+  {
+    "type": "node",
+    "maxmem": 193669939200,
+    "mem": 56165527552,
+    "status": "online",
+    "node": "server-a"
+  }
+]

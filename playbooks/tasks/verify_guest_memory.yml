@@ -1,0 +1,63 @@
+---
+# PVE maxmem is configured allocation, including stopped and unmanaged guests.
+# Measured usage is not a reservation and cannot establish capacity.
+- name: Require a positive integer guest memory budget
+  ansible.builtin.assert:
+    that:
+      - placement_node_config.memory_budget_mb is defined
+      - placement_node_config.memory_budget_mb is integer
+      - placement_node_config.memory_budget_mb is not boolean
+      - placement_node_config.memory_budget_mb > 0
+      - placement_resources is sequence and placement_resources is not string and placement_resources is not mapping
+    fail_msg: A node memory budget and a complete PVE resource list are required.
+
+- name: Select this node and every allocated guest on it
+  ansible.builtin.set_fact:
+    placement_memory_node: "{{ placement_resources | selectattr('type', 'equalto', 'node') | selectattr('node', 'equalto', placement_node) | list }}"
+    placement_memory_guests: >-
+      {{ placement_resources | selectattr('type', 'in', ['qemu', 'lxc'])
+         | selectattr('node', 'equalto', placement_node) | list }}
+
+- name: Require physical memory telemetry for exactly one node
+  ansible.builtin.assert:
+    that:
+      - placement_memory_node | length == 1
+      - placement_memory_node[0].maxmem is defined
+      - placement_memory_node[0].maxmem is integer
+      - placement_memory_node[0].maxmem is not boolean
+      - placement_memory_node[0].maxmem > 0
+    fail_msg: Physical memory telemetry is missing or invalid.
+
+- name: Require configured memory and template status for every guest
+  ansible.builtin.assert:
+    that:
+      - item.maxmem is defined
+      - item.maxmem is integer
+      - item.maxmem is not boolean
+      - item.maxmem > 0
+      - item.template is defined
+      - item.template is integer
+      - item.template is not boolean
+      - item.template in [0, 1]
+    fail_msg: A guest allocation or template status is missing or invalid.
+  loop: "{{ placement_memory_guests }}"
+  loop_control:
+    label: "{{ item.vmid | default('unknown') }}"
+
+- name: Require all guest allocations to fit within physical memory and the node budget
+  ansible.builtin.assert:
+    that:
+      - placement_node_config.memory_budget_mb * 1048576 <= placement_memory_node[0].maxmem
+      - placement_allocated_bytes | int <= placement_node_config.memory_budget_mb * 1048576
+    fail_msg: >-
+      Allocated guest memory {{ placement_allocated_bytes }} bytes,
+      budget {{ placement_node_config.memory_budget_mb }} MiB,
+      physical memory {{ placement_memory_node[0].maxmem }} bytes.
+    success_msg: >-
+      Allocated guest memory {{ placement_allocated_bytes }} bytes fits the
+      {{ placement_node_config.memory_budget_mb }} MiB guest budget within
+      {{ placement_memory_node[0].maxmem }} bytes of physical memory.
+  vars:
+    placement_allocated_bytes: >-
+      {{ placement_memory_guests | selectattr('template', 'equalto', 0)
+         | map(attribute='maxmem') | sum }}

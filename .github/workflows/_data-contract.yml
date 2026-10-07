@@ -212,6 +212,9 @@ jobs:
           ansible-playbook tests/guest_placement/verify.yml
           -i localhost, -c local
 
+      - name: Verify configured guest memory budgets
+        run: python3 tests/guest_placement/test_memory_budget.py
+
       # One unreachable cluster peer must not abort the by-IP reachability
       # proof -- and therefore the whole site converge -- for every other
       # node. Loads the role's real defaults/main.yml against fixture hosts.

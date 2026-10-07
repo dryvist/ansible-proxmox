@@ -219,6 +219,18 @@ PROXMOX_VE_HOSTNAME=localhost \
     -i inventory/hosts.yml -c local
 ```
 
+### Guest memory budgets
+
+The placement verifier reads optional `nodes.*.memory_budget_mb` values from
+published inventory. Each value reserves guest RAM in MiB after the host
+reserve. The verifier compares the budget with physical RAM and all PVE guest
+allocations, including stopped and unmanaged guests. Templates do not reserve
+guest RAM.
+Nodes without a published budget report resource fit as unverified.
+
+Run `python3 tests/guest_placement/test_memory_budget.py` to exercise the
+production tasks against sanitized PVE API fixtures.
+
 ## For Developers
 
 ### Pre-commit Hooks
