@@ -1,9 +1,9 @@
 ---
 # CI Gate — thin wrapper around the shared ansible CI gate.
 #
-# Lint and molecule live in dryvist/.github/.github/workflows/_ansible-ci.yml.
-# This repo uses its defaults: ansible-lint over the whole project, the
-# `default` molecule scenario, and molecule deps from requirements-ci.txt.
+# Lint and Molecule change detection live in
+# dryvist/.github/.github/workflows/_ansible-ci.yml. This wrapper runs the
+# selected local scenario matrix and aggregates it with the data contract.
 #
 # The shared workflow runs with emit_gate:false and this wrapper aggregates its
 # own "Merge Gate" instead, so the repo-local data-contract job sits INSIDE the
@@ -31,6 +31,7 @@ jobs:
       pull-requests: read
     uses: dryvist/.github/.github/workflows/_ansible-ci.yml@main
     with:
+      molecule: false
       # Opt in to the shared Renovate-annotation gate: a git-type SHA pin in
       # requirements.yml (e.g. the homelab-contracts collection) without its
       # `# renovate:` annotation is otherwise invisible to Renovate and to
@@ -50,9 +51,13 @@ jobs:
     needs: ci
     uses: ./.github/workflows/_data-contract.yml
 
+  molecule:
+    name: Molecule Test
+    uses: ./.github/workflows/molecule.yml
+
   gate:
     name: Merge Gate
-    needs: [ci, data-contract]
+    needs: [ci, data-contract, molecule]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:

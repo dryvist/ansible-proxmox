@@ -1,3 +1,4 @@
+---
 name: CI Fix (Claude)
 
 # Thin caller for dryvist/ai-workflows cc-ci-fix. When CI Gate fails on a PR
@@ -22,4 +23,6 @@ jobs:
     secrets: inherit
     with:
       repo_context: "Ansible playbooks and roles for configuring Proxmox VE host"
-      ci_structure: "CI Gate aggregates required checks: Ansible Lint (ansible-lint over the project) and Molecule Test (default scenario integration tests)."
+      ci_structure: >-
+        CI Gate aggregates required checks: Ansible Lint and Molecule Test
+        (changed-role scenarios on PRs; full matrix on pushes and shared inputs).
