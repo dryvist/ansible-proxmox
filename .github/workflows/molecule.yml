@@ -2,9 +2,17 @@
 name: Molecule Test
 
 on:
-  push:
-    branches: [main, develop]
-  workflow_call: {}
+  # CI Gate owns PR and branch-push triggers so shared scenario selection and
+  # every Molecule result feed the same required Merge Gate.
+  workflow_call:
+    inputs:
+      scenarios:
+        description: >-
+          JSON scenario list from the shared Ansible CI workflow. An empty
+          string requests every scenario; [] means contracts apply without a
+          Molecule scenario for this change.
+        type: string
+        default: ""
   # Manual trigger for ad-hoc full-matrix runs.
   workflow_dispatch:
 
@@ -39,26 +47,22 @@ jobs:
       - name: Verify bulk data comparison static safety contract
         run: python3 tests/pve_bulk_data_compare/test_contract.py
 
-  # Discover scenarios and roles from the tree, then derive the PR matrix from
-  # role references. Main promotions and shared inputs run all; CI harness edits
-  # use the default smoke scenario. Pushes run all.
+      - name: Verify full-system stress NVMe JSON contract
+        run: python3 tests/pve_full_system_stress/test_nvme_sample.py
+
+  # Use the shared role-to-scenario selection. When no narrowed list is passed,
+  # discover the full matrix for pushes, promotions, and shared inputs.
   discover:
     name: Discover scenarios
     runs-on: ubuntu-latest
     outputs:
-      scenarios: ${{ steps.select.outputs.scenarios }}
+      scenarios: ${{ inputs.scenarios != '' && inputs.scenarios || steps.list.outputs.scenarios }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-
-      - name: Select scenarios for this change
-        id: select
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      - name: List all molecule scenarios when no narrowed list is supplied
+        id: list
+        if: ${{ inputs.scenarios == '' }}
         run: |
           set -euo pipefail
           mapfile -t all_scenarios < <(
@@ -69,128 +73,14 @@ jobs:
             echo "::error::No Molecule scenarios discovered."
             exit 1
           fi
-          mapfile -t role_names < <(find roles -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
-          if [ "${#role_names[@]}" -eq 0 ]; then
-            echo "::error::No Ansible roles discovered."
-            exit 1
-          fi
-          for role in "${role_names[@]}"; do
-            if [[ ! "$role" =~ ^[a-z0-9_]+$ ]]; then
-              echo "::error::Rejected role name outside [a-z0-9_]."
-              exit 1
-            fi
-          done
-          role_pattern=$(printf '%s|' "${role_names[@]}")
-          role_pattern=${role_pattern%|}
           for scenario in "${all_scenarios[@]}"; do
             if [[ ! "$scenario" =~ ^[a-z0-9_]+$ ]]; then
               echo "::error::Rejected scenario name outside [a-z0-9_]."
               exit 1
             fi
-            if ! grep -R -E -q -w --include='*.yml' --include='*.yaml' \
-              -- "$role_pattern" "molecule/$scenario"; then
-              echo "::error::Scenario has no resolvable role references."
-              exit 1
-            fi
           done
-
-          full_matrix=false
-          reason="no Molecule inputs changed"
-          selected_paths=$(mktemp)
-          changed_paths=$(mktemp)
-          trap 'rm -f "$selected_paths" "$changed_paths"' EXIT
-          if [ "$EVENT_NAME" != pull_request ]; then
-            full_matrix=true
-            reason="non-pull-request event"
-          elif [ "$BASE_REF" = main ]; then
-            full_matrix=true
-            reason="promotion pull request targets main"
-          else
-            if [ -z "$BASE_SHA" ]; then
-              echo "::error::Pull request base SHA is missing; refusing to narrow."
-              exit 1
-            fi
-            git diff --name-only -z "$BASE_SHA...HEAD" > "$changed_paths"
-            while IFS= read -r -d '' path; do
-              case "$path" in
-                roles/*/meta/*|molecule/shared/*|molecule/resources/*|.config/molecule/*|playbooks/*|requirements.yml|requirements-ci.txt|ansible.cfg)
-                  full_matrix=true
-                  reason="shared inputs changed"
-                  break
-                  ;;
-                .github/workflows/*|.github/scripts/*)
-                  printf '%s\n' default >> "$selected_paths"
-                  reason="CI harness changed; run default smoke scenario"
-                  ;;
-                roles/*/*)
-                  role=${path#roles/}
-                  role=${role%%/*}
-                  if [[ ! "$role" =~ ^[a-z0-9_]+$ || ! -d "roles/$role" ]]; then
-                    full_matrix=true
-                    reason="role path is not in the current tree"
-                    break
-                  fi
-                  # A role referenced by another role may affect multiple
-                  # scenarios; widen instead of guessing which dependents run.
-                  if grep -R -q -w --include='*.yml' --include='*.yaml' \
-                    --exclude-dir="$role" -- "$role" roles/; then
-                    full_matrix=true
-                    reason="role dependency changed"
-                    break
-                  fi
-                  hits=0
-                  while IFS= read -r -d '' candidate; do
-                    scenario=${candidate#molecule/}
-                    scenario=${scenario%%/*}
-                    if [ -f "molecule/$scenario/molecule.yml" ]; then
-                      if ! grep -F -q -x -- "$scenario" "$selected_paths"; then
-                        printf '%s\n' "$scenario" >> "$selected_paths"
-                      fi
-                      hits=1
-                    fi
-                  done < <(grep -R -l -Z -w --include='*.yml' --include='*.yaml' -- "$role" molecule/ || true)
-                  if [ "$hits" -eq 0 ]; then
-                    full_matrix=true
-                    reason="changed role has no Molecule scenario; "
-                    reason+="widening to full matrix"
-                  else
-                    reason="changed role coverage"
-                  fi
-                  ;;
-                molecule/*/*)
-                  scenario=${path#molecule/}
-                  scenario=${scenario%%/*}
-                  if [ -f "molecule/$scenario/molecule.yml" ]; then
-                    if ! grep -F -q -x -- "$scenario" "$selected_paths"; then
-                      printf '%s\n' "$scenario" >> "$selected_paths"
-                    fi
-                    reason="changed scenario coverage"
-                  else
-                    full_matrix=true
-                    reason="molecule path is not a known scenario"
-                    break
-                  fi
-                  ;;
-              esac
-            done < "$changed_paths"
-          fi
-
-          if [ "$full_matrix" = true ]; then
-            scenarios=("${all_scenarios[@]}")
-          else
-            mapfile -t scenarios < <(sort -u "$selected_paths")
-          fi
-          if [ "${#scenarios[@]}" -gt 0 ]; then
-            mapfile -t scenarios < <(printf '%s\n' "${scenarios[@]}" | sort -u)
-            scenario_json=$(printf '%s\n' "${scenarios[@]}" | jq -R . | jq -sc .)
-          else
-            scenario_json='[]'
-          fi
+          scenario_json=$(printf '%s\n' "${all_scenarios[@]}" | jq -R . | jq -sc .)
           echo "scenarios=$scenario_json" >> "$GITHUB_OUTPUT"
-          echo "### Molecule selection" >> "$GITHUB_STEP_SUMMARY"
-          printf '\n%s; selected %s of %s scenarios.\n' \
-            "$reason" "${#scenarios[@]}" "${#all_scenarios[@]}" >> "$GITHUB_STEP_SUMMARY"
-          echo "$reason: $scenario_json"
 
   molecule:
     name: Molecule (${{ matrix.scenario }})
@@ -243,12 +133,8 @@ jobs:
         if: steps.galaxy-cache.outputs.cache-hit != 'true'
         run: ansible-galaxy install -r requirements.yml
 
-      # molecule/default/verify.yml imports tests/container_start_contract.yml,
-      # so the `default` scenario also carries the container start contract.
-      # SCENARIO reaches the script through env, not through GitHub expression
-      # interpolation into the shell. The value is a repository directory name
-      # and this workflow now runs on pull_request, so it is untrusted input;
-      # `discover` additionally allow-lists it to [a-z0-9_].
+      # The shared workflow supplies only scenario names declared in this
+      # caller's filter map; the full-matrix fallback discovers directories.
       # Fetch the platform image before molecule needs it, retrying transient
       # registry errors. Molecule's own create step retries twice and then fails
       # the scenario, which reads as a broken role rather than a bad minute at
