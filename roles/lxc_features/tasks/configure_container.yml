@@ -1,39 +1,46 @@
 ---
-# Configure features for a single LXC container
-# item.key = container ID (string), item.value = desired features string
+# item.key = Tofu service key; item.value = current VMID
 
-- name: "Get current features for container {{ item.key }}"
-  ansible.builtin.command: "pct config '{{ item.key }}'"
-  register: lxc_features_pct_config
+- name: "Read current config for container {{ item.value }}"
+  ansible.builtin.command:
+    cmd: "pct config {{ item.value }}"
+  register: lxc_features_cfg
   changed_when: false
+  tags:
+    - lxc_features
 
-- name: "Parse current features for container {{ item.key }}"
+- name: "Parse current features for container {{ item.value }}"
   ansible.builtin.set_fact:
-    lxc_features_current: >-
+    lxc_features_current_tokens: >-
       {{
-        lxc_features_pct_config.stdout_lines
+        lxc_features_cfg.stdout_lines
         | select('match', '^features:')
-        | map('regex_replace', '^features:\s*', '')
-        | list
-        | first
-        | default('')
+        | map('regex_replace', '^features:\\s*', '')
+        | list | first | default('')
+        | split(',') | select('truthy') | list
       }}
+  tags:
+    - lxc_features
 
-- name: "Apply features to container {{ item.key }}"
-  when: lxc_features_current != item.value
+- name: "Apply required features to container {{ item.value }}"
+  when:
+    - (lxc_features_current_tokens | sort)
+      != (lxc_features_desired_tokens | sort)
   block:
-    - name: Stop container to apply feature changes # {{ item.key }}
-      ansible.builtin.command: "pct stop '{{ item.key }}'"
-      register: lxc_features_stop_result
-      failed_when:
-        - lxc_features_stop_result.rc != 0
-        - "'already stopped' not in lxc_features_stop_result.stderr"
-      changed_when: lxc_features_stop_result.rc == 0
-
-    - name: "Set features on container {{ item.key }}"
-      ansible.builtin.command: "pct set '{{ item.key }}' --features '{{ item.value }}'"
+    - name: "Set required features on container {{ item.value }}"
+      ansible.builtin.command:
+        cmd: >-
+          pct set {{ item.value }} --features
+          {{ lxc_features_desired_features }}
       changed_when: true
+      notify: Restart changed LXC feature containers
+      register: lxc_features_set
+      tags:
+        - lxc_features
 
-    - name: "Start container {{ item.key }}"
-      ansible.builtin.command: "pct start '{{ item.key }}'"
-      changed_when: true
+    - name: "Record feature change for container {{ item.value }}"
+      ansible.builtin.set_fact:
+        lxc_features_changed: "{{ lxc_features_changed + [item.value | string] }}"
+      when: lxc_features_set is defined and lxc_features_set.changed
+      tags:
+        - lxc_features

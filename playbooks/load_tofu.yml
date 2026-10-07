@@ -191,6 +191,56 @@
         containers_from_tofu: "{{ tofu_data.containers | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
+    # Membership in container_nesting_hosts comes from the generic
+    # `container-nesting` capability. Project only guests placed on this node;
+    # a VMID change therefore flows through inventory instead of a host_vars
+    # or group_vars list.
+    - name: Select container-nesting guests from published tags
+      ansible.builtin.set_fact:
+        load_tofu_container_nesting_guests: >-
+          {{
+            (tofu_data.containers | default({}) | dict2items)
+            | selectattr('value.tags', 'defined')
+            | selectattr('value.tags', 'contains', 'container-nesting')
+            | rejectattr('value.tags', 'contains', 'docker')
+            | list
+          }}
+
+    - name: Inject node-local container-nesting guest identities
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        lxc_features_service_vmids_from_tofu: >-
+          {{
+            dict(
+              (load_tofu_container_nesting_guests
+               | selectattr('value.node', 'defined')
+               | selectattr('value.node', 'equalto', _tofu_node_key)
+               | selectattr('value.ansible_pct_vmid', 'defined')
+               | map(attribute='key') | list)
+              | zip(
+                  load_tofu_container_nesting_guests
+                  | selectattr('value.node', 'defined')
+                  | selectattr('value.node', 'equalto', _tofu_node_key)
+                  | selectattr('value.ansible_pct_vmid', 'defined')
+                  | map(attribute='value.ansible_pct_vmid') | list
+                )
+            )
+          }}
+      vars:
+        _tofu_node_key: "{{ hostvars[item].proxmox_node_name | default(item) }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"
+
+    - name: Add nodes hosting container-nesting guests to their capability group
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups:
+          - container_nesting_hosts
+      loop: "{{ groups['proxmox'] | default([]) }}"
+      when: >-
+        (hostvars[item].lxc_features_service_vmids_from_tofu
+         | default({}, true) | length) > 0
+      changed_when: false
+
     # The same pass-through for VMs. Absent before this, which is why a
     # host_vars expression could reach a container's dataset but never a VM's:
     # docker VM 250 had NO snapshot coverage because nothing downstream could

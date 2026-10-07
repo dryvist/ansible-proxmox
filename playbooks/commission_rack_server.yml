@@ -52,10 +52,8 @@
     - role: lxc_features
       tags:
         - lxc_features
+      when: inventory_hostname in groups.get('container_nesting_hosts', [])
 
-    # Root-only Docker-in-LXC features (nesting, keyctl, fuse) for the AI
-    # orchestration guests. Safe no-op here unless a rack server also hosts
-    # those LXCs.
     - role: docker_lxc_features
       tags:
         - docker_lxc_features

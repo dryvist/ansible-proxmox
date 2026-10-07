@@ -28,6 +28,14 @@
           - >-
             hostvars['test-gpu-node'].media_lxc_features_service_vmids_from_tofu
             == {'media-guest': 101002}
+          - "'test-gpu-node' in groups['container_nesting_hosts']"
+          - "'test-cpu-node' not in groups['container_nesting_hosts']"
+          - >-
+            hostvars['test-gpu-node'].lxc_features_service_vmids_from_tofu
+            == {'container-nesting-guest': 101005}
+          - >-
+            hostvars['test-cpu-node'].lxc_features_service_vmids_from_tofu
+            == {}
           - pve_ha_ct_hostnames | sort == ['ha-guest']
           - pve_ha_vm_names | sort == ['ha-vm']
         fail_msg: >-

@@ -11,6 +11,7 @@
     "nvidia-guest": {
       "vmid": 101001,
       "ansible_pct_vmid": 101001,
+      "node": "test-gpu",
       "tags": ["nvidia-gpu"]
     },
     "media-guest": {
@@ -27,6 +28,18 @@
       "vmid": 101004,
       "ansible_pct_vmid": 101004,
       "tags": []
+    },
+    "container-nesting-guest": {
+      "vmid": 101005,
+      "ansible_pct_vmid": 101005,
+      "node": "test-gpu",
+      "tags": ["container-nesting"]
+    },
+    "docker-container-guest": {
+      "vmid": 101006,
+      "ansible_pct_vmid": 101006,
+      "node": "test-cpu",
+      "tags": ["container-nesting", "docker"]
     }
   },
   "vms": {
