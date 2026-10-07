@@ -24,5 +24,6 @@ jobs:
     with:
       repo_context: "Ansible playbooks and roles for configuring Proxmox VE host"
       ci_structure: >-
-        CI Gate aggregates required checks: Ansible Lint and Molecule Test
-        (changed-role scenarios on PRs; full matrix on pushes and shared inputs).
+        CI Gate aggregates lint, syntax, contract, and Molecule checks. PRs into
+        develop use changed-role scenarios; PRs into main and non-PR runs use
+        the full Molecule matrix.
