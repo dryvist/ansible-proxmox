@@ -143,11 +143,11 @@ space. An OS upgrade does not touch guest disks (separate datasets), so the
 root snapshot, not a guest backup, is the right rollback artifact. It then
 applies the `pve_repositories` role, which keeps the node on the
 no-subscription channel (deb822 `.sources`, enterprise repo disabled) without
-touching the Debian base repos. If `pve_repositories_apt_proxies` is non-empty
-(URLs read from `APT_PROXY_URL`, e.g. apt-cacher-ng
-instances — several accepted, separated by commas and/or whitespace), apt
-`http://` fetches are routed through the first one that answers, or straight to
-upstream when none does. The selection is apt's own
+touching the Debian base repos. The published inventory supplies the
+FQDN-based `cache_proxy_urls.apt_cache` list. When
+`pve_repositories_apt_proxies` is non-empty, apt `http://` fetches are routed
+through the first one that answers, or straight to upstream when none does.
+The selection is apt's own
 `Acquire::http::Proxy-Auto-Detect` hook, because apt accepts exactly one
 `Acquire::http::Proxy` value and a pair cannot be expressed as config. Run it
 with console access available; the node reboots.

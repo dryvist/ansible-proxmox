@@ -14,7 +14,19 @@
       ansible.builtin.include_role:
         name: dryvist.homelab.inventory_resolve
       vars:
-        inventory_resolve_required_keys: [node_storage]
+        inventory_resolve_required_keys: [node_storage, cache_proxy_urls]
+
+    - name: Require published APT cache endpoints
+      ansible.builtin.assert:
+        that:
+          - tofu_data.cache_proxy_urls.apt_cache is defined
+          - tofu_data.cache_proxy_urls.apt_cache | length > 0
+        fail_msg: >-
+          The published inventory must contain at least one
+          cache_proxy_urls.apt_cache entry before repository convergence.
+        success_msg: >-
+          Using {{ tofu_data.cache_proxy_urls.apt_cache | length }} APT cache
+          endpoint(s) from the published inventory.
 
     # SMB shares are declared ON the dataset they serve, inside
     # node_storage.<node>.pools.<pool>.datasets.<dataset>.smb, with the
@@ -214,8 +226,9 @@
     # Estate domain, so host_vars can build guest FQDNs (e.g. the
     # postgres_standby source_host) instead of hard-coding an IP or domain.
     # Empty when absent (test fixture) — consumers gate on non-empty.
-    - name: Inject OpenTofu domain onto proxmox hosts
+    - name: Inject OpenTofu domain and APT cache URLs onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
         domain_from_tofu: "{{ tofu_data.domain | default('') }}"
+        cache_proxy_urls_from_tofu: "{{ tofu_data.cache_proxy_urls.apt_cache }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
