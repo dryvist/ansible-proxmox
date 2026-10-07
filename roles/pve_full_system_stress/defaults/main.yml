@@ -1,14 +1,43 @@
 ---
-pve_full_system_stress_memory_minutes: 4
-pve_full_system_stress_cpu_minutes: 1
-pve_full_system_stress_storage_minutes: 1
-pve_full_system_stress_gpu_minutes: 1
-pve_full_system_stress_combined_minutes: 3
+# Template 18 starts with this mode/profile; status polls pass the run id returned by start.
+pve_full_system_stress_mode: start
+pve_full_system_stress_run_id: ''
+pve_full_system_stress_profile: smoke
+pve_full_system_stress_profiles:
+  smoke:
+    memory_minutes: 4
+    cpu_minutes: 1
+    storage_minutes: 1
+    gpu_minutes: 1
+    combined_minutes: 3
+  full:
+    memory_minutes: 40
+    cpu_minutes: 20
+    storage_minutes: 20
+    gpu_minutes: 20
+    combined_minutes: 20
+pve_full_system_stress_memory_minutes: "{{ pve_full_system_stress_profiles[pve_full_system_stress_profile].memory_minutes }}"
+pve_full_system_stress_cpu_minutes: "{{ pve_full_system_stress_profiles[pve_full_system_stress_profile].cpu_minutes }}"
+pve_full_system_stress_storage_minutes: "{{ pve_full_system_stress_profiles[pve_full_system_stress_profile].storage_minutes }}"
+pve_full_system_stress_gpu_minutes: "{{ pve_full_system_stress_profiles[pve_full_system_stress_profile].gpu_minutes }}"
+pve_full_system_stress_combined_minutes: "{{ pve_full_system_stress_profiles[pve_full_system_stress_profile].combined_minutes }}"
 pve_full_system_stress_fio_size: 1G
 pve_full_system_stress_sample_seconds: 30
+pve_full_system_stress_stage_transition_seconds: 10
+pve_full_system_stress_workload_margin_seconds: 5
 pve_full_system_stress_ue_count_files: "/sys/devices/system/edac/mc/*/ue_count"
 pve_full_system_stress_rpool: rpool
 pve_full_system_stress_scratch_dataset: rpool/ansible-proxmox-stress
+pve_full_system_stress_active_path: /run/pve-full-system-stress.active
+pve_full_system_stress_stage_script_path: /run/pve-full-system-stress-stage.sh
+pve_full_system_stress_guard_script_path: /run/pve-full-system-stress-guards.sh
+pve_full_system_stress_cpu_temp_limit_c: "{{ pve_health_telemetry_temp_critical_die_c | default(90) }}"
+pve_full_system_stress_stage_order:
+  - memory
+  - cpu
+  - storage
+  - gpu
+  - combined
 # The NVIDIA role runs in a separate play, so resolve its inventory override
 # here while retaining the role's declared default path.
 pve_full_system_stress_gpu_burn_dir: "{{ nvidia_driver_gpu_burn_dir | default('/var/lib/llm-cache/bin/gpu-burn') }}"

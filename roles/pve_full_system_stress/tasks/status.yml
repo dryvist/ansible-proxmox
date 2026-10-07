@@ -1,0 +1,123 @@
+---
+- name: Require a run id returned by the start task
+  ansible.builtin.assert:
+    that:
+      - pve_full_system_stress_run_id is match('^[0-9a-fA-F-]{36}$')
+    fail_msg: Supply the run id returned by the start operation.
+    quiet: true
+
+- name: Collect unit states, journal lines, peaks, and error counters
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      run_id={{ pve_full_system_stress_run_id | quote }}
+      lock={{ pve_full_system_stress_active_path | quote }}
+      printf 'run_id=%s\n' "$run_id"
+      if [[ -r "$lock/run-id" && $(cat "$lock/run-id") == "$run_id" ]]; then
+        printf 'campaign_lock=held\n'
+      else
+        printf 'campaign_lock=released\n'
+      fi
+      for stage in {{ pve_full_system_stress_stage_order | join(' ') }}; do
+        unit="pve-full-system-stress-${run_id}-${stage}"
+        for suffix in timer service; do
+          state=$(systemctl show --property=LoadState,ActiveState,SubState,Result --value "${unit}.${suffix}" 2>/dev/null \
+            | paste -sd, - || true)
+          [[ -n "$state" ]] || state=not-found
+          printf 'unit_%s_%s=%s\n' "$stage" "$suffix" "$state"
+        done
+      done
+      journal=''
+      for stage in {{ pve_full_system_stress_stage_order | join(' ') }}; do
+        unit="pve-full-system-stress-${run_id}-${stage}.service"
+        stage_journal=$(journalctl -u "$unit" --no-pager -o cat 2>/dev/null \
+          | grep -F "run=${run_id}" || true)
+        [[ -z "$stage_journal" ]] || journal+="${stage_journal}"$'\n'
+      done
+      if [[ -n "$journal" ]]; then
+        printf 'journal_lines_begin\n%s\njournal_lines_end\n' "$journal"
+      else
+        printf 'journal_lines=none\n'
+      fi
+      printf '%s\n' "$journal" | awk '
+        function record_max(key, value) {
+          if (value ~ /^[0-9]+([.][0-9]+)?$/ && (!(key in peak) || value + 0 > peak[key])) {
+            peak[key] = value + 0
+          }
+        }
+        {
+          for (i = 1; i <= NF; i++) {
+            split($i, field, "=")
+            key = field[1]
+            value = substr($i, length(key) + 2)
+            if (key == "cpu_temp_mC" || key == "gpu_temp_c" || key == "nvme_temp_c" ||
+                key == "gpu_power_w" || key == "gpu_sm_clock_mhz" ||
+                key == "gpu_mem_clock_mhz" || key == "cpu_throttle_count" ||
+                key == "edac_ce_count" || key == "edac_ue_count" ||
+                key == "mce_count" || key == "xid_count") {
+              record_max(key, value)
+            }
+            if (key == "gpu_throttle_active") throttle[value] = 1
+            if (key == "event" && value == "campaign_start") {
+              for (j = 1; j <= NF; j++) if ($j ~ /^start_utc=/) start_utc = substr($j, 11)
+            }
+          }
+        }
+        END {
+          for (key in peak) printf "peak_%s=%s\n", key, peak[key]
+          printf "gpu_throttle_values="
+          first = 1
+          for (value in throttle) {
+            printf "%s%s", first ? "" : ",", value
+            first = 0
+          }
+          if (first) printf "none"
+          printf "\n"
+          if (start_utc != "") printf "campaign_start_utc=%s\n", start_utc
+          else printf "campaign_start_utc=not-recorded\n"
+        }
+      '
+      ce=0 ue=0 found_ue=0
+      shopt -s nullglob
+      for file in /sys/devices/system/edac/mc/*/ce_count; do
+        [[ -r "$file" ]] || continue
+        value=$(cat "$file")
+        [[ "$value" =~ ^[0-9]+$ ]]
+        ce=$((ce + value))
+      done
+      for file in /sys/devices/system/edac/mc/*/ue_count; do
+        [[ -r "$file" ]] || continue
+        value=$(cat "$file")
+        [[ "$value" =~ ^[0-9]+$ ]]
+        ue=$((ue + value))
+        found_ue=1
+      done
+      if ((found_ue == 1)); then printf 'edac_ce_current=%s\nedac_ue_current=%s\n' "$ce" "$ue"
+      else printf 'edac_current=unavailable\n'
+      fi
+      start_utc=$(printf '%s\n' "$journal" | awk '
+        /event=campaign_start/ {
+          for (i = 1; i <= NF; i++) {
+            if ($i ~ /^start_utc=/) {
+              sub(/^start_utc=/, "", $i)
+              print $i
+              exit
+            }
+          }
+        }
+      ')
+      if [[ -n "$start_utc" ]]; then
+        kernel_events=$(journalctl -k --since "$start_utc" --no-pager -o cat)
+        mce_count=$(grep -Eic 'mce:|machine check|hardware error|uncorrected|EDAC.*(UE|uncorrected)' <<< "$kernel_events" || true)
+        xid_count=$(grep -Eic 'NVRM.*Xid|Xid [0-9]+' <<< "$kernel_events" || true)
+        printf 'kernel_mce_count=%s\nkernel_xid_count=%s\n' "$mce_count" "$xid_count"
+      else
+        printf 'kernel_mce_count=unavailable\nkernel_xid_count=unavailable\n'
+      fi
+  register: pve_full_system_stress_status
+  changed_when: false
+
+- name: Display full-system stress status and collected results
+  ansible.builtin.debug:
+    msg: "{{ pve_full_system_stress_status.stdout }}"
