@@ -5,7 +5,8 @@ run_id=$1 stage=$2 duration=$3 sample_seconds=$4 cpu_limit_c=$5
 watch_gpu=$6 campaign_started_at=$7 gpu_vmids_csv=$8 llm_pattern=$9
 previous_stage=${10} future_stages_csv=${11} rpool=${12} scratch_file=${13}
 lock_path=${14} guard_script=${15}
-shift 15
+memory_ecc=${16}
+shift 16
 log() {
   logger -t pve-full-system-stress -p "$1" -- \
     "pve_full_system_stress run=${run_id} stage=${stage} ${*:2}"
@@ -74,10 +75,11 @@ on_signal() { abort_reason=runtime_limit_or_signal; exit 143; }
 trap on_exit EXIT
 trap on_signal TERM INT
 abort() { abort_reason=$1; exit 1; }
+[[ "$memory_ecc" == true || "$memory_ecc" == false ]] || abort invalid_memory_ecc_value
 stage_started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-log daemon.info "event=stage_start start_utc=${stage_started_at} duration_seconds=${duration}"
+log daemon.info "event=stage_start start_utc=${stage_started_at} duration_seconds=${duration} memory_ecc=${memory_ecc}"
 if [[ "$stage" == memory ]]; then
-  log daemon.info "event=campaign_start start_utc=${campaign_started_at}"
+  log daemon.info "event=campaign_start start_utc=${campaign_started_at} memory_ecc=${memory_ecc}"
 fi
 if [[ -n "$previous_stage" ]]; then
   if journalctl -t pve-full-system-stress --no-pager -o cat \
@@ -102,9 +104,14 @@ if [[ "$stage" == memory ]]; then
   while IFS= read -r line; do log daemon.info "event=dimm ${line}"; done <<< "$dimm_layout"
 fi
 source "$guard_script"
-edac_initial=$(edac_counts) || abort edac_counters_unavailable
-read -r baseline_ce baseline_ue <<< "$edac_initial"
-((baseline_ue == 0)) || abort edac_ue_before_stage
+edac_initial=$(edac_counts "$memory_ecc") || abort edac_counters_unavailable
+if [[ "$edac_initial" == not_applicable ]]; then
+  log daemon.info "event=edac_guard memory_ecc=false decision=not_applicable"
+else
+  read -r baseline_ce baseline_ue <<< "$edac_initial"
+  ((baseline_ue == 0)) || abort edac_ue_before_stage
+  log daemon.info "event=edac_guard memory_ecc=true ue_count=${baseline_ue} decision=clear"
+fi
 guard_sample
 [[ "$stage" != memory ]] || :
 component_count=0

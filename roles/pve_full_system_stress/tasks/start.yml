@@ -70,6 +70,17 @@
     pve_full_system_stress_campaign_started_at: "{{ pve_full_system_stress_started_at.stdout | trim }}"
     pve_full_system_stress_stage: memory
 
+- name: Detect whether the memory array supports ECC
+  ansible.builtin.include_tasks:
+    file: detect_memory_ecc.yml
+    apply:
+      tags:
+        - never
+        - pve_full_system_stress
+  tags:
+    - never
+    - pve_full_system_stress
+
 - name: Refuse to start while another campaign is active
   ansible.builtin.shell:
     executable: /bin/bash

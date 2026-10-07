@@ -1,0 +1,19 @@
+---
+- name: Verify stress-role memory ECC detection from SMBIOS fixtures
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    pve_full_system_stress_run_id: ecc-test-run
+    pve_full_system_stress_stage: memory
+    pve_full_system_stress_expected_memory_ecc: "{{ lookup('env', 'PVE_FULL_SYSTEM_STRESS_EXPECTED_ECC') | bool }}"
+  tasks:
+    - name: Run the role's ECC detection tasks
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/tasks/detect_memory_ecc.yml"
+
+    - name: Require the detected capability to match the fixture
+      ansible.builtin.assert:
+        that:
+          - pve_full_system_stress_memory_ecc == pve_full_system_stress_expected_memory_ecc
+        quiet: true
