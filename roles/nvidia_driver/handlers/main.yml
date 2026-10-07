@@ -10,6 +10,6 @@
   changed_when: true
   when: ansible_virtualization_type | default('') != 'docker'
 
-- name: Reload systemd after removing the graphics-clock unit
+- name: Reload systemd after removing an NVIDIA unit
   ansible.builtin.systemd_service:
     daemon_reload: true
