@@ -15,7 +15,7 @@
       {{
         lxc_features_cfg.stdout_lines
         | select('match', '^features:')
-        | map('regex_replace', '^features:\\s*', '')
+        | map('regex_replace', '^features:\s*', '')
         | list | first | default('')
         | split(',') | select('truthy') | list
       }}

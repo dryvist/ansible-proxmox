@@ -1,0 +1,22 @@
+{
+  "unmapped_paths": [
+    "roles/lxc_features/defaults/main.yml",
+    "roles/lxc_features/handlers/main.yml",
+    "roles/lxc_features/tasks/configure_container.yml",
+    "roles/lxc_features/tasks/main.yml",
+    "tests/capability_tags/hosts.yml",
+    "tests/capability_tags/tofu_inventory.json",
+    "tests/capability_tags/verify_inventory.yml",
+    "tests/guest_placement/resources-gpu-a.json",
+    "tests/guest_placement/resources-gpu-b.json",
+    "tests/guest_placement/resources-server-a.json",
+    "tests/guest_placement/resources-server-b.json",
+    "tests/guest_placement/test_memory_budget.py",
+    "tests/guest_placement/tofu_fixture.json",
+    "tests/inventory_load/tofu_inventory.json",
+    "tests/inventory_load/verify_inventory.yml",
+    "tests/pve_ha_relocation/live_fixture.json",
+    "tests/pve_ha_relocation/test_preflight.py"
+  ],
+  "redacted_full_matrix_path": "inventory/host_vars/<redacted>/01-gpu.yml"
+}

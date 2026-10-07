@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+log=/tmp/lxc-features-pct-actions.log
+case "${1:-}" in
+  list)
+    cat /tmp/lxc-features-pct-list.txt
+    ;;
+  config)
+    if [[ -f /tmp/lxc-features-pct-state ]]; then
+      printf 'features: %s\n' "$(< /tmp/lxc-features-pct-state)"
+    else
+      cat /tmp/lxc-features-pct-config.txt
+    fi
+    ;;
+  status)
+    printf 'status: running\n'
+    ;;
+  set)
+    printf '%s\n' "$*" >> "$log"
+    printf '%s\n' "${4:?features argument required}" > /tmp/lxc-features-pct-state
+    ;;
+  stop|start)
+    printf '%s\n' "$*" >> "$log"
+    ;;
+  *)
+    printf 'Unexpected pct command: %s\n' "$*" >&2
+    exit 64
+    ;;
+esac
