@@ -33,3 +33,17 @@
         fail_msg: >-
           Capability-tag groups and role selectors must include only the
           matching synthetic inventory entries.
+
+    - name: Resolve the stress guard GPU guests through its production task
+      ansible.builtin.import_tasks: ../../roles/pve_full_system_stress/tasks/resolve_gpu_vmids.yml
+      vars:
+        lxc_gpu_features_nvidia_vmids_from_tofu: >-
+          {{ hostvars['test-gpu-node'].lxc_gpu_features_nvidia_vmids_from_tofu }}
+
+    - name: Verify the stress guard selects only the NVIDIA-tagged guest
+      ansible.builtin.assert:
+        that:
+          - pve_full_system_stress_gpu_vmids == ['101001']
+        fail_msg: >-
+          The stress guard must resolve exactly the published NVIDIA-tagged
+          guest VMIDs, independently of the removed service-name map.
