@@ -305,10 +305,8 @@
     - cpu_governor
   block:
     - name: Declare the CPU governor for boot
-      ansible.builtin.copy:
-        content: |
-          {{ ansible_managed | comment }}
-          w /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor - - - - {{ kernel_tuning_cpu_governor }}
+      ansible.builtin.template:
+        src: cpu-governor.conf.j2
         dest: "{{ kernel_tuning_cpu_governor_file }}"
         owner: root
         group: root
