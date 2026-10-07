@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise production HA admission against sanitized real API definitions."""
+"""Exercise production HA admission against anonymized real API definitions."""
 import copy
 import json
 import os
