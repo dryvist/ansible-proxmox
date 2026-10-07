@@ -57,8 +57,8 @@
     - name: Confirm only a running legacy GPU guest received graceful shutdown
       ansible.builtin.assert:
         that:
-          - legacy_running_after.stdout | trim == 'status: stopped'
-          - legacy_stopped_after.stdout | trim == 'status: stopped'
+          - "legacy_running_after.stdout | trim == 'status: stopped'"
+          - "legacy_stopped_after.stdout | trim == 'status: stopped'"
           - legacy_running_calls.stat.exists
           - not legacy_stopped_calls.stat.exists
         fail_msg: >-
