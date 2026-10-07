@@ -1,0 +1,34 @@
+---
+- name: Verify stress stage scheduling against role tasks
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Load the role defaults under test
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/defaults/main.yml"
+      tags: always
+
+    - name: Schedule selected role stages through the mocked systemd command
+      vars:
+        pve_full_system_stress_run_id: 01234567-89ab-cdef-0123-456789abcdef
+        pve_full_system_stress_campaign_started_at: '2026-10-07T00:00:00Z'
+        pve_full_system_stress_memory_ecc: false
+        pve_full_system_stress_gpu_vmids: []
+        pve_full_system_stress_cpu_temp_limit_c: 90
+        pve_full_system_stress_scratch_file: /tmp/stress-fixture.dat
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/tasks/schedule_stages.yml"
+        apply:
+          tags: pve_full_system_stress
+      tags: always
+
+    - name: Assert the selected stages are the scheduled stages
+      ansible.builtin.assert:
+        that:
+          - pve_full_system_stress_scheduled_stages | length == pve_full_system_stress_stages | length
+          - >-
+            pve_full_system_stress_scheduled_stages
+            | map('regex_replace', '^pve-full-system-stress-01234567-89ab-cdef-0123-456789abcdef-', '')
+            | list == pve_full_system_stress_stages
+      tags: always

@@ -14,12 +14,14 @@
       run_id={{ pve_full_system_stress_run_id | quote }}
       lock={{ pve_full_system_stress_active_path | quote }}
       printf 'run_id=%s\n' "$run_id"
+      printf 'selected_stages={{ pve_full_system_stress_stages | join(',') }}\n'
+      printf 'skipped_stages={{ pve_full_system_stress_stage_order | reject('in', pve_full_system_stress_stages) | list | join(',') }}\n'
       if [[ -r "$lock/run-id" && $(cat "$lock/run-id") == "$run_id" ]]; then
         printf 'campaign_lock=held\n'
       else
         printf 'campaign_lock=released\n'
       fi
-      for stage in {{ pve_full_system_stress_stage_order | join(' ') }}; do
+      for stage in {{ pve_full_system_stress_stages | join(' ') }}; do
         unit="pve-full-system-stress-${run_id}-${stage}"
         for suffix in timer service; do
           state=$(systemctl show --property=LoadState,ActiveState,SubState,Result --value "${unit}.${suffix}" 2>/dev/null \
@@ -28,8 +30,9 @@
           printf 'unit_%s_%s=%s\n' "$stage" "$suffix" "$state"
         done
       done
-      journal=''
-      for stage in {{ pve_full_system_stress_stage_order | join(' ') }}; do
+      journal=$(journalctl -t pve-full-system-stress --no-pager -o cat 2>/dev/null \
+        | grep -F "run=${run_id}" || true)
+      for stage in {{ pve_full_system_stress_stages | join(' ') }}; do
         unit="pve-full-system-stress-${run_id}-${stage}.service"
         stage_journal=$(journalctl -u "$unit" --no-pager -o cat 2>/dev/null \
           | grep -F "run=${run_id}" || true)

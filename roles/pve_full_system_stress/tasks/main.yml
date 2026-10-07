@@ -4,7 +4,12 @@
     that:
       - pve_full_system_stress_mode in ['start', 'status']
       - pve_full_system_stress_profile in pve_full_system_stress_profiles
-    fail_msg: Select the start or status operation and a declared duration profile.
+      - pve_full_system_stress_stages | type_debug == 'list'
+      - pve_full_system_stress_stages | length > 0
+      - pve_full_system_stress_stages | unique | length == pve_full_system_stress_stages | length
+      - pve_full_system_stress_stages | difference(pve_full_system_stress_stage_order) | length == 0
+      - pve_full_system_stress_stages == (pve_full_system_stress_stage_order | select('in', pve_full_system_stress_stages) | list)
+    fail_msg: Select start or status, a declared duration profile, and one or more known stages in canonical order.
     quiet: true
   tags:
     - never

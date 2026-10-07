@@ -1,39 +1,14 @@
 ---
-- name: Validate declared stress durations and memory headroom
-  ansible.builtin.assert:
-    that:
-      - pve_full_system_stress_memory_minutes | int > 0
-      - pve_full_system_stress_cpu_minutes | int > 0
-      - pve_full_system_stress_storage_minutes | int > 0
-      - pve_full_system_stress_gpu_minutes | int > 0
-      - pve_full_system_stress_combined_minutes | int > 0
-      - pve_full_system_stress_memory_minutes | int > pve_full_system_stress_cpu_minutes | int
-      - pve_full_system_stress_memory_minutes | int > pve_full_system_stress_storage_minutes | int
-      - pve_full_system_stress_memory_minutes | int > pve_full_system_stress_gpu_minutes | int
-      - pve_full_system_stress_memory_minutes | int > pve_full_system_stress_combined_minutes | int
-      - pve_full_system_stress_fio_size is match('^[1-9][0-9]*[KMGTP]$')
-      - pve_full_system_stress_sample_seconds | int >= 5
-      - pve_full_system_stress_stage_transition_seconds | int >= 5
-      - pve_full_system_stress_workload_margin_seconds | int > 0
-      - pve_full_system_stress_memory_minutes | int * 60 > pve_full_system_stress_workload_margin_seconds | int
-      - pve_full_system_stress_cpu_temp_limit_c | int > 0
-    fail_msg: >-
-      Durations must be positive, memory must be the longest stage, fio size
-      must use a positive binary size, and telemetry limits must be valid.
-    quiet: true
+- name: Validate stress stage selection and durations
+  ansible.builtin.include_tasks:
+    file: validate.yml
 
 - name: Check required declared host tooling
   ansible.builtin.command:
     argv:
       - "{{ item }}"
       - --version
-  loop:
-    - stress-ng
-    - fio
-    - dmidecode
-    - nvme
-    - nvidia-smi
-    - systemd-run
+  loop: "{{ pve_full_system_stress_stages | map('extract', pve_full_system_stress_stage_tools) | flatten | unique }}"
   register: pve_full_system_stress_tool_checks
   changed_when: false
 
@@ -41,6 +16,7 @@
   ansible.builtin.stat:
     path: "{{ pve_full_system_stress_gpu_burn_dir }}/gpu_burn"
   register: pve_full_system_stress_gpu_burn
+  when: pve_full_system_stress_stages | intersect(['gpu', 'combined']) | length > 0
 
 - name: Assert the declared GPU Burn executable is present
   ansible.builtin.assert:
@@ -51,6 +27,7 @@
       The declared GPU Burn executable is missing; converge the existing
       nvidia_driver tooling before running this opt-in stress sequence.
     quiet: true
+  when: pve_full_system_stress_stages | intersect(['gpu', 'combined']) | length > 0
 
 - name: Generate a unique stress run id
   ansible.builtin.command:
@@ -170,6 +147,7 @@
       register: pve_full_system_stress_scratch_mount_result
       changed_when: false
       failed_when: false
+      when: "'storage' in pve_full_system_stress_stages"
 
     - name: Require the exact dedicated fio dataset before any create
       ansible.builtin.assert:
@@ -177,6 +155,7 @@
           - pve_full_system_stress_scratch_dataset == pve_full_system_stress_rpool ~ '/ansible-proxmox-stress'
         fail_msg: Refusing to create or use a non-dedicated dataset for fio.
         quiet: true
+      when: "'storage' in pve_full_system_stress_stages"
 
     - name: Create the dedicated scratch dataset when it is absent
       ansible.builtin.command:
@@ -185,6 +164,7 @@
           - create
           - "{{ pve_full_system_stress_scratch_dataset }}"
       when:
+        - "'storage' in pve_full_system_stress_stages"
         - pve_full_system_stress_scratch_mount_result.rc != 0
         - pve_full_system_stress_scratch_mount_result.stderr is search('dataset does not exist')
       changed_when: true
@@ -201,6 +181,7 @@
           - "{{ pve_full_system_stress_scratch_dataset }}"
       register: pve_full_system_stress_scratch_mount
       changed_when: false
+      when: "'storage' in pve_full_system_stress_stages"
 
     - name: Verify the fio scratch path belongs to the dedicated dataset
       ansible.builtin.command:
@@ -213,7 +194,9 @@
           - "{{ pve_full_system_stress_scratch_mount.stdout }}"
       register: pve_full_system_stress_scratch_source
       changed_when: false
-      when: pve_full_system_stress_scratch_mount.stdout != '-'
+      when:
+        - "'storage' in pve_full_system_stress_stages"
+        - pve_full_system_stress_scratch_mount.stdout != '-'
 
     - name: Require the fio target to be mounted from the dedicated dataset
       ansible.builtin.assert:
@@ -222,6 +205,7 @@
           - pve_full_system_stress_scratch_source.stdout == pve_full_system_stress_scratch_dataset
         fail_msg: The fio scratch dataset has no matching mounted ZFS path.
         quiet: true
+      when: "'storage' in pve_full_system_stress_stages"
 
     - name: Read available scratch-dataset capacity
       ansible.builtin.command:
@@ -235,6 +219,7 @@
           - "{{ pve_full_system_stress_scratch_dataset }}"
       register: pve_full_system_stress_scratch_available
       changed_when: false
+      when: "'storage' in pve_full_system_stress_stages"
 
     - name: Require fio to leave ten percent of available capacity free
       ansible.builtin.shell:
@@ -265,11 +250,13 @@
             exit 1
           }
       changed_when: false
+      when: "'storage' in pve_full_system_stress_stages"
 
     - name: Set the unique fio scratch file path
       ansible.builtin.set_fact:
         pve_full_system_stress_scratch_mountpoint: "{{ pve_full_system_stress_scratch_mount.stdout }}"
         pve_full_system_stress_scratch_file: "{{ pve_full_system_stress_scratch_mount.stdout }}/fio-{{ pve_full_system_stress_run_id }}.dat"
+      when: "'storage' in pve_full_system_stress_stages"
 
     - name: Schedule the detached stress stages
       ansible.builtin.include_tasks:

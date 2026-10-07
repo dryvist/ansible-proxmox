@@ -1,0 +1,46 @@
+---
+- name: Validate the stress role stage contract
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Load the role defaults under test
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/defaults/main.yml"
+
+    - name: Assert the default selection preserves all stages in order
+      ansible.builtin.assert:
+        that:
+          - pve_full_system_stress_stages == ['memory', 'cpu', 'storage', 'gpu', 'combined']
+
+    - name: Validate default stage configuration
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/tasks/validate.yml"
+
+    - name: Validate a GPU and combined subset without a longer memory stage
+      vars:
+        pve_full_system_stress_stages: [gpu, combined]
+        pve_full_system_stress_memory_minutes: 0
+        pve_full_system_stress_gpu_minutes: 1
+        pve_full_system_stress_combined_minutes: 1
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/tasks/validate.yml"
+
+    - name: Confirm that a one-minute storage stage fails the contract
+      block:
+        - name: Validate an undersized storage stage
+          vars:
+            pve_full_system_stress_stages: [storage]
+            pve_full_system_stress_storage_minutes: 1
+          ansible.builtin.include_tasks:
+            file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/tasks/validate.yml"
+      rescue:
+        - name: Confirm the storage minimum explains the refusal
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('storage at least 5 minutes')
+      always:
+        - name: Fail if undersized storage unexpectedly passed
+          ansible.builtin.fail:
+            msg: A one-minute storage stage unexpectedly passed validation.
+          when: not ansible_failed_result is defined
