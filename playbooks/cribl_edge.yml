@@ -22,6 +22,8 @@
 - name: Install and configure Cribl Edge on Proxmox hosts
   hosts: proxmox
   become: true
+  tags:
+    - cribl_edge
 
   pre_tasks:
     # A hypervisor is not a general workload host. If the tarball or the
