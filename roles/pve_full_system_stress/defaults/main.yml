@@ -29,6 +29,8 @@ pve_full_system_stress_ue_count_files: "/sys/devices/system/edac/mc/*/ue_count"
 pve_full_system_stress_rpool: rpool
 pve_full_system_stress_scratch_dataset: rpool/ansible-proxmox-stress
 pve_full_system_stress_active_path: /run/pve-full-system-stress.active
+pve_full_system_stress_stage_script_path: /run/pve-full-system-stress-stage.sh
+pve_full_system_stress_guard_script_path: /run/pve-full-system-stress-guards.sh
 pve_full_system_stress_cpu_temp_limit_c: "{{ pve_health_telemetry_temp_critical_die_c | default(90) }}"
 pve_full_system_stress_stage_order:
   - memory

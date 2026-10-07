@@ -130,6 +130,22 @@
 
 - name: Prepare the dedicated fio scratch dataset and run sequence
   block:
+    - name: Install the detached stage supervisor
+      ansible.builtin.copy:
+        src: pve-full-system-stress-stage.sh
+        dest: "{{ pve_full_system_stress_stage_script_path }}"
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Install the stage guard library
+      ansible.builtin.copy:
+        src: pve-full-system-stress-guards.sh
+        dest: "{{ pve_full_system_stress_guard_script_path }}"
+        owner: root
+        group: root
+        mode: "0700"
+
     - name: Read the dedicated scratch dataset mountpoint
       ansible.builtin.command:
         argv:
@@ -244,192 +260,16 @@
         pve_full_system_stress_scratch_mountpoint: "{{ pve_full_system_stress_scratch_mount.stdout }}"
         pve_full_system_stress_scratch_file: "{{ pve_full_system_stress_scratch_mount.stdout }}/fio-{{ pve_full_system_stress_run_id }}.dat"
 
-    - name: Record the campaign start and schedule all stages
-      block:
-        - name: Record the start of the detached campaign
-          ansible.builtin.command:
-            argv:
-              - logger
-              - -t
-              - pve-full-system-stress
-              - -p
-              - daemon.info
-              - --
-              - >-
-                pve_full_system_stress run={{ pve_full_system_stress_run_id }}
-                event=campaign_start start_utc={{ pve_full_system_stress_campaign_started_at }}
-                profile={{ pve_full_system_stress_profile }}
-                duration_seconds={{ pve_full_system_stress_memory_minutes | int * 60
-                  + pve_full_system_stress_cpu_minutes | int * 60
-                  + pve_full_system_stress_storage_minutes | int * 60
-                  + pve_full_system_stress_gpu_minutes | int * 60
-                  + pve_full_system_stress_combined_minutes | int * 60 }}
-          changed_when: false
-
-        - name: Record the schedule base time and initial stage offset
-          ansible.builtin.command:
-            argv: [date, -u, +%s]
-          register: pve_full_system_stress_schedule_base
-          changed_when: false
-
-        - name: Initialize the stage schedule
-          ansible.builtin.set_fact:
-            pve_full_system_stress_schedule_offset: 1
-            pve_full_system_stress_scheduled_stages: []
-
-        - name: Schedule memory stress first and longest
-          ansible.builtin.include_tasks:
-            file: run_stage.yml
-            apply:
-              tags:
-                - never
-                - pve_full_system_stress
+    - name: Schedule the detached stress stages
+      ansible.builtin.include_tasks:
+        file: schedule_stages.yml
+        apply:
           tags:
             - never
             - pve_full_system_stress
-          vars:
-            pve_full_system_stress_stage: memory
-            pve_full_system_stress_duration_seconds: "{{ pve_full_system_stress_memory_minutes | int * 60 }}"
-            pve_full_system_stress_watch_gpu: false
-            pve_full_system_stress_components:
-              - name: memory
-                cwd: ''
-                argv:
-                  - stress-ng
-                  - --vm
-                  - '1'
-                  - --vm-bytes
-                  - 85%
-                  - --oom-avoid
-                  - --no-oom-adjust
-                  - --verify
-                  - --metrics-brief
-                  - --timeout
-                  - "{{ (pve_full_system_stress_memory_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int) }}s"
-
-        - name: Schedule all-core CPU stress
-          ansible.builtin.include_tasks:
-            file: run_stage.yml
-            apply:
-              tags:
-                - never
-                - pve_full_system_stress
-          tags:
-            - never
-            - pve_full_system_stress
-          vars:
-            pve_full_system_stress_stage: cpu
-            pve_full_system_stress_duration_seconds: "{{ pve_full_system_stress_cpu_minutes | int * 60 }}"
-            pve_full_system_stress_watch_gpu: false
-            pve_full_system_stress_components:
-              - name: cpu
-                cwd: ''
-                argv:
-                  - stress-ng
-                  - --cpu
-                  - '0'
-                  - --cpu-method
-                  - all
-                  - --metrics-brief
-                  - --timeout
-                  - "{{ (pve_full_system_stress_cpu_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int) }}s"
-
-        - name: Schedule random storage stress on the rpool scratch dataset
-          ansible.builtin.include_tasks:
-            file: run_stage.yml
-            apply:
-              tags:
-                - never
-                - pve_full_system_stress
-          tags:
-            - never
-            - pve_full_system_stress
-          vars:
-            pve_full_system_stress_stage: storage
-            pve_full_system_stress_duration_seconds: "{{ pve_full_system_stress_storage_minutes | int * 60 }}"
-            pve_full_system_stress_watch_gpu: false
-            pve_full_system_stress_components:
-              - name: storage
-                cwd: "{{ pve_full_system_stress_scratch_mountpoint }}"
-                argv:
-                  - fio
-                  - --name=rpool-randrw
-                  - "--filename={{ pve_full_system_stress_scratch_file }}"
-                  - --rw=randrw
-                  - --rwmixread=50
-                  - --bs=4k
-                  - --ioengine=libaio
-                  - --iodepth=16
-                  - --numjobs=1
-                  - --direct=1
-                  - --time_based=1
-                  - "--runtime={{ pve_full_system_stress_storage_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int }}"
-                  - "--size={{ pve_full_system_stress_fio_size }}"
-                  - --group_reporting
-
-        - name: Schedule NVIDIA GPU Burn
-          ansible.builtin.include_tasks:
-            file: run_stage.yml
-            apply:
-              tags:
-                - never
-                - pve_full_system_stress
-          tags:
-            - never
-            - pve_full_system_stress
-          vars:
-            pve_full_system_stress_stage: gpu
-            pve_full_system_stress_duration_seconds: "{{ pve_full_system_stress_gpu_minutes | int * 60 }}"
-            pve_full_system_stress_watch_gpu: true
-            pve_full_system_stress_components:
-              - name: gpu
-                cwd: "{{ pve_full_system_stress_gpu_burn_dir }}"
-                argv:
-                  - "{{ pve_full_system_stress_gpu_burn_dir }}/gpu_burn"
-                  - "{{ pve_full_system_stress_gpu_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int }}"
-
-        - name: Schedule combined CPU, memory, and GPU stress
-          ansible.builtin.include_tasks:
-            file: run_stage.yml
-            apply:
-              tags:
-                - never
-                - pve_full_system_stress
-          tags:
-            - never
-            - pve_full_system_stress
-          vars:
-            pve_full_system_stress_stage: combined
-            pve_full_system_stress_duration_seconds: "{{ pve_full_system_stress_combined_minutes | int * 60 }}"
-            pve_full_system_stress_watch_gpu: true
-            pve_full_system_stress_components:
-              - name: cpu-memory
-                cwd: ''
-                argv:
-                  - stress-ng
-                  - --cpu
-                  - '0'
-                  - --vm
-                  - '1'
-                  - --vm-bytes
-                  - 85%
-                  - --oom-avoid
-                  - --no-oom-adjust
-                  - --verify
-                  - --metrics-brief
-                  - --timeout
-                  - "{{ (pve_full_system_stress_combined_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int) }}s"
-              - name: gpu
-                cwd: "{{ pve_full_system_stress_gpu_burn_dir }}"
-                argv:
-                  - "{{ pve_full_system_stress_gpu_burn_dir }}/gpu_burn"
-                  - "{{ pve_full_system_stress_combined_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int }}"
-
-        - name: Return the id used for status polls
-          ansible.builtin.debug:
-            msg: >-
-              Stress run {{ pve_full_system_stress_run_id }} is scheduled.
-              Use pve_full_system_stress_mode=status and pass this run id to collect results.
+      tags:
+        - never
+        - pve_full_system_stress
 
   rescue:
     - name: Stop every timer or stage already scheduled for this run
@@ -441,6 +281,9 @@
             unit="pve-full-system-stress-{{ pve_full_system_stress_run_id }}-${stage}"
             systemctl stop "${unit}.timer" "${unit}.service" >/dev/null 2>&1 || true
           done
+          rm -f -- \
+            {{ pve_full_system_stress_stage_script_path | quote }} \
+            {{ pve_full_system_stress_guard_script_path | quote }}
           logger -t pve-full-system-stress -p daemon.err -- \
             "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
             "event=campaign_abort reason=start_dispatch_failed end_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
