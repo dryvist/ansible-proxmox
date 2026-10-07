@@ -52,7 +52,7 @@
   ansible.builtin.file:
     path: /etc/systemd/system/nvidia-graphics-clock.service
     state: absent
-  notify: Reload systemd after removing the graphics-clock unit
+  notify: Reload systemd after removing an NVIDIA unit
   when:
     - nvidia_driver_graphics_clock_max_mhz is none
     - nvidia_driver_graphics_clock_existing_unit.stat.exists

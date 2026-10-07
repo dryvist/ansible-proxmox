@@ -164,8 +164,9 @@ nvidia_driver_graphics_clock_max_mhz: null
 
 # Optional per-host power cap in watts (e.g. a Max-Q-class card whose factory
 # board power exceeds what a given chassis/PSU should sustain continuously).
-# Undefined (the default) is a no-op -- the unit below is installed but does
-# nothing differently; it is only the applied cap that is skipped.
+# Null (the default) means no cap: the role removes any power-limit unit an
+# earlier cap installed and resets each GPU to the default limit the driver
+# reports, so the factory default is what runs.
 #
 # This is a boot-time systemd unit rather than a one-shot `nvidia-smi -pl`
 # task because both persistence mode and any power limit RESET at every
