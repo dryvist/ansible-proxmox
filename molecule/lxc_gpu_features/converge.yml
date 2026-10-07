@@ -61,6 +61,11 @@
             dri: false
             kfd: false
             nvidia: true
+        - key: "{{ lxc_gpu_features_test_service_vmids['llm-6000'] }}"
+          value:
+            dri: false
+            kfd: false
+            nvidia: true
         - key: "{{ lxc_gpu_features_test_service_vmids['llm-fast'] }}"
           value:
             dri: true

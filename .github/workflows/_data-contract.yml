@@ -144,6 +144,11 @@ jobs:
       - name: Verify pve_api_tokens mint decision and read gate
         run: python3 tests/test_pve_api_tokens.py
 
+      # Interface pinning and bridge ports are one inventory contract. Keep
+      # kernel-slot names from returning in the rendered bridge configuration.
+      - name: Verify pve_host_network MAC pinning contract
+        run: python3 tests/test_pve_host_network_contract.py
+
       # The drive artifact feeds a Nautobot sync that DELETES what it stops
       # seeing, so every failure here is silent and destructive: a filter that
       # stops excluding removable media churns the inventory every converge, and
@@ -230,6 +235,14 @@ jobs:
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/llm_model_store_seed/verify_mount_hotplug_check.yml -i localhost, -c local
+
+      # The shared catalog now includes provider and non-GGUF serving models;
+      # only entries with a pinned GGUF artifact can be seeded onto the store.
+      - name: Verify llm_model_store_seed selects only catalogued GGUF artifacts
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_catalog_models.yml -i localhost, -c local
 
       # Whether a changed container gets `pct reboot` or `pct start`. Drives
       # the handler's own decision task against both outcomes.

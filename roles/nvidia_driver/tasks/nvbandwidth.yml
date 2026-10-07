@@ -1,0 +1,49 @@
+---
+- name: Create the nvbandwidth build directory
+  ansible.builtin.file:
+    path: "{{ nvidia_driver_nvbandwidth_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Checkout the pinned NVIDIA nvbandwidth source
+  ansible.builtin.git:
+    repo: https://github.com/NVIDIA/nvbandwidth.git
+    dest: "{{ nvidia_driver_nvbandwidth_dir }}/src"
+    version: "{{ nvidia_driver_nvbandwidth_version }}"
+    update: true
+  register: nvidia_driver_nvbandwidth_checkout
+
+- name: Check for an existing nvbandwidth executable
+  ansible.builtin.stat:
+    path: "{{ nvidia_driver_nvbandwidth_dir }}/build/nvbandwidth"
+  register: nvidia_driver_nvbandwidth_binary
+
+- name: Configure NVIDIA nvbandwidth
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - -S
+      - "{{ nvidia_driver_nvbandwidth_dir }}/src"
+      - -B
+      - "{{ nvidia_driver_nvbandwidth_dir }}/build"
+  when:
+    - >-
+      nvidia_driver_nvbandwidth_checkout.changed
+      or not nvidia_driver_nvbandwidth_binary.stat.exists
+  changed_when: true
+
+- name: Build NVIDIA nvbandwidth
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - --build
+      - "{{ nvidia_driver_nvbandwidth_dir }}/build"
+      - --parallel
+      - "2"
+  when:
+    - >-
+      nvidia_driver_nvbandwidth_checkout.changed
+      or not nvidia_driver_nvbandwidth_binary.stat.exists
+  changed_when: true

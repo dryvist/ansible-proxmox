@@ -25,6 +25,11 @@ proxmox_user: "{{ [proxmox_user_from_tofu | default('')] | reject('equalto', '')
 # assert on every converge — caught live 2026-08-15.
 pve_ha_enabled: true
 
+# Cribl Edge's native GPU metrics require NVIDIA's nvidia-smi utility. Reuse
+# the existing driver opt-in so only NVIDIA-enabled hosts collect per-GPU data.
+cribl_edge_gpu_mode: >-
+  {{ 'custom' if (nvidia_driver_enabled | default(false) | bool) else 'disabled' }}
+
 # Trust the OpenBao SSH client CA on the PVE nodes and (via pct) their LXC
 # containers (ssh-certificate-authority ADR). Additive + lockout-guarded (a
 # static break-glass key must still authenticate before the role finishes) and
@@ -32,6 +37,10 @@ pve_ha_enabled: true
 # deny-by-default: PVE root:[ansible], LXC root:[ansible] — ai-agent is never a
 # hypervisor root. Stopped containers are reported as blockers, not failures.
 ssh_ca_trust_rollout_enabled: true
+# Also issue CA-signed SSH host certificates to the nodes and their running
+# containers, so clients trust one @cert-authority line instead of pinning
+# each host key.
+ssh_ca_trust_host_cert_enabled: true
 
 # Node naming: node names are hardware-keyed, so a name can no longer be composed
 # from a prefix plus an ordinal — the old `<prefix><N>` scheme could only ever

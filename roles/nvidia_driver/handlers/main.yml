@@ -9,3 +9,7 @@
     cmd: update-initramfs -u -k all
   changed_when: true
   when: ansible_virtualization_type | default('') != 'docker'
+
+- name: Reload systemd after removing the graphics-clock unit
+  ansible.builtin.systemd_service:
+    daemon_reload: true

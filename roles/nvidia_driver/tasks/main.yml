@@ -22,6 +22,8 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
+    - nvidia_driver_graphics_clock
 
 # Fail loud rather than silently install a driver for absent hardware: an
 # opt-in on the wrong host would otherwise pull DKMS and a kernel module onto a
@@ -37,6 +39,33 @@
   when:
     - nvidia_driver_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+    - nvidia_driver_graphics_clock
+
+# Guards against enabling a version pin (an "=" in the package spec) without
+# the matching NVIDIA pinning package: apt would then resolve nvidia-open's
+# OWN version correctly but leave its dependencies -- nvidia-persistenced and
+# whatever transitively provides nvidia-smi -- free to float onto the
+# repository's newest series. That is the exact host/guest version mismatch
+# this role exists to prevent, and nothing about it fails loudly on its own:
+# the install succeeds, the services start, and only an inference workload
+# fails later with "Driver/library version mismatch".
+- name: Fail loud when a pinned driver version has no matching apt pinning package
+  ansible.builtin.assert:
+    that:
+      - >-
+        (nvidia_driver_packages | select('search', '=') | list | length) == 0
+        or (nvidia_driver_packages | select('match', '^nvidia-driver-pinning-') | list | length) > 0
+    fail_msg: >-
+      nvidia_driver_packages pins an exact version (one entry contains "=")
+      but carries no nvidia-driver-pinning-<version> package. Add NVIDIA's
+      pinning package alongside the version pin, or apt will resolve
+      nvidia-open's dependencies against the repository's newest series
+      instead of the pinned one.
+  when:
+    - nvidia_driver_enabled | bool
   tags:
     - nvidia_driver
 
@@ -77,30 +106,84 @@
   tags:
     - nvidia_driver
 
-- name: Install the kernel headers DKMS builds against
+- name: Select headers and boot kernel for the NVIDIA DKMS pair
+  ansible.builtin.include_tasks: kernel_pair_select.yml
+  tags:
+    - nvidia_driver
+
+- name: Install the NVIDIA driver version pin before resolving driver dependencies
   ansible.builtin.apt:
-    name: "{{ nvidia_driver_header_packages }}"
+    name: "{{ nvidia_driver_packages | select('match', '^nvidia-driver-pinning-') | list }}"
     state: present
-    update_cache: true
-    cache_valid_time: 3600
   when:
     - nvidia_driver_enabled | bool
+    - nvidia_driver_packages | select('match', '^nvidia-driver-pinning-') | list | length > 0
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
 
-- name: Install the NVIDIA driver packages
+- name: Install NVIDIA host support and build packages
   ansible.builtin.apt:
-    name: "{{ nvidia_driver_packages }}"
+    name: >-
+      {{ nvidia_driver_packages_extra +
+      (['cmake'] if nvidia_driver_nvbandwidth_enabled | bool else []) }}
     state: present
-    update_cache: true
-    cache_valid_time: 3600
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_packages_extra | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+    - nvidia_driver_nvbandwidth
+
+- name: Install the NVIDIA driver packages at the declared version
+  ansible.builtin.apt:
+    name: "{{ nvidia_driver_packages | reject('match', '^nvidia-driver-pinning-') | list }}"
+    state: present
+    allow_downgrade: "{{ nvidia_driver_packages | select('search', '=') | list | length > 0 }}"
+    update_cache: false
   notify: Regenerate the initramfs
   when:
     - nvidia_driver_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+
+- name: Remove excluded DKMS series and assert the selected NVIDIA kernel pair
+  ansible.builtin.include_tasks: kernel_pair_verify.yml
+  tags:
+    - nvidia_driver
+
+- name: Manage the optional GPU Burn tool
+  ansible.builtin.include_tasks:
+    file: gpu_burn.yml
+    apply:
+      tags:
+        - nvidia_driver
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_gpu_burn_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+- name: Build optional NVIDIA nvbandwidth utility
+  ansible.builtin.include_tasks:
+    file: nvbandwidth.yml
+    apply:
+      environment:
+        PATH: >-
+          {{ nvidia_driver_gpu_burn_cuda_path }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      tags:
+        - nvidia_driver
+        - nvidia_driver_nvbandwidth
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_nvbandwidth_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+    - nvidia_driver_nvbandwidth
 
 - name: Check whether nouveau is still holding the GPU
   ansible.builtin.command:
@@ -112,6 +195,14 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+    - nvidia_driver_power_limit
+    - nvidia_driver_graphics_clock
+
+- name: Configure the optional NVIDIA graphics-clock lock
+  ansible.builtin.import_tasks: graphics_clock.yml
+  tags:
+    - nvidia_driver
+    - nvidia_driver_graphics_clock
 
 # Keeps the driver resident between clients.
 #
@@ -157,6 +248,141 @@
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - nvidia_driver
+
+# Persistence mode and any power limit reset at every reboot and at every
+# driver unload/reload (nvidia-smi's own docs), so a cap is only durable as a
+# boot-time unit, not a one-shot task run at converge time. Installed
+# whenever a cap is set; a host with no cap gets no unit at all, rather than
+# an unapplied one, so `systemctl status` on an uncapped host shows nothing
+# to read the wrong conclusion from.
+- name: Install the boot-time NVIDIA power-limit unit
+  ansible.builtin.template:
+    src: nvidia-power-limit.service.j2
+    dest: /etc/systemd/system/nvidia-power-limit.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: nvidia_driver_power_limit_unit_file
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Read the supported NVIDIA GPU power-limit ranges
+  ansible.builtin.command:
+    cmd: nvidia-smi --query-gpu=power.min_limit,power.max_limit --format=csv,noheader,nounits
+  register: nvidia_driver_power_limit_range
+  changed_when: false
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Require nvidia-smi to report supported GPU power limits
+  ansible.builtin.assert:
+    that:
+      - nvidia_driver_power_limit_range.stdout_lines | length > 0
+    fail_msg: >-
+      nvidia-smi returned no GPU power-limit ranges; refusing to apply the
+      requested NVIDIA power limit.
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Reject NVIDIA power limits outside each GPU's supported range
+  ansible.builtin.assert:
+    that:
+      - (item.split(',') | first | trim | float) <= (nvidia_driver_power_limit_w | float)
+      - (item.split(',') | last | trim | float) >= (nvidia_driver_power_limit_w | float)
+    fail_msg: >-
+      Requested NVIDIA power limit {{ nvidia_driver_power_limit_w }} W is
+      outside this GPU's supported range ({{ item | trim }} W, min,max);
+      refusing to rely on the driver to clamp the value.
+  loop: "{{ nvidia_driver_power_limit_range.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item | trim }} W (min,max)"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Enable the boot-time NVIDIA power-limit unit
+  ansible.builtin.systemd_service:
+    name: nvidia-power-limit.service
+    enabled: true
+    daemon_reload: true
+    state: "{{ ('restarted' if nvidia_driver_power_limit_unit_file.changed else 'started') if 'nouveau' not in nvidia_driver_lsmod.stdout else omit }}"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Read back the live NVIDIA GPU power limits
+  ansible.builtin.command:
+    cmd: nvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits
+  register: nvidia_driver_power_limit_readback
+  changed_when: false
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Require nvidia-smi to report live GPU power limits
+  ansible.builtin.assert:
+    that:
+      - nvidia_driver_power_limit_readback.stdout_lines | length > 0
+    fail_msg: >-
+      nvidia-smi returned no live GPU power limits after starting the
+      power-limit unit.
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Assert the live NVIDIA GPU power limits match the requested cap
+  ansible.builtin.assert:
+    that:
+      - ((item | float) - (nvidia_driver_power_limit_w | float)) | abs <= 1
+    fail_msg: >-
+      nvidia-smi reports a GPU power limit of {{ item | trim }} W; expected
+      {{ nvidia_driver_power_limit_w }} W within 1 W.
+  loop: "{{ nvidia_driver_power_limit_readback.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item | trim }} W"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
 
 # Surfaced, not acted on. Rebooting a hypervisor evacuates or interrupts every
 # guest on it, so that is an operator decision taken inside a maintenance

@@ -1,0 +1,75 @@
+---
+- name: Validate supplied systemd unit contracts
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[A-Za-z0-9_.@-]+[.]service$')
+      - item.content is string
+      - item.content | length > 0
+      - item.content is regex('(?m)^\\[Unit\\]$')
+      - item.content is regex('(?m)^\\[Service\\]$')
+      - item.content is regex('(?m)^ExecStart=.+$')
+      - item.state | default('stopped') in ['started', 'stopped']
+      - item.enabled | default(false) | type_debug == 'bool'
+      - >-
+        item.python_packages is not defined or
+        (item.python_packages is sequence and item.python_packages is not string)
+      - >-
+        item.python_virtualenv is not defined or
+        item.python_virtualenv is match('^/.+')
+      - item.python_packages is not defined or item.python_virtualenv is defined
+      - >-
+        item.python_packages is not defined or
+        (item.python_packages | select('string') | list | length ==
+        item.python_packages | length)
+    fail_msg: "Systemd unit contract {{ item.name | default('unnamed') }} is invalid."
+    quiet: true
+  loop: "{{ pve_host_systemd_units_contracts }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+  tags:
+    - pve_host_systemd_units
+
+- name: Install supplied systemd unit Python dependencies
+  ansible.builtin.pip:
+    name: "{{ item.python_packages }}"
+    virtualenv: "{{ item.python_virtualenv }}"
+    state: present
+  loop: >-
+    {{ pve_host_systemd_units_contracts
+       | selectattr('python_packages', 'defined')
+       | selectattr('python_packages') | list }}
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Restart supplied systemd services after package changes
+  tags:
+    - pve_host_systemd_units
+
+- name: Install supplied systemd unit contracts
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "/etc/systemd/system/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ pve_host_systemd_units_contracts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Reload systemd unit definitions
+  tags:
+    - pve_host_systemd_units
+
+- name: Apply unit definitions before managing service state
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - pve_host_systemd_units
+
+- name: Manage supplied systemd services
+  ansible.builtin.systemd:
+    name: "{{ item.name }}"
+    enabled: "{{ item.enabled | default(false) }}"
+    state: "{{ item.state | default('stopped') }}"
+  loop: "{{ pve_host_systemd_units_contracts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  tags:
+    - pve_host_systemd_units

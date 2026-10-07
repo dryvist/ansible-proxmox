@@ -12,6 +12,8 @@
       loop:
         - /etc/modprobe.d/blacklist-nouveau.conf
         - /etc/apt/sources.list.d/nvidia-cuda.sources
+        - /etc/systemd/system/nvidia-graphics-clock.service
+        - /var/lib/llm-cache/bin/nvbandwidth
       loop_control:
         label: "{{ item }}"
 
@@ -50,13 +52,23 @@
     # from adding an apt repository, installing DKMS, or building a kernel
     # module. Proven here by the .sources file being absent after a converge
     # that ran the role enabled.
-    - name: Assert the apt repository was not added under Docker
+    - name: Assert host-only artifacts were not added under Docker
       ansible.builtin.assert:
         that:
           - not (nvidia_driver_artifacts.results[1].stat.exists)
+          - not (nvidia_driver_artifacts.results[2].stat.exists)
+          - not (nvidia_driver_artifacts.results[3].stat.exists)
         fail_msg: >-
-          nvidia_driver added its apt repository inside a container -- the
+          nvidia_driver added a host-only artifact inside a container -- the
           ansible_virtualization_type guard is not holding.
+
+    - name: Assert graphics-clock locking is off by default
+      ansible.builtin.assert:
+        that:
+          - not (nvidia_driver_artifacts.results[2].stat.exists)
+        fail_msg: >-
+          nvidia_driver installed a graphics-clock unit without an explicit
+          nvidia_driver_graphics_clock_max_mhz value.
 
     - name: Assert nvidia packages were not installed
       ansible.builtin.command:

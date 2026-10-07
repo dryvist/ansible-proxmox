@@ -10,6 +10,7 @@
     cmd: "zfs list -H -o name {{ zfs_pool.key }}/{{ item.key }}"
   register: zfs_pools_ds_check
   changed_when: false
+  check_mode: false
   failed_when: false
   loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
   loop_control:
@@ -34,6 +35,7 @@
     cmd: "zfs get -Hp -o value quota {{ zfs_pool.key }}/{{ item.key }}"
   register: zfs_pools_ds_quota
   changed_when: false
+  check_mode: false
   loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
   loop_control:
     label: "{{ zfs_pool.key }}/{{ item.key }}"
@@ -64,6 +66,22 @@
     loop_var: zfs_dataset
     label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }}"
   when: zfs_dataset.value.properties | default({}) | length > 0
+  tags:
+    - zfs_pools
+
+- name: "Require an NFS export when dataset export permissions are declared in {{ zfs_pool.key }}"
+  ansible.builtin.assert:
+    that:
+      - item.value.nfs_export is defined
+      - item.value.nfs_export | string | length > 0
+    fail_msg: >-
+      nfs_export_permissions applies only to a dataset with a non-empty
+      nfs_export declaration.
+    quiet: true
+  loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ zfs_pool.key }}/{{ item.key }}"
+  when: item.value.nfs_export_permissions is defined
   tags:
     - zfs_pools
 

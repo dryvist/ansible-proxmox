@@ -9,12 +9,52 @@
   ansible.builtin.assert:
     that:
       - wol_enable_interface | trim | length > 0
+      - wol_enable_mac | trim | length == 0 or wol_enable_mac is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$')
     fail_msg: >-
-      wol_enable_enabled is true but wol_enable_interface is empty -- set it
-      in this host's host_vars to the physical NIC enslaved to the bridge
-      (e.g. enp5s0), not the bridge itself.
+      WoL is enabled but the stable interface name is empty or the MAC address
+      is invalid. Set the physical interface alias and, when matching by MAC,
+      its six-octet hardware address in host_vars.
   when:
     - wol_enable_enabled | bool
+  tags:
+    - wol_enable
+
+- name: Read current link names when WoL is bound to a MAC
+  ansible.builtin.command:
+    cmd: ip -o link
+  register: wol_enable_link_listing
+  changed_when: false
+  when:
+    - wol_enable_enabled | bool
+    - wol_enable_mac | trim | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - wol_enable
+
+- name: Resolve the current interface name from its MAC
+  ansible.builtin.set_fact:
+    wol_enable_interface_resolved: >-
+      {{ (wol_enable_link_listing.stdout | default('', true)
+          | regex_findall('(?m)^[0-9]+: +([^:@]+)(?:@[^:]+)?:.*link/ether +'
+                          ~ (wol_enable_mac | lower) ~ '(?: |$)')
+          | first | default('', true))
+         if wol_enable_mac | trim | length > 0 else wol_enable_interface }}
+  when:
+    - wol_enable_enabled | bool
+  tags:
+    - wol_enable
+
+- name: Require the configured WoL MAC to identify a live interface
+  ansible.builtin.assert:
+    that:
+      - wol_enable_interface_resolved | trim | length > 0
+      - wol_enable_interface_resolved in ansible_interfaces
+    fail_msg: >-
+      The configured WoL MAC did not identify a live interface. Check the
+      inventory MAC and the host's current Ethernet interfaces.
+  when:
+    - wol_enable_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
   tags:
     - wol_enable
 
@@ -32,7 +72,7 @@
 
 - name: Read the interface's current Wake-on-LAN support and state
   ansible.builtin.command:
-    cmd: "ethtool {{ wol_enable_interface }}"
+    cmd: "ethtool {{ wol_enable_interface_resolved }}"
   register: wol_enable_ethtool
   changed_when: false
   when:
@@ -61,7 +101,7 @@
     that:
       - "'g' in wol_enable_supported_modes"
     fail_msg: >-
-      {{ wol_enable_interface }} does not advertise magic-packet (g)
+      {{ wol_enable_interface_resolved }} does not advertise magic-packet (g)
       Wake-on-LAN support (supports: '{{ wol_enable_supported_modes }}').
   when:
     - wol_enable_enabled | bool
@@ -71,7 +111,7 @@
 
 - name: Set Wake-on-LAN to magic packet now
   ansible.builtin.command:
-    cmd: "ethtool -s {{ wol_enable_interface }} wol g"
+    cmd: "ethtool -s {{ wol_enable_interface_resolved }} wol g"
   changed_when: "'Wake-on: g' not in wol_enable_ethtool.stdout"
   when:
     - wol_enable_enabled | bool
@@ -98,7 +138,7 @@
 # real hardware identifier is committed.
 - name: Read the interface's permanent hardware address
   ansible.builtin.command:
-    cmd: "ethtool -P {{ wol_enable_interface }}"
+    cmd: "ethtool -P {{ wol_enable_interface_resolved }}"
   register: wol_enable_permaddr
   changed_when: false
   when:
@@ -118,7 +158,7 @@
     wol_enable_mac_resolved: >-
       {{ wol_enable_mac | trim
          | default(wol_enable_permaddr_found, true)
-         | default(ansible_facts[wol_enable_interface].macaddress | default('', true), true) }}
+         | default(ansible_facts[wol_enable_interface_resolved].macaddress | default('', true), true) }}
   vars:
     # regex_search returns the match or None; the single-item list lets reject
     # drop an all-zero permanent address without iterating the string itself.
@@ -138,7 +178,7 @@
     that:
       - wol_enable_mac_resolved | trim | length > 0
     fail_msg: >-
-      Could not determine a MAC address for {{ wol_enable_interface }} --
+      Could not determine a MAC address for {{ wol_enable_interface_resolved }} --
       `ethtool -P` reported none and the interface has no runtime address.
       Set wol_enable_mac in this host's host_vars, or wol_enable_node_config
       to false to skip publishing the node's wakeonlan key.

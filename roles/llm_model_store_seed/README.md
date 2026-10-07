@@ -45,7 +45,7 @@ the backing volume, which is what this role does.
    `roles/pve_guest_evacuation_lxc_managed_volumes` already uses, because a
    managed mount_point's real backing dataset name only exists once Proxmox
    allocates it; it cannot be derived from the desired state alone.
-4. For every model in `llm_model_catalog_models`, resolves its sha256 from
+4. For every GGUF-backed model in `llm_model_catalog_models`, resolves its sha256 from
    HuggingFace's own LFS blob metadata at the model's pinned `hf_revision`,
    then fetches the GGUF with `ansible.builtin.get_url` and `checksum:` —
    idempotent (skipped once the destination already matches) and atomic
@@ -93,6 +93,6 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 | Variable                         | Default                            | Purpose                                                                     |
 | -------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
-| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Declared `{name, hf_repo, gguf, hf_revision}` catalog (not this role's own) |
+| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Shared model catalog; this role seeds only entries with the optional Hugging Face GGUF artifact fields |
 | `llm_model_store_seed_timeout`   | `3600`                             | Seconds allowed for the HF metadata lookup and the GGUF download            |
 | `llm_model_store_seed_file_mode` | `"0644"`                           | Mode of a seeded GGUF file                                                  |

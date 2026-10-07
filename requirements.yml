@@ -35,13 +35,17 @@ collections:
   # (splitting hypervisor syslog out of the os catch-all by host).
   # An immutable SHA, not a branch — a moving ref would let an unreviewed
   # contracts change reach a converge here without a PR in this repo.
-  # Now at homelab-contracts#58, which makes inventory_resolve report the
+  # Now at homelab-contracts#125, which adds the opt-in node_exporter hardware-sensor
+  # scrape source (earlier: #110, which publishes the numeric model catalog
+  # consumed by model serving and seeding).
+  #
+  # Earlier change: homelab-contracts#58 makes inventory_resolve report the
   # underlying error on every failure path, instead of naming one presumed
   # cause regardless of what actually failed.
   # renovate: datasource=git-refs depName=https://github.com/dryvist/homelab-contracts.git currentValue=main
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: fd486a9dcf94f57f2022c7727ba1160e9946974a
+    version: 469cd58dbf3c8d94eab341c1dceff0a41354aede
 
 # No `roles:` section — inventory_resolve comes from the collection above, by
 # FQCN, for the reason stated there. Its old git-scm `roles:` entry installed

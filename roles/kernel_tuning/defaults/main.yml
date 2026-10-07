@@ -81,3 +81,9 @@ kernel_tuning_edac_report: 1
 # / "Power Supply Idle Control=Typical Current Idle" mitigations. Opt-in per
 # host (first-gen Zen parts only).
 kernel_tuning_disable_zen_c6: false
+
+# CPU frequency scaling governor applied to every core at boot through
+# systemd-tmpfiles (/etc/tmpfiles.d). Empty leaves the kernel default.
+# Opt-in per host.
+kernel_tuning_cpu_governor: ""
+kernel_tuning_cpu_governor_file: /etc/tmpfiles.d/cpu-governor.conf

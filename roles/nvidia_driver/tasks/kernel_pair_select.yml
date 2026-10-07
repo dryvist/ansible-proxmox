@@ -1,0 +1,68 @@
+---
+- name: Install the kernel headers DKMS builds against
+  ansible.builtin.apt:
+    name: "{{ nvidia_driver_header_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: "{{ nvidia_driver_apt_cache_valid_time | int }}"
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+- name: Read the currently pinned Proxmox kernel
+  ansible.builtin.command:
+    cmd: proxmox-boot-tool kernel list
+  register: nvidia_driver_kernel_list
+  changed_when: false
+  check_mode: false
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+
+- name: Pin the kernel used by NVIDIA DKMS
+  ansible.builtin.command:
+    argv:
+      - proxmox-boot-tool
+      - kernel
+      - pin
+      - "{{ nvidia_driver_kernel_version }}"
+  register: nvidia_driver_kernel_pin
+  changed_when: true
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - >-
+      nvidia_driver_kernel_list.stdout is not search(
+        '(?ms)^Manually selected kernels:\n'
+        ~ '(?:(?!^Automatically selected kernels:).)*^\s*'
+        ~ (nvidia_driver_kernel_version | regex_escape) ~ '\s*$'
+      )
+  tags:
+    - nvidia_driver
+
+- name: Check whether Proxmox boot partitions need refreshing after a kernel pin
+  ansible.builtin.stat:
+    path: /etc/kernel/proxmox-boot-uuids
+  register: nvidia_driver_boot_uuids
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - nvidia_driver_kernel_pin is changed
+  tags:
+    - nvidia_driver
+
+- name: Refresh Proxmox boot partitions after changing the kernel pin
+  ansible.builtin.command:
+    cmd: proxmox-boot-tool refresh
+  changed_when: true
+  when:
+    - nvidia_driver_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+    - nvidia_driver_kernel_pin is changed
+    - nvidia_driver_boot_uuids.stat.exists
+  tags:
+    - nvidia_driver

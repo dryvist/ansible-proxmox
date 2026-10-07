@@ -276,6 +276,12 @@
       tags:
         - pve_api_tokens
 
+    # Installs secret-free systemd unit contracts supplied by the owning
+    # application profile. Empty by default so host units remain opt-in.
+    - role: pve_host_systemd_units
+      tags:
+        - pve_host_systemd_units
+
 # Backup, disaster-recovery, and notification roles (syncoid, sqlite_standby,
 # postgres_standby, pve_config_backup, pve_notifications, git_mirror). Split
 # out of this file rather than left inline so site.yml stays inside its token

@@ -116,6 +116,41 @@
       could otherwise choose the principal a signed host certificate is
       issued for.
 
+# Container decision parse: run the production decision tasks against a
+# fixture probe, so the parsing itself is tested (a whole public key line with
+# spaces, a principal built from pct-config HOSTNAME, an absent cert -> sign).
+- name: Run the container host-cert decision tasks against a fixture probe
+  ansible.builtin.include_role:
+    name: ssh_ca_trust
+    tasks_from: lxc_host_cert_decide
+  vars:
+    ssh_ca_trust_host_cert_domain: example.test
+    ssh_ca_trust_host_cert_renew_before: 45d
+    ssh_ca_trust_fetched_fp: {stdout: "SHA256:fixture"}
+    ssh_ca_trust_host_cert_now: "2026-01-01T00:00:00"
+    ssh_ca_trust_lxc_host_cert_probe:
+      results:
+        - item: 100
+          stdout: |-
+            PUBKEY=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample root@ct
+            HOSTNAME=ct-example
+            PRESENT=0
+            PROBE_B64=
+            PREFP=d41d8cd98f00b204e9800998ecf8427e  -
+
+- name: Assert the fixture container's decision
+  ansible.builtin.assert:
+    that:
+      - ssh_ca_trust_lxc_host_cert_decisions | length == 1
+      - ssh_ca_trust_lxc_host_cert_decisions[0].pubkey == 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample root@ct'
+      - ssh_ca_trust_lxc_host_cert_decisions[0].principal == 'ct-example.example.test'
+      - ssh_ca_trust_lxc_host_cert_decisions[0].needs_signing | bool
+      - ssh_ca_trust_lxc_host_cert_pre_fp[100] == 'd41d8cd98f00b204e9800998ecf8427e'
+    fail_msg: >-
+      tasks/lxc_host_cert_decide.yml must capture the whole public key line,
+      build the principal from HOSTNAME plus the domain, and sign when no
+      certificate is present.
+
 # Reload regression: a cert-only renewal (dropin/CA/principals unchanged)
 # must still reload sshd, or the container keeps serving the old/no
 # certificate. lxc.yml's "Push CA trust" task drives that reload from a

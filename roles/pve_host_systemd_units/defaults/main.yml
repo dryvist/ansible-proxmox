@@ -1,0 +1,5 @@
+---
+# Unit contracts are rendered by the owning application profile and passed to
+# the host runner. Keep the default empty so this role has no effect unless a
+# run explicitly supplies units.
+pve_host_systemd_units_contracts: []
