@@ -40,7 +40,8 @@ jobs:
         run: python3 tests/pve_bulk_data_compare/test_contract.py
 
   # Discover scenarios and roles from the tree, then derive the PR matrix from
-  # role references. Shared inputs widen to every scenario; pushes run all.
+  # role references. Main promotions and shared inputs run all; CI harness edits
+  # use the default smoke scenario. Pushes run all.
   discover:
     name: Discover scenarios
     runs-on: ubuntu-latest
@@ -112,10 +113,14 @@ jobs:
             git diff --name-only -z "$BASE_SHA...HEAD" > "$changed_paths"
             while IFS= read -r -d '' path; do
               case "$path" in
-                roles/*/meta/*|molecule/shared/*|molecule/resources/*|.config/molecule/*|.github/workflows/*|.github/scripts/*|playbooks/*|requirements.yml|requirements-ci.txt|ansible.cfg)
+                roles/*/meta/*|molecule/shared/*|molecule/resources/*|.config/molecule/*|playbooks/*|requirements.yml|requirements-ci.txt|ansible.cfg)
                   full_matrix=true
                   reason="shared inputs changed"
                   break
+                  ;;
+                .github/workflows/*|.github/scripts/*)
+                  printf '%s\n' default >> "$selected_paths"
+                  reason="CI harness changed; run default smoke scenario"
                   ;;
                 roles/*/*)
                   role=${path#roles/}
