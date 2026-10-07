@@ -282,6 +282,14 @@
       tags:
         - pve_host_systemd_units
 
+    # Deliberate, bounded hardware stress only when explicitly selected.
+    # `never` keeps the load out of ordinary site converges; the unique tag is
+    # the Semaphore entry point for the declared burn-in sequence.
+    - role: pve_full_system_stress
+      tags:
+        - never
+        - pve_full_system_stress
+
 # Backup, disaster-recovery, and notification roles (syncoid, sqlite_standby,
 # postgres_standby, pve_config_backup, pve_notifications, git_mirror). Split
 # out of this file rather than left inline so site.yml stays inside its token
