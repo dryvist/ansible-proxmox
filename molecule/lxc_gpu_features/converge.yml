@@ -20,11 +20,11 @@
       ansible.builtin.include_role:
         name: lxc_gpu_features
 
-    - name: Assert both engine identities resolve to NVIDIA passthrough
+    - name: Assert both NVIDIA-tagged guests resolve to passthrough
       ansible.builtin.assert:
         that:
-          - lxc_gpu_features_engine_resolved['90104'].nvidia | bool
-          - lxc_gpu_features_engine_resolved['90105'].nvidia | bool
+          - lxc_gpu_features_nvidia_resolved['90104'].nvidia | bool
+          - lxc_gpu_features_nvidia_resolved['90105'].nvidia | bool
           - lxc_gpu_features_resolved['90104'].nvidia | bool
           - lxc_gpu_features_resolved['90105'].nvidia | bool
           - lxc_gpu_features_resolved['90103'].nvidia | bool
