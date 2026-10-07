@@ -1,0 +1,19 @@
+---
+- name: Render stress status from captured target command output
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Load the role defaults under test
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/defaults/main.yml"
+      tags: always
+
+    - name: Run the real status task against the target-output fixture commands
+      vars:
+        pve_full_system_stress_run_id: 01234567-89ab-cdef-0123-456789abcdef
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir }}/../../roles/pve_full_system_stress/tasks/status.yml"
+        apply:
+          tags: pve_full_system_stress
+      tags: always

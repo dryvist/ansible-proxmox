@@ -15,13 +15,15 @@
 # No per-node GPU passthrough mapping belongs here: lxc_gpu_features_map
 # (roles/lxc_gpu_features/defaults/main.yml) is keyed by SERVICE NAME, not by
 # node, and the role only acts on services whose vmid is actually PRESENT on
-# the host it is converging (`pct list`). So once the llm-4080 LXC (nvidia:
-# true in that map) is migrated here, this node's own run of the role picks
+# the host it is converging (`pct list`). So once the
+# llm-ada-lovelace-6X-16 LXC (nvidia: true in that map) is migrated here,
+# this node's own run of the role picks
 # it up automatically -- no mapping edit, here or in pve-w5900.yml, moves
 # with the container. The AMD dri/kfd entry for the retired llm-fast service
 # is removed at its source in that same defaults file instead of disabled
 # per-node, for the identical reason: it is not node-scoped to begin with.
-nvidia_driver_enabled: true
-nvidia_driver_power_limit_w: 250
+# LLM decode is memory-bandwidth-bound, so a lower limit costs little speed and
+# cuts heat and fan noise. 200 W is about 62% of this card's default limit.
+nvidia_driver_power_limit_w: 200
 # renovate: ignore — hold the NVIDIA-tested kernel ABI until a later DKMS pair is validated.
 pve_upgrade_kernel_version: "7.0.14-8-pve"

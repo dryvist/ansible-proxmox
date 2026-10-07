@@ -74,6 +74,13 @@ jobs:
           PROXMOX_VE_HOSTNAME=localhost \
           ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
 
+      - name: Verify capability-tag inventory selection
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          TOFU_INVENTORY_PATH=$PWD/tests/capability_tags/tofu_inventory.json \
+          ansible-playbook tests/capability_tags/verify_inventory.yml -i inventory/hosts.yml -i tests/capability_tags/hosts.yml -c local
+
       # pve_ha's replication logic cannot be exercised by molecule (it needs a
       # real cluster), so it is pinned by fixture-driven assertions instead.
       - name: Verify pve_ha replication derivation and self-heal selection
@@ -205,6 +212,9 @@ jobs:
           ansible-playbook tests/guest_placement/verify.yml
           -i localhost, -c local
 
+      - name: Verify configured guest memory budgets
+        run: python3 tests/guest_placement/test_memory_budget.py
+
       # One unreachable cluster peer must not abort the by-IP reachability
       # proof -- and therefore the whole site converge -- for every other
       # node. Loads the role's real defaults/main.yml against fixture hosts.
@@ -226,6 +236,11 @@ jobs:
         # several behaviour-named modules, and naming them individually is how
         # a newly added one silently never runs.
         run: python -m pytest tests/pve_guest_evacuation_lxc_managed_volumes/
+
+      # ECC detection and EDAC enforcement execute from the role's own tasks
+      # and guard library against SMBIOS and counter fixtures.
+      - name: Verify full-system stress ECC and EDAC paths
+        run: python3 tests/pve_full_system_stress/test_memory_ecc.py
 
       # A new mpN can hotplug live on a running LXC; restarting unconditionally
       # to apply it takes the serving guest down for nothing when it already
@@ -262,3 +277,6 @@ jobs:
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/llm_model_store_seed/verify_duplicate_removal.yml -i localhost, -c local
+
+      - name: Verify HA relocation admission against sanitized API fixtures
+        run: python3 tests/pve_ha_relocation/test_preflight.py

@@ -5,8 +5,10 @@
   gather_facts: false
 
   vars:
-    nvidia_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-4080'] }}.conf"
-    nvidia_6000_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-6000'] }}.conf"
+    nvidia_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-ada-lovelace-6X-16'] }}.conf"
+    nvidia_6000_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-blackwell-7-96'] }}.conf"
+    llama_engine_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_engine_vmids.llama_cpp }}.conf"
+    vllm_engine_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_engine_vmids.vllm }}.conf"
     amd_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-fast'] }}.conf"
 
     # The exact lines the role must have written for the NVIDIA container.
@@ -30,6 +32,39 @@
       - "lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file"
 
   tasks:
+    - name: Check the running legacy guest shutdown call record
+      ansible.builtin.stat:
+        path: "/run/mock-pct/{{ lxc_gpu_features_test_legacy_vmids.running }}.calls"
+      register: legacy_running_calls
+
+    - name: Check the already-stopped legacy guest shutdown call record
+      ansible.builtin.stat:
+        path: "/run/mock-pct/{{ lxc_gpu_features_test_legacy_vmids.stopped }}.calls"
+      register: legacy_stopped_calls
+
+    - name: Read the mocked running-guest state after handoff
+      ansible.builtin.command:
+        cmd: "cat /run/mock-pct/{{ lxc_gpu_features_test_legacy_vmids.running }}.status"
+      register: legacy_running_after
+      changed_when: false
+
+    - name: Read the mocked stopped-guest state after handoff
+      ansible.builtin.command:
+        cmd: "cat /run/mock-pct/{{ lxc_gpu_features_test_legacy_vmids.stopped }}.status"
+      register: legacy_stopped_after
+      changed_when: false
+
+    - name: Confirm only a running legacy GPU guest received graceful shutdown
+      ansible.builtin.assert:
+        that:
+          - "legacy_running_after.stdout | trim == 'status: stopped'"
+          - "legacy_stopped_after.stdout | trim == 'status: stopped'"
+          - legacy_running_calls.stat.exists
+          - not legacy_stopped_calls.stat.exists
+        fail_msg: >-
+          Legacy guest handoff must gracefully stop a running guest and leave
+          an already stopped guest unchanged.
+
     - name: Read the NVIDIA container's rendered config
       ansible.builtin.slurp:
         src: "{{ nvidia_conf }}"
@@ -39,6 +74,16 @@
       ansible.builtin.slurp:
         src: "{{ nvidia_6000_conf }}"
       register: nvidia_6000_raw
+
+    - name: Read the engine-identified NVIDIA guest's rendered config
+      ansible.builtin.slurp:
+        src: "{{ vllm_engine_conf }}"
+      register: vllm_engine_raw
+
+    - name: Read the other engine-identified NVIDIA guest's rendered config
+      ansible.builtin.slurp:
+        src: "{{ llama_engine_conf }}"
+      register: llama_engine_raw
 
     - name: Read the AMD container's rendered config
       ansible.builtin.slurp:
@@ -68,6 +113,44 @@
         fail_msg: AMD device lines leaked into {{ nvidia_6000_conf }}
       vars:
         nvidia_6000_lines: "{{ (nvidia_6000_raw.content | b64decode).splitlines() | select('truthy') | list }}"
+
+    - name: Assert the engine-identified NVIDIA guest received the same passthrough lines
+      ansible.builtin.assert:
+        that:
+          - item in vllm_engine_lines
+        fail_msg: >-
+          Missing from {{ vllm_engine_conf }}: "{{ item }}".
+          Rendered: {{ vllm_engine_lines }}
+      loop: "{{ expected_nvidia_lines }}"
+      vars:
+        vllm_engine_lines: "{{ (vllm_engine_raw.content | b64decode).splitlines() | select('truthy') | list }}"
+
+    - name: Assert the engine-identified NVIDIA guest received no AMD device bindings
+      ansible.builtin.assert:
+        that:
+          - vllm_engine_lines | select('search', '/dev/dri|/dev/kfd|226:|235:') | list | length == 0
+        fail_msg: AMD device lines leaked into {{ vllm_engine_conf }}
+      vars:
+        vllm_engine_lines: "{{ (vllm_engine_raw.content | b64decode).splitlines() | select('truthy') | list }}"
+
+    - name: Assert the llama.cpp engine guest received the same passthrough lines
+      ansible.builtin.assert:
+        that:
+          - item in llama_engine_lines
+        fail_msg: >-
+          Missing from {{ llama_engine_conf }}: "{{ item }}".
+          Rendered: {{ llama_engine_lines }}
+      loop: "{{ expected_nvidia_lines }}"
+      vars:
+        llama_engine_lines: "{{ (llama_engine_raw.content | b64decode).splitlines() | select('truthy') | list }}"
+
+    - name: Assert the llama.cpp engine guest received no AMD device bindings
+      ansible.builtin.assert:
+        that:
+          - llama_engine_lines | select('search', '/dev/dri|/dev/kfd|226:|235:') | list | length == 0
+        fail_msg: AMD device lines leaked into {{ llama_engine_conf }}
+      vars:
+        llama_engine_lines: "{{ (llama_engine_raw.content | b64decode).splitlines() | select('truthy') | list }}"
 
     # --- 1. every expected NVIDIA line is present, verbatim -------------------
     - name: Assert every expected NVIDIA passthrough line was written

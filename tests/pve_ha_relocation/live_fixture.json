@@ -1,0 +1,246 @@
+{
+  "resources": [
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:90112",
+      "state": "started"
+    },
+    {
+      "max_relocate": 1,
+      "max_restart": 3,
+      "sid": "ct:90111",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:90107",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:90104",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:90102",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:90106",
+      "state": "started"
+    },
+    {
+      "max_relocate": 1,
+      "max_restart": 3,
+      "sid": "ct:90110",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:90103",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:90108",
+      "state": "started"
+    },
+    {
+      "max_relocate": 1,
+      "max_restart": 3,
+      "sid": "vm:90105",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:90101",
+      "state": "started"
+    },
+    {
+      "max_relocate": 1,
+      "max_restart": 3,
+      "sid": "ct:90109",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:90100",
+      "state": "started"
+    }
+  ],
+  "rules": [
+    {
+      "affinity": "negative",
+      "resources": "ct:90104,ct:90106",
+      "rule": "fixture-rule-0",
+      "type": "resource-affinity"
+    },
+    {
+      "affinity": "negative",
+      "resources": "ct:90107,ct:90108",
+      "rule": "fixture-rule-1",
+      "type": "resource-affinity"
+    },
+    {
+      "affinity": "positive",
+      "nodes": "node-c",
+      "resources": "ct:90103,ct:90101",
+      "rule": "fixture-rule-2",
+      "strict": 1,
+      "type": "node-affinity"
+    },
+    {
+      "affinity": "positive",
+      "nodes": "node-d",
+      "resources": "ct:90102,ct:90104,ct:90107",
+      "rule": "fixture-rule-3",
+      "strict": 1,
+      "type": "node-affinity"
+    },
+    {
+      "affinity": "positive",
+      "nodes": "node-b",
+      "resources": "ct:90106,ct:90100,ct:90108,ct:90112",
+      "rule": "fixture-rule-4",
+      "strict": 1,
+      "type": "node-affinity"
+    },
+    {
+      "affinity": "positive",
+      "nodes": "node-c,node-d",
+      "resources": "ct:90109,ct:90110,ct:90111,vm:90105",
+      "rule": "fixture-rule-5",
+      "strict": 1,
+      "type": "node-affinity"
+    },
+    {
+      "affinity": "negative",
+      "resources": "ct:90102,ct:90103",
+      "rule": "fixture-rule-6",
+      "type": "resource-affinity"
+    },
+    {
+      "affinity": "negative",
+      "resources": "ct:90100,ct:90101",
+      "rule": "fixture-rule-7",
+      "type": "resource-affinity"
+    }
+  ],
+  "jobs": [
+    {
+      "disable": 1,
+      "guest": 90105,
+      "id": "90105-0",
+      "schedule": "*/5",
+      "source": "node-c",
+      "target": "node-e",
+      "type": "local"
+    },
+    {
+      "guest": 90108,
+      "id": "90108-0",
+      "schedule": "*/5",
+      "source": "node-b",
+      "target": "node-c",
+      "type": "local"
+    },
+    {
+      "guest": 90109,
+      "id": "90109-0",
+      "schedule": "*/5",
+      "source": "node-c",
+      "target": "node-d",
+      "type": "local"
+    },
+    {
+      "guest": 90110,
+      "id": "90110-0",
+      "schedule": "*/5",
+      "source": "node-c",
+      "target": "node-d",
+      "type": "local"
+    },
+    {
+      "guest": 90111,
+      "id": "90111-0",
+      "schedule": "*/5",
+      "source": "node-c",
+      "target": "node-d",
+      "type": "local"
+    }
+  ],
+  "published_vms": {
+    "vm:90105": {
+      "vmid": 90105,
+      "disks": [
+        {
+          "datastore": "local-zfs",
+          "interface": "scsi0",
+          "path": "vm-90105-disk-0"
+        },
+        {
+          "datastore": "local-zfs",
+          "interface": "scsi1",
+          "path": "vm-90105-disk-1"
+        }
+      ]
+    }
+  },
+  "guest_configs": {
+    "vm:90105": {
+      "ide2": "local-zfs:vm-90105-cloudinit,media=cdrom,size=4M",
+      "scsi0": "local-zfs:vm-90105-disk-0,aio=io_uring,backup=1,cache=none,discard=ignore,iothread=1,replicate=1,size=100G,ssd=0",
+      "scsi1": "local-zfs:vm-90105-disk-1,aio=io_uring,backup=1,cache=none,discard=ignore,iothread=1,replicate=1,size=100G,ssd=0"
+    },
+    "ct:90111": {
+      "mp0": "local-zfs:subvol-90111-disk-1,mp=/opt/app-three,size=40G",
+      "rootfs": "local-zfs:subvol-90111-disk-0,size=24G"
+    },
+    "ct:90110": {
+      "mp0": "local-zfs:subvol-90110-disk-1,mp=/var/lib/app-two,size=10G",
+      "rootfs": "local-zfs:subvol-90110-disk-0,size=8G"
+    },
+    "ct:90109": {
+      "mp0": "local-zfs:subvol-90109-disk-1,mp=/opt/app-one,size=40G",
+      "rootfs": "local-zfs:subvol-90109-disk-0,size=24G"
+    }
+  },
+  "placements": [
+    {
+      "vmid": 90105,
+      "type": "qemu",
+      "node": "node-c"
+    },
+    {
+      "vmid": 90109,
+      "type": "lxc",
+      "node": "node-c"
+    },
+    {
+      "vmid": 90110,
+      "type": "lxc",
+      "node": "node-c"
+    },
+    {
+      "vmid": 90111,
+      "type": "lxc",
+      "node": "node-c"
+    },
+    {
+      "vmid": 90108,
+      "type": "lxc",
+      "node": "node-b"
+    }
+  ]
+}

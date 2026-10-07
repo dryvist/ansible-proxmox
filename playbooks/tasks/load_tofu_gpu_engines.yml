@@ -1,0 +1,127 @@
+---
+- name: Resolve the current GPU engine selector and handoff guests
+  ansible.builtin.set_fact:
+    load_tofu_gpu_engine_selector: >-
+      {{ (tofu_data | default({})).get('llm_gpu_engine', 'llama_cpp') }}
+    load_tofu_gpu_engine_members: >-
+      {{ (tofu_data.containers | default({}) | dict2items)
+         | selectattr('value.llm_gpu_engine_identity', 'defined')
+         | selectattr('value.llm_gpu_engine_identity', 'in', ['llama_cpp', 'vllm']) | list }}
+    load_tofu_gpu_handoff_members: >-
+      {{
+        (
+          (
+            (tofu_data.containers | default({}) | dict2items)
+            | selectattr('value.tags', 'defined')
+            | selectattr('value.tags', 'contains', 'llm-gpu') | list
+          )
+          +
+              (
+                (tofu_data.containers | default({}) | dict2items)
+                | selectattr('value.llm_gpu_engine_identity', 'defined')
+                | selectattr('value.llm_gpu_engine_identity', 'in', ['llama_cpp', 'vllm']) | list
+              )
+        ) | unique(attribute='key') | list
+      }}
+
+- name: Validate the current GPU engine pair before handoff projection
+  ansible.builtin.assert:
+    that:
+      - load_tofu_gpu_engine_selector in ['llama_cpp', 'vllm']
+      - load_tofu_gpu_engine_members | length in [0, 2]
+      - >-
+        load_tofu_gpu_engine_members | length == 0 or
+        (load_tofu_gpu_engine_members | map(attribute='value.llm_gpu_engine_identity') | sort | list
+         == ['llama_cpp', 'vllm'])
+    fail_msg: >-
+      Published GPU engine inventory must contain either no replacement
+      guests or exactly one llama_cpp and one vllm guest.
+
+# Service -> VMID resolution for lxc_gpu_features (GPU passthrough). Same
+# projection as the media map above, exposed under its own var so the GPU
+# role has no coupling to media naming. Extra (non-GPU) entries are harmless.
+- name: Inject OpenTofu service -> vmid map for GPU passthrough onto proxmox hosts
+  ansible.builtin.add_host:
+    name: "{{ item }}"
+    lxc_gpu_features_service_vmids_from_tofu: >-
+      {{
+        dict(
+          (tofu_data.containers | default({})) | dict2items
+          | selectattr('value.ansible_pct_vmid', 'defined')
+          | map(attribute='key') | list
+          | zip(
+              (tofu_data.containers | default({})) | dict2items
+              | selectattr('value.ansible_pct_vmid', 'defined')
+              | map(attribute='value.ansible_pct_vmid') | list
+            )
+        )
+      }}
+    lxc_gpu_features_nvidia_vmids_from_tofu: >-
+      {{
+        dict(
+          (tofu_data.containers | default({})) | dict2items
+          | selectattr('value.tags', 'defined')
+          | selectattr('value.tags', 'contains', 'nvidia-gpu')
+          | selectattr('value.ansible_pct_vmid', 'defined')
+          | map(attribute='key') | list
+          | zip(
+              (tofu_data.containers | default({})) | dict2items
+              | selectattr('value.tags', 'defined')
+              | selectattr('value.tags', 'contains', 'nvidia-gpu')
+              | selectattr('value.ansible_pct_vmid', 'defined')
+              | map(attribute='value.ansible_pct_vmid') | list
+            )
+        )
+      }}
+    lxc_gpu_features_legacy_engine_vmids_from_tofu: >-
+      {{
+        dict(
+          (tofu_data.containers | default({})) | dict2items
+          | selectattr('value.llm_gpu_engine_legacy_runtime_managed', 'defined')
+          | selectattr('value.llm_gpu_engine_legacy_runtime_managed', 'equalto', true)
+          | map(attribute='key') | list
+          | zip(
+              (tofu_data.containers | default({})) | dict2items
+              | selectattr('value.llm_gpu_engine_legacy_runtime_managed', 'defined')
+              | selectattr('value.llm_gpu_engine_legacy_runtime_managed', 'equalto', true)
+              | map(attribute='value.ansible_pct_vmid') | list
+            )
+        )
+      }}
+    lxc_gpu_features_engine_handoff_vmids_from_tofu: >-
+      {{
+        dict(
+          load_tofu_gpu_handoff_members | map(attribute='key') | list
+          | zip(load_tofu_gpu_handoff_members
+               | map(attribute='value.ansible_pct_vmid') | list)
+        )
+      }}
+  loop: "{{ groups['proxmox'] | default([]) }}"
+
+# Fail loud when the service projection comes out empty against a non-empty
+# container map. Both maps above are consumed by roles that iterate them:
+# an empty map makes those roles no-op at rc=0 with changed=0, which reads
+# as "already converged" and is indistinguishable from success. Every task
+# is skipped, nothing is reported, and the guests quietly never receive
+# their device bindings.
+#
+# That is not hypothetical — it is what a wrong attribute name did here.
+- name: Assert the service -> vmid projections resolved
+  ansible.builtin.assert:
+    that:
+      - (tofu_data.containers | default({})) | length == 0
+        or (hostvars[groups['proxmox'][0]].lxc_gpu_features_service_vmids_from_tofu
+            | default({}) | length) > 0
+    fail_msg: >-
+      The published inventory has
+      {{ (tofu_data.containers | default({})) | length }} containers, but the
+      service -> vmid projection resolved to none. The container entries do
+      not carry the attribute this projection selects on, so every consuming
+      role would skip silently at rc=0. Compare the key names in the
+      published ansible_inventory against the selectattr above.
+    success_msg: >-
+      Service -> vmid projection resolved
+      {{ hostvars[groups['proxmox'][0]].lxc_gpu_features_service_vmids_from_tofu
+         | default({}) | length }} of
+      {{ (tofu_data.containers | default({})) | length }} containers.
+  when: groups['proxmox'] | default([]) | length > 0

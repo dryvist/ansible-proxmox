@@ -1,0 +1,51 @@
+---
+# The engine pair shares one physical GPU with the legacy guest. The host role
+# receives this VMID only when the selector pair is declared. Gracefully stop
+# it before adding/restarting replacement GPU passthrough; never force-stop or
+# destroy it.
+
+- name: Read the previous GPU guest status
+  ansible.builtin.command:
+    cmd: "pct status {{ lxc_gpu_features_legacy_guest.value }}"
+  register: lxc_gpu_features_legacy_status_before
+  changed_when: false
+
+- name: Log the previous GPU guest status decision
+  ansible.builtin.debug:
+    msg: >-
+      GPU engine handoff guest vmid={{ lxc_gpu_features_legacy_guest.value }}
+      status={{ lxc_gpu_features_legacy_status_before.stdout | trim }};
+      shutdown={{ 'required' if lxc_gpu_features_legacy_status_before.stdout | trim == 'status: running' else 'not-required' }}.
+
+- name: Gracefully shut down the previous GPU guest
+  ansible.builtin.command:
+    cmd: "pct shutdown {{ lxc_gpu_features_legacy_guest.value }} --timeout 120"
+  register: lxc_gpu_features_legacy_shutdown
+  changed_when: true
+  when: >-
+    lxc_gpu_features_legacy_status_before.stdout | trim == "status: running"
+
+- name: Wait for the previous GPU guest to stop
+  ansible.builtin.command:
+    cmd: "pct status {{ lxc_gpu_features_legacy_guest.value }}"
+  register: lxc_gpu_features_legacy_status_after
+  changed_when: false
+  retries: 60
+  delay: 2
+  until: >-
+    lxc_gpu_features_legacy_status_after.stdout | trim == "status: stopped"
+  when: >-
+    lxc_gpu_features_legacy_status_before.stdout | trim == "status: running"
+
+- name: Require the previous GPU guest to be stopped before passthrough changes
+  ansible.builtin.assert:
+    that:
+      - >-
+        (lxc_gpu_features_legacy_status_after.stdout | default(lxc_gpu_features_legacy_status_before.stdout) | trim)
+        == 'status: stopped'
+    fail_msg: >-
+      The previous GPU guest {{ lxc_gpu_features_legacy_guest.value }} is not stopped;
+      replacement passthrough must not proceed while it can own the GPU.
+    success_msg: >-
+      GPU guest {{ lxc_gpu_features_legacy_guest.value }} is stopped;
+      replacement passthrough may proceed.

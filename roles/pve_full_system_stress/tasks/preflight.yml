@@ -1,0 +1,167 @@
+---
+- name: Resolve NVIDIA-tagged LXC identities from the published inventory
+  ansible.builtin.import_tasks: resolve_gpu_vmids.yml
+
+- name: Read running LXC identifiers on this host
+  ansible.builtin.command:
+    argv: [pct, list]
+  register: pve_full_system_stress_pct_list
+  changed_when: false
+
+- name: Match declared NVIDIA guests to running LXC identifiers
+  ansible.builtin.set_fact:
+    pve_full_system_stress_running_gpu_vmids: >-
+      {{ pve_full_system_stress_pct_list.stdout_lines | map('trim')
+         | select('match', '^[0-9]+ +running +')
+         | map('split') | map('first')
+         | select('in', pve_full_system_stress_gpu_vmids) | list }}
+
+- name: Require the published GPU guest map to be available
+  ansible.builtin.assert:
+    that:
+      - pve_full_system_stress_gpu_vmids | length > 0
+    fail_msg: >-
+      The published inventory did not resolve any declared NVIDIA LXC guests;
+      refusing to stress a GPU without checking its serving guest.
+    quiet: true
+
+- name: Read active systemd service units from each running GPU guest
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ item }}"
+      - --
+      - systemctl
+      - list-units
+      - --type=service
+      - --state=active
+      - --no-legend
+      - --no-pager
+  loop: "{{ pve_full_system_stress_running_gpu_vmids }}"
+  register: pve_full_system_stress_guest_units
+  changed_when: false
+
+- name: Collect active LLM-serving units from GPU guests
+  ansible.builtin.set_fact:
+    pve_full_system_stress_active_llm_units: >-
+      {{ pve_full_system_stress_guest_units.results | default([])
+         | map(attribute='stdout_lines') | flatten
+         | map('split') | map('first')
+         | select('match', pve_full_system_stress_llm_unit_pattern) | list }}
+
+- name: Log an active LLM-serving refusal
+  ansible.builtin.command:
+    argv:
+      - logger
+      - -t
+      - pve-full-system-stress
+      - -p
+      - daemon.err
+      - --
+      - >-
+        pve_full_system_stress run={{ pve_full_system_stress_run_id }}
+        stage={{ pve_full_system_stress_stage }} event=abort
+        reason=llm_unit_active
+        units={{ pve_full_system_stress_active_llm_units | join(',') }}
+  changed_when: false
+  when: pve_full_system_stress_active_llm_units | length > 0
+
+- name: Refuse the stage while an LLM serving unit is active
+  ansible.builtin.assert:
+    that:
+      - pve_full_system_stress_active_llm_units | length == 0
+    fail_msg: >-
+      An LLM serving systemd unit is active in a declared GPU guest. Stop the
+      serving service through its owner before dispatching this stress run.
+    quiet: true
+
+- name: Log the clear LLM-serving guard decision
+  ansible.builtin.command:
+    argv:
+      - logger
+      - -t
+      - pve-full-system-stress
+      - -p
+      - daemon.info
+      - --
+      - "pve_full_system_stress run={{ pve_full_system_stress_run_id }} stage={{ pve_full_system_stress_stage }} event=llm_guard decision=clear"
+  changed_when: false
+
+- name: Require a healthy rpool before every stress stage
+  ansible.builtin.command:
+    argv: [zpool, list, -H, -o, health, "{{ pve_full_system_stress_rpool }}"]
+  register: pve_full_system_stress_pool_health
+  changed_when: false
+  failed_when: false
+
+- name: Log the storage-pool guard decision
+  ansible.builtin.command:
+    argv:
+      - logger
+      - -t
+      - pve-full-system-stress
+      - -p
+      - "{{ 'daemon.info' if pve_full_system_stress_pool_health.rc == 0 and pve_full_system_stress_pool_health.stdout == 'ONLINE' else 'daemon.err' }}"
+      - --
+      - >-
+        pve_full_system_stress run={{ pve_full_system_stress_run_id }}
+        stage={{ pve_full_system_stress_stage }} event=pool_guard
+        health={{ pve_full_system_stress_pool_health.stdout | default('unavailable') }}
+  changed_when: false
+
+- name: Refuse stress when rpool is not online
+  ansible.builtin.assert:
+    that:
+      - pve_full_system_stress_pool_health.rc == 0
+      - pve_full_system_stress_pool_health.stdout == 'ONLINE'
+    fail_msg: The declared stress pool is not ONLINE.
+    quiet: true
+
+- name: Record current NVMe temperature and refuse active critical warnings
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      mapfile -t leaves < <(zpool status -P "{{ pve_full_system_stress_rpool }}" | awk '$1 ~ /^\/dev\// {print $1}')
+      index=0
+      for leaf in "${leaves[@]}"; do
+        parent=$(lsblk -nro PKNAME -- "$leaf" | head -1)
+        device="$leaf"
+        [[ -z "$parent" ]] || device="/dev/$parent"
+        smart=$(nvme smart-log "$device")
+        warning=$(awk -F: 'tolower($1) ~ /critical_warning/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}' <<< "$smart")
+        temperature=$(awk -F: 'tolower($1) ~ /temperature/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}' <<< "$smart")
+        [[ -n "$warning" && -n "$temperature" ]]
+        warning_value=${warning#0x}
+        logger -t pve-full-system-stress -p daemon.info -- \
+          "pve_full_system_stress run={{ pve_full_system_stress_run_id }} stage={{ pve_full_system_stress_stage }}" \
+          "event=nvme phase=before device_index=${index}" \
+          "critical_warning=${warning} temperature=${temperature// /}"
+        ((16#$warning_value == 0))
+        index=$((index + 1))
+      done
+      ((index > 0))
+  register: pve_full_system_stress_nvme_preflight
+  changed_when: false
+
+- name: Check EDAC counters when the memory array supports ECC
+  ansible.builtin.include_tasks:
+    file: edac_preflight.yml
+
+- name: Refuse the stage after an MCE, Xid, or kernel hardware error in this campaign
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      events=$(journalctl -k --since "{{ pve_full_system_stress_campaign_started_at }}" --no-pager -o cat)
+      if grep -Ei 'mce:|machine check|hardware error|uncorrected|EDAC.*(UE|uncorrected)|NVRM.*Xid|Xid [0-9]+' <<< "$events"; then
+        logger -t pve-full-system-stress -p daemon.err -- \
+          "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+          "stage={{ pve_full_system_stress_stage }} event=abort reason=existing_kernel_hardware_error"
+        exit 1
+      fi
+      logger -t pve-full-system-stress -p daemon.info -- \
+        "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+        "stage={{ pve_full_system_stress_stage }} event=kernel_errors count=0"
+  changed_when: false

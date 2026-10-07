@@ -62,7 +62,8 @@ break-glass path from a workstation:
 
 ## Installation
 
-Requires [Ansible][ansible-install] (Mac, Linux, WSL), SSH access to Proxmox server(s), and Proxmox VE 8.x.
+Requires [Ansible][ansible-install] (Mac, Linux, WSL), SSH access to Proxmox
+server(s), and Proxmox VE 8.x.
 
 ```bash
 git clone https://github.com/JacobPEvans/ansible-proxmox.git
@@ -143,11 +144,11 @@ space. An OS upgrade does not touch guest disks (separate datasets), so the
 root snapshot, not a guest backup, is the right rollback artifact. It then
 applies the `pve_repositories` role, which keeps the node on the
 no-subscription channel (deb822 `.sources`, enterprise repo disabled) without
-touching the Debian base repos. If `pve_repositories_apt_proxies` is non-empty
-(URLs read from `APT_PROXY_URL`, e.g. apt-cacher-ng
-instances — several accepted, separated by commas and/or whitespace), apt
-`http://` fetches are routed through the first one that answers, or straight to
-upstream when none does. The selection is apt's own
+touching the Debian base repos. The published inventory supplies the
+FQDN-based `cache_proxy_urls.apt_cache` list. When
+`pve_repositories_apt_proxies` is non-empty, apt `http://` fetches are routed
+through the first one that answers, or straight to upstream when none does.
+The selection is apt's own
 `Acquire::http::Proxy-Auto-Detect` hook, because apt accepts exactly one
 `Acquire::http::Proxy` value and a pair cannot be expressed as config. Run it
 with console access available; the node reboots.
@@ -185,7 +186,8 @@ ulimits_nofile: 65536
 
 ## Development Environment
 
-This project uses [Nix flakes](https://wiki.nixos.org/wiki/Flakes) + [direnv](https://direnv.net/) for a reproducible dev environment.
+This project uses [Nix flakes](https://wiki.nixos.org/wiki/Flakes) +
+[direnv](https://direnv.net/) for a reproducible dev environment.
 
 Requires [Nix](https://nixos.org/download/) with flakes enabled and
 [direnv](https://direnv.net/docs/installation.html) with [nix-direnv](https://github.com/nix-community/nix-direnv).
@@ -213,8 +215,21 @@ ANSIBLE_ALLOW_BROKEN_CONDITIONALS=1 molecule test -s nas_storage
 # Verify OpenTofu inventory loading locally
 TOFU_INVENTORY_PATH=$PWD/tests/inventory_load/tofu_inventory.json \
 PROXMOX_VE_HOSTNAME=localhost \
-  ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
+  ansible-playbook tests/inventory_load/verify_inventory.yml \
+    -i inventory/hosts.yml -c local
 ```
+
+### Guest memory budgets
+
+The placement verifier reads optional `nodes.*.memory_budget_mb` values from
+published inventory. Each value reserves guest RAM in MiB after the host
+reserve. The verifier compares the budget with physical RAM and all PVE guest
+allocations, including stopped and unmanaged guests. Templates do not reserve
+guest RAM.
+Nodes without a published budget report resource fit as unverified.
+
+Run `python3 tests/guest_placement/test_memory_budget.py` to exercise the
+production tasks against sanitized PVE API fixtures.
 
 ## For Developers
 
@@ -257,4 +272,15 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 ---
 
-> Part of a [larger ecosystem of ~40 repos](https://docs.jacobpevans.com) — see how it all fits together.
+> Part of a larger ecosystem of ~40 repos — see how it all fits together.
+
+## CI
+
+Pull requests into `develop` run lint, syntax, contracts, and Molecule coverage
+for changed roles. Shared inputs, workflow changes, and unclassified
+role/scenario paths widen to the full matrix. Pull requests into `main` and
+pushes to `main` or `develop` run the full matrix. Required validation is
+aggregated by `Merge Gate`. Public pull-request CI stays on GitHub-hosted
+runners.
+
+See the canonical policy in the `dryvist/.github` README, “Ansible CI policy.”

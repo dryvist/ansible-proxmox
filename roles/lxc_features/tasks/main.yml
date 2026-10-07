@@ -1,22 +1,48 @@
 ---
-# Configure LXC container features on Proxmox VE host
-# Uses pct set to apply feature flags (nesting, keyctl, fuse, etc.)
-# Requires stopping the container, so will briefly interrupt service.
+# Root-only LXC feature configuration is selected in load_tofu.yml from the
+# `container-nesting` capability group. Each Proxmox node receives only its
+# tagged service -> VMID projection, so a guest move or renumber needs no role
+# list edit.
 
-# The map in group_vars spans the whole cluster; only apply entries whose
-# container actually lives on this node (same pattern as lxc_gpu_features).
-- name: Build the set of vmids present on this host
-  ansible.builtin.command: pct list
+- name: Enumerate LXC containers present on this host
+  ansible.builtin.command:
+    cmd: pct list
   register: lxc_features_pct_list
   changed_when: false
-  when: lxc_features_containers | length > 0
-
-- name: Configure LXC container features
-  ansible.builtin.include_tasks: configure_container.yml
-  loop: "{{ lxc_features_containers | dict2items }}"
-  loop_control:
-    label: "Container {{ item.key }}: {{ item.value }}"
   when:
-    - lxc_features_containers | length > 0
-    - item.key in (lxc_features_pct_list.stdout_lines | default([])
-        | map('trim') | map('split') | map('first') | list)
+    - ansible_virtualization_type | default('') != 'docker'
+    - lxc_features_service_vmids_from_tofu | length > 0
+  tags:
+    - lxc_features
+
+- name: Build the set of VMIDs present on this host
+  ansible.builtin.set_fact:
+    lxc_features_present: >-
+      {{
+        lxc_features_pct_list.stdout_lines | default([])
+        | map('regex_search', '^\d+')
+        | select('truthy')
+        | list
+      }}
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - lxc_features_service_vmids_from_tofu | length > 0
+  tags:
+    - lxc_features
+
+- name: Reset the changed-container accumulator
+  ansible.builtin.set_fact:
+    lxc_features_changed: []
+  tags:
+    - lxc_features
+
+- name: Configure container-nesting guests present on this host
+  ansible.builtin.include_tasks: configure_container.yml
+  loop: "{{ lxc_features_service_vmids_from_tofu | dict2items }}"
+  loop_control:
+    label: "{{ item.key }} -> {{ item.value }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - item.value | string in lxc_features_present | default([])
+  tags:
+    - lxc_features

@@ -1,0 +1,297 @@
+---
+- name: Validate stress stage selection and durations
+  ansible.builtin.include_tasks:
+    file: validate.yml
+
+- name: Check required declared host tooling
+  ansible.builtin.command:
+    argv:
+      - "{{ item }}"
+      - --version
+  loop: "{{ pve_full_system_stress_stages | map('extract', pve_full_system_stress_stage_tools) | flatten | unique }}"
+  register: pve_full_system_stress_tool_checks
+  changed_when: false
+
+- name: Require the declared GPU Burn build
+  ansible.builtin.stat:
+    path: "{{ pve_full_system_stress_gpu_burn_dir }}/gpu_burn"
+  register: pve_full_system_stress_gpu_burn
+  when: pve_full_system_stress_stages | intersect(['gpu', 'combined']) | length > 0
+
+- name: Assert the declared GPU Burn executable is present
+  ansible.builtin.assert:
+    that:
+      - pve_full_system_stress_gpu_burn.stat.exists
+      - pve_full_system_stress_gpu_burn.stat.executable
+    fail_msg: >-
+      The declared GPU Burn executable is missing; converge the existing
+      nvidia_driver tooling before running this opt-in stress sequence.
+    quiet: true
+  when: pve_full_system_stress_stages | intersect(['gpu', 'combined']) | length > 0
+
+- name: Generate a unique stress run id
+  ansible.builtin.command:
+    argv: [cat, /proc/sys/kernel/random/uuid]
+  register: pve_full_system_stress_id
+  changed_when: false
+
+- name: Record the stress run start time in UTC
+  ansible.builtin.command:
+    argv: [date, -u, +%Y-%m-%dT%H:%M:%SZ]
+  register: pve_full_system_stress_started_at
+  changed_when: false
+
+- name: Record the run id and UTC start time
+  ansible.builtin.set_fact:
+    pve_full_system_stress_run_id: "{{ pve_full_system_stress_id.stdout | trim }}"
+    pve_full_system_stress_campaign_started_at: "{{ pve_full_system_stress_started_at.stdout | trim }}"
+    pve_full_system_stress_stage: memory
+
+- name: Detect whether the memory array supports ECC
+  ansible.builtin.include_tasks:
+    file: detect_memory_ecc.yml
+    apply:
+      tags:
+        - never
+        - pve_full_system_stress
+  tags:
+    - never
+    - pve_full_system_stress
+
+- name: Refuse to start while another campaign is active
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      lock={{ pve_full_system_stress_active_path | quote }}
+      units=$(systemctl list-units --no-legend --no-pager \
+        --state=active,activating,deactivating 'pve-full-system-stress-*' || true)
+      if [[ -d "$lock" || -n "$units" ]]; then
+        active_run=unknown
+        [[ ! -r "$lock/run-id" ]] || active_run=$(cat "$lock/run-id")
+        logger -t pve-full-system-stress -p daemon.err -- \
+          "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+          "event=run_refused reason=run_active active_run=${active_run}" \
+          "active_units=${units//$'\n'/,}"
+        exit 1
+      fi
+      logger -t pve-full-system-stress -p daemon.info -- \
+        "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+        "event=run_guard decision=clear active_units=0 lock=absent"
+  register: pve_full_system_stress_active_guard
+  changed_when: false
+
+- name: Verify initial stage safety guards
+  ansible.builtin.include_tasks:
+    file: preflight.yml
+    apply:
+      tags:
+        - never
+        - pve_full_system_stress
+  tags:
+    - never
+    - pve_full_system_stress
+
+- name: Acquire the campaign lock atomically
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      umask 077
+      lock={{ pve_full_system_stress_active_path | quote }}
+      if ! mkdir "$lock" 2>/dev/null; then
+        active_run=unknown
+        [[ ! -r "$lock/run-id" ]] || active_run=$(cat "$lock/run-id")
+        logger -t pve-full-system-stress -p daemon.err -- \
+          "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+          "event=run_refused reason=run_active active_run=${active_run}"
+        exit 1
+      fi
+      if ! printf '%s\n' "{{ pve_full_system_stress_run_id }}" > "$lock/run-id"; then
+        rmdir "$lock"
+        exit 1
+      fi
+      logger -t pve-full-system-stress -p daemon.info -- \
+        "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+        "event=run_guard decision=lock_acquired"
+  changed_when: true
+
+- name: Prepare the dedicated fio scratch dataset and run sequence
+  block:
+    - name: Install the detached stage supervisor
+      ansible.builtin.copy:
+        src: pve-full-system-stress-stage.sh
+        dest: "{{ pve_full_system_stress_stage_script_path }}"
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Install the stage guard library
+      ansible.builtin.copy:
+        src: pve-full-system-stress-guards.sh
+        dest: "{{ pve_full_system_stress_guard_script_path }}"
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Read the dedicated scratch dataset mountpoint
+      ansible.builtin.command:
+        argv:
+          - zfs
+          - get
+          - -H
+          - -o
+          - value
+          - mountpoint
+          - "{{ pve_full_system_stress_scratch_dataset }}"
+      register: pve_full_system_stress_scratch_mount_result
+      changed_when: false
+      failed_when: false
+      when: "'storage' in pve_full_system_stress_stages"
+
+    - name: Require the exact dedicated fio dataset before any create
+      ansible.builtin.assert:
+        that:
+          - pve_full_system_stress_scratch_dataset == pve_full_system_stress_rpool ~ '/ansible-proxmox-stress'
+        fail_msg: Refusing to create or use a non-dedicated dataset for fio.
+        quiet: true
+      when: "'storage' in pve_full_system_stress_stages"
+
+    - name: Create the dedicated scratch dataset when it is absent
+      ansible.builtin.command:
+        argv:
+          - zfs
+          - create
+          - "{{ pve_full_system_stress_scratch_dataset }}"
+      when:
+        - "'storage' in pve_full_system_stress_stages"
+        - pve_full_system_stress_scratch_mount_result.rc != 0
+        - pve_full_system_stress_scratch_mount_result.stderr is search('dataset does not exist')
+      changed_when: true
+
+    - name: Read back the dedicated scratch dataset mountpoint
+      ansible.builtin.command:
+        argv:
+          - zfs
+          - get
+          - -H
+          - -o
+          - value
+          - mountpoint
+          - "{{ pve_full_system_stress_scratch_dataset }}"
+      register: pve_full_system_stress_scratch_mount
+      changed_when: false
+      when: "'storage' in pve_full_system_stress_stages"
+
+    - name: Verify the fio scratch path belongs to the dedicated dataset
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - -n
+          - -o
+          - SOURCE
+          - --target
+          - "{{ pve_full_system_stress_scratch_mount.stdout }}"
+      register: pve_full_system_stress_scratch_source
+      changed_when: false
+      when:
+        - "'storage' in pve_full_system_stress_stages"
+        - pve_full_system_stress_scratch_mount.stdout != '-'
+
+    - name: Require the fio target to be mounted from the dedicated dataset
+      ansible.builtin.assert:
+        that:
+          - pve_full_system_stress_scratch_mount.stdout != '-'
+          - pve_full_system_stress_scratch_source.stdout == pve_full_system_stress_scratch_dataset
+        fail_msg: The fio scratch dataset has no matching mounted ZFS path.
+        quiet: true
+      when: "'storage' in pve_full_system_stress_stages"
+
+    - name: Read available scratch-dataset capacity
+      ansible.builtin.command:
+        argv:
+          - zfs
+          - get
+          - -Hp
+          - -o
+          - value
+          - available
+          - "{{ pve_full_system_stress_scratch_dataset }}"
+      register: pve_full_system_stress_scratch_available
+      changed_when: false
+      when: "'storage' in pve_full_system_stress_stages"
+
+    - name: Require fio to leave ten percent of available capacity free
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: |
+          set -euo pipefail
+          if ! required=$(numfmt --from=iec {{ pve_full_system_stress_fio_size | quote }}); then
+            logger -t pve-full-system-stress -p daemon.err -- \
+              "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+              "stage=storage event=abort reason=invalid_fio_size"
+            exit 1
+          fi
+          available={{ pve_full_system_stress_scratch_available.stdout | trim }}
+          logger -t pve-full-system-stress -p daemon.info -- \
+            "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+            "stage=storage event=fio_guard requested_bytes=${required}" \
+            "available_bytes=${available}"
+          ((required >= 4096)) || {
+            logger -t pve-full-system-stress -p daemon.err -- \
+              "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+              "stage=storage event=abort reason=fio_size_below_block_size"
+            exit 1
+          }
+          ((required + available / 10 <= available)) || {
+            logger -t pve-full-system-stress -p daemon.err -- \
+              "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+              "stage=storage event=abort reason=insufficient_scratch_space"
+            exit 1
+          }
+      changed_when: false
+      when: "'storage' in pve_full_system_stress_stages"
+
+    - name: Set the unique fio scratch file path
+      ansible.builtin.set_fact:
+        pve_full_system_stress_scratch_mountpoint: "{{ pve_full_system_stress_scratch_mount.stdout }}"
+        pve_full_system_stress_scratch_file: "{{ pve_full_system_stress_scratch_mount.stdout }}/fio-{{ pve_full_system_stress_run_id }}.dat"
+      when: "'storage' in pve_full_system_stress_stages"
+
+    - name: Schedule the detached stress stages
+      ansible.builtin.include_tasks:
+        file: schedule_stages.yml
+        apply:
+          tags:
+            - never
+            - pve_full_system_stress
+      tags:
+        - never
+        - pve_full_system_stress
+
+  rescue:
+    - name: Stop every timer or stage already scheduled for this run
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: |
+          set -u
+          for stage in {{ pve_full_system_stress_stage_order | join(' ') }}; do
+            unit="pve-full-system-stress-{{ pve_full_system_stress_run_id }}-${stage}"
+            systemctl stop "${unit}.timer" "${unit}.service" >/dev/null 2>&1 || true
+          done
+          rm -f -- \
+            {{ pve_full_system_stress_stage_script_path | quote }} \
+            {{ pve_full_system_stress_guard_script_path | quote }}
+          logger -t pve-full-system-stress -p daemon.err -- \
+            "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+            "event=campaign_abort reason=start_dispatch_failed end_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          lock={{ pve_full_system_stress_active_path | quote }}
+          if [[ -r "$lock/run-id" && $(cat "$lock/run-id") == "{{ pve_full_system_stress_run_id }}" ]]; then
+            rm -f "$lock/run-id"
+            rmdir "$lock" 2>/dev/null || true
+          fi
+      changed_when: false
+
+    - name: Stop after a failed stress run start
+      ansible.builtin.fail:
+        msg: The stress run could not be scheduled; its units were stopped and its lock was released.

@@ -1,0 +1,114 @@
+---
+- name: Require enough time for a clean stage shutdown
+  ansible.builtin.assert:
+    that:
+      - pve_full_system_stress_duration_seconds | int > pve_full_system_stress_workload_margin_seconds | int
+    fail_msg: A stress stage must exceed the workload shutdown margin.
+    quiet: true
+
+- name: Read the current schedule time
+  ansible.builtin.command:
+    argv: [date, -u, +%s]
+  register: pve_full_system_stress_schedule_now
+  changed_when: false
+
+- name: Calculate a start time that cannot overlap the prior stage
+  ansible.builtin.set_fact:
+    pve_full_system_stress_stage_unit: >-
+      pve-full-system-stress-{{ pve_full_system_stress_run_id }}-{{ pve_full_system_stress_stage }}
+    pve_full_system_stress_stage_target_epoch: >-
+      {{ pve_full_system_stress_schedule_base.stdout | int + pve_full_system_stress_schedule_offset | int }}
+    pve_full_system_stress_stage_delay_seconds: >-
+      {{ [1, (pve_full_system_stress_schedule_base.stdout | int
+              + pve_full_system_stress_schedule_offset | int
+              - pve_full_system_stress_schedule_now.stdout | int)] | max }}
+    pve_full_system_stress_stage_index: >-
+      {{ pve_full_system_stress_stages.index(pve_full_system_stress_stage) }}
+
+- name: Resolve the previous stage and its remaining timers
+  ansible.builtin.set_fact:
+    pve_full_system_stress_previous_stage: >-
+      {{ pve_full_system_stress_stages[pve_full_system_stress_stage_index | int - 1]
+         if pve_full_system_stress_stage_index | int > 0 else '' }}
+    pve_full_system_stress_future_stages: >-
+      {{ pve_full_system_stress_stages[pve_full_system_stress_stage_index | int + 1 :] }}
+    pve_full_system_stress_stage_argv: >-
+      {{ ['systemd-run',
+          '--unit=' ~ pve_full_system_stress_stage_unit,
+          '--on-active=' ~ (pve_full_system_stress_stage_delay_seconds | int) ~ 's',
+          '--timer-property=AccuracySec=1s',
+          '--property=RuntimeMaxSec=' ~ (pve_full_system_stress_duration_seconds | int) ~ 's',
+          '--property=TimeoutStopSec=15s',
+          '--property=KillMode=control-group',
+          '--property=StandardOutput=journal',
+          '--property=StandardError=journal',
+          '--property=SyslogIdentifier=pve-full-system-stress',
+          '--service-type=exec', '--no-block', '--', '/bin/bash',
+          pve_full_system_stress_stage_script_path] }}
+
+- name: Append the detached stage watchdog and workload arguments
+  ansible.builtin.set_fact:
+    pve_full_system_stress_stage_argv: >-
+      {{ pve_full_system_stress_stage_argv
+         + [pve_full_system_stress_run_id,
+            pve_full_system_stress_stage,
+            pve_full_system_stress_duration_seconds | string,
+            pve_full_system_stress_sample_seconds | string,
+            pve_full_system_stress_cpu_temp_limit_c | string,
+            pve_full_system_stress_watch_gpu | ternary('true', 'false'),
+            pve_full_system_stress_campaign_started_at,
+            pve_full_system_stress_gpu_vmids | join(','),
+            pve_full_system_stress_llm_unit_pattern,
+            pve_full_system_stress_previous_stage,
+            pve_full_system_stress_future_stages | join(','),
+            pve_full_system_stress_rpool,
+            pve_full_system_stress_scratch_file | default(''),
+            pve_full_system_stress_active_path,
+            pve_full_system_stress_guard_script_path,
+            pve_full_system_stress_memory_ecc | ternary('true', 'false'),
+            '--component']
+         + [pve_full_system_stress_components[0].cwd | default('')]
+         + pve_full_system_stress_components[0].argv }}
+
+- name: Append any additional workload component commands
+  ansible.builtin.set_fact:
+    pve_full_system_stress_stage_argv: >-
+      {{ pve_full_system_stress_stage_argv
+         + ['--component', item.cwd | default('')]
+         + item.argv }}
+  loop: "{{ pve_full_system_stress_components[1:] }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Start the detached stage service and watchdog timer
+  ansible.builtin.command:
+    argv: "{{ pve_full_system_stress_stage_argv }}"
+  register: pve_full_system_stress_scheduled
+  changed_when: true
+
+- name: Log the accepted stage schedule
+  ansible.builtin.command:
+    argv:
+      - logger
+      - -t
+      - pve-full-system-stress
+      - -p
+      - daemon.info
+      - --
+      - >-
+        pve_full_system_stress run={{ pve_full_system_stress_run_id }}
+        stage={{ pve_full_system_stress_stage }} event=stage_scheduled
+        decision=accepted unit={{ pve_full_system_stress_stage_unit }}.service
+        delay_seconds={{ pve_full_system_stress_stage_delay_seconds }}
+        runtime_max_seconds={{ pve_full_system_stress_duration_seconds }}
+  changed_when: false
+
+- name: Record scheduled stage units and calculate the next stage offset
+  ansible.builtin.set_fact:
+    pve_full_system_stress_scheduled_stages: >-
+      {{ pve_full_system_stress_scheduled_stages | default([])
+         + [pve_full_system_stress_stage_unit] }}
+    pve_full_system_stress_schedule_offset: >-
+      {{ pve_full_system_stress_schedule_offset | int
+         + pve_full_system_stress_duration_seconds | int
+         + pve_full_system_stress_stage_transition_seconds | int }}

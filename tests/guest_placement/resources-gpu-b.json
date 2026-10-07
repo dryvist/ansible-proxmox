@@ -1,0 +1,13 @@
+[
+  {
+    "type": "lxc",
+    "maxmem": 51539607552,
+    "template": 0,
+    "node": "gpu-b"
+  },
+  {
+    "type": "node",
+    "maxmem": 101160513536,
+    "node": "gpu-b"
+  }
+]

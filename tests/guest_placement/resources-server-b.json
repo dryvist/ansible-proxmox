@@ -1,0 +1,175 @@
+[
+  {
+    "type": "lxc",
+    "maxmem": 536870912,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 15032385536,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 4294967296,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 8589934592,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 17179869184,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 6442450944,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 8589934592,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 8589934592,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 8589934592,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 3221225472,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 536870912,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 8589934592,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-b"
+  },
+  {
+    "type": "node",
+    "maxmem": 253528018944,
+    "node": "server-b"
+  }
+]

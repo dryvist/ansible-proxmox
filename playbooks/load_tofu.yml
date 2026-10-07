@@ -14,7 +14,34 @@
       ansible.builtin.include_role:
         name: dryvist.homelab.inventory_resolve
       vars:
-        inventory_resolve_required_keys: [node_storage]
+        inventory_resolve_required_keys: [node_storage, cache_proxy_urls]
+
+    - name: Require published APT cache endpoints
+      ansible.builtin.assert:
+        that:
+          - tofu_data.cache_proxy_urls.apt_cache is defined
+          - tofu_data.cache_proxy_urls.apt_cache | length > 0
+        fail_msg: >-
+          The published inventory must contain at least one
+          cache_proxy_urls.apt_cache entry before repository convergence.
+        success_msg: >-
+          Using {{ tofu_data.cache_proxy_urls.apt_cache | length }} APT cache
+          endpoint(s) from the published inventory.
+
+    # Capability tags on node entries are published from Tofu desired state.
+    # Join them to the existing static PVE inventory by its declared Tofu node
+    # key, then let group_vars and roles select the capability group.
+    - name: Add tagged Proxmox nodes to capability groups
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: >-
+          {{ ['nvidia_gpu_nodes']
+             if 'nvidia-gpu' in (_node.tags | default([])) else [] }}
+      vars:
+        _tofu_node_key: "{{ hostvars[item].proxmox_node_name | default(item) }}"
+        _node: "{{ (tofu_data.nodes | default({})).get(_tofu_node_key, {}) }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"
+      changed_when: false
 
     # SMB shares are declared ON the dataset they serve, inside
     # node_storage.<node>.pools.<pool>.datasets.<dataset>.smb, with the
@@ -127,12 +154,9 @@
         ct_template_from_tofu: "{{ tofu_data.ct_template | default('') }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
-    # Service -> VMID resolution for media_lxc_features. The tofu
-    # `containers` dict is keyed by service hostname and carries each container's
-    # current `vmid`; project it to { service: vmid } so the role can key its
-    # feature map by service and follow any VMID renumber with no role change.
-    # The role only resolves the services it knows about, so the extra
-    # (non-media) entries are harmless.
+    # Membership in media_lxc_features comes from the `shared-media-data`
+    # capability tag. Keep the role's service-keyed map for each guest's
+    # mount/id-map details, while this projection carries the current VMID.
     - name: Inject OpenTofu service -> vmid map onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
@@ -140,10 +164,14 @@
           {{
             dict(
               (tofu_data.containers | default({})) | dict2items
+              | selectattr('value.tags', 'defined')
+              | selectattr('value.tags', 'contains', 'shared-media-data')
               | selectattr('value.ansible_pct_vmid', 'defined')
               | map(attribute='key') | list
               | zip(
                   (tofu_data.containers | default({})) | dict2items
+                  | selectattr('value.tags', 'defined')
+                  | selectattr('value.tags', 'contains', 'shared-media-data')
                   | selectattr('value.ansible_pct_vmid', 'defined')
                   | map(attribute='value.ansible_pct_vmid') | list
                 )
@@ -151,54 +179,8 @@
           }}
       loop: "{{ groups['proxmox'] | default([]) }}"
 
-    # Service -> VMID resolution for lxc_gpu_features (GPU passthrough). Same
-    # projection as the media map above, exposed under its own var so the GPU
-    # role has no coupling to media naming. Extra (non-GPU) entries are harmless.
-    - name: Inject OpenTofu service -> vmid map for GPU passthrough onto proxmox hosts
-      ansible.builtin.add_host:
-        name: "{{ item }}"
-        lxc_gpu_features_service_vmids_from_tofu: >-
-          {{
-            dict(
-              (tofu_data.containers | default({})) | dict2items
-              | selectattr('value.ansible_pct_vmid', 'defined')
-              | map(attribute='key') | list
-              | zip(
-                  (tofu_data.containers | default({})) | dict2items
-                  | selectattr('value.ansible_pct_vmid', 'defined')
-                  | map(attribute='value.ansible_pct_vmid') | list
-                )
-            )
-          }}
-      loop: "{{ groups['proxmox'] | default([]) }}"
-
-    # Fail loud when the projection comes out empty against a non-empty
-    # container map. Both maps above are consumed by roles that iterate them:
-    # an empty map makes those roles no-op at rc=0 with changed=0, which reads
-    # as "already converged" and is indistinguishable from success. Every task
-    # is skipped, nothing is reported, and the guests quietly never receive
-    # their device bindings.
-    #
-    # That is not hypothetical — it is what a wrong attribute name did here.
-    - name: Assert the service -> vmid projections resolved
-      ansible.builtin.assert:
-        that:
-          - (tofu_data.containers | default({})) | length == 0
-            or (hostvars[groups['proxmox'][0]].lxc_gpu_features_service_vmids_from_tofu
-                | default({}) | length) > 0
-        fail_msg: >-
-          The published inventory has
-          {{ (tofu_data.containers | default({})) | length }} containers, but the
-          service -> vmid projection resolved to none. The container entries do
-          not carry the attribute this projection selects on, so every consuming
-          role would skip silently at rc=0. Compare the key names in the
-          published ansible_inventory against the selectattr above.
-        success_msg: >-
-          Service -> vmid projection resolved
-          {{ hostvars[groups['proxmox'][0]].lxc_gpu_features_service_vmids_from_tofu
-             | default({}) | length }} of
-          {{ (tofu_data.containers | default({})) | length }} containers.
-      when: groups['proxmox'] | default([]) | length > 0
+    - name: Project GPU engine identities from OpenTofu inventory
+      ansible.builtin.import_tasks: tasks/load_tofu_gpu_engines.yml
 
     # Splunk VM identity (node + vmid) for the sanoid/syncoid replication config.
     # Lets host_vars derive the source node + vmid from tofu instead of
@@ -220,6 +202,79 @@
         name: "{{ item }}"
         containers_from_tofu: "{{ tofu_data.containers | default({}) }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
+
+    # Membership in container_nesting_hosts comes from the generic
+    # `container-nesting` capability. Project only guests placed on this node;
+    # a VMID change therefore flows through inventory instead of a host_vars
+    # or group_vars list.
+    - name: Select container-nesting guests from published tags
+      ansible.builtin.set_fact:
+        load_tofu_container_nesting_guests: >-
+          {{
+            (tofu_data.containers | default({}) | dict2items)
+            | selectattr('value.tags', 'defined')
+            | selectattr('value.tags', 'contains', 'container-nesting')
+            | rejectattr('value.tags', 'contains', 'docker')
+            | list
+          }}
+
+    - name: Inject node-local container-nesting guest identities
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        lxc_features_service_vmids_from_tofu: >-
+          {{
+            dict(
+              (load_tofu_container_nesting_guests
+               | selectattr('value.node', 'defined')
+               | selectattr('value.node', 'equalto', _tofu_node_key)
+               | selectattr('value.ansible_pct_vmid', 'defined')
+               | map(attribute='key') | list)
+              | zip(
+                  load_tofu_container_nesting_guests
+                  | selectattr('value.node', 'defined')
+                  | selectattr('value.node', 'equalto', _tofu_node_key)
+                  | selectattr('value.ansible_pct_vmid', 'defined')
+                  | map(attribute='value.ansible_pct_vmid') | list
+                )
+            )
+          }}
+      vars:
+        _tofu_node_key: "{{ hostvars[item].proxmox_node_name | default(item) }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"
+
+    - name: Add nodes hosting container-nesting guests to their capability group
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups:
+          - container_nesting_hosts
+      loop: "{{ groups['proxmox'] | default([]) }}"
+      when: >-
+        (hostvars[item].lxc_features_service_vmids_from_tofu
+         | default({}, true) | length) > 0
+      changed_when: false
+
+    - name: Validate container-nesting guests resolve to node-local VMIDs
+      ansible.builtin.assert:
+        that:
+          - >-
+            load_tofu_container_nesting_guests | length ==
+            (load_tofu_container_nesting_guests
+             | selectattr('value.node', 'defined')
+             | selectattr('value.ansible_pct_vmid', 'defined')
+             | list | length)
+          - >-
+            load_tofu_container_nesting_guests | length ==
+            (groups['proxmox'] | default([])
+             | map('extract', hostvars, 'lxc_features_service_vmids_from_tofu')
+             | select('defined') | map('length') | sum)
+        fail_msg: >-
+          Every non-Docker container tagged `container-nesting` must publish
+          its node and Ansible PCT VMID and resolve to exactly one Proxmox
+          host. Otherwise the root-only feature role would silently skip it.
+        success_msg: >-
+          All {{ load_tofu_container_nesting_guests | length }} tagged guests
+          resolve to node-local Proxmox feature targets.
+      when: load_tofu_container_nesting_guests | length > 0
 
     # The same pass-through for VMs. Absent before this, which is why a
     # host_vars expression could reach a container's dataset but never a VM's:
@@ -260,8 +315,9 @@
     # Estate domain, so host_vars can build guest FQDNs (e.g. the
     # postgres_standby source_host) instead of hard-coding an IP or domain.
     # Empty when absent (test fixture) — consumers gate on non-empty.
-    - name: Inject OpenTofu domain onto proxmox hosts
+    - name: Inject OpenTofu domain and APT cache URLs onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
         domain_from_tofu: "{{ tofu_data.domain | default('') }}"
+        cache_proxy_urls_from_tofu: "{{ tofu_data.cache_proxy_urls.apt_cache }}"
       loop: "{{ groups['proxmox'] | default([]) }}"

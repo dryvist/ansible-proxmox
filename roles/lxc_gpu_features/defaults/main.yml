@@ -10,30 +10,40 @@
 # Ordering: terraform-proxmox (shell) -> THIS role (devices) ->
 # ansible-proxmox-apps role: llama_cpp (inference stack). See README.md.
 #
+# Capability selection is tag-driven. Every NVIDIA guest tagged
+# `nvidia-gpu` receives the shared NVIDIA device set below; this map remains
+# for an exceptional guest whose passthrough differs from that capability.
 # Per-service shape:
 #   dri:    bool — bind /dev/dri (card0 + renderD128, char major 226) for compute
 #   kfd:    bool — bind /dev/kfd (char major 235) for ROCm/HIP compute
 #   nvidia: bool — bind the host's /dev/nvidia* character devices for CUDA
 #
-# Keyed by SERVICE NAME; each service's current vmid is resolved at run time from
-# the tofu inventory (see lxc_gpu_features_service_vmids). A vmid renumber
-# needs no change here. Only vmids present on the host are acted on; every task
-# is skipped under Docker virtualization (molecule). No IPs, no secrets.
-lxc_gpu_features_map:
-  # llm-fast (AMD RX 6800, dri+kfd) retired 2026-10: the card was removed
-  # when the RTX 4080 SUPER physically replaced it on pve-w1700. Dropped
-  # here rather than disabled per-node because this map is global and
-  # service-keyed, not node-scoped (see the file header) -- a stale entry
-  # for a service with no vmid in the tofu inventory is already inert, but
-  # a map that still lists retired hardware is misleading to read.
-  llm-4080: # llama.cpp + llama-swap + Vulkan on the NVIDIA card (privileged LXC)
-    dri: false
-    kfd: false
-    nvidia: true
-  llm-6000: # vLLM + llama.cpp on the RTX PRO 6000 Blackwell (privileged LXC)
-    dri: false
-    kfd: false
-    nvidia: true
+# Overrides are keyed by service because their values are per-service device
+# configuration. Membership comes from `nvidia-gpu` tags in desired state.
+# Only vmids present on the host are acted on; every task is skipped under
+# Docker virtualization (molecule). No IPs, no secrets.
+lxc_gpu_features_map: {}
+
+# NVIDIA-tagged guests are projected from the published Tofu inventory. This
+# keeps passthrough membership out of service-name lists; the host role still
+# reads device majors from the live device nodes below.
+lxc_gpu_features_nvidia_guest_features:
+  dri: false
+  kfd: false
+  nvidia: true
+
+# Legacy GPU guest VMIDs published only when the replacement engine pair is
+# declared. The host role gracefully stops these before applying passthrough to
+# the replacement guests that share the physical GPU.
+lxc_gpu_features_legacy_engine_vmids_from_tofu: {}
+
+# Opt-in pre-cutover action. The current selected GPU guest is resolved from
+# published inventory and gracefully stopped before a selector-changing Tofu
+# apply, preventing two passthrough guests from owning the physical GPU during
+# the provider's parallel resource updates. This is an operation gate, not an
+# engine selector.
+lxc_gpu_features_engine_handoff_pre_stop: false
+lxc_gpu_features_engine_handoff_vmids_from_tofu: {}
 
 # AMD GPU character-device majors, verified live on the host that holds the
 # card: /dev/dri/card0 = 226:0, /dev/dri/renderD128 = 226:128, /dev/kfd = 235:0.

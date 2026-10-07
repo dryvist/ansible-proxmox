@@ -1,0 +1,26 @@
+---
+- name: Prepare fake pct command and sanitized target-output fixtures
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install Python for Ansible modules
+      ansible.builtin.raw: apt-get update && apt-get install -y python3
+      changed_when: true
+
+    - name: Install the fake pct command
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/pct"
+        dest: /usr/local/bin/pct
+        mode: "0755"
+
+    - name: Copy sanitized pct list fixture
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/fixtures/pct-list.txt"
+        dest: /tmp/lxc-features-pct-list.txt
+        mode: "0644"
+
+    - name: Copy sanitized pct config fixture
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/fixtures/pct-config.txt"
+        dest: /tmp/lxc-features-pct-config.txt
+        mode: "0644"

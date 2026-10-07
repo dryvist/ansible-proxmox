@@ -1,0 +1,17 @@
+---
+- name: Verify pct list selection and feature update
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Read fake pct action log
+      ansible.builtin.command:
+        cmd: cat /tmp/lxc-features-pct-actions.log
+      register: lxc_features_pct_actions
+      changed_when: false
+
+    - name: Assert role used the selected VMID and restarted the running container
+      ansible.builtin.assert:
+        that:
+          - "'set 90110 --features nesting=1,keyctl=1,fuse=1' in lxc_features_pct_actions.stdout"
+          - "'stop 90110' in lxc_features_pct_actions.stdout"
+          - "'start 90110' in lxc_features_pct_actions.stdout"

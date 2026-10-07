@@ -1,9 +1,9 @@
 ---
 # CI Gate — thin wrapper around the shared ansible CI gate.
 #
-# Lint and molecule live in dryvist/.github/.github/workflows/_ansible-ci.yml.
-# This repo uses its defaults: ansible-lint over the whole project, the
-# `default` molecule scenario, and molecule deps from requirements-ci.txt.
+# Lint and Molecule change detection live in
+# dryvist/.github/.github/workflows/_ansible-ci.yml. This wrapper runs the
+# selected local scenario matrix and aggregates it with the data contract.
 #
 # The shared workflow runs with emit_gate:false and this wrapper aggregates its
 # own "Merge Gate" instead, so the repo-local data-contract job sits INSIDE the
@@ -14,7 +14,10 @@ name: CI Gate
 
 on:
   pull_request:
+    branches: [develop, main]
     types: [opened, synchronize, reopened]
+  push:
+    branches: [main, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -29,8 +32,125 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@main
+    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@e3c0fa803516d9a85697cce97583bc2b7cc5c6d6
     with:
+      molecule: false
+      molecule_contract_filters: |
+        contract_only:
+          - 'roles/pve_full_system_stress/**'
+          - 'tests/pve_full_system_stress/**'
+          - 'tests/capability_tags/**'
+          - 'tests/guest_placement/**'
+          - 'tests/inventory_load/**'
+          - 'tests/pve_ha_relocation/**'
+          - '.github/workflows/ci-gate.yml'
+          - '.github/workflows/molecule.yml'
+          - 'tests/workflow_policy/**'
+      molecule_scenario_filters: |
+        cluster_ssh_trust:
+          - 'roles/cluster_ssh_trust/**'
+          - 'molecule/cluster_ssh_trust/**'
+        default:
+          - 'roles/common/**'
+          - 'roles/crash_diagnostics/**'
+          - 'roles/kernel_tuning/**'
+          - 'roles/nas_storage/**'
+          - 'roles/proxmox_monitoring/**'
+          - 'roles/ulimits/**'
+          - 'roles/zfs_swap/**'
+          - 'molecule/default/**'
+        docker_lxc_features:
+          - 'roles/docker_lxc_features/**'
+          - 'molecule/docker_lxc_features/**'
+        git_mirror:
+          - 'roles/git_mirror/**'
+          - 'molecule/git_mirror/**'
+        hba_storcli:
+          - 'roles/hba_storcli/**'
+          - 'molecule/hba_storcli/**'
+        idrac_power:
+          - 'roles/idrac_power/**'
+          - 'molecule/idrac_power/**'
+        local_identities:
+          - 'roles/local_identities/**'
+          - 'molecule/local_identities/**'
+        lxc_gpu_features:
+          - 'roles/lxc_gpu_features/**'
+          - 'molecule/lxc_gpu_features/**'
+        lxc_features:
+          - 'roles/lxc_features/**'
+          - 'molecule/lxc_features/**'
+        media_lxc_features:
+          - 'roles/media_lxc_features/**'
+          - 'molecule/media_lxc_features/**'
+        nas_storage:
+          - 'roles/nas_storage/**'
+          - 'roles/zfs_pools/**'
+          - 'molecule/nas_storage/**'
+        node_auto_poweroff:
+          - 'roles/node_auto_poweroff/**'
+          - 'roles/sanoid/**'
+          - 'molecule/node_auto_poweroff/**'
+        node_scheduled_wake:
+          - 'roles/node_auto_poweroff/**'
+          - 'roles/node_scheduled_wake/**'
+          - 'molecule/node_scheduled_wake/**'
+        nvidia_driver:
+          - 'roles/nvidia_driver/**'
+          - 'molecule/nvidia_driver/**'
+        postgres_standby:
+          - 'roles/postgres_standby/**'
+          - 'molecule/postgres_standby/**'
+        pve_bulk_data_compare:
+          - 'roles/pve_bulk_data_compare/**'
+          - 'molecule/pve_bulk_data_compare/**'
+        pve_cluster:
+          - 'roles/pve_cluster/**'
+          - 'molecule/pve_cluster/**'
+        pve_config_backup:
+          - 'roles/pve_config_backup/**'
+          - 'molecule/pve_config_backup/**'
+        pve_guest_evacuation:
+          - 'roles/pve_guest_evacuation/**'
+          - 'molecule/pve_guest_evacuation/**'
+        pve_guest_evacuation_lxc_managed_volumes:
+          - 'roles/pve_guest_evacuation_lxc_managed_volumes/**'
+          - 'molecule/pve_guest_evacuation_lxc_managed_volumes/**'
+        pve_guest_evacuation_restore:
+          - 'roles/pve_guest_evacuation_restore/**'
+          - 'molecule/pve_guest_evacuation_restore/**'
+        pve_notifications:
+          - 'roles/pve_cluster/**'
+          - 'roles/pve_ha/**'
+          - 'roles/pve_notifications/**'
+          - 'molecule/pve_notifications/**'
+        root_authorized_keys:
+          - 'roles/root_authorized_keys/**'
+          - 'molecule/root_authorized_keys/**'
+        sanoid:
+          - 'roles/sanoid/**'
+          - 'molecule/sanoid/**'
+        sqlite_standby:
+          - 'roles/sqlite_standby/**'
+          - 'molecule/sqlite_standby/**'
+        ssh_ca_trust:
+          - 'roles/ssh_ca_trust/**'
+          - 'molecule/ssh_ca_trust/**'
+        syncoid:
+          - 'roles/syncoid/**'
+          - 'molecule/syncoid/**'
+        wol_enable:
+          - 'roles/wol_enable/**'
+          - 'molecule/wol_enable/**'
+        zfs_pools:
+          - 'roles/zfs_pools/**'
+          - 'molecule/zfs_pools/**'
+        zfs_replication:
+          - 'roles/node_auto_poweroff/**'
+          - 'roles/sanoid/**'
+          - 'roles/syncoid/**'
+          - 'roles/zfs_replication/**'
+          - 'molecule/zfs_replication/**'
       # Opt in to the shared Renovate-annotation gate: a git-type SHA pin in
       # requirements.yml (e.g. the homelab-contracts collection) without its
       # `# renovate:` annotation is otherwise invisible to Renovate and to
@@ -50,14 +170,30 @@ jobs:
     needs: ci
     uses: ./.github/workflows/_data-contract.yml
 
+  molecule:
+    name: Molecule Test
+    needs: ci
+    if: >-
+      needs.ci.outputs.molecule == 'true' ||
+      github.event_name == 'push'
+    uses: ./.github/workflows/molecule.yml
+    with:
+      scenarios: >-
+        ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+        'FULL' || needs.ci.outputs.molecule_scenarios }}
+
   gate:
     name: Merge Gate
-    needs: [ci, data-contract]
+    needs: [ci, data-contract, molecule]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Check all results
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # release/v1
         with:
-          # No allowed-skips: every job here must actually run and pass.
+          # Shared path selection focuses pull requests and develop pushes.
+          # Workflow-only changes run their caller contract; the full matrix
+          # runs only after a merge to main.
+          allowed-skips: >-
+            ${{ github.event_name == 'pull_request' && 'molecule' || '' }}
           jobs: ${{ toJSON(needs) }}

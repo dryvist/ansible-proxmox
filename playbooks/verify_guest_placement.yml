@@ -25,7 +25,35 @@
     - placement
     - verify
 
+  vars:
+    placement_node: "{{ proxmox_node_name | default(inventory_hostname) }}"
+    placement_node_config: "{{ (cluster_nodes_from_tofu | default({})).get(placement_node, {}) }}"
+
   tasks:
+    - name: Report nodes without a published memory budget
+      ansible.builtin.debug:
+        msg: "Memory budget absent: resource-fit unverified. Placement comparison remains available."
+      when: placement_node_config.memory_budget_mb is not defined
+
+    - name: Read cluster resource allocations
+      ansible.builtin.command:
+        argv:
+          - pvesh
+          - get
+          - /cluster/resources
+          - --output-format
+          - json
+      register: placement_resources_raw
+      changed_when: false
+      check_mode: false
+      when: placement_node_config.memory_budget_mb is defined
+
+    - name: Verify allocated memory against the published node budget
+      ansible.builtin.include_tasks: tasks/verify_guest_memory.yml
+      vars:
+        placement_resources: "{{ placement_resources_raw.stdout | from_json }}"
+      when: placement_node_config.memory_budget_mb is defined
+
     - name: List the guest IDs this node actually runs
       ansible.builtin.shell:
         cmd: |

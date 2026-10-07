@@ -1,0 +1,40 @@
+---
+- name: Validate the requested full-system stress operation
+  ansible.builtin.assert:
+    that:
+      - pve_full_system_stress_mode in ['start', 'status']
+      - pve_full_system_stress_profile in pve_full_system_stress_profiles
+      - pve_full_system_stress_stages | type_debug == 'list'
+      - pve_full_system_stress_stages | length > 0
+      - pve_full_system_stress_stages | unique | length == pve_full_system_stress_stages | length
+      - pve_full_system_stress_stages | difference(pve_full_system_stress_stage_order) | length == 0
+      - pve_full_system_stress_stages == (pve_full_system_stress_stage_order | select('in', pve_full_system_stress_stages) | list)
+    fail_msg: Select start or status, a declared duration profile, and one or more known stages in canonical order.
+    quiet: true
+  tags:
+    - never
+    - pve_full_system_stress
+
+- name: Start a full-system stress run
+  ansible.builtin.include_tasks:
+    file: start.yml
+    apply:
+      tags:
+        - never
+        - pve_full_system_stress
+  when: pve_full_system_stress_mode == 'start'
+  tags:
+    - never
+    - pve_full_system_stress
+
+- name: Report a full-system stress run
+  ansible.builtin.include_tasks:
+    file: status.yml
+    apply:
+      tags:
+        - never
+        - pve_full_system_stress
+  when: pve_full_system_stress_mode == 'status'
+  tags:
+    - never
+    - pve_full_system_stress

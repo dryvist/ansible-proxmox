@@ -27,7 +27,8 @@ the download-vpn LXC).
 1. `tofu-proxmox` — creates the GPU LXC as a privileged shell.
 2. **this role** — binds the device nodes a service asks for in
    `lxc_gpu_features_map` (`/dev/dri` + `/dev/kfd` for an AMD compute service,
-   `/dev/nvidia*` for an NVIDIA one), reboots on change.
+   `/dev/nvidia*` for a legacy NVIDIA service). Engine-identified NVIDIA guests
+   are derived from the published Tofu inventory, reboots on change.
 3. `ansible-proxmox-apps` (role `llama_cpp`) — installs llama.cpp + llama-swap
    and the matching GPU userspace (ROCm or CUDA/Vulkan), adds the service user
    to the needed groups, stages the GGUF models.
@@ -44,25 +45,39 @@ lxc.cgroup2.devices.allow: c 235:* rwm
 lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 ```
 
-## Feature map (keyed by service, not VMID)
+## Feature sources
 
-| Var                              | Default                          | Purpose                               |
-| -------------------------------- | -------------------------------- | ------------------------------------- |
-| `lxc_gpu_features_map`           | `{ llm-4080, llm-6000: { nvidia: true } }` | Service → which device groups to bind |
-| `lxc_gpu_features_dri_major`     | `226`                            | `/dev/dri` char major                 |
-| `lxc_gpu_features_kfd_major`     | `235`                            | `/dev/kfd` char major                 |
-| `lxc_gpu_features_service_vmids` | from tofu inventory              | Service → current vmid (auto)         |
+| Var                                       | Default             | Purpose                                           |
+| ----------------------------------------- | ------------------- | ------------------------------------------------- |
+| `lxc_gpu_features_map`                    | legacy service map  | Service → device groups                          |
+| `lxc_gpu_features_nvidia_guest_features`   | NVIDIA device set   | Shared device set for `nvidia-gpu` guests         |
+| `lxc_gpu_features_service_vmids`           | from Tofu inventory | Service → current vmid                            |
+| `lxc_gpu_features_nvidia_vmids_from_tofu`  | from Tofu inventory | `nvidia-gpu` capability tag → current vmid          |
+| `lxc_gpu_features_legacy_engine_vmids_from_tofu` | from Tofu inventory | Legacy guest to stop after the replacement pair is declared |
+| `lxc_gpu_features_engine_handoff_pre_stop` | `false` | Explicitly stop GPU guests before a selector-changing Tofu apply |
+| `lxc_gpu_features_engine_handoff_vmids_from_tofu` | from Tofu inventory | Legacy and engine GPU guest candidates for that pre-stop |
+| `lxc_gpu_features_dri_major`               | `226`               | `/dev/dri` char major                              |
+| `lxc_gpu_features_kfd_major`               | `235`               | `/dev/kfd` char major                              |
 
-The current vmid is resolved at run time from `tofu_inventory.json`, so a
-vmid renumber needs no change here.
+VMIDs are resolved at run time from the published inventory, so renumbering a
+guest needs no service-to-VMID edit here. Engine guests use their immutable
+engine identity, not a second hard-coded service name.
 
 ## Idempotency & guards
 
 Each raw line is managed with `lineinfile` (idempotent by exact match,
 position-agnostic), and the handler reboots **only** changed containers, so a
 converged host does nothing. Acts only on vmids actually present (`pct list`);
-skipped entirely under Docker virtualization (molecule), and a no-op when the
-inventory resolves no GPU services.
+the handler reads each changed guest's status and reboots only guests that are
+running. When Tofu publishes the replacement pair, the role logs and gracefully
+stops the same-node legacy GPU guest before changing passthrough. For an engine
+switch, set `lxc_gpu_features_engine_handoff_pre_stop=true` for a pre-apply
+host-role run; it gracefully stops every legacy/engine GPU guest candidate
+present on the limited host, so drift cannot leave another candidate owning
+the device. This operation is opt-in, works only on present VMIDs, and never
+force-stops or destroys a guest. All `pct` tasks are skipped under Docker
+virtualization (molecule), and the role is a no-op when inventory resolves no
+GPU services.
 
 ## Usage
 

@@ -1,0 +1,10 @@
+---
+- name: Exercise container nesting feature selection and update
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    ansible_virtualization_type: proxmox
+    lxc_features_service_vmids_from_tofu: "{{ lxc_features_test_service_vmids }}"
+  roles:
+    - lxc_features

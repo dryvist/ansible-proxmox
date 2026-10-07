@@ -1,0 +1,204 @@
+---
+# Optional NVIDIA power cap, or the factory default when no cap is declared.
+
+# Persistence mode and any power limit reset at every reboot and at every
+# driver unload/reload (nvidia-smi's own docs), so a cap is only durable as a
+# boot-time unit, not a one-shot task run at converge time. Installed
+# whenever a cap is set; a host with no cap gets no unit at all, rather than
+# an unapplied one, so `systemctl status` on an uncapped host shows nothing
+# to read the wrong conclusion from.
+- name: Install the boot-time NVIDIA power-limit unit
+  ansible.builtin.template:
+    src: nvidia-power-limit.service.j2
+    dest: /etc/systemd/system/nvidia-power-limit.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: nvidia_driver_power_limit_unit_file
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Read the supported NVIDIA GPU power-limit ranges
+  ansible.builtin.command:
+    cmd: nvidia-smi --query-gpu=power.min_limit,power.max_limit --format=csv,noheader,nounits
+  register: nvidia_driver_power_limit_range
+  changed_when: false
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Require nvidia-smi to report supported GPU power limits
+  ansible.builtin.assert:
+    that:
+      - nvidia_driver_power_limit_range.stdout_lines | length > 0
+    fail_msg: >-
+      nvidia-smi returned no GPU power-limit ranges; refusing to apply the
+      requested NVIDIA power limit.
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Reject NVIDIA power limits outside each GPU's supported range
+  ansible.builtin.assert:
+    that:
+      - (item.split(',') | first | trim | float) <= (nvidia_driver_power_limit_w | float)
+      - (item.split(',') | last | trim | float) >= (nvidia_driver_power_limit_w | float)
+    fail_msg: >-
+      Requested NVIDIA power limit {{ nvidia_driver_power_limit_w }} W is
+      outside this GPU's supported range ({{ item | trim }} W, min,max);
+      refusing to rely on the driver to clamp the value.
+  loop: "{{ nvidia_driver_power_limit_range.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item | trim }} W (min,max)"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Enable the boot-time NVIDIA power-limit unit
+  ansible.builtin.systemd_service:
+    name: nvidia-power-limit.service
+    enabled: true
+    daemon_reload: true
+    state: "{{ ('restarted' if nvidia_driver_power_limit_unit_file.changed else 'started') if 'nouveau' not in nvidia_driver_lsmod.stdout else omit }}"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Read back the live NVIDIA GPU power limits
+  ansible.builtin.command:
+    cmd: nvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits
+  register: nvidia_driver_power_limit_readback
+  changed_when: false
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Require nvidia-smi to report live GPU power limits
+  ansible.builtin.assert:
+    that:
+      - nvidia_driver_power_limit_readback.stdout_lines | length > 0
+    fail_msg: >-
+      nvidia-smi returned no live GPU power limits after starting the
+      power-limit unit.
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+- name: Assert the live NVIDIA GPU power limits match the requested cap
+  ansible.builtin.assert:
+    that:
+      - ((item | float) - (nvidia_driver_power_limit_w | float)) | abs <= 1
+    fail_msg: >-
+      nvidia-smi reports a GPU power limit of {{ item | trim }} W; expected
+      {{ nvidia_driver_power_limit_w }} W within 1 W.
+  loop: "{{ nvidia_driver_power_limit_readback.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item | trim }} W"
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is not none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+
+# No cap declared: the factory default applies. A cap set by an earlier
+# converge stays live until the next reboot, so remove its boot unit and reset
+# each GPU to the default limit the driver reports.
+- name: Return the GPU power limit to the factory default when no cap is declared
+  when:
+    - nvidia_driver_enabled | bool
+    - nvidia_driver_power_limit_w is none
+    - ansible_virtualization_type | default('') != 'docker'
+    - "'nouveau' not in nvidia_driver_lsmod.stdout"
+  tags:
+    - nvidia_driver
+    - nvidia_driver_power_limit
+  block:
+    - name: Check whether a power-limit unit from an earlier cap exists
+      ansible.builtin.stat:
+        path: /etc/systemd/system/nvidia-power-limit.service
+      register: nvidia_driver_power_limit_existing_unit
+
+    - name: Stop and disable the power-limit unit from an earlier cap
+      ansible.builtin.systemd_service:
+        name: nvidia-power-limit.service
+        state: stopped
+        enabled: false
+        daemon_reload: true
+      when: nvidia_driver_power_limit_existing_unit.stat.exists
+
+    - name: Remove the boot-time NVIDIA power-limit unit
+      ansible.builtin.file:
+        path: /etc/systemd/system/nvidia-power-limit.service
+        state: absent
+      notify: Reload systemd after removing an NVIDIA unit
+
+    - name: Read each GPU's live and default power limits
+      ansible.builtin.command:
+        cmd: nvidia-smi --query-gpu=index,power.limit,power.default_limit --format=csv,noheader,nounits
+      register: nvidia_driver_power_limit_defaults
+      changed_when: false
+
+    - name: Reset GPUs whose live power limit differs from the default
+      ansible.builtin.command:
+        argv:
+          - nvidia-smi
+          - -i
+          - "{{ item.split(',')[0] | trim }}"
+          - -pl
+          - "{{ item.split(',')[2] | trim }}"
+      loop: "{{ nvidia_driver_power_limit_defaults.stdout_lines }}"
+      loop_control:
+        label: "GPU {{ item.split(',')[0] | trim }}: {{ item.split(',')[1] | trim }} -> {{ item.split(',')[2] | trim }} W"
+      when: ((item.split(',')[1] | float) - (item.split(',')[2] | float)) | abs > 1
+      changed_when: true
+
+    - name: Read back the live power limits after the reset
+      ansible.builtin.command:
+        cmd: nvidia-smi --query-gpu=power.limit,power.default_limit --format=csv,noheader,nounits
+      register: nvidia_driver_power_limit_reset_readback
+      changed_when: false
+
+    - name: Assert every GPU runs at its default power limit
+      ansible.builtin.assert:
+        that:
+          - ((item.split(',')[0] | float) - (item.split(',')[1] | float)) | abs <= 1
+        fail_msg: "GPU power limit {{ item.split(',')[0] | trim }} W is not its default {{ item.split(',')[1] | trim }} W."
+      loop: "{{ nvidia_driver_power_limit_reset_readback.stdout_lines }}"
+      loop_control:
+        label: "{{ item | trim }} W (live,default)"

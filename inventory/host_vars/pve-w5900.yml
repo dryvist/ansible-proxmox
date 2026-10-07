@@ -35,7 +35,6 @@ pve_host_network_uplink_mac: "10:ff:e0:c4:32:db"
 # nvidia-persistenced/nvidia-smi aligned with it live in the role defaults,
 # not per-host, because host and guest userspace must match exactly and a
 # per-host override would let this node's pin drift from pve-w1700's.
-nvidia_driver_enabled: true
 
 # Keep the boot kernel, its headers, and DKMS build on the same tested ABI.
 # renovate: ignore — hold the NVIDIA-tested kernel ABI until a later DKMS pair is validated.
@@ -55,26 +54,11 @@ nvidia_driver_gpu_burn_enabled: true
 nvidia_driver_gpu_burn_compute: "120"
 nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda-13.2
 
-# Max-Q-class card at the driver's maximum board power (range 250-325 W,
-# factory default 300 W). Persistence mode and any power limit RESET at every
-# reboot and at every driver unload/reload (nvidia-smi docs), which is why
-# this is a boot-time systemd unit (roles/nvidia_driver) rather than a
-# one-time `nvidia-smi -pl` call. Undefined (the role default) is a no-op.
-nvidia_driver_power_limit_w: 325
+# temporary thermal cap until ventilation improves; revisit the limit then
+nvidia_driver_power_limit_w: 270
 
 # Every core runs the performance governor.
 kernel_tuning_cpu_governor: performance
-
-# Cribl Edge (playbooks/cribl_edge.yml, every Proxmox host) collects GPU
-# metrics from this node's card via nvidia-smi (installed above). Opt-in
-# per-host — cribl_edge_gpu_mode defaults to disabled everywhere else.
-cribl_edge_gpu_mode: custom
-cribl_edge_gpu_detail: true
-
-# Fan and temperature series from the local node_exporter hwmon collector;
-# System Metrics has no hardware-sensor group. Requires the cribl_edge role
-# release that provides the scrape source.
-cribl_edge_node_exporter_scrape_enabled: true
 
 # sanoid snapshot policy for this node's guests.
 #

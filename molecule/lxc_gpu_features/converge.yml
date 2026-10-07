@@ -13,9 +13,29 @@
 
   vars:
     lxc_gpu_features_service_vmids_from_tofu: "{{ lxc_gpu_features_test_service_vmids }}"
+    lxc_gpu_features_nvidia_vmids_from_tofu: "{{ lxc_gpu_features_test_nvidia_vmids }}"
 
-  roles:
-    - role: lxc_gpu_features
+  tasks:
+    - name: Converge lxc_gpu_features
+      ansible.builtin.include_role:
+        name: lxc_gpu_features
+
+    - name: Assert NVIDIA-tagged services and engines resolve to passthrough
+      ansible.builtin.assert:
+        that:
+          - lxc_gpu_features_nvidia_resolved | length == 4
+          - "'90101' not in lxc_gpu_features_nvidia_resolved"
+          - lxc_gpu_features_nvidia_resolved['90102'].nvidia | bool
+          - lxc_gpu_features_nvidia_resolved['90103'].nvidia | bool
+          - lxc_gpu_features_nvidia_resolved['90104'].nvidia | bool
+          - lxc_gpu_features_nvidia_resolved['90105'].nvidia | bool
+          - lxc_gpu_features_resolved['90102'].nvidia | bool
+          - lxc_gpu_features_resolved['90103'].nvidia | bool
+          - lxc_gpu_features_resolved['90104'].nvidia | bool
+          - lxc_gpu_features_resolved['90105'].nvidia | bool
+        fail_msg: >-
+          NVIDIA tags must preserve both service guests and select both engine
+          guests, while excluding the AMD fixture guest.
 
 # Play 2 — the NVIDIA line construction, against the ROLE'S OWN task file.
 #
@@ -34,6 +54,12 @@
   hosts: all
   become: false
   gather_facts: true
+
+  # Handlers are scoped to a play. Load the role in this play as well as in
+  # Play 1 so the direct task-file fixture can notify the real role handler.
+  # Docker guards make the full role a no-op for Proxmox commands here.
+  roles:
+    - lxc_gpu_features
 
   vars:
     lxc_gpu_features_nvidia_majors: "{{ lxc_gpu_features_test_nvidia_majors }}"
@@ -56,12 +82,22 @@
         name: lxc_gpu_features
         tasks_from: configure_container
       loop:
-        - key: "{{ lxc_gpu_features_test_service_vmids['llm-4080'] }}"
+        - key: "{{ lxc_gpu_features_test_service_vmids['llm-ada-lovelace-6X-16'] }}"
           value:
             dri: false
             kfd: false
             nvidia: true
-        - key: "{{ lxc_gpu_features_test_service_vmids['llm-6000'] }}"
+        - key: "{{ lxc_gpu_features_test_service_vmids['llm-blackwell-7-96'] }}"
+          value:
+            dri: false
+            kfd: false
+            nvidia: true
+        - key: "{{ lxc_gpu_features_test_engine_vmids.llama_cpp }}"
+          value:
+            dri: false
+            kfd: false
+            nvidia: true
+        - key: "{{ lxc_gpu_features_test_engine_vmids.vllm }}"
           value:
             dri: false
             kfd: false
@@ -74,3 +110,25 @@
       loop_control:
         loop_var: gpu_ct
         label: "container {{ gpu_ct.key }}"
+
+# Play 3 — handoff lifecycle calls against a mocked native `pct` CLI. This
+# proves a running legacy guest receives a graceful shutdown and an already
+# stopped guest is left alone, without invoking any live Proxmox operation.
+- name: Converge — legacy GPU guest runtime handoff
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Exercise the role's legacy GPU lifecycle task for both states
+      ansible.builtin.include_role:
+        name: lxc_gpu_features
+        tasks_from: manage_engine_legacy
+      loop:
+        - key: running
+          value: "{{ lxc_gpu_features_test_legacy_vmids.running }}"
+        - key: stopped
+          value: "{{ lxc_gpu_features_test_legacy_vmids.stopped }}"
+      loop_control:
+        loop_var: lxc_gpu_features_legacy_guest
+        label: "legacy GPU guest {{ lxc_gpu_features_legacy_guest.value }}"

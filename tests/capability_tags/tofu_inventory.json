@@ -1,0 +1,53 @@
+{
+  "schema_version": "2.3.0",
+  "domain": "example.test",
+  "cache_proxy_urls": {
+    "apt_cache": ["http://cache.example.test:3142"]
+  },
+  "proxmox_user": "root",
+  "constants": {},
+  "nodes": {
+    "test-gpu": { "role": "test-gpu", "tags": ["nvidia-gpu"] },
+    "test-cpu": { "role": "test-cpu", "tags": [] }
+  },
+  "containers": {
+    "nvidia-guest": {
+      "vmid": 101001,
+      "ansible_pct_vmid": 101001,
+      "node": "test-gpu",
+      "tags": ["nvidia-gpu"]
+    },
+    "media-guest": {
+      "vmid": 101002,
+      "ansible_pct_vmid": 101002,
+      "tags": ["shared-media-data"]
+    },
+    "ha-guest": {
+      "vmid": 101003,
+      "ansible_pct_vmid": 101003,
+      "tags": ["ha-managed"]
+    },
+    "ordinary-guest": {
+      "vmid": 101004,
+      "ansible_pct_vmid": 101004,
+      "tags": []
+    },
+    "container-nesting-guest": {
+      "vmid": 101005,
+      "ansible_pct_vmid": 101005,
+      "node": "test-gpu",
+      "tags": ["container-nesting"]
+    },
+    "docker-container-guest": {
+      "vmid": 101006,
+      "ansible_pct_vmid": 101006,
+      "node": "test-cpu",
+      "tags": ["container-nesting", "docker"]
+    }
+  },
+  "vms": {
+    "ha-vm": { "vmid": 101010, "tags": ["ha-managed"] },
+    "ordinary-vm": { "vmid": 101011, "tags": [] }
+  },
+  "node_storage": {}
+}
