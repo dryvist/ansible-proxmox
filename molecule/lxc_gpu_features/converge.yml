@@ -87,7 +87,7 @@
             dri: false
             kfd: false
             nvidia: true
-        - key: "{{ lxc_gpu_features_test_service_vmids['llm-6000'] }}"
+        - key: "{{ lxc_gpu_features_test_service_vmids['llm-blackwell-7-96'] }}"
           value:
             dri: false
             kfd: false

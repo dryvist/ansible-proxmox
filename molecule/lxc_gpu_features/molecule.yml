@@ -26,13 +26,13 @@ provisioner:
         lxc_gpu_features_test_service_vmids:
           llm-fast: 90101
           llm-ada-lovelace-6X-16: 90102
-          llm-6000: 90103
+          llm-blackwell-7-96: 90103
         lxc_gpu_features_test_engine_vmids:
           llama_cpp: 90104
           vllm: 90105
         lxc_gpu_features_test_nvidia_vmids:
           llm-ada-lovelace-6X-16: "{{ lxc_gpu_features_test_service_vmids['llm-ada-lovelace-6X-16'] }}"
-          llm-6000: "{{ lxc_gpu_features_test_service_vmids['llm-6000'] }}"
+          llm-blackwell-7-96: "{{ lxc_gpu_features_test_service_vmids['llm-blackwell-7-96'] }}"
           llama_cpp: "{{ lxc_gpu_features_test_engine_vmids.llama_cpp }}"
           vllm: "{{ lxc_gpu_features_test_engine_vmids.vllm }}"
         lxc_gpu_features_test_legacy_vmids:
