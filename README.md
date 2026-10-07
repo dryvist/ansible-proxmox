@@ -62,7 +62,8 @@ break-glass path from a workstation:
 
 ## Installation
 
-Requires [Ansible][ansible-install] (Mac, Linux, WSL), SSH access to Proxmox server(s), and Proxmox VE 8.x.
+Requires [Ansible][ansible-install] (Mac, Linux, WSL), SSH access to Proxmox
+server(s), and Proxmox VE 8.x.
 
 ```bash
 git clone https://github.com/JacobPEvans/ansible-proxmox.git
@@ -185,7 +186,8 @@ ulimits_nofile: 65536
 
 ## Development Environment
 
-This project uses [Nix flakes](https://wiki.nixos.org/wiki/Flakes) + [direnv](https://direnv.net/) for a reproducible dev environment.
+This project uses [Nix flakes](https://wiki.nixos.org/wiki/Flakes) +
+[direnv](https://direnv.net/) for a reproducible dev environment.
 
 Requires [Nix](https://nixos.org/download/) with flakes enabled and
 [direnv](https://direnv.net/docs/installation.html) with [nix-direnv](https://github.com/nix-community/nix-direnv).
@@ -213,7 +215,8 @@ ANSIBLE_ALLOW_BROKEN_CONDITIONALS=1 molecule test -s nas_storage
 # Verify OpenTofu inventory loading locally
 TOFU_INVENTORY_PATH=$PWD/tests/inventory_load/tofu_inventory.json \
 PROXMOX_VE_HOSTNAME=localhost \
-  ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
+  ansible-playbook tests/inventory_load/verify_inventory.yml \
+    -i inventory/hosts.yml -c local
 ```
 
 ## For Developers
@@ -257,4 +260,15 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 ---
 
-> Part of a [larger ecosystem of ~40 repos](https://docs.jacobpevans.com) — see how it all fits together.
+> Part of a larger ecosystem of ~40 repos — see how it all fits together.
+
+## CI
+
+Pull requests into `develop` run lint, syntax, contracts, and Molecule coverage
+for changed roles. Shared inputs, workflow changes, and unclassified
+role/scenario paths widen to the full matrix. Pull requests into `main` and
+pushes to `main` or `develop` run the full matrix. Required validation is
+aggregated by `Merge Gate`. Public pull-request CI stays on GitHub-hosted
+runners.
+
+See the canonical policy in the `dryvist/.github` README, “Ansible CI policy.”
