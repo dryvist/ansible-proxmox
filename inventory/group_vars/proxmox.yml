@@ -134,13 +134,10 @@ common_packages:
 pve_node_exporter_extra_args:
   - "--collector.drm"
 
-# apt caching proxies read APT_PROXY_URL. Empty disables proxying.
-#
-# The cache is an HA pair, so APT_PROXY_URL accepts several URLs separated by
-# commas and/or whitespace; one URL is still a valid value. Order is the
-# preference order — the node uses the first that answers.
+# The shared inventory publishes the sorted FQDN URL list for guests carrying
+# the apt-cache capability tag. The loader requires the list before a converge.
 pve_repositories_apt_proxies: >-
-  {{ lookup('env', 'APT_PROXY_URL') | default('', true) | regex_findall('[^,\s]+') }}
+  {{ cache_proxy_urls_from_tofu }}
 
 # Corosync voting members that are deliberately not powered on. Their vote
 # still counts toward `Highest expected` and so still raises the quorum bar,
