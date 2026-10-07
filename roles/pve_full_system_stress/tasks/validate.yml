@@ -1,0 +1,23 @@
+---
+- name: Validate stress stage selection and durations
+  ansible.builtin.assert:
+    that:
+      - pve_full_system_stress_memory_minutes | int > 0 if 'memory' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_cpu_minutes | int > 0 if 'cpu' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_storage_minutes | int >= 5 if 'storage' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_gpu_minutes | int > 0 if 'gpu' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_combined_minutes | int > 0 if 'combined' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_memory_minutes | int > pve_full_system_stress_cpu_minutes | int if 'memory' in pve_full_system_stress_stages and 'cpu' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_memory_minutes | int > pve_full_system_stress_storage_minutes | int if 'memory' in pve_full_system_stress_stages and 'storage' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_memory_minutes | int > pve_full_system_stress_gpu_minutes | int if 'memory' in pve_full_system_stress_stages and 'gpu' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_memory_minutes | int > pve_full_system_stress_combined_minutes | int if 'memory' in pve_full_system_stress_stages and 'combined' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_fio_size is match('^[1-9][0-9]*[KMGTP]$') if 'storage' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_sample_seconds | int >= 5
+      - pve_full_system_stress_stage_transition_seconds | int >= 5
+      - pve_full_system_stress_workload_margin_seconds | int > 0
+      - pve_full_system_stress_memory_minutes | int * 60 > pve_full_system_stress_workload_margin_seconds | int if 'memory' in pve_full_system_stress_stages else true
+      - pve_full_system_stress_cpu_temp_limit_c | int > 0
+    fail_msg: >-
+      Select one or more known stages in canonical order. Selected durations must be positive
+      (storage at least 5 minutes); memory must be longest when selected. Fio size and telemetry limits must be valid.
+    quiet: true

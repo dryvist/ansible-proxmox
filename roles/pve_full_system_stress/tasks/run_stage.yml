@@ -23,15 +23,15 @@
               + pve_full_system_stress_schedule_offset | int
               - pve_full_system_stress_schedule_now.stdout | int)] | max }}
     pve_full_system_stress_stage_index: >-
-      {{ pve_full_system_stress_stage_order.index(pve_full_system_stress_stage) }}
+      {{ pve_full_system_stress_stages.index(pve_full_system_stress_stage) }}
 
 - name: Resolve the previous stage and its remaining timers
   ansible.builtin.set_fact:
     pve_full_system_stress_previous_stage: >-
-      {{ pve_full_system_stress_stage_order[pve_full_system_stress_stage_index | int - 1]
+      {{ pve_full_system_stress_stages[pve_full_system_stress_stage_index | int - 1]
          if pve_full_system_stress_stage_index | int > 0 else '' }}
     pve_full_system_stress_future_stages: >-
-      {{ pve_full_system_stress_stage_order[pve_full_system_stress_stage_index | int + 1 :] }}
+      {{ pve_full_system_stress_stages[pve_full_system_stress_stage_index | int + 1 :] }}
     pve_full_system_stress_stage_argv: >-
       {{ ['systemd-run',
           '--unit=' ~ pve_full_system_stress_stage_unit,

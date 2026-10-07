@@ -1,0 +1,3 @@
+# Read from systemctl show --property=LoadState,ActiveState,SubState,Result --value
+# for an absent pve-full-system-stress timer on a real Proxmox node.
+success,not-found,inactive,dead

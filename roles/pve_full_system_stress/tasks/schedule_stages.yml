@@ -1,6 +1,19 @@
 ---
 - name: Record the campaign start and schedule all stages
   block:
+    - name: Initialize the selected stage schedule and durations
+      ansible.builtin.set_fact:
+        pve_full_system_stress_schedule_offset: 1
+        pve_full_system_stress_scheduled_stages: []
+        pve_full_system_stress_total_duration_seconds: >-
+          {{ (pve_full_system_stress_stages | map('extract', {
+            'memory': pve_full_system_stress_memory_minutes | int,
+            'cpu': pve_full_system_stress_cpu_minutes | int,
+            'storage': pve_full_system_stress_storage_minutes | int,
+            'gpu': pve_full_system_stress_gpu_minutes | int,
+            'combined': pve_full_system_stress_combined_minutes | int
+          }) | sum) * 60 }}
+
     - name: Record the start of the detached campaign
       ansible.builtin.command:
         argv:
@@ -14,12 +27,9 @@
             pve_full_system_stress run={{ pve_full_system_stress_run_id }}
             event=campaign_start start_utc={{ pve_full_system_stress_campaign_started_at }}
             profile={{ pve_full_system_stress_profile }}
+            selected_stages={{ pve_full_system_stress_stages | join(',') }}
             memory_ecc={{ pve_full_system_stress_memory_ecc | ternary('true', 'false') }}
-            duration_seconds={{ pve_full_system_stress_memory_minutes | int * 60
-              + pve_full_system_stress_cpu_minutes | int * 60
-              + pve_full_system_stress_storage_minutes | int * 60
-              + pve_full_system_stress_gpu_minutes | int * 60
-              + pve_full_system_stress_combined_minutes | int * 60 }}
+            duration_seconds={{ pve_full_system_stress_total_duration_seconds }}
       changed_when: false
 
     - name: Record the schedule base time and initial stage offset
@@ -28,10 +38,20 @@
       register: pve_full_system_stress_schedule_base
       changed_when: false
 
-    - name: Initialize the stage schedule
-      ansible.builtin.set_fact:
-        pve_full_system_stress_schedule_offset: 1
-        pve_full_system_stress_scheduled_stages: []
+    - name: Record each omitted stage
+      ansible.builtin.command:
+        argv:
+          - logger
+          - -t
+          - pve-full-system-stress
+          - -p
+          - daemon.info
+          - --
+          - "pve_full_system_stress run={{ pve_full_system_stress_run_id }} stage={{ item }} event=stage_skipped reason=not_selected"
+      loop: "{{ pve_full_system_stress_stage_order | reject('in', pve_full_system_stress_stages) | list }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
 
     - name: Schedule memory stress first and longest
       ansible.builtin.include_tasks:
@@ -62,6 +82,7 @@
               - --metrics-brief
               - --timeout
               - "{{ (pve_full_system_stress_memory_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int) }}s"
+      when: pve_full_system_stress_stage in pve_full_system_stress_stages
 
     - name: Schedule all-core CPU stress
       ansible.builtin.include_tasks:
@@ -89,6 +110,7 @@
               - --metrics-brief
               - --timeout
               - "{{ (pve_full_system_stress_cpu_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int) }}s"
+      when: pve_full_system_stress_stage in pve_full_system_stress_stages
 
     - name: Schedule random storage stress on the rpool scratch dataset
       ansible.builtin.include_tasks:
@@ -122,6 +144,7 @@
               - "--runtime={{ pve_full_system_stress_storage_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int }}"
               - "--size={{ pve_full_system_stress_fio_size }}"
               - --group_reporting
+      when: pve_full_system_stress_stage in pve_full_system_stress_stages
 
     - name: Schedule NVIDIA GPU Burn
       ansible.builtin.include_tasks:
@@ -143,6 +166,7 @@
             argv:
               - "{{ pve_full_system_stress_gpu_burn_dir }}/gpu_burn"
               - "{{ pve_full_system_stress_gpu_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int }}"
+      when: pve_full_system_stress_stage in pve_full_system_stress_stages
 
     - name: Schedule combined CPU, memory, and GPU stress
       ansible.builtin.include_tasks:
@@ -180,6 +204,7 @@
             argv:
               - "{{ pve_full_system_stress_gpu_burn_dir }}/gpu_burn"
               - "{{ pve_full_system_stress_combined_minutes | int * 60 - pve_full_system_stress_workload_margin_seconds | int }}"
+      when: pve_full_system_stress_stage in pve_full_system_stress_stages
 
     - name: Return the id used for status polls
       ansible.builtin.debug:
