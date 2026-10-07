@@ -241,6 +241,29 @@
          | default({}, true) | length) > 0
       changed_when: false
 
+    - name: Validate container-nesting guests resolve to node-local VMIDs
+      ansible.builtin.assert:
+        that:
+          - >-
+            load_tofu_container_nesting_guests | length ==
+            (load_tofu_container_nesting_guests
+             | selectattr('value.node', 'defined')
+             | selectattr('value.ansible_pct_vmid', 'defined')
+             | list | length)
+          - >-
+            load_tofu_container_nesting_guests | length ==
+            (groups['proxmox'] | default([])
+             | map('extract', hostvars, 'lxc_features_service_vmids_from_tofu')
+             | select('defined') | map('length') | sum)
+        fail_msg: >-
+          Every non-Docker container tagged `container-nesting` must publish
+          its node and Ansible PCT VMID and resolve to exactly one Proxmox
+          host. Otherwise the root-only feature role would silently skip it.
+        success_msg: >-
+          All {{ load_tofu_container_nesting_guests | length }} tagged guests
+          resolve to node-local Proxmox feature targets.
+      when: load_tofu_container_nesting_guests | length > 0
+
     # The same pass-through for VMs. Absent before this, which is why a
     # host_vars expression could reach a container's dataset but never a VM's:
     # docker VM 250 had NO snapshot coverage because nothing downstream could
