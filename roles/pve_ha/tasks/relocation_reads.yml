@@ -1,0 +1,56 @@
+---
+- name: Read current replication definitions before changing relocation limits
+  ansible.builtin.command: pvesh get /cluster/replication --output-format json
+  register: pve_ha_preflight_replication_raw
+  changed_when: false
+
+- name: Read current HA rules before changing relocation limits
+  ansible.builtin.command: pvesh get /cluster/ha/rules --output-format json
+  register: pve_ha_preflight_rules_raw
+  changed_when: false
+
+- name: Include every planned relocation limit in admission
+  ansible.builtin.set_fact:
+    pve_ha_relocation_resources: >-
+      {%- set ns = namespace(resources=pve_ha_resources_raw.stdout | from_json) -%}
+      {%- for sid in pve_ha_managed_sids -%}
+        {%- set limit = pve_ha_max_relocate if sid in pve_ha_relocatable_sids else pve_ha_pinned_max_relocate -%}
+        {%- set ns.resources = ns.resources + [{'sid': sid, 'max_relocate': limit}] -%}
+      {%- endfor -%}
+      {{ ns.resources }}
+
+- name: Read actual guest placement for guest disk admission
+  ansible.builtin.command: pvesh get /cluster/resources --output-format json
+  register: pve_ha_preflight_resources_raw
+  changed_when: false
+
+- name: Read actual disk configurations for existing and planned relocating guests
+  ansible.builtin.command: >-
+    pvesh get /nodes/{{ placement.node }}/{{ 'qemu' if item.sid.startswith('vm:') else 'lxc' }}/{{ item.sid.split(':')[1] }}/config
+    --output-format json
+  loop: "{{ pve_ha_relocation_resources }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  vars:
+    placement: >-
+      {{ (pve_ha_preflight_resources_raw.stdout | from_json
+          | selectattr('type', 'equalto', 'qemu' if item.sid.startswith('vm:') else 'lxc')
+          | selectattr('vmid', 'equalto', item.sid.split(':')[1] | int)
+          | list | first) }}
+  when:
+    - item.max_relocate | default(1) | int > 0
+  register: pve_ha_preflight_guest_raw
+  changed_when: false
+
+- name: Index actual guest disk configurations by SID
+  ansible.builtin.set_fact:
+    pve_ha_preflight_guest_configs: >-
+      {{ pve_ha_preflight_guest_configs | default({})
+         | combine({item.item.sid: item.stdout | from_json}) }}
+  loop: "{{ pve_ha_preflight_guest_raw.results }}"
+  loop_control:
+    label: "{{ item.item.sid }}"
+  when: not item.skipped | default(false)
+
+- name: Admit existing and planned relocation only with complete metadata
+  ansible.builtin.include_tasks: relocation_preflight.yml

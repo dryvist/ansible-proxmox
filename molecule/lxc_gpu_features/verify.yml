@@ -5,7 +5,7 @@
   gather_facts: false
 
   vars:
-    nvidia_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-4080'] }}.conf"
+    nvidia_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-ada-lovelace-6X-16'] }}.conf"
     nvidia_6000_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-blackwell-7-96'] }}.conf"
     llama_engine_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_engine_vmids.llama_cpp }}.conf"
     vllm_engine_conf: "/etc/pve/lxc/{{ lxc_gpu_features_test_engine_vmids.vllm }}.conf"
