@@ -39,6 +39,7 @@ See `defaults/main.yml` for complete list. Key variables:
 | `kernel_tuning_clocksource`         | `""`    | Forced clocksource; empty lets the kernel choose           |
 | `kernel_tuning_disable_smt`         | `false` | Add `nosmt` parameter                                      |
 | `kernel_tuning_manage_crashkernel`  | `false` | Manage crashkernel (conflicts with crash_diagnostics role) |
+| `kernel_tuning_cpu_governor`        | `""`    | CPU governor set on every core at boot; empty leaves default |
 
 ### Hardware-Specific Settings
 

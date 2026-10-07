@@ -295,3 +295,38 @@
     state: stopped
   failed_when: false
   when: not (kernel_tuning_disable_zen_c6 | bool)
+
+# ------------------------------------------------------------------------------
+# CPU frequency governor (opt-in via kernel_tuning_cpu_governor)
+# ------------------------------------------------------------------------------
+- name: Manage the CPU frequency governor
+  tags:
+    - kernel_tuning
+    - cpu_governor
+  block:
+    - name: Declare the CPU governor for boot
+      ansible.builtin.copy:
+        content: |
+          {{ ansible_managed | comment }}
+          w /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor - - - - {{ kernel_tuning_cpu_governor }}
+        dest: "{{ kernel_tuning_cpu_governor_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: kernel_tuning_cpu_governor_conf
+      when: kernel_tuning_cpu_governor | length > 0
+
+    - name: Apply the CPU governor now
+      ansible.builtin.command:
+        cmd: systemd-tmpfiles --create {{ kernel_tuning_cpu_governor_file }}
+      changed_when: true
+      when:
+        - kernel_tuning_cpu_governor | length > 0
+        - kernel_tuning_cpu_governor_conf.changed
+        - ansible_virtualization_type | default('') != 'docker'
+
+    - name: Remove the CPU governor declaration when unset
+      ansible.builtin.file:
+        path: "{{ kernel_tuning_cpu_governor_file }}"
+        state: absent
+      when: kernel_tuning_cpu_governor | length == 0
