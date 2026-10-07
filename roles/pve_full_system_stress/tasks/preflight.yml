@@ -1,14 +1,6 @@
 ---
-- name: Resolve NVIDIA LXC service identities from the published inventory
-  ansible.builtin.set_fact:
-    pve_full_system_stress_gpu_vmids: >-
-      {{ lxc_gpu_features_map | dict2items
-         | selectattr('value.nvidia', 'defined')
-         | selectattr('value.nvidia', 'equalto', true)
-         | selectattr('key', 'in', lxc_gpu_features_service_vmids_from_tofu)
-         | map(attribute='key')
-         | map('extract', lxc_gpu_features_service_vmids_from_tofu)
-         | map('string') | unique | list }}
+- name: Resolve NVIDIA-tagged LXC identities from the published inventory
+  ansible.builtin.import_tasks: resolve_gpu_vmids.yml
 
 - name: Read running LXC identifiers on this host
   ansible.builtin.command:

@@ -1,9 +1,13 @@
 ---
-# LXC container feature configuration
-# Maps container IDs to their desired feature strings (pct set --features format)
-#
-# Example:
-#   lxc_features_containers:
-#     "110": "nesting=1,keyctl=1,fuse=1"
-#     "111": "nesting=1,keyctl=1,fuse=1"
-lxc_features_containers: {}
+# Root-only Proxmox LXC features for guests selected by the
+# `container-nesting` capability tag. The service -> VMID projection comes from
+# playbooks/load_tofu.yml; no guest names or VMIDs live in role configuration.
+
+lxc_features_service_vmids_from_tofu: {}
+
+lxc_features_desired_tokens:
+  - nesting=1
+  - keyctl=1
+  - fuse=1
+
+lxc_features_desired_features: "{{ lxc_features_desired_tokens | join(',') }}"

@@ -13,24 +13,29 @@
 
   vars:
     lxc_gpu_features_service_vmids_from_tofu: "{{ lxc_gpu_features_test_service_vmids }}"
-    lxc_gpu_features_engine_vmids_from_tofu: "{{ lxc_gpu_features_test_engine_vmids }}"
+    lxc_gpu_features_nvidia_vmids_from_tofu: "{{ lxc_gpu_features_test_nvidia_vmids }}"
 
   tasks:
     - name: Converge lxc_gpu_features
       ansible.builtin.include_role:
         name: lxc_gpu_features
 
-    - name: Assert both engine identities resolve to NVIDIA passthrough
+    - name: Assert NVIDIA-tagged services and engines resolve to passthrough
       ansible.builtin.assert:
         that:
-          - lxc_gpu_features_engine_resolved['90104'].nvidia | bool
-          - lxc_gpu_features_engine_resolved['90105'].nvidia | bool
+          - lxc_gpu_features_nvidia_resolved | length == 4
+          - "'90101' not in lxc_gpu_features_nvidia_resolved"
+          - lxc_gpu_features_nvidia_resolved['90102'].nvidia | bool
+          - lxc_gpu_features_nvidia_resolved['90103'].nvidia | bool
+          - lxc_gpu_features_nvidia_resolved['90104'].nvidia | bool
+          - lxc_gpu_features_nvidia_resolved['90105'].nvidia | bool
+          - lxc_gpu_features_resolved['90102'].nvidia | bool
+          - lxc_gpu_features_resolved['90103'].nvidia | bool
           - lxc_gpu_features_resolved['90104'].nvidia | bool
           - lxc_gpu_features_resolved['90105'].nvidia | bool
-          - lxc_gpu_features_resolved['90103'].nvidia | bool
         fail_msg: >-
-          Engine identities must resolve alongside the existing service map;
-          the active NVIDIA service and both engine guests keep passthrough.
+          NVIDIA tags must preserve both service guests and select both engine
+          guests, while excluding the AMD fixture guest.
 
 # Play 2 — the NVIDIA line construction, against the ROLE'S OWN task file.
 #

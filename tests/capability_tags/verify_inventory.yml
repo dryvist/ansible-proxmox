@@ -1,0 +1,57 @@
+---
+- name: Load capability-tagged inventory
+  import_playbook: ../../playbooks/load_tofu.yml
+
+- name: Verify capability membership is derived from published tags
+  hosts: localhost
+  gather_facts: false
+  vars:
+    containers_from_tofu: "{{ hostvars['test-gpu-node'].containers_from_tofu }}"
+    vms_from_tofu: "{{ hostvars['test-gpu-node'].vms_from_tofu }}"
+  tasks:
+    - name: Load the Proxmox HA membership defaults
+      ansible.builtin.include_vars:
+        file: ../../roles/pve_ha/defaults/main/30_membership.yml
+
+    - name: Verify node, GPU, media, and HA capability selection
+      ansible.builtin.assert:
+        that:
+          - "'test-gpu-node' in groups['nvidia_gpu_nodes']"
+          - "'test-cpu-node' not in groups['nvidia_gpu_nodes']"
+          - hostvars['test-gpu-node'].nvidia_driver_enabled | bool
+          - not (hostvars['test-cpu-node'].nvidia_driver_enabled | bool)
+          - hostvars['test-gpu-node'].cribl_edge_gpu_mode == 'custom'
+          - hostvars['test-cpu-node'].cribl_edge_gpu_mode == 'disabled'
+          - >-
+            hostvars['test-gpu-node'].lxc_gpu_features_nvidia_vmids_from_tofu
+            == {'nvidia-guest': 101001}
+          - >-
+            hostvars['test-gpu-node'].media_lxc_features_service_vmids_from_tofu
+            == {'media-guest': 101002}
+          - "'test-gpu-node' in groups['container_nesting_hosts']"
+          - "'test-cpu-node' not in groups['container_nesting_hosts']"
+          - >-
+            hostvars['test-gpu-node'].lxc_features_service_vmids_from_tofu
+            == {'container-nesting-guest': 101005}
+          - >-
+            hostvars['test-cpu-node'].lxc_features_service_vmids_from_tofu
+            == {}
+          - pve_ha_ct_hostnames | sort == ['ha-guest']
+          - pve_ha_vm_names | sort == ['ha-vm']
+        fail_msg: >-
+          Capability-tag groups and role selectors must include only the
+          matching synthetic inventory entries.
+
+    - name: Resolve the stress guard GPU guests through its production task
+      ansible.builtin.import_tasks: ../../roles/pve_full_system_stress/tasks/resolve_gpu_vmids.yml
+      vars:
+        lxc_gpu_features_nvidia_vmids_from_tofu: >-
+          {{ hostvars['test-gpu-node'].lxc_gpu_features_nvidia_vmids_from_tofu }}
+
+    - name: Verify the stress guard selects only the NVIDIA-tagged guest
+      ansible.builtin.assert:
+        that:
+          - pve_full_system_stress_gpu_vmids == ['101001']
+        fail_msg: >-
+          The stress guard must resolve exactly the published NVIDIA-tagged
+          guest VMIDs, independently of the removed service-name map.

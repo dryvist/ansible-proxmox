@@ -1,0 +1,17 @@
+---
+- name: Restart changed LXC feature containers
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      if pct status {{ item }} | grep -q 'status: running'; then
+        pct stop {{ item }}
+      fi
+      pct start {{ item }}
+    executable: /bin/bash
+  loop: "{{ lxc_features_changed | default([]) | unique }}"
+  loop_control:
+    label: "container {{ item }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - lxc_features_changed | default([]) | length > 0
+  changed_when: true

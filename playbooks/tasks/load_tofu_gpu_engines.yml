@@ -56,17 +56,19 @@
             )
         )
       }}
-    lxc_gpu_features_engine_vmids_from_tofu: >-
+    lxc_gpu_features_nvidia_vmids_from_tofu: >-
       {{
         dict(
           (tofu_data.containers | default({})) | dict2items
-          | selectattr('value.llm_gpu_engine_identity', 'defined')
-          | selectattr('value.llm_gpu_engine_identity', 'in', ['llama_cpp', 'vllm'])
-          | map(attribute='value.llm_gpu_engine_identity') | list
+          | selectattr('value.tags', 'defined')
+          | selectattr('value.tags', 'contains', 'nvidia-gpu')
+          | selectattr('value.ansible_pct_vmid', 'defined')
+          | map(attribute='key') | list
           | zip(
               (tofu_data.containers | default({})) | dict2items
-              | selectattr('value.llm_gpu_engine_identity', 'defined')
-              | selectattr('value.llm_gpu_engine_identity', 'in', ['llama_cpp', 'vllm'])
+              | selectattr('value.tags', 'defined')
+              | selectattr('value.tags', 'contains', 'nvidia-gpu')
+              | selectattr('value.ansible_pct_vmid', 'defined')
               | map(attribute='value.ansible_pct_vmid') | list
             )
         )
@@ -96,7 +98,7 @@
       }}
   loop: "{{ groups['proxmox'] | default([]) }}"
 
-# Fail loud when the projection comes out empty against a non-empty
+# Fail loud when the service projection comes out empty against a non-empty
 # container map. Both maps above are consumed by roles that iterate them:
 # an empty map makes those roles no-op at rc=0 with changed=0, which reads
 # as "already converged" and is indistinguishable from success. Every task

@@ -74,6 +74,13 @@ jobs:
           PROXMOX_VE_HOSTNAME=localhost \
           ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
 
+      - name: Verify capability-tag inventory selection
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          TOFU_INVENTORY_PATH=$PWD/tests/capability_tags/tofu_inventory.json \
+          ansible-playbook tests/capability_tags/verify_inventory.yml -i inventory/hosts.yml -i tests/capability_tags/hosts.yml -c local
+
       # pve_ha's replication logic cannot be exercised by molecule (it needs a
       # real cluster), so it is pinned by fixture-driven assertions instead.
       - name: Verify pve_ha replication derivation and self-heal selection

@@ -1,0 +1,6 @@
+---
+- name: Resolve NVIDIA-tagged LXC identities from the published inventory
+  ansible.builtin.set_fact:
+    pve_full_system_stress_gpu_vmids: >-
+      {{ lxc_gpu_features_nvidia_vmids_from_tofu | default({}) | dict2items
+         | map(attribute='value') | map('string') | unique | list }}

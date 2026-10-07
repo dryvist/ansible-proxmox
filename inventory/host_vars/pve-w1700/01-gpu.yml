@@ -21,7 +21,6 @@
 # with the container. The AMD dri/kfd entry for the retired llm-fast service
 # is removed at its source in that same defaults file instead of disabled
 # per-node, for the identical reason: it is not node-scoped to begin with.
-nvidia_driver_enabled: true
 # LLM decode is memory-bandwidth-bound, so a lower limit costs little speed and
 # cuts heat and fan noise. 200 W is about 62% of this card's default limit.
 nvidia_driver_power_limit_w: 200

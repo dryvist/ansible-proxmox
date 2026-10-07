@@ -54,8 +54,8 @@
         - idrac_power
 
     # NVIDIA host GPU driver, so LXC guests can be handed the card via device
-    # passthrough. Inert unless a host sets nvidia_driver_enabled: true, and
-    # fails loud if opted in on a node with no NVIDIA card on the PCI bus.
+    # passthrough. Node membership in nvidia_gpu_nodes comes from the Tofu
+    # `nvidia-gpu` capability tag; the role fails loud if the tag has no card.
     # Reports rather than takes the reboot the driver switch needs.
     - role: nvidia_driver
       tags:

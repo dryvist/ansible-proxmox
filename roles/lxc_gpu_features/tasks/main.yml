@@ -39,16 +39,16 @@
   tags:
     - lxc_gpu_features
 
-- name: Resolve engine-identified NVIDIA guests to current vmids
+- name: Resolve NVIDIA-tagged guests to current vmids
   ansible.builtin.set_fact:
-    lxc_gpu_features_engine_resolved: >-
+    lxc_gpu_features_nvidia_resolved: >-
       {{
         dict(
-          (lxc_gpu_features_engine_vmids_from_tofu | default({}) | dict2items
+          (lxc_gpu_features_nvidia_vmids_from_tofu | default({}) | dict2items
            | map(attribute='value') | map('string') | list)
           | zip(
               [lxc_gpu_features_nvidia_guest_features]
-              * (lxc_gpu_features_engine_vmids_from_tofu | default({}) | length)
+              * (lxc_gpu_features_nvidia_vmids_from_tofu | default({}) | length)
             )
         )
       }}
@@ -58,7 +58,7 @@
 - name: Combine service and engine GPU feature mappings
   ansible.builtin.set_fact:
     lxc_gpu_features_resolved: >-
-      {{ lxc_gpu_features_service_resolved | combine(lxc_gpu_features_engine_resolved) }}
+      {{ lxc_gpu_features_service_resolved | combine(lxc_gpu_features_nvidia_resolved) }}
   tags:
     - lxc_gpu_features
 
