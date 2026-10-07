@@ -1,6 +1,9 @@
 {
   "schema_version": "2.3.0",
   "domain": "example.test",
+  "cache_proxy_urls": {
+    "apt_cache": ["http://cache.example.test:3142"]
+  },
   "proxmox_user": "root",
   "constants": {},
   "nodes": {

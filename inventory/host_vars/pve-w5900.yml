@@ -54,10 +54,8 @@ nvidia_driver_gpu_burn_enabled: true
 nvidia_driver_gpu_burn_compute: "120"
 nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda-13.2
 
-# Max-Q-class card at its factory default board power (driver range
-# 250-325 W). Null declares no cap: roles/nvidia_driver removes any earlier
-# cap's boot unit and resets the card to the default the driver reports.
-nvidia_driver_power_limit_w: null
+# Temporary thermal cap.
+nvidia_driver_power_limit_w: 290
 
 # Every core runs the performance governor.
 kernel_tuning_cpu_governor: performance
