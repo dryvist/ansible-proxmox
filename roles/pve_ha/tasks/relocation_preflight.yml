@@ -1,0 +1,84 @@
+---
+# Read-only admission: current relocation must have an enabled replica in the
+# intersection of its strict rules. A configured target alone is no replica.
+- name: Require a safe target for every existing or planned relocating HA resource
+  ansible.builtin.assert:
+    that:
+      - pve_ha_relocation_evidence.strict_rules | int > 0
+      - pve_ha_relocation_evidence.targets | length > 0
+      - pve_ha_relocation_evidence.unsupported | length == 0
+      - not item.sid.startswith('vm:') or pve_ha_relocation_disks | length > 0
+      - pve_ha_live_disks | length > 0
+      - pve_ha_live_disks | selectattr('value', 'search', '(^|,)replicate=0(,|$)') | list | length == 0
+      - pve_ha_live_disks | selectattr('value', 'match', '^/') | list | length == 0
+      - >-
+        not item.sid.startswith('vm:') or pve_ha_live_disks | map(attribute='key') | difference(pve_ha_relocation_disks |
+        map(attribute='interface') | list) | length == 0
+    fail_msg: >-
+      HA relocation admission failed for {{ item.sid }}:
+      {{ pve_ha_relocation_evidence }}. Disk admission:
+      {{ pve_ha_disk_evidence }}. Reconcile replication and strict
+      node-affinity metadata before changing relocation limits. Prepare and
+      verify replication before enrolling a new relocating resource.
+    success_msg: >-
+      HA relocation admission passed for {{ item.sid }}:
+      {{ pve_ha_relocation_evidence }}. Disk admission:
+      {{ pve_ha_disk_evidence }}. Enabled replication is configuration
+      evidence; successful synchronization and all required volumes must
+      still be verified before a relocation.
+  loop: "{{ pve_ha_relocation_resources | default(pve_ha_resources_raw.stdout | from_json) }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when: item.max_relocate | default(1) | int > 0
+  vars:
+    pve_ha_current_placement: >-
+      {{ (pve_ha_preflight_resources_raw.stdout | from_json
+          | selectattr('type', 'equalto', 'qemu' if item.sid.startswith('vm:') else 'lxc')
+          | selectattr('vmid', 'equalto', item.sid.split(':')[1] | int)
+          | list | first | default({})) }}
+    pve_ha_relocation_disks: >-
+      {{ (vms_from_tofu | default({}) | dict2items
+          | selectattr('value.vmid', 'defined')
+          | selectattr('value.vmid', 'equalto', item.sid.split(':')[1] | int)
+          | selectattr('value.disks', 'defined')
+          | map(attribute='value.disks') | flatten) }}
+    pve_ha_live_disks: >-
+      {{ pve_ha_preflight_guest_configs | default({})
+         | dict2items | selectattr('key', 'equalto', item.sid)
+         | map(attribute='value') | first | default({}) | dict2items
+         | selectattr('key', 'match', '^(rootfs|mp[0-9]+|(scsi|virtio|sata|ide|efidisk|tpmstate)[0-9]+)$')
+         | rejectattr('value', 'search', '(^|,)media=cdrom(,|$)') | list }}
+    pve_ha_disk_evidence: >-
+      {{ {'actual': pve_ha_live_disks | map(attribute='key') | list,
+          'published': pve_ha_relocation_disks | map(attribute='interface') | list,
+          'excluded': pve_ha_live_disks | selectattr('value', 'search', '(^|,)replicate=0(,|$)')
+                      | map(attribute='key') | list} }}
+    pve_ha_relocation_evidence: >-
+      {%- set ns = namespace(allowed=none, rules=0, targets=[], unsupported=[]) -%}
+      {%- for rule in pve_ha_preflight_rules_raw.stdout | from_json -%}
+        {%- if rule.type == 'node-affinity' and rule.strict | default(0) | int == 1
+               and item.sid in rule.resources | default('') | split(',') -%}
+          {%- set ns.rules = ns.rules + 1 -%}
+          {%- if rule.affinity | default('positive') != 'positive'
+                 or rule.nodes is not defined or rule.nodes is not string
+                 or rule.nodes | length == 0 -%}
+            {%- set ns.unsupported = ns.unsupported + [rule.rule | default('unknown')] -%}
+          {%- else -%}
+            {%- set nodes = rule.nodes | split(',') | map('regex_replace', ':.*$', '') | list -%}
+            {%- set ns.allowed = nodes if ns.allowed is none else ns.allowed | intersect(nodes) -%}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- for job in pve_ha_preflight_replication_raw.stdout | from_json -%}
+        {%- if job.guest | string == item.sid.split(':')[1]
+               and not job.disable | default(0) | bool
+               and job.source == pve_ha_current_placement.node | default('')
+               and job.source in (ns.allowed | default([], true))
+               and job.source != job.target
+               and job.target in (ns.allowed | default([], true)) -%}
+          {%- set ns.targets = ns.targets + [job.target] -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ {'strict_rules': ns.rules, 'allowed': ns.allowed | default([], true),
+          'current_node': pve_ha_current_placement.node | default(''),
+          'targets': ns.targets, 'unsupported': ns.unsupported} }}

@@ -155,6 +155,9 @@
       {{ (pve_ha_resources_raw.stdout | from_json)
          | map(attribute='sid') | list }}
 
+- name: Read and admit existing and planned relocation before HA writes
+  ansible.builtin.include_tasks: relocation_reads.yml
+
 - name: Add tier-0 guests to HA (only those not yet managed)
   ansible.builtin.command: >-
     ha-manager add {{ item }}

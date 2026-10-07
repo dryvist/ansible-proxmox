@@ -1,0 +1,246 @@
+{
+  "resources": [
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:12012",
+      "state": "started"
+    },
+    {
+      "max_relocate": 1,
+      "max_restart": 3,
+      "sid": "ct:12011",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:12007",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:12004",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:12002",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:12006",
+      "state": "started"
+    },
+    {
+      "max_relocate": 1,
+      "max_restart": 3,
+      "sid": "ct:12010",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:12003",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:12008",
+      "state": "started"
+    },
+    {
+      "max_relocate": 1,
+      "max_restart": 3,
+      "sid": "vm:12005",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:12001",
+      "state": "started"
+    },
+    {
+      "max_relocate": 1,
+      "max_restart": 3,
+      "sid": "ct:12009",
+      "state": "started"
+    },
+    {
+      "max_relocate": 0,
+      "max_restart": 3,
+      "sid": "ct:12000",
+      "state": "started"
+    }
+  ],
+  "rules": [
+    {
+      "affinity": "negative",
+      "resources": "ct:12004,ct:12006",
+      "rule": "fixture-rule-0",
+      "type": "resource-affinity"
+    },
+    {
+      "affinity": "negative",
+      "resources": "ct:12007,ct:12008",
+      "rule": "fixture-rule-1",
+      "type": "resource-affinity"
+    },
+    {
+      "affinity": "positive",
+      "nodes": "node-c",
+      "resources": "ct:12003,ct:12001",
+      "rule": "fixture-rule-2",
+      "strict": 1,
+      "type": "node-affinity"
+    },
+    {
+      "affinity": "positive",
+      "nodes": "node-d",
+      "resources": "ct:12002,ct:12004,ct:12007",
+      "rule": "fixture-rule-3",
+      "strict": 1,
+      "type": "node-affinity"
+    },
+    {
+      "affinity": "positive",
+      "nodes": "node-b",
+      "resources": "ct:12006,ct:12000,ct:12008,ct:12012",
+      "rule": "fixture-rule-4",
+      "strict": 1,
+      "type": "node-affinity"
+    },
+    {
+      "affinity": "positive",
+      "nodes": "node-c,node-d",
+      "resources": "ct:12009,ct:12010,ct:12011,vm:12005",
+      "rule": "fixture-rule-5",
+      "strict": 1,
+      "type": "node-affinity"
+    },
+    {
+      "affinity": "negative",
+      "resources": "ct:12002,ct:12003",
+      "rule": "fixture-rule-6",
+      "type": "resource-affinity"
+    },
+    {
+      "affinity": "negative",
+      "resources": "ct:12000,ct:12001",
+      "rule": "fixture-rule-7",
+      "type": "resource-affinity"
+    }
+  ],
+  "jobs": [
+    {
+      "disable": 1,
+      "guest": 12005,
+      "id": "12005-0",
+      "schedule": "*/5",
+      "source": "node-c",
+      "target": "node-e",
+      "type": "local"
+    },
+    {
+      "guest": 12008,
+      "id": "12008-0",
+      "schedule": "*/5",
+      "source": "node-b",
+      "target": "node-c",
+      "type": "local"
+    },
+    {
+      "guest": 12009,
+      "id": "12009-0",
+      "schedule": "*/5",
+      "source": "node-c",
+      "target": "node-d",
+      "type": "local"
+    },
+    {
+      "guest": 12010,
+      "id": "12010-0",
+      "schedule": "*/5",
+      "source": "node-c",
+      "target": "node-d",
+      "type": "local"
+    },
+    {
+      "guest": 12011,
+      "id": "12011-0",
+      "schedule": "*/5",
+      "source": "node-c",
+      "target": "node-d",
+      "type": "local"
+    }
+  ],
+  "published_vms": {
+    "vm:12005": {
+      "vmid": 12005,
+      "disks": [
+        {
+          "datastore": "local-zfs",
+          "interface": "scsi0",
+          "path": "vm-12005-disk-0"
+        },
+        {
+          "datastore": "local-zfs",
+          "interface": "scsi1",
+          "path": "vm-12005-disk-1"
+        }
+      ]
+    }
+  },
+  "guest_configs": {
+    "vm:12005": {
+      "ide2": "local-zfs:vm-12005-cloudinit,media=cdrom,size=4M",
+      "scsi0": "local-zfs:vm-12005-disk-0,aio=io_uring,backup=1,cache=none,discard=ignore,iothread=1,replicate=1,size=100G,ssd=0",
+      "scsi1": "local-zfs:vm-12005-disk-1,aio=io_uring,backup=1,cache=none,discard=ignore,iothread=1,replicate=1,size=100G,ssd=0"
+    },
+    "ct:12011": {
+      "mp0": "local-zfs:subvol-12011-disk-1,mp=/opt/zammad,size=40G",
+      "rootfs": "local-zfs:subvol-12011-disk-0,size=24G"
+    },
+    "ct:12010": {
+      "mp0": "local-zfs:subvol-12010-disk-1,mp=/var/lib/vikunja,size=10G",
+      "rootfs": "local-zfs:subvol-12010-disk-0,size=8G"
+    },
+    "ct:12009": {
+      "mp0": "local-zfs:subvol-12009-disk-1,mp=/opt/nautobot,size=40G",
+      "rootfs": "local-zfs:subvol-12009-disk-0,size=24G"
+    }
+  },
+  "placements": [
+    {
+      "vmid": 12005,
+      "type": "qemu",
+      "node": "node-c"
+    },
+    {
+      "vmid": 12009,
+      "type": "lxc",
+      "node": "node-c"
+    },
+    {
+      "vmid": 12010,
+      "type": "lxc",
+      "node": "node-c"
+    },
+    {
+      "vmid": 12011,
+      "type": "lxc",
+      "node": "node-c"
+    },
+    {
+      "vmid": 12008,
+      "type": "lxc",
+      "node": "node-b"
+    }
+  ]
+}
