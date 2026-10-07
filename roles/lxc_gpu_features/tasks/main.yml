@@ -24,7 +24,7 @@
 
 - name: Resolve the GPU service feature map to current vmids
   ansible.builtin.set_fact:
-    lxc_gpu_features_resolved: >-
+    lxc_gpu_features_service_resolved: >-
       {{
         dict(
           (
@@ -36,6 +36,29 @@
           | zip(lxc_gpu_features_selected | map(attribute='value') | list)
         )
       }}
+  tags:
+    - lxc_gpu_features
+
+- name: Resolve engine-identified NVIDIA guests to current vmids
+  ansible.builtin.set_fact:
+    lxc_gpu_features_engine_resolved: >-
+      {{
+        dict(
+          (lxc_gpu_features_engine_vmids_from_tofu | default({}) | dict2items
+           | map(attribute='value') | map('string') | list)
+          | zip(
+              [lxc_gpu_features_nvidia_guest_features]
+              * (lxc_gpu_features_engine_vmids_from_tofu | default({}) | length)
+            )
+        )
+      }}
+  tags:
+    - lxc_gpu_features
+
+- name: Combine service and engine GPU feature mappings
+  ansible.builtin.set_fact:
+    lxc_gpu_features_resolved: >-
+      {{ lxc_gpu_features_service_resolved | combine(lxc_gpu_features_engine_resolved) }}
   tags:
     - lxc_gpu_features
 
@@ -58,6 +81,83 @@
         | list
       }}
   when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - lxc_gpu_features
+
+- name: Log the legacy GPU guest runtime handoff decision
+  ansible.builtin.debug:
+    msg: >-
+      GPU engine legacy handoff candidates={{ lxc_gpu_features_legacy_engine_vmids_from_tofu | default({}) | length }};
+      candidates present on this host={{
+        (lxc_gpu_features_legacy_engine_vmids_from_tofu | default({}) | dict2items
+         | map(attribute='value') | map('string') | select('in', lxc_gpu_features_present | default([]))
+         | list | length)
+      }}.
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - lxc_gpu_features
+
+- name: Resolve the pre-cutover GPU guest candidates present on this host
+  ansible.builtin.set_fact:
+    lxc_gpu_features_engine_handoff_present: >-
+      {{ lxc_gpu_features_engine_handoff_vmids_from_tofu | default({}) | dict2items
+         | map(attribute='value') | map('string')
+         | select('in', lxc_gpu_features_present | default([])) | list }}
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - lxc_gpu_features
+
+- name: Log the explicit pre-cutover GPU guest decisions
+  ansible.builtin.debug:
+    msg: >-
+      GPU engine pre-cutover stop requested={{ lxc_gpu_features_engine_handoff_pre_stop | bool }};
+      selected candidates={{ lxc_gpu_features_engine_handoff_vmids_from_tofu | default({}) | length }};
+      candidates present on this host={{ lxc_gpu_features_engine_handoff_present | default([]) | length }}.
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - lxc_gpu_features
+
+- name: Require a GPU guest candidate when pre-cutover stop is requested
+  ansible.builtin.assert:
+    that:
+      - lxc_gpu_features_engine_handoff_present | default([]) | length > 0
+    fail_msg: >-
+      Pre-cutover GPU handoff was requested, but no published GPU guest
+      candidate exists on this host. Confirm the inventory and host limit before
+      applying a selector change.
+    success_msg: >-
+      Pre-cutover GPU handoff will stop
+      {{ lxc_gpu_features_engine_handoff_present | length }} candidate(s) on this host.
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - lxc_gpu_features_engine_handoff_pre_stop | bool
+  tags:
+    - lxc_gpu_features
+
+- name: Gracefully stop GPU guest candidates before a selector-changing apply
+  ansible.builtin.include_tasks: manage_engine_legacy.yml
+  loop: >-
+    {{ lxc_gpu_features_engine_handoff_vmids_from_tofu | default({}) | dict2items }}
+  loop_control:
+    loop_var: lxc_gpu_features_legacy_guest
+    label: "GPU engine handoff candidate {{ lxc_gpu_features_legacy_guest.value }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - lxc_gpu_features_engine_handoff_pre_stop | bool
+    - (lxc_gpu_features_legacy_guest.value | string) in (lxc_gpu_features_present | default([]))
+  tags:
+    - lxc_gpu_features
+
+- name: Stop the old GPU guest before applying replacement passthrough
+  ansible.builtin.include_tasks: manage_engine_legacy.yml
+  loop: >-
+    {{ lxc_gpu_features_legacy_engine_vmids_from_tofu | default({}) | dict2items }}
+  loop_control:
+    loop_var: lxc_gpu_features_legacy_guest
+    label: "legacy GPU guest {{ lxc_gpu_features_legacy_guest.value }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - (lxc_gpu_features_legacy_guest.value | string) in (lxc_gpu_features_present | default([]))
   tags:
     - lxc_gpu_features
 

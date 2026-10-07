@@ -5,13 +5,39 @@
 # Mutating tasks append the vmid to lxc_gpu_features_changed and notify this
 # handler, which reboots ONLY those containers — a converged host does nothing.
 
-- name: Restart changed gpu containers
+- name: Read runtime state for changed GPU containers
+  listen: Restart changed gpu containers
   ansible.builtin.command:
-    cmd: "pct reboot {{ item }}"
+    cmd: "pct status {{ item }}"
+  register: lxc_gpu_features_changed_status
   loop: "{{ lxc_gpu_features_changed | default([]) | unique }}"
   loop_control:
     label: "container {{ item }}"
+  changed_when: false
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - lxc_gpu_features_changed | default([]) | length > 0
+
+- name: Log which changed GPU containers need a reboot
+  listen: Restart changed gpu containers
+  ansible.builtin.debug:
+    msg: >-
+      GPU passthrough changed for vmid={{ item.item }};
+      runtime={{ item.stdout | trim }};
+      reboot={{ 'required' if item.stdout | trim == 'status: running' else 'not-required' }}.
+  loop: "{{ lxc_gpu_features_changed_status.results | default([]) }}"
+  loop_control:
+    label: "container {{ item.item }}"
+  when: ansible_virtualization_type | default('') != 'docker'
+
+- name: Restart changed GPU containers that are running
+  listen: Restart changed gpu containers
+  ansible.builtin.command:
+    cmd: "pct reboot {{ item.item }}"
+  loop: "{{ lxc_gpu_features_changed_status.results | default([]) }}"
+  loop_control:
+    label: "container {{ item.item }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - item.stdout | trim == 'status: running'
   changed_when: true

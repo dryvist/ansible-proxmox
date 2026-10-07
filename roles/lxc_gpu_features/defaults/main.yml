@@ -35,6 +35,28 @@ lxc_gpu_features_map:
     kfd: false
     nvidia: true
 
+# Engine-identified GPU guests are projected from the published Tofu inventory
+# by immutable engine identity. This keeps a second guest from needing a
+# hard-coded service name here; the host role still reads the device majors
+# from the live device nodes below.
+lxc_gpu_features_nvidia_guest_features:
+  dri: false
+  kfd: false
+  nvidia: true
+
+# Legacy GPU guest VMIDs published only when the replacement engine pair is
+# declared. The host role gracefully stops these before applying passthrough to
+# the replacement guests that share the physical GPU.
+lxc_gpu_features_legacy_engine_vmids_from_tofu: {}
+
+# Opt-in pre-cutover action. The current selected GPU guest is resolved from
+# published inventory and gracefully stopped before a selector-changing Tofu
+# apply, preventing two passthrough guests from owning the physical GPU during
+# the provider's parallel resource updates. This is an operation gate, not an
+# engine selector.
+lxc_gpu_features_engine_handoff_pre_stop: false
+lxc_gpu_features_engine_handoff_vmids_from_tofu: {}
+
 # AMD GPU character-device majors, verified live on the host that holds the
 # card: /dev/dri/card0 = 226:0, /dev/dri/renderD128 = 226:128, /dev/kfd = 235:0.
 # A `*` minor covers card + render + any future render nodes.

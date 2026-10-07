@@ -1,4 +1,7 @@
 ---
+driver:
+  name: docker
+
 platforms:
   - name: proxmox-lxc-gpu-features-test
     image: "${MOLECULE_IMAGE:-debian:stable-slim}"
@@ -9,6 +12,9 @@ platforms:
       - /tmp
 
 provisioner:
+  config_options:
+    defaults:
+      roles_path: ${MOLECULE_SCENARIO_DIRECTORY}/../../roles
   inventory:
     group_vars:
       all:
@@ -21,6 +27,12 @@ provisioner:
           llm-fast: 90101
           llm-4080: 90102
           llm-6000: 90103
+        lxc_gpu_features_test_engine_vmids:
+          llama_cpp: 90104
+          vllm: 90105
+        lxc_gpu_features_test_legacy_vmids:
+          running: 90106
+          stopped: 90107
 
         # Device fixture for the NVIDIA line-construction test. These stand in
         # for what `stat -c %t` reports on a real GPU host, and they are

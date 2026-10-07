@@ -27,7 +27,33 @@
     - name: Create the PVE guest-config files the role edits
       ansible.builtin.raw: >-
         mkdir -p /etc/pve/lxc &&
-        touch {{ lxc_gpu_features_test_service_vmids.values()
+        touch {{ (lxc_gpu_features_test_service_vmids.values() | list
+                 + lxc_gpu_features_test_engine_vmids.values() | list)
                  | map('regex_replace', '^(.*)$', '/etc/pve/lxc/\1.conf')
                  | join(' ') }}
+      changed_when: true
+
+    - name: Create mocked pct status and shutdown behavior for lifecycle tests
+      ansible.builtin.raw: |
+        mkdir -p /run/mock-pct
+        printf 'status: running\n' > /run/mock-pct/{{ lxc_gpu_features_test_legacy_vmids.running }}.status
+        printf 'status: stopped\n' > /run/mock-pct/{{ lxc_gpu_features_test_legacy_vmids.stopped }}.status
+        cat > /usr/local/bin/pct <<'EOF'
+        #!/bin/sh
+        set -eu
+        case "$1" in
+          status)
+            cat "/run/mock-pct/$2.status"
+            ;;
+          shutdown)
+            [ "$3" = "--timeout" ] && [ "$4" = "120" ]
+            printf '%s\n' "$1" >> "/run/mock-pct/$2.calls"
+            printf 'status: stopped\n' > "/run/mock-pct/$2.status"
+            ;;
+          *)
+            exit 2
+            ;;
+        esac
+        EOF
+        chmod 0755 /usr/local/bin/pct
       changed_when: true
