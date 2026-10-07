@@ -50,9 +50,9 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 | Var                                       | Default             | Purpose                                           |
 | ----------------------------------------- | ------------------- | ------------------------------------------------- |
 | `lxc_gpu_features_map`                    | legacy service map  | Service → device groups                          |
-| `lxc_gpu_features_nvidia_guest_features`   | NVIDIA device set   | Shared device set for engine-identified guests   |
+| `lxc_gpu_features_nvidia_guest_features`   | NVIDIA device set   | Shared device set for `nvidia-gpu` guests         |
 | `lxc_gpu_features_service_vmids`           | from Tofu inventory | Service → current vmid                            |
-| `lxc_gpu_features_engine_vmids_from_tofu`  | from Tofu inventory | Engine identity → current vmid                     |
+| `lxc_gpu_features_nvidia_vmids_from_tofu`  | from Tofu inventory | `nvidia-gpu` capability tag → current vmid          |
 | `lxc_gpu_features_legacy_engine_vmids_from_tofu` | from Tofu inventory | Legacy guest to stop after the replacement pair is declared |
 | `lxc_gpu_features_engine_handoff_pre_stop` | `false` | Explicitly stop GPU guests before a selector-changing Tofu apply |
 | `lxc_gpu_features_engine_handoff_vmids_from_tofu` | from Tofu inventory | Legacy and engine GPU guest candidates for that pre-stop |

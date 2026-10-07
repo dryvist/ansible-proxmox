@@ -13,7 +13,7 @@
 
   vars:
     lxc_gpu_features_service_vmids_from_tofu: "{{ lxc_gpu_features_test_service_vmids }}"
-    lxc_gpu_features_engine_vmids_from_tofu: "{{ lxc_gpu_features_test_engine_vmids }}"
+    lxc_gpu_features_nvidia_vmids_from_tofu: "{{ lxc_gpu_features_test_engine_vmids }}"
 
   tasks:
     - name: Converge lxc_gpu_features

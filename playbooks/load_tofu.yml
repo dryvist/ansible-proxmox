@@ -16,6 +16,21 @@
       vars:
         inventory_resolve_required_keys: [node_storage]
 
+    # Capability tags on node entries are published from Tofu desired state.
+    # Join them to the existing static PVE inventory by its declared Tofu node
+    # key, then let group_vars and roles select the capability group.
+    - name: Add tagged Proxmox nodes to capability groups
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: >-
+          {{ ['nvidia_gpu_nodes']
+             if 'nvidia-gpu' in (_node.tags | default([])) else [] }}
+      vars:
+        _tofu_node_key: "{{ hostvars[item].proxmox_node_name | default(item) }}"
+        _node: "{{ (tofu_data.nodes | default({})).get(_tofu_node_key, {}) }}"
+      loop: "{{ groups['proxmox'] | default([]) }}"
+      changed_when: false
+
     # SMB shares are declared ON the dataset they serve, inside
     # node_storage.<node>.pools.<pool>.datasets.<dataset>.smb, with the
     # node-level Samba SERVICE settings under node_storage.<node>.smb.
@@ -127,12 +142,9 @@
         ct_template_from_tofu: "{{ tofu_data.ct_template | default('') }}"
       loop: "{{ groups['proxmox'] | default([]) }}"
 
-    # Service -> VMID resolution for media_lxc_features. The tofu
-    # `containers` dict is keyed by service hostname and carries each container's
-    # current `vmid`; project it to { service: vmid } so the role can key its
-    # feature map by service and follow any VMID renumber with no role change.
-    # The role only resolves the services it knows about, so the extra
-    # (non-media) entries are harmless.
+    # Membership in media_lxc_features comes from the `shared-media-data`
+    # capability tag. Keep the role's service-keyed map for each guest's
+    # mount/id-map details, while this projection carries the current VMID.
     - name: Inject OpenTofu service -> vmid map onto proxmox hosts
       ansible.builtin.add_host:
         name: "{{ item }}"
@@ -140,10 +152,14 @@
           {{
             dict(
               (tofu_data.containers | default({})) | dict2items
+              | selectattr('value.tags', 'defined')
+              | selectattr('value.tags', 'contains', 'shared-media-data')
               | selectattr('value.ansible_pct_vmid', 'defined')
               | map(attribute='key') | list
               | zip(
                   (tofu_data.containers | default({})) | dict2items
+                  | selectattr('value.tags', 'defined')
+                  | selectattr('value.tags', 'contains', 'shared-media-data')
                   | selectattr('value.ansible_pct_vmid', 'defined')
                   | map(attribute='value.ansible_pct_vmid') | list
                 )

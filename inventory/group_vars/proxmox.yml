@@ -25,8 +25,12 @@ proxmox_user: "{{ [proxmox_user_from_tofu | default('')] | reject('equalto', '')
 # assert on every converge — caught live 2026-08-15.
 pve_ha_enabled: true
 
-# Cribl Edge's native GPU metrics require NVIDIA's nvidia-smi utility. Reuse
-# the existing driver opt-in so only NVIDIA-enabled hosts collect per-GPU data.
+# NVIDIA driver role's internal guard is derived from the capability group
+# built from Tofu node tags in playbooks/load_tofu.yml.
+nvidia_driver_enabled: "{{ 'nvidia_gpu_nodes' in group_names }}"
+
+# Cribl Edge's native GPU metrics require NVIDIA's nvidia-smi utility. Reuse the
+# driver opt-in derived from the node's NVIDIA capability group.
 cribl_edge_gpu_mode: >-
   {{ 'custom' if (nvidia_driver_enabled | default(false) | bool) else 'disabled' }}
 
