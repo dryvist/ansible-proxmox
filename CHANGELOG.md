@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.0](https://github.com/dryvist/ansible-proxmox/compare/v2.17.0...v2.18.0) (2026-10-07)
+
+
+### Features
+
+* **ansible-proxmox:** add optional nvbandwidth utility ([#891](https://github.com/dryvist/ansible-proxmox/issues/891)) ([3cf6243](https://github.com/dryvist/ansible-proxmox/commit/3cf62435b6ce447fd8c51b2eba0ca8dc4c5ffe44))
+* **ansible-proxmox:** consume node-declared NFS mounts ([#878](https://github.com/dryvist/ansible-proxmox/issues/878)) ([fd591df](https://github.com/dryvist/ansible-proxmox/commit/fd591dfe127c6275337526da3075ac501b5665c1))
+* **ansible-proxmox:** support root-squashed NFS export permissions ([#896](https://github.com/dryvist/ansible-proxmox/issues/896)) ([fa137e2](https://github.com/dryvist/ansible-proxmox/commit/fa137e211b22c61558f397385a6c11907cd9f59a))
+* **ansible:** add opt-in host systemd unit contracts ([5aff0b9](https://github.com/dryvist/ansible-proxmox/commit/5aff0b990e07b937512921662d8c1c34af479440))
+* **ansible:** support unit virtualenv packages ([#893](https://github.com/dryvist/ansible-proxmox/issues/893)) ([841028b](https://github.com/dryvist/ansible-proxmox/commit/841028b703bd49614f2c02560458c85247db1937))
+* **cribl_edge:** enable GPU metrics from NVIDIA opt-in ([#888](https://github.com/dryvist/ansible-proxmox/issues/888)) ([99eb062](https://github.com/dryvist/ansible-proxmox/commit/99eb06264f331588dedc418fb3f0c832ca890be9))
+* **cribl:** enable detailed GPU metrics on the GPU node ([2335eb8](https://github.com/dryvist/ansible-proxmox/commit/2335eb8e28a6d45e3904153e986e4f4f5cc33e37))
+* **cribl:** enable detailed GPU metrics on the GPU node ([1d41ed9](https://github.com/dryvist/ansible-proxmox/commit/1d41ed975ecd6647cb7274e966cc83d321c3dc02))
+* **cribl:** scrape hardware sensors on the GPU node ([5164997](https://github.com/dryvist/ansible-proxmox/commit/51649974d70bd81481f007f3d11b85b0bb879dac))
+* **cribl:** scrape hardware sensors on the GPU node ([2d48343](https://github.com/dryvist/ansible-proxmox/commit/2d48343ab4b03dae2ff7a4c511d0ded8217790d8))
+* filter model store seeds from the shared catalog ([#872](https://github.com/dryvist/ansible-proxmox/issues/872)) ([2283759](https://github.com/dryvist/ansible-proxmox/commit/2283759b850154a7a29a5f361b91c152c7b817dc))
+* **kernel_tuning:** declare CPU governor, performance on the GPU node ([1b860e6](https://github.com/dryvist/ansible-proxmox/commit/1b860e6bdbddb019117c577dcd311cc320c97973))
+* **kernel_tuning:** declare CPU governor, set performance on the GPU node ([ac0d79b](https://github.com/dryvist/ansible-proxmox/commit/ac0d79be37a8072b85a1b9d71e7c57ed3897497a))
+* **lxc_gpu_features:** bind NVIDIA devices into the llm-6000 guest ([#897](https://github.com/dryvist/ansible-proxmox/issues/897)) ([2e4a776](https://github.com/dryvist/ansible-proxmox/commit/2e4a776f0c1d7588666619920e770aa5597218fb))
+* **network:** pin host uplinks to MAC addresses ([db6dceb](https://github.com/dryvist/ansible-proxmox/commit/db6dceb3cc1ab8ec5252a6a27bf986f85f3fe8ab))
+* **network:** pin host uplinks to MAC addresses ([cd2b621](https://github.com/dryvist/ansible-proxmox/commit/cd2b621f9ed814f7ed38485cc74b26c8987f0cda))
+* **nvidia_driver:** pin nvidia-open, add boot-time power cap, enable on pve-w1700 ([#876](https://github.com/dryvist/ansible-proxmox/issues/876)) ([38899db](https://github.com/dryvist/ansible-proxmox/commit/38899db7ff958c9ef669929987d5854a33d087cc))
+* **nvidia:** set the GPU power limit to 250 W ([#881](https://github.com/dryvist/ansible-proxmox/issues/881)) ([5bc09aa](https://github.com/dryvist/ansible-proxmox/commit/5bc09aaeae7d5f4ca558c9f6508bb9808e817d23))
+* **pve-w5900:** declare bridge uplink and optional GPU stress tooling ([#879](https://github.com/dryvist/ansible-proxmox/issues/879)) ([73fca73](https://github.com/dryvist/ansible-proxmox/commit/73fca7323f3174ab0b1aa95d3764aa653e99a1ee))
+* **pve-w5900:** run the GPU at the driver's maximum board power ([#908](https://github.com/dryvist/ansible-proxmox/issues/908)) ([e3511a3](https://github.com/dryvist/ansible-proxmox/commit/e3511a3e1cf41140d93d94d80f1352a69207aa8f))
+* **ssh_ca_trust:** issue host certificates to nodes and containers ([#901](https://github.com/dryvist/ansible-proxmox/issues/901)) ([94cf4e4](https://github.com/dryvist/ansible-proxmox/commit/94cf4e4fde5362c67fff2c2924b3640e43335e32))
+
+
+### Bug Fixes
+
+* **cribl_edge:** tag the Cribl Edge play so it can converge on its own ([17b34d4](https://github.com/dryvist/ansible-proxmox/commit/17b34d449faeec48fe85ee69556ecf3dd3987c71))
+* **cribl_edge:** tag the Cribl Edge play so it can converge on its own ([7c8f6ec](https://github.com/dryvist/ansible-proxmox/commit/7c8f6ece6fa5c08c3f557b898be3924d0312bffb))
+* **network:** derive management settings during enforcement ([b70c122](https://github.com/dryvist/ansible-proxmox/commit/b70c122493bfce06a0fd247804b3a62669042a24))
+* **nvidia_driver:** install pinned packages before driver dependencies ([#882](https://github.com/dryvist/ansible-proxmox/issues/882)) ([258eb98](https://github.com/dryvist/ansible-proxmox/commit/258eb9857da85bdfc110576ad085b841bfe7d181))
+* **nvidia_driver:** match Proxmox kernel pin output ([ad77eb8](https://github.com/dryvist/ansible-proxmox/commit/ad77eb8121be9f7fed9268839106a84fefa0c674))
+* **nvidia_driver:** pin the kernel and DKMS headers ([f2c15b1](https://github.com/dryvist/ansible-proxmox/commit/f2c15b196ed5f5a71f3bdb03df71e2461bdf4884))
+* **nvidia_driver:** pin the supported kernel and headers ([d63a878](https://github.com/dryvist/ansible-proxmox/commit/d63a87815d255332378d2110413d0b8ed6672648))
+* **nvidia_driver:** split kernel pairing tasks ([91a7096](https://github.com/dryvist/ansible-proxmox/commit/91a7096818c2d60502c10092f447a2bd52883fba))
+* **pve-ha:** reconcile declared replication jobs ([108b221](https://github.com/dryvist/ansible-proxmox/commit/108b221574b306987c8162820095d32f76f22b6a))
+* **ssh_ca_trust:** parse container probe output in the host-cert decision ([#903](https://github.com/dryvist/ansible-proxmox/issues/903)) ([b1a9fad](https://github.com/dryvist/ansible-proxmox/commit/b1a9fad87be67474c5c2792d6b4ac31977b0affa))
+* **wol_enable:** resolve pinned NICs by MAC ([248eb9d](https://github.com/dryvist/ansible-proxmox/commit/248eb9d18d8597355a4f8df45d39976e7f8e7613))
+* **zfs_pools:** run read-only lookups in check mode ([#899](https://github.com/dryvist/ansible-proxmox/issues/899)) ([aea6379](https://github.com/dryvist/ansible-proxmox/commit/aea6379bf64637e94057c5b82f747749257f3a17))
+
 ## [2.17.0](https://github.com/dryvist/ansible-proxmox/compare/v2.16.0...v2.17.0) (2026-10-04)
 
 
