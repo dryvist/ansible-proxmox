@@ -124,7 +124,7 @@
    "node": "pve-r540",
    "vmid": 515010
   },
-  "llm-4080": {
+  "llm-ada-lovelace-6X-16": {
    "node": "pve-w5900",
    "vmid": 503020
   },
