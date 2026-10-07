@@ -1,0 +1,181 @@
+[
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 6442450944,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 12884901888,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 8589934592,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 3221225472,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 8589934592,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 34359738368,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 3221225472,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 2147483648,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 536870912,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 4294967296,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "lxc",
+    "maxmem": 1073741824,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 51539607552,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 8589934592,
+    "template": 1,
+    "node": "server-a"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "template": 1,
+    "node": "server-a"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "template": 1,
+    "node": "server-a"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "qemu",
+    "maxmem": 12884901888,
+    "template": 0,
+    "node": "server-a"
+  },
+  {
+    "type": "node",
+    "maxmem": 193669939200,
+    "node": "server-a"
+  }
+]
