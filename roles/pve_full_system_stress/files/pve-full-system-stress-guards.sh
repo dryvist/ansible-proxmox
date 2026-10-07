@@ -111,12 +111,14 @@ sample_nvme() {
     parent=$(lsblk -nro PKNAME -- "$leaf" | head -1) || return 2
     device=$leaf
     [[ -z "$parent" ]] || device="/dev/${parent}"
-    smart=$(nvme smart-log "$device") || return 2
-    warning=$(awk -F: 'tolower($1) ~ /critical_warning/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' <<< "$smart")
-    temperature=$(awk -F: 'tolower($1) == "temperature" {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' <<< "$smart")
-    warning_hex=${warning#0x}
-    temperature=${temperature//[[:space:]cC]/}
-    [[ "$warning_hex" =~ ^[0-9a-fA-F]+$ && "$temperature" =~ ^[0-9]+$ ]] || return 2
+    # JSON output is unit-stable: the text form follows nvme-cli's display
+    # settings (Celsius or Fahrenheit), while JSON reports Kelvin.
+    smart=$(nvme smart-log --output-format=json "$device") || return 2
+    warning=$(grep -oE '"critical_warning"[[:space:]]*:[[:space:]]*[0-9]+' <<< "$smart" | grep -oE '[0-9]+$' | head -1)
+    temperature=$(grep -oE '"temperature"[[:space:]]*:[[:space:]]*[0-9]+' <<< "$smart" | grep -oE '[0-9]+$' | head -1)
+    [[ "$warning" =~ ^[0-9]+$ && "$temperature" =~ ^[0-9]+$ ]] || return 2
+    warning_hex=$(printf '%x' "$warning")
+    temperature=$((temperature - 273))
     logger -t pve-full-system-stress -p daemon.info -- \
       "pve_full_system_stress run=${run_id} stage=${stage}" \
       "event=sample nvme_device_index=${index} nvme_temp_c=${temperature}" \
