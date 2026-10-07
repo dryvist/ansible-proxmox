@@ -151,6 +151,41 @@
           }}
       loop: "{{ groups['proxmox'] | default([]) }}"
 
+    - name: Resolve the current GPU engine selector and handoff guests
+      ansible.builtin.set_fact:
+        load_tofu_gpu_engine_selector: >-
+          {{ (tofu_data | default({})).get('llm_gpu_engine', 'llama_cpp') }}
+        load_tofu_gpu_engine_members: >-
+          {{ (tofu_data.containers | default({}) | dict2items)
+             | selectattr('value.llm_gpu_engine_identity', 'in', ['llama_cpp', 'vllm']) | list }}
+        load_tofu_gpu_handoff_members: >-
+          {{
+            (
+              (
+                (tofu_data.containers | default({}) | dict2items)
+                | selectattr('value.tags', 'contains', 'llm-gpu') | list
+              )
+              +
+              (
+                (tofu_data.containers | default({}) | dict2items)
+                | selectattr('value.llm_gpu_engine_identity', 'in', ['llama_cpp', 'vllm']) | list
+              )
+            ) | unique(attribute='key') | list
+          }}
+
+    - name: Validate the current GPU engine pair before handoff projection
+      ansible.builtin.assert:
+        that:
+          - load_tofu_gpu_engine_selector in ['llama_cpp', 'vllm']
+          - load_tofu_gpu_engine_members | length in [0, 2]
+          - >-
+            load_tofu_gpu_engine_members | length == 0 or
+            (load_tofu_gpu_engine_members | map(attribute='value.llm_gpu_engine_identity') | sort | list
+             == ['llama_cpp', 'vllm'])
+        fail_msg: >-
+          Published GPU engine inventory must contain either no replacement
+          guests or exactly one llama_cpp and one vllm guest.
+
     # Service -> VMID resolution for lxc_gpu_features (GPU passthrough). Same
     # projection as the media map above, exposed under its own var so the GPU
     # role has no coupling to media naming. Extra (non-GPU) entries are harmless.
@@ -168,6 +203,42 @@
                   | selectattr('value.ansible_pct_vmid', 'defined')
                   | map(attribute='value.ansible_pct_vmid') | list
                 )
+            )
+          }}
+        lxc_gpu_features_engine_vmids_from_tofu: >-
+          {{
+            dict(
+              (tofu_data.containers | default({})) | dict2items
+              | selectattr('value.llm_gpu_engine_identity', 'in', ['llama_cpp', 'vllm'])
+              | map(attribute='value.llm_gpu_engine_identity') | list
+              | zip(
+                  (tofu_data.containers | default({})) | dict2items
+                  | selectattr('value.llm_gpu_engine_identity', 'in', ['llama_cpp', 'vllm'])
+                  | map(attribute='value.ansible_pct_vmid') | list
+                )
+            )
+          }}
+        lxc_gpu_features_legacy_engine_vmids_from_tofu: >-
+          {{
+            dict(
+              (tofu_data.containers | default({})) | dict2items
+              | selectattr('value.llm_gpu_engine_legacy_runtime_managed', 'defined')
+              | selectattr('value.llm_gpu_engine_legacy_runtime_managed', 'equalto', true)
+              | map(attribute='key') | list
+              | zip(
+                  (tofu_data.containers | default({})) | dict2items
+                  | selectattr('value.llm_gpu_engine_legacy_runtime_managed', 'defined')
+                  | selectattr('value.llm_gpu_engine_legacy_runtime_managed', 'equalto', true)
+                  | map(attribute='value.ansible_pct_vmid') | list
+                )
+            )
+          }}
+        lxc_gpu_features_engine_handoff_vmids_from_tofu: >-
+          {{
+            dict(
+              load_tofu_gpu_handoff_members | map(attribute='key') | list
+              | zip(load_tofu_gpu_handoff_members
+                   | map(attribute='value.ansible_pct_vmid') | list)
             )
           }}
       loop: "{{ groups['proxmox'] | default([]) }}"
