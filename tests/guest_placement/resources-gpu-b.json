@@ -2,17 +2,12 @@
   {
     "type": "lxc",
     "maxmem": 51539607552,
-    "mem": 6597783552,
     "template": 0,
-    "status": "running",
-    "node": "gpu-b",
-    "vmid": 10046
+    "node": "gpu-b"
   },
   {
     "type": "node",
     "maxmem": 101160513536,
-    "mem": 25073897472,
-    "status": "online",
     "node": "gpu-b"
   }
 ]

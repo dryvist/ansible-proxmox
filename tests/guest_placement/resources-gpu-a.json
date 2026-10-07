@@ -2,458 +2,306 @@
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 22151168,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10000
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 125222912,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10001
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 43405312,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10003
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 22003712,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10004
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 0,
     "template": 0,
-    "status": "stopped",
-    "node": "gpu-a",
-    "vmid": 10005
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 25280512,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10006
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 76398592,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10007
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 108617728,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10008
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 103026688,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10013
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 147435520,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10016
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 188829696,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10017
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 4294967296,
-    "mem": 100638720,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10018
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 4294967296,
-    "mem": 59674624,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10019
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 1073741824,
-    "mem": 22687744,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10020
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 373010432,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10021
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 3221225472,
-    "mem": 11931648,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10022
+    "node": "gpu-a"
   },
   {
     "type": "qemu",
     "maxmem": 12884901888,
-    "mem": 11942326272,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10023
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 3221225472,
-    "mem": 18444288,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10027
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 1073741824,
-    "mem": 0,
     "template": 0,
-    "status": "stopped",
-    "node": "gpu-a",
-    "vmid": 10028
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 1073741824,
-    "mem": 0,
     "template": 0,
-    "status": "stopped",
-    "node": "gpu-a",
-    "vmid": 10029
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 26763264,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10030
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 402735104,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10034
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 49008640,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10035
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 32178176,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10036
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 313208832,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10037
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 290254848,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10038
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 4294967296,
-    "mem": 1089363968,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10039
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 1057894400,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10040
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 56037376,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10041
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 1073741824,
-    "mem": 32505856,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10042
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 17179869184,
-    "mem": 23425024,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10043
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 4294967296,
-    "mem": 101814272,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10047
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 8589934592,
-    "mem": 1662234624,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10048
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 4294967296,
-    "mem": 1409937408,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10049
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 4294967296,
-    "mem": 394981376,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10050
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 8589934592,
-    "mem": 145584128,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10051
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 4294967296,
-    "mem": 646541312,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10054
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 1073741824,
-    "mem": 24272896,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10058
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 8589934592,
-    "mem": 28430336,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10062
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 1073741824,
-    "mem": 578486272,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10066
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 251813888,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10083
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 1073741824,
-    "mem": 71311360,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10084
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 36147200,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10085
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 278134784,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10086
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 536870912,
-    "mem": 30437376,
     "template": 0,
-    "status": "running",
-    "node": "gpu-a",
-    "vmid": 10088
+    "node": "gpu-a"
   },
   {
     "type": "qemu",
     "maxmem": 536870912,
-    "mem": 0,
     "template": 0,
-    "status": "stopped",
-    "node": "gpu-a",
-    "vmid": 10096
+    "node": "gpu-a"
   },
   {
     "type": "qemu",
     "maxmem": 4294967296,
-    "mem": 0,
     "template": 1,
-    "status": "stopped",
-    "node": "gpu-a",
-    "vmid": 10097
+    "node": "gpu-a"
   },
   {
     "type": "qemu",
     "maxmem": 2147483648,
-    "mem": 0,
     "template": 1,
-    "status": "stopped",
-    "node": "gpu-a",
-    "vmid": 10098
+    "node": "gpu-a"
   },
   {
     "type": "qemu",
     "maxmem": 4294967296,
-    "mem": 0,
     "template": 1,
-    "status": "stopped",
-    "node": "gpu-a",
-    "vmid": 10100
+    "node": "gpu-a"
   },
   {
     "type": "lxc",
     "maxmem": 2147483648,
-    "mem": 0,
     "template": 0,
-    "status": "stopped",
-    "node": "gpu-a",
-    "vmid": 10104
+    "node": "gpu-a"
   },
   {
     "type": "node",
     "maxmem": 33354723328,
-    "mem": 28324511744,
-    "status": "online",
     "node": "gpu-a"
   }
 ]

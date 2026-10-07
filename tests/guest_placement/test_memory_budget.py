@@ -2,8 +2,8 @@
 """Run the actual read-only budget tasks against sanitized PVE API output.
 
 Run: python3 tests/guest_placement/test_memory_budget.py
-The fixture retains observed allocations, physical RAM, usage and status;
-node labels and guest IDs are synthetic. No measured-use admission shortcut.
+The fixtures retain observed allocations and physical RAM; node labels are
+synthetic. No measured-use admission shortcut.
 """
 
 import copy
