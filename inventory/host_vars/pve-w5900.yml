@@ -60,16 +60,6 @@ nvidia_driver_power_limit_w: 290
 # Every core runs the performance governor.
 kernel_tuning_cpu_governor: performance
 
-# Cribl Edge (playbooks/cribl_edge.yml, every Proxmox host) collects GPU
-# metrics from this node's card via nvidia-smi (installed above). Opt-in
-# per-host — cribl_edge_gpu_mode follows the NVIDIA node capability tag.
-cribl_edge_gpu_detail: true
-
-# Fan and temperature series from the local node_exporter hwmon collector;
-# System Metrics has no hardware-sensor group. Requires the cribl_edge role
-# release that provides the scrape source.
-cribl_edge_node_exporter_scrape_enabled: true
-
 # sanoid snapshot policy for this node's guests.
 #
 # The dataset PATHS are derived, never written down. An earlier revision named
