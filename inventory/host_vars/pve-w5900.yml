@@ -72,6 +72,11 @@ kernel_tuning_cpu_governor: performance
 cribl_edge_gpu_mode: custom
 cribl_edge_gpu_detail: true
 
+# Fan and temperature series from the local node_exporter hwmon collector;
+# System Metrics has no hardware-sensor group. Requires the cribl_edge role
+# release that provides the scrape source.
+cribl_edge_node_exporter_scrape_enabled: true
+
 # sanoid snapshot policy for this node's guests.
 #
 # The dataset PATHS are derived, never written down. An earlier revision named
