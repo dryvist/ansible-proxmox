@@ -70,6 +70,7 @@ kernel_tuning_cpu_governor: performance
 # metrics from this node's card via nvidia-smi (installed above). Opt-in
 # per-host — cribl_edge_gpu_mode defaults to disabled everywhere else.
 cribl_edge_gpu_mode: custom
+cribl_edge_gpu_detail: true
 
 # sanoid snapshot policy for this node's guests.
 #
