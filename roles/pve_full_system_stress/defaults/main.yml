@@ -1,0 +1,15 @@
+---
+pve_full_system_stress_memory_minutes: 4
+pve_full_system_stress_cpu_minutes: 1
+pve_full_system_stress_storage_minutes: 1
+pve_full_system_stress_gpu_minutes: 1
+pve_full_system_stress_combined_minutes: 3
+pve_full_system_stress_fio_size: 1G
+pve_full_system_stress_sample_seconds: 30
+pve_full_system_stress_ue_count_files: "/sys/devices/system/edac/mc/*/ue_count"
+pve_full_system_stress_rpool: rpool
+pve_full_system_stress_scratch_dataset: rpool/ansible-proxmox-stress
+# The NVIDIA role runs in a separate play, so resolve its inventory override
+# here while retaining the role's declared default path.
+pve_full_system_stress_gpu_burn_dir: "{{ nvidia_driver_gpu_burn_dir | default('/var/lib/llm-cache/bin/gpu-burn') }}"
+pve_full_system_stress_llm_unit_pattern: "^(llama|llm|vllm|ollama|sglang|text-generation).*\\.service$"

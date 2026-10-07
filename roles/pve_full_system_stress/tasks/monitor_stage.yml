@@ -1,0 +1,136 @@
+---
+- name: Monitor stage units and stop immediately on hardware errors
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      units="{{ pve_full_system_stress_unit_names | join(' ') }}"
+      read -r -a unit_list <<< "$units"
+      baseline_ue={{ pve_full_system_stress_ue_baseline.stdout | trim }}
+      stage_started="{{ pve_full_system_stress_stage_started.stdout }}"
+      sample_seconds={{ pve_full_system_stress_sample_seconds | int }}
+      watch_cpu={{ pve_full_system_stress_watch_cpu | ternary('true', 'false') }}
+      watch_gpu={{ pve_full_system_stress_watch_gpu | ternary('true', 'false') }}
+      max_cpu_temp=0
+      stop_units() {
+        for unit in "${unit_list[@]}"; do
+          systemctl kill --kill-who=all --signal=SIGTERM "$unit" >/dev/null 2>&1 || true
+          systemctl stop --no-block "$unit" >/dev/null 2>&1 || true
+        done
+      }
+      ue_total() {
+        local total=0 file value found=0
+        for file in /sys/devices/system/edac/mc/*/ue_count; do
+          [[ -r "$file" ]] || continue
+          value=$(cat "$file") || return 2
+          [[ "$value" =~ ^[0-9]+$ ]] || return 2
+          total=$((total + value))
+          found=1
+        done
+        ((found == 1)) || return 2
+        printf '%s\n' "$total"
+      }
+      stop_reason() {
+        local events current_ue
+        events=$(journalctl -k --since "$stage_started" --no-pager -o cat) || return 2
+        if grep -Eiq 'mce:|machine check|hardware error|uncorrected|EDAC.*(UE|uncorrected)|NVRM.*Xid|Xid [0-9]+' <<< "$events"; then
+          logger -t pve-full-system-stress -p daemon.err -- \
+            "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+            "stage={{ pve_full_system_stress_stage }} event=abort reason=kernel_hardware_error"
+          return 1
+        fi
+        current_ue=$(ue_total) || return 2
+        if ((current_ue > baseline_ue)); then
+          logger -t pve-full-system-stress -p daemon.err -- \
+            "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+            "stage={{ pve_full_system_stress_stage }} event=abort reason=edac_ue" \
+            "baseline=${baseline_ue} current=${current_ue}"
+          return 1
+        fi
+        return 0
+      }
+      sample_cpu() {
+        local sensor name input value count=0 throttle_found=0
+        local max=0 alarm=0 throttle=unavailable min_freq=unavailable
+        shopt -s nullglob
+        for sensor in /sys/class/hwmon/hwmon*; do
+          [[ -r "$sensor/name" ]] || continue
+          name=$(cat "$sensor/name")
+          [[ "$name" == k10temp ]] || continue
+          for input in "$sensor"/temp*_input; do
+            [[ -r "$input" ]] || continue
+            value=$(cat "$input")
+            ((value > max)) && max=$value
+            count=$((count + 1))
+          done
+          for input in "$sensor"/temp*_crit_alarm; do
+            [[ -r "$input" ]] && [[ $(cat "$input") == 1 ]] && alarm=1
+          done
+        done
+        ((count > 0)) || return 2
+        throttle=0
+        for input in /sys/devices/system/cpu/cpu*/thermal_throttle/*_throttle_count; do
+          [[ -r "$input" ]] || continue
+          value=$(cat "$input") || return 2
+          throttle=$((throttle + value))
+          throttle_found=1
+        done
+        [[ "$throttle_found" == 1 ]] || throttle=unavailable
+        min_freq=0
+        for input in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq; do
+          [[ -r "$input" ]] || continue
+          value=$(cat "$input") || return 2
+          if ((min_freq == 0 || value < min_freq)); then min_freq=$value; fi
+        done
+        ((min_freq > 0)) || min_freq=unavailable
+        ((max > max_cpu_temp)) && max_cpu_temp=$max
+        logger -t pve-full-system-stress -p daemon.info -- \
+          "pve_full_system_stress run={{ pve_full_system_stress_run_id }} stage={{ pve_full_system_stress_stage }}" \
+          "event=sample cpu_k10temp_max_mC=${max} cpu_throttle_count=${throttle}" \
+          "cpu_min_freq_khz=${min_freq} cpu_crit_alarm=${alarm}"
+        ((alarm == 0)) || return 1
+      }
+      sample_gpu() {
+        local output
+        local query=temperature.gpu,power.draw,clocks.gr,clocks.mem,clocks_throttle_reasons.active
+        output=$(nvidia-smi --query-gpu="$query" --format=csv,noheader,nounits) || return 2
+        output=${output// /}
+        logger -t pve-full-system-stress -p daemon.info -- \
+          "pve_full_system_stress run={{ pve_full_system_stress_run_id }} stage={{ pve_full_system_stress_stage }}" \
+          "event=sample gpu_csv=${output}"
+      }
+      while :; do
+        active=0
+        for unit in "${unit_list[@]}"; do
+          state=$(systemctl show --property=ActiveState --value "$unit") || { stop_units; exit 2; }
+          case "$state" in
+            active|activating|deactivating) active=1 ;;
+            inactive|failed) ;;
+            *) stop_units; exit 2 ;;
+          esac
+        done
+        ((active == 1)) || break
+        if ! stop_reason; then stop_units; exit 1; fi
+        if [[ "$watch_cpu" == true ]] && ! sample_cpu; then
+          logger -t pve-full-system-stress -p daemon.err -- \
+            "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+            "stage={{ pve_full_system_stress_stage }} event=abort reason=cpu_thermal_or_sensor"
+          stop_units
+          exit 1
+        fi
+        if [[ "$watch_gpu" == true ]] && ! sample_gpu; then
+          logger -t pve-full-system-stress -p daemon.err -- \
+            "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+            "stage={{ pve_full_system_stress_stage }} event=abort reason=gpu_telemetry"
+          stop_units
+          exit 1
+        fi
+        sleep "$sample_seconds"
+      done
+      if ! stop_reason; then stop_units; exit 1; fi
+      logger -t pve-full-system-stress -p daemon.info -- \
+        "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
+        "stage={{ pve_full_system_stress_stage }} event=monitor_end" \
+        "cpu_k10temp_max_mC=${max_cpu_temp}"
+  register: pve_full_system_stress_monitor
+  changed_when: false
