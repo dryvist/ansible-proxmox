@@ -82,7 +82,7 @@ sample_cpu() {
   ((max < cpu_limit_c * 1000 && alarm == 0)) || return 1
 }
 sample_gpu() {
-  local data limit_text gpu_temp power sm_clock mem_clock throttle limit
+  local data limit_text gpu_temp power sm_clock mem_clock throttle limit headroom
   data=$(nvidia-smi --query-gpu=temperature.gpu,power.draw,clocks.gr,clocks.mem,clocks_throttle_reasons.active --format=csv,noheader,nounits) || return 2
   [[ "$data" != *$'\n'* ]] || return 2
   IFS=',' read -r gpu_temp power sm_clock mem_clock throttle <<< "$data"
@@ -95,7 +95,14 @@ sample_gpu() {
     && "$sm_clock" =~ ^[0-9]+$ && "$mem_clock" =~ ^[0-9]+$ ]] || return 2
   limit_text=$(nvidia-smi -q -d TEMPERATURE) || return 2
   limit=$(awk -F: 'tolower($1) ~ /gpu max operating temp/ {gsub(/[[:space:]cC]/, "", $2); print $2; exit}' <<< "$limit_text")
-  [[ "$limit" =~ ^[0-9]+$ ]] || return 2
+  # Newer drivers report T.Limit headroom (degrees below the max operating
+  # point) instead of an absolute limit.
+  if ! [[ "$limit" =~ ^[0-9]+$ ]]; then
+    headroom=$(nvidia-smi --query-gpu=temperature.gpu.tlimit --format=csv,noheader,nounits) || return 2
+    headroom=${headroom//[[:space:]]/}
+    [[ "$headroom" =~ ^-?[0-9]+$ ]] || return 2
+    limit=$((gpu_temp + headroom))
+  fi
   logger -t pve-full-system-stress -p daemon.info -- \
     "pve_full_system_stress run=${run_id} stage=${stage}" \
     "event=sample gpu_temp_c=${gpu_temp} gpu_temp_limit_c=${limit}" \
