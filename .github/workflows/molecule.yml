@@ -50,19 +50,24 @@ jobs:
       - name: Verify full-system stress NVMe JSON contract
         run: python3 tests/pve_full_system_stress/test_nvme_sample.py
 
-  # Use the shared role-to-scenario selection. When no narrowed list is passed,
-  # discover the full matrix for pushes, promotions, and shared inputs.
+      - name: Verify CI scope policy
+        run: python3 tests/workflow_policy/test_ci_scope.py
+
+  # Use the shared role-to-scenario selection. FULL discovers all scenarios
+  # only on the post-merge main push; other branch runs receive focused paths.
   discover:
     name: Discover scenarios
     runs-on: ubuntu-latest
     outputs:
-      scenarios: ${{ inputs.scenarios != '' && inputs.scenarios || steps.list.outputs.scenarios }}
+      scenarios: >-
+        ${{ (inputs.scenarios != '' && inputs.scenarios != 'FULL' &&
+        inputs.scenarios) || steps.list.outputs.scenarios }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: List all molecule scenarios when no narrowed list is supplied
         id: list
-        if: ${{ inputs.scenarios == '' }}
+        if: ${{ inputs.scenarios == '' || inputs.scenarios == 'FULL' }}
         run: |
           set -euo pipefail
           mapfile -t all_scenarios < <(
