@@ -5,6 +5,12 @@
 # guest_power_action (start|stop|shutdown|reboot|reset). The node is read from
 # the cluster's live placement, never supplied. Transport is the same root SSH
 # access the proxmox inventory hosts already use; no API token is involved.
+#
+# load_tofu.yml runs first so the proxmox hosts carry proxmox_user_from_tofu,
+# the login user that ansible_user resolves from.
+
+- name: Load OpenTofu host services
+  ansible.builtin.import_playbook: load_tofu.yml
 
 - name: Power-act on one Proxmox guest
   hosts: localhost
