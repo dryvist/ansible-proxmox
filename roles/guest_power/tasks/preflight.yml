@@ -1,0 +1,36 @@
+---
+- name: Assert the target variables are supplied
+  ansible.builtin.assert:
+    that:
+      - guest_power_vmid is defined
+      - guest_power_type is defined
+      - guest_power_action is defined
+    fail_msg: >-
+      Pass guest_power_vmid, guest_power_type and guest_power_action. They have
+      no defaults so an unscoped run cannot act on a guest.
+
+- name: Assert the target values are valid
+  ansible.builtin.assert:
+    that:
+      - guest_power_vmid | string is match('^[0-9]+$')
+      - guest_power_vmid | int >= 100
+      - guest_power_type in guest_power_allowed_types
+      - guest_power_action in guest_power_allowed_actions
+      - guest_power_type == 'qemu' or guest_power_action != 'reset'
+    fail_msg: >-
+      guest_power_vmid must be a number of at least 100, guest_power_type one of
+      {{ guest_power_allowed_types }}, guest_power_action one of
+      {{ guest_power_allowed_actions }}; reset exists for qemu only.
+
+- name: Refuse an active power action in check mode
+  ansible.builtin.assert:
+    that:
+      - not ansible_check_mode
+    fail_msg: >-
+      guest_power cannot predict a power action in check mode. Re-run without
+      --check after reviewing the target.
+
+- name: Resolve the command and wanted end state
+  ansible.builtin.set_fact:
+    guest_power_tool: "{{ 'qm' if guest_power_type == 'qemu' else 'pct' }}"
+    guest_power_wanted_status: "{{ 'stopped' if guest_power_action in ['stop', 'shutdown'] else 'running' }}"

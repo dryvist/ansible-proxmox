@@ -280,3 +280,9 @@ jobs:
 
       - name: Verify HA relocation admission against sanitized API fixtures
         run: python3 tests/pve_ha_relocation/test_preflight.py
+
+      - name: Verify guest_power request validation fails closed
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/guest_power_contract.yml -i localhost, -c local
