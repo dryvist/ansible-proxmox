@@ -221,3 +221,31 @@
               - >-
                 ansible_failed_task.name
                 == 'Assert one exact live LXC was found: example-agent'
+
+    - name: Prove placement parsing skips nodes that did not answer
+      ansible.builtin.include_tasks: container_start_parse_case.yml
+      loop:
+        - name: empty stdout then a valid answer
+          results:
+            - {rc: 0, stdout: ""}
+            - {rc: 0, stdout: '[{"vmid": 900001, "node": "example-node"}]'}
+          want: 1
+        - name: non-JSON then unreachable then a valid answer
+          results:
+            - {rc: 0, stdout: "Shared connection closed."}
+            - {unreachable: true, msg: "Host key verification failed."}
+            - {rc: 0, stdout: '[{"vmid": 900001, "node": "example-node"}]'}
+          want: 1
+        - name: non-zero exit then a valid answer
+          results:
+            - {rc: 255, stdout: '[{"vmid": 1}]'}
+            - {rc: 0, stdout: '[{"vmid": 900001, "node": "example-node"}]'}
+          want: 1
+        - name: no node answers
+          results:
+            - {rc: 0, stdout: ""}
+            - {rc: 0, stdout: "  "}
+          want: 0
+      loop_control:
+        loop_var: container_start_case
+        label: "{{ container_start_case.name }}"
