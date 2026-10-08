@@ -1,0 +1,65 @@
+---
+- name: Verify the guest power request contract
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Accept a valid qemu reset request
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: preflight
+      vars:
+        guest_power_vmid: "900001"
+        guest_power_type: qemu
+        guest_power_action: reset
+
+    - name: Assert the valid request resolved qm and a running end state
+      ansible.builtin.assert:
+        that:
+          - guest_power_tool == 'qm'
+          - guest_power_wanted_status == 'running'
+
+    - name: Accept a valid lxc shutdown request
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: preflight
+      vars:
+        guest_power_vmid: 900002
+        guest_power_type: lxc
+        guest_power_action: shutdown
+
+    - name: Assert the lxc request resolved pct and a stopped end state
+      ansible.builtin.assert:
+        that:
+          - guest_power_tool == 'pct'
+          - guest_power_wanted_status == 'stopped'
+
+    - name: Prove invalid requests fail closed at the value gate
+      ansible.builtin.include_tasks: guest_power_contract_reject.yml
+      loop:
+        - {vmid: "12ab", type: qemu, action: reset}
+        - {vmid: "42", type: qemu, action: reset}
+        - {vmid: "900001", type: vm, action: reset}
+        - {vmid: "900001", type: qemu, action: destroy}
+        - {vmid: "900001", type: lxc, action: reset}
+      loop_control:
+        loop_var: guest_power_case
+        label: "{{ guest_power_case }}"
+
+    - name: Prove a missing target fails closed at the presence gate
+      block:
+        - name: Run preflight with no target
+          ansible.builtin.include_role:
+            name: guest_power
+            tasks_from: preflight
+
+        - name: Fail when the unscoped run unexpectedly passes
+          ansible.builtin.fail:
+            msg: "An unscoped guest_power run unexpectedly passed preflight."
+      rescue:
+        - name: Assert the rejection came from the presence gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert the target variables are supplied'

@@ -1,0 +1,17 @@
+---
+# Power-act on one Proxmox guest by VMID, on whichever node it is live on.
+#
+# Required extra vars: guest_power_vmid, guest_power_type (qemu|lxc),
+# guest_power_action (start|stop|shutdown|reboot|reset). The node is read from
+# the cluster's live placement, never supplied. Transport is the same root SSH
+# access the proxmox inventory hosts already use; no API token is involved.
+
+- name: Power-act on one Proxmox guest
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  roles:
+    - role: guest_power
+      tags:
+        - guest_power
