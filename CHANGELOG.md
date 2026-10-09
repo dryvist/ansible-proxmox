@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.0](https://github.com/dryvist/ansible-proxmox/compare/v2.19.0...v2.20.0) (2026-10-09)
+
+
+### Features
+
+* **guest-power:** add variable-driven guest power playbook ([#955](https://github.com/dryvist/ansible-proxmox/issues/955)) ([63e5bbd](https://github.com/dryvist/ansible-proxmox/commit/63e5bbd12c61ef88f8e30ed07a24ce9a144971c3))
+
+
+### Bug Fixes
+
+* **ci:** grant actions: read to daily run limit callers ([#954](https://github.com/dryvist/ansible-proxmox/issues/954)) ([5bcb65b](https://github.com/dryvist/ansible-proxmox/commit/5bcb65b65a59cf07b2a2abafbe2632400cf0e1d0))
+* **guest-power:** load the tofu inventory user ([#957](https://github.com/dryvist/ansible-proxmox/issues/957)) ([f56f975](https://github.com/dryvist/ansible-proxmox/commit/f56f975fb94bffdaf98b46f55f5df314954854e8))
+* **guest-power:** read placement with command and skip nodes that did not answer ([cf12b95](https://github.com/dryvist/ansible-proxmox/commit/cf12b95de89b2372348a472750789ca2f74626d3))
+* **inventory:** never fall back to localhost for proxmox hosts ([3a3abd4](https://github.com/dryvist/ansible-proxmox/commit/3a3abd4f38a0def1dbb90a74d1e5249ac4afc8a3))
+* **inventory:** never fall back to localhost for proxmox hosts ([e8d6c94](https://github.com/dryvist/ansible-proxmox/commit/e8d6c9492775ede079a271adfe4014314f87acc2))
+* **placement:** read cluster placement without a pty ([c70be67](https://github.com/dryvist/ansible-proxmox/commit/c70be675a867faa83b0deeb388546f5f5c66adae))
+
 ## [2.19.0](https://github.com/dryvist/ansible-proxmox/compare/v2.18.0...v2.19.0) (2026-10-07)
 
 
