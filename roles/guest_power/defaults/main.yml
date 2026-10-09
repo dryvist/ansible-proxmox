@@ -1,0 +1,19 @@
+---
+# No defaults for the target: an unscoped run must fail, never act.
+# guest_power_vmid:   numeric VMID of exactly one guest
+# guest_power_type:   qemu | lxc
+# guest_power_action: start | stop | shutdown | reboot | reset (reset: qemu only)
+
+# Nodes asked for live placement (/cluster/resources); the first to answer is
+# used. The action itself runs on the node the guest is live on.
+guest_power_nodes: "{{ groups['proxmox'] | default([]) }}"
+
+guest_power_allowed_types: [qemu, lxc]
+guest_power_allowed_actions: [start, stop, shutdown, reboot, reset]
+
+# Graceful-shutdown budget (seconds) before the shutdown call gives up.
+guest_power_shutdown_timeout_seconds: 120
+
+# Bounded state verification.
+guest_power_verify_retries: 24
+guest_power_verify_delay_seconds: 5

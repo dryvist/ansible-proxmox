@@ -1,0 +1,75 @@
+---
+- name: Validate the power action request
+  ansible.builtin.include_tasks: preflight.yml
+
+# Any node answers /cluster/resources for the whole cluster. command, not raw:
+# raw allocates a pty (ssh -tt, no stdin payload), and pvesh prints nothing to
+# a pty with rc 0, so the read came back empty. command runs through the
+# module transport with no pty.
+- name: Read live guest placement from the cluster
+  ansible.builtin.command:
+    argv: [pvesh, get, /cluster/resources, --type, vm, --output-format, json]
+  delegate_to: "{{ item }}"
+  register: guest_power_placement
+  loop: "{{ guest_power_nodes }}"
+  changed_when: false
+  failed_when: false
+  ignore_unreachable: true
+
+- name: Parse the first placement answer
+  ansible.builtin.include_tasks: parse_placement.yml
+
+- name: Find the guest in live placement
+  ansible.builtin.set_fact:
+    guest_power_matches: >-
+      {{ guest_power_live
+         | selectattr('vmid', 'defined')
+         | selectattr('vmid', 'equalto', guest_power_vmid | int)
+         | list }}
+
+- name: Assert exactly one guest of the requested type was found
+  ansible.builtin.assert:
+    that:
+      - guest_power_live | length > 0
+      - guest_power_matches | length == 1
+      - guest_power_matches[0].type == guest_power_type
+    fail_msg: >-
+      Placement read returned {{ guest_power_live | length }} guests; matched
+      {{ guest_power_matches | length }} for VMID {{ guest_power_vmid }} (type
+      {{ guest_power_matches[0].type | default('none') }}, expected
+      {{ guest_power_type }}). Nothing was changed.
+
+- name: Record the power decision
+  ansible.builtin.debug:
+    msg: >-
+      guest_power {{ guest_power_action }} {{ guest_power_type }}
+      {{ guest_power_vmid }} on node {{ guest_power_matches[0].node }}:
+      status '{{ guest_power_matches[0].status }}'.
+
+- name: Refuse reboot or reset of a guest that is not running
+  ansible.builtin.assert:
+    that:
+      - guest_power_matches[0].status == 'running'
+    fail_msg: "A {{ guest_power_action }} needs a running guest; use start."
+  when: guest_power_action in ['reboot', 'reset']
+
+- name: Run the power action on the live node
+  ansible.builtin.command:
+    argv: >-
+      {{ [guest_power_tool, guest_power_action, guest_power_vmid | string]
+         + (['--timeout', guest_power_shutdown_timeout_seconds | string]
+            if guest_power_action == 'shutdown' else []) }}
+  delegate_to: "{{ guest_power_matches[0].node }}"
+  changed_when: true
+  when: guest_power_matches[0].status != guest_power_wanted_status
+        or guest_power_action in ['reboot', 'reset']
+
+- name: Verify the guest reaches the wanted state
+  ansible.builtin.command:
+    argv: ["{{ guest_power_tool }}", status, "{{ guest_power_vmid }}"]
+  delegate_to: "{{ guest_power_matches[0].node }}"
+  register: guest_power_verify
+  changed_when: false
+  until: "('status: ' ~ guest_power_wanted_status) in guest_power_verify.stdout"
+  retries: "{{ guest_power_verify_retries }}"
+  delay: "{{ guest_power_verify_delay_seconds }}"

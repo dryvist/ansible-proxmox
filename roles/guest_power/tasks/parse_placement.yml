@@ -1,0 +1,15 @@
+---
+# Pick the first node whose answer is a non-empty JSON list. A node that was
+# unreachable, exited non-zero, or returned empty or non-JSON output did not
+# answer; the next node is tried. No answer leaves an empty list, which the
+# caller's assertion rejects.
+- name: Parse the first placement answer
+  ansible.builtin.set_fact:
+    guest_power_live: >-
+      {{ guest_power_placement.results
+         | selectattr('rc', 'defined') | selectattr('rc', 'equalto', 0)
+         | selectattr('stdout', 'defined')
+         | map(attribute='stdout') | map('trim')
+         | select('match', '(?s)^\[.*\]$')
+         | map('from_json') | reject('equalto', [])
+         | first | default([]) }}

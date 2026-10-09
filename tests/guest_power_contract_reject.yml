@@ -1,0 +1,20 @@
+---
+- name: Reject one invalid guest power request
+  block:
+    - name: Run preflight with the invalid request
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: preflight
+      vars:
+        guest_power_vmid: "{{ guest_power_case.vmid }}"
+        guest_power_type: "{{ guest_power_case.type }}"
+        guest_power_action: "{{ guest_power_case.action }}"
+
+    - name: Fail when the invalid request unexpectedly passes
+      ansible.builtin.fail:
+        msg: "Invalid guest_power request unexpectedly passed: {{ guest_power_case }}"
+  rescue:
+    - name: Assert the rejection came from the value gate
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Assert the target values are valid'

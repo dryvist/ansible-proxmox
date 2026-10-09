@@ -156,6 +156,11 @@ jobs:
       - name: Verify pve_host_network MAC pinning contract
         run: python3 tests/test_pve_host_network_contract.py
 
+      # An unset PVE<N>_VE_HOSTNAME must resolve to the node's own name, never
+      # to an empty ansible_host that ssh and delegate_to read as localhost.
+      - name: Verify Proxmox host connection fallback
+        run: python3 tests/test_inventory_proxmox_host_connection.py
+
       # The drive artifact feeds a Nautobot sync that DELETES what it stops
       # seeing, so every failure here is silent and destructive: a filter that
       # stops excluding removable media churns the inventory every converge, and
@@ -280,3 +285,15 @@ jobs:
 
       - name: Verify HA relocation admission against sanitized API fixtures
         run: python3 tests/pve_ha_relocation/test_preflight.py
+
+      - name: Verify guest_power request validation fails closed
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/guest_power_contract.yml -i localhost, -c local
+
+      - name: Verify container_start resolution fails closed
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/container_start_contract.yml -i localhost, -c local
