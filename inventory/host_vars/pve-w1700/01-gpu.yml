@@ -16,7 +16,7 @@
 # (roles/lxc_gpu_features/defaults/main.yml) is keyed by SERVICE NAME, not by
 # node, and the role only acts on services whose vmid is actually PRESENT on
 # the host it is converging (`pct list`). So once the
-# llm-ada-lovelace-6X-16 LXC (nvidia: true in that map) is migrated here,
+# llm-ada-lovelace-6X-16G LXC (nvidia: true in that map) is migrated here,
 # this node's own run of the role picks
 # it up automatically -- no mapping edit, here or in pve-w5900.yml, moves
 # with the container. The AMD dri/kfd entry for the retired llm-fast service
