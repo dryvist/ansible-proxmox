@@ -57,11 +57,15 @@ jobs:
           path: |
             ~/.ansible/collections
             ~/.ansible/roles
-          key: ansible-galaxy-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
+          key: ansible-galaxy-v2-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
+          # A partial restore keeps unchanged dependencies warm; the forced
+          # install below reconciles restored content against the current pins.
+          restore-keys: |
+            ansible-galaxy-v2-${{ runner.os }}-
 
       - name: Install Ansible dependencies
         if: steps.galaxy-cache.outputs.cache-hit != 'true'
-        run: ansible-galaxy install -r requirements.yml
+        run: ansible-galaxy install -r requirements.yml --force
 
       # load_tofu.yml (imported by verify_inventory.yml) include_role's the
       # shared inventory_resolve role by FQCN, so this run is what proves the
