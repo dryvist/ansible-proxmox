@@ -1,0 +1,14 @@
+---
+- name: Parse a synthetic placement answer set
+  ansible.builtin.include_role:
+    name: guest_power
+    tasks_from: parse_placement
+  vars:
+    guest_power_placement:
+      results: "{{ guest_power_case.results }}"
+
+- name: Assert the case returned the expected guest count
+  ansible.builtin.assert:
+    that:
+      - guest_power_live | length == guest_power_case.want
+    fail_msg: "{{ guest_power_case.name }} returned {{ guest_power_live }}"

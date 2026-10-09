@@ -291,3 +291,9 @@ jobs:
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/guest_power_contract.yml -i localhost, -c local
+
+      - name: Verify container_start resolution fails closed
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/container_start_contract.yml -i localhost, -c local

@@ -2,10 +2,13 @@
 - name: Validate the power action request
   ansible.builtin.include_tasks: preflight.yml
 
-# Any node answers /cluster/resources for the whole cluster. raw needs no
-# Python or remote tmp dir on the node.
+# Any node answers /cluster/resources for the whole cluster. command, not raw:
+# raw allocates a pty (ssh -tt, no stdin payload), and pvesh prints nothing to
+# a pty with rc 0, so the read came back empty. command runs through the
+# module transport with no pty.
 - name: Read live guest placement from the cluster
-  ansible.builtin.raw: pvesh get /cluster/resources --type vm --output-format json
+  ansible.builtin.command:
+    argv: [pvesh, get, /cluster/resources, --type, vm, --output-format, json]
   delegate_to: "{{ item }}"
   register: guest_power_placement
   loop: "{{ guest_power_nodes }}"
@@ -14,11 +17,7 @@
   ignore_unreachable: true
 
 - name: Parse the first placement answer
-  ansible.builtin.set_fact:
-    guest_power_live: >-
-      {{ (guest_power_placement.results
-          | selectattr('rc', 'defined') | selectattr('rc', 'equalto', 0)
-          | map(attribute='stdout') | first | default('[]')) | from_json }}
+  ansible.builtin.include_tasks: parse_placement.yml
 
 - name: Find the guest in live placement
   ansible.builtin.set_fact:
