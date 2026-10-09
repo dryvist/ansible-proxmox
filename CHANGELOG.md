@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.1](https://github.com/dryvist/ansible-proxmox/compare/v2.20.0...v2.20.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **nvidia_driver:** lift the GPU power cap on the workstation node ([#969](https://github.com/dryvist/ansible-proxmox/issues/969)) ([568c94f](https://github.com/dryvist/ansible-proxmox/commit/568c94f9e985c6ef71b51efc18426df031cbfbfb))
+
 ## [2.20.0](https://github.com/dryvist/ansible-proxmox/compare/v2.19.0...v2.20.0) (2026-10-09)
 
 
