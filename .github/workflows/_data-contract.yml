@@ -156,6 +156,11 @@ jobs:
       - name: Verify pve_host_network MAC pinning contract
         run: python3 tests/test_pve_host_network_contract.py
 
+      # An unset PVE<N>_VE_HOSTNAME must resolve to the node's own name, never
+      # to an empty ansible_host that ssh and delegate_to read as localhost.
+      - name: Verify Proxmox host connection fallback
+        run: python3 tests/test_inventory_proxmox_host_connection.py
+
       # The drive artifact feeds a Nautobot sync that DELETES what it stops
       # seeing, so every failure here is silent and destructive: a filter that
       # stops excluding removable media churns the inventory every converge, and
