@@ -46,6 +46,7 @@ jobs:
           - 'roles/guest_power/**'
           - 'tests/guest_power_contract.yml'
           - 'tests/guest_power_contract_reject.yml'
+          - 'tests/test_inventory_proxmox_host_connection.py'
           - '.github/workflows/ci-gate.yml'
           - '.github/workflows/molecule.yml'
           - 'tests/workflow_policy/**'
