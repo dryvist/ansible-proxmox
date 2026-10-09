@@ -54,8 +54,10 @@ nvidia_driver_gpu_burn_enabled: true
 nvidia_driver_gpu_burn_compute: "120"
 nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda-13.2
 
-# temporary thermal cap until ventilation improves; revisit the limit then
-nvidia_driver_power_limit_w: 270
+# No cap: the card runs at its factory default limit (300 W). The last cap,
+# kept for reference if thermals regress:
+# nvidia_driver_power_limit_w: 270
+nvidia_driver_power_limit_w: null
 
 # Every core runs the performance governor.
 kernel_tuning_cpu_governor: performance
