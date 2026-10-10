@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   ci-fix:
-    uses: dryvist/ai-workflows/.github/workflows/cc-ci-fix.yml@d1d335bdb010b47108374e8a6152a7926477a32a # v0.48.1
+    uses: dryvist/ai-workflows/.github/workflows/cc-ci-fix.yml@e77c7f08b2f33f5dd3e1dff25c65056892ece445 # v0.48.2
     secrets: inherit
     with:
       repo_context: "Ansible playbooks and roles for configuring Proxmox VE host"

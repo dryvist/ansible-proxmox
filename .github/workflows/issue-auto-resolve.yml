@@ -64,7 +64,7 @@ jobs:
 
   run-triage:
     if: github.event_name == 'workflow_dispatch'
-    uses: dryvist/ai-workflows/.github/workflows/issue-triage.yml@d1d335bdb010b47108374e8a6152a7926477a32a # v0.48.1
+    uses: dryvist/ai-workflows/.github/workflows/issue-triage.yml@e77c7f08b2f33f5dd3e1dff25c65056892ece445 # v0.48.2
     secrets: inherit
     with:
       issue_number: ${{ inputs.issue_number }}
@@ -75,7 +75,7 @@ jobs:
       always() &&
       github.event_name == 'workflow_dispatch' &&
       (needs.run-triage.result == 'success' || needs.run-triage.result == 'skipped')
-    uses: dryvist/ai-workflows/.github/workflows/cc-issue-resolver.yml@d1d335bdb010b47108374e8a6152a7926477a32a # v0.48.1
+    uses: dryvist/ai-workflows/.github/workflows/cc-issue-resolver.yml@e77c7f08b2f33f5dd3e1dff25c65056892ece445 # v0.48.2
     secrets: inherit
     with:
       repo_context: "Ansible playbooks and roles for configuring Proxmox VE host"
