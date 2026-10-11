@@ -1,0 +1,54 @@
+---
+# ---------------------------------------------------------------------------
+# A hostname in llm_model_store_seed_exclude_hostnames gets no seed target,
+# while the node's other model-store containers keep theirs. Drives the role's
+# own selection task (select_targets.yml) against a fixed inventory fixture.
+# ---------------------------------------------------------------------------
+- name: Verify llm_model_store_seed_exclude_hostnames drops only the named containers
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars:
+    llm_model_store_seed_node_name: pve-a
+    llm_model_store_seed_exclude_hostnames: [llm-excluded]
+    containers_from_tofu:
+      llm-kept:
+        hostname: llm-kept
+        node: pve-a
+        models_mount_path: /var/lib/llm
+      llm-excluded:
+        hostname: llm-excluded
+        node: pve-a
+        models_mount_path: /var/lib/llm
+      llm-other-node:
+        hostname: llm-other-node
+        node: pve-b
+        models_mount_path: /var/lib/llm
+
+  tasks:
+    - name: Run the target selection
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/select_targets.yml
+
+    - name: Assert only the non-excluded container on this node is a target
+      ansible.builtin.assert:
+        that:
+          - llm_model_store_seed_targets | map(attribute='hostname') | list == ['llm-kept']
+        fail_msg: >-
+          Expected only llm-kept as a target. Got
+          {{ llm_model_store_seed_targets | map(attribute='hostname') | list }}.
+        quiet: true
+
+    - name: Run the target selection with the default empty exclusion list
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/select_targets.yml
+      vars:
+        llm_model_store_seed_exclude_hostnames: []
+
+    - name: Assert both containers on this node are targets without an exclusion
+      ansible.builtin.assert:
+        that:
+          - llm_model_store_seed_targets | map(attribute='hostname') | sort == ['llm-excluded', 'llm-kept']
+        fail_msg: >-
+          Expected llm-excluded and llm-kept as targets. Got
+          {{ llm_model_store_seed_targets | map(attribute='hostname') | list }}.
+        quiet: true

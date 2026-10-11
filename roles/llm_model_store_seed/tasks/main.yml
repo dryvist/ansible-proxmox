@@ -13,16 +13,7 @@
     - llm_model_store_seed
 
 - name: Find this node's llm-fabric model-store containers in the published inventory
-  ansible.builtin.set_fact:
-    llm_model_store_seed_targets: >-
-      {{
-        (containers_from_tofu | default({})) | dict2items
-        | selectattr('value.node', 'defined')
-        | selectattr('value.node', 'equalto', llm_model_store_seed_node_name)
-        | selectattr('value.models_mount_path', 'defined')
-        | rejectattr('value.models_mount_path', 'equalto', None)
-        | map(attribute='value') | list
-      }}
+  ansible.builtin.include_tasks: select_targets.yml
   tags:
     - llm_model_store_seed
 
