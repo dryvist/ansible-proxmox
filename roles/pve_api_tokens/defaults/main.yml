@@ -19,6 +19,9 @@ pve_api_tokens_consumers:
     certificate_field: homarr_proxmox_ca
   - app: pve-exporter
     field_prefix: pve_exporter
+  - app: nautobot
+    field_prefix: nautobot_proxmox
+    certificate_field: nautobot_proxmox_ca
 
 pve_api_tokens_role: PVEAuditor
 pve_api_tokens_realm: pve
