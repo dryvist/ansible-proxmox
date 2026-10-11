@@ -95,6 +95,8 @@
     label: "container {{ item }}"
   register: llm_model_store_seed_surplus_pending
   changed_when: false
+  # Read-only; a check run needs the real value to preview the seed.
+  check_mode: false
 
 # A detach that applied live leaves no mpN key in /pending; one that is still
 # queued keeps listing it until the container restarts.
@@ -132,6 +134,8 @@
     label: "container {{ item }}"
   register: llm_model_store_seed_surplus_configs
   changed_when: false
+  # Read-only; a check run needs the real value to preview the seed.
+  check_mode: false
 
 - name: Reset the detached-volume accumulator
   ansible.builtin.set_fact:
