@@ -22,6 +22,11 @@
           hostname).
         quiet: true
 
+    - name: Render the ntfy webhook body and Title header for the PVE API
+      ansible.builtin.set_fact:
+        pve_notifications_ntfy_body_b64: "{{ pve_notifications_ntfy_body_template | b64encode }}"
+        pve_notifications_ntfy_header: "name=Title,value={{ pve_notifications_ntfy_title_template | b64encode }}"
+
     - name: Check whether the ntfy webhook target already exists
       ansible.builtin.command:
         argv:
@@ -46,14 +51,20 @@
           - "{{ pve_notifications_ntfy_url }}"
           - --method
           - "{{ pve_notifications_ntfy_method }}"
+          - --body
+          - "{{ pve_notifications_ntfy_body_b64 }}"
+          - --header
+          - "{{ pve_notifications_ntfy_header }}"
           - --comment
           - Managed by ansible-proxmox pve_notifications
       when: pve_notifications_target_check.rc != 0
       changed_when: true
 
-    # rc == 0 means the target already exists; keep its URL/method in sync
-    # rather than re-creating (pvesh create fails on a name that exists).
-    - name: Update the ntfy webhook target if its URL or method drifted
+    # rc == 0 means the target already exists; keep its URL/method/body/header
+    # in sync rather than re-creating (pvesh create fails on a name that exists).
+    - name: Update the ntfy webhook target if its URL, method, body or header drifted
+      vars:
+        _current: "{{ pve_notifications_target_check.stdout | from_json }}"
       ansible.builtin.command:
         argv:
           - pvesh
@@ -63,10 +74,16 @@
           - "{{ pve_notifications_ntfy_url }}"
           - --method
           - "{{ pve_notifications_ntfy_method }}"
+          - --body
+          - "{{ pve_notifications_ntfy_body_b64 }}"
+          - --header
+          - "{{ pve_notifications_ntfy_header }}"
       when:
         - pve_notifications_target_check.rc == 0
-        - (pve_notifications_ntfy_url != (pve_notifications_target_check.stdout | from_json).url) or
-          (pve_notifications_ntfy_method != (pve_notifications_target_check.stdout | from_json).method)
+        - (pve_notifications_ntfy_url != _current.url) or
+          (pve_notifications_ntfy_method != _current.method) or
+          (pve_notifications_ntfy_body_b64 != (_current.body | default(''))) or
+          ([pve_notifications_ntfy_header] != (_current.header | default([])))
       changed_when: true
 
     - name: Check which matchers already exist
