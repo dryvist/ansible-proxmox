@@ -38,6 +38,8 @@
       register: pve_notifications_target_check
       changed_when: false
       failed_when: false
+      # Read-only; a check run needs the live state to preview any drift.
+      check_mode: false
 
     - name: Create the ntfy webhook target
       ansible.builtin.command:
@@ -100,6 +102,8 @@
       register: pve_notifications_matcher_check
       changed_when: false
       failed_when: false
+      # Read-only; a check run needs the live state to preview any drift.
+      check_mode: false
 
     - name: Create missing matchers routed at the ntfy target
       ansible.builtin.command:
