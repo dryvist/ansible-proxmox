@@ -123,10 +123,12 @@
   tags:
     - pve_health_telemetry
 
+# Check mode runs no sample and skips the read-back, so there is nothing to prove.
 - name: Read back the emitted telemetry line
   ansible.builtin.command: journalctl -t {{ pve_health_telemetry_tag }} -n 1 --no-pager -o cat
   register: pve_health_telemetry_sample
   changed_when: false
+  when: not ansible_check_mode
   tags:
     - pve_health_telemetry
 
@@ -146,5 +148,6 @@
       No usable health telemetry line found in the journal under tag
       '{{ pve_health_telemetry_tag }}'. Got: {{ pve_health_telemetry_sample.stdout | default('') | truncate(200) }}
     quiet: true
+  when: not ansible_check_mode
   tags:
     - pve_health_telemetry
