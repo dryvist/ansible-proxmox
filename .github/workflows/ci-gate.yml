@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@e3c0fa803516d9a85697cce97583bc2b7cc5c6d6
+    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@0aab1ddaecacea5dc9752b075e2ac10491af33bf # v1.11.3
     with:
       molecule: false
       molecule_contract_filters: |
