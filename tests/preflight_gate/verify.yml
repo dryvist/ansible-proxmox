@@ -7,8 +7,6 @@
   vars_files:
     - fixtures.yml
   vars:
-    preflight_gate_work_dir: /private/tmp/claude-501/-Users-jevans-git-public-homelab/aa50528b-3326-400b-a1ce-81e65738c999/scratchpad/preflight-gate-G1
-    preflight_gate_stub_dir: "{{ preflight_gate_work_dir }}/bin"
     gate_test_cases:
       - name: good
         inventory: "{{ gate_inventory }}"
@@ -63,41 +61,56 @@
         ha: "{{ gate_ha_recovery }}"
         allow_unchecked: true
         unchecked_guest: guest-1
-  environment:
-    PATH: "{{ preflight_gate_stub_dir }}:{{ lookup('ansible.builtin.env', 'PATH') }}"
   tasks:
-    - name: Create the offline fixture directories
-      ansible.builtin.file:
-        path: "{{ item }}"
+    - name: Create a private offline work directory
+      ansible.builtin.tempfile:
         state: directory
-        mode: "0755"
-      loop:
-        - "{{ preflight_gate_work_dir }}"
-        - "{{ preflight_gate_stub_dir }}"
+        prefix: preflight-gate-
+      register: preflight_gate_tmp
 
-    - name: Install the recorded pvesh responder
-      ansible.builtin.copy:
-        content: |
-          #!/bin/sh
-          printf '%s\n' "$*" >> {{ preflight_gate_work_dir }}/commands.log
-          case "$*" in
-            'get /cluster/ha/resources --output-format json') cat {{ preflight_gate_work_dir }}/ha-resources.json ;;
-            'get /cluster/replication --output-format json') cat {{ preflight_gate_work_dir }}/replication.json ;;
-            'get /cluster/ha/rules --output-format json') cat {{ preflight_gate_work_dir }}/rules.json ;;
-            'get /cluster/resources --output-format json') cat {{ preflight_gate_work_dir }}/resources.json ;;
-            get\ /nodes/*/qemu/*/config\ --output-format\ json) cat {{ preflight_gate_work_dir }}/guest-config.json ;;
-            *) printf '%s\n' 'unexpected pvesh request' >&2; exit 2 ;;
-          esac
-        dest: "{{ preflight_gate_stub_dir }}/pvesh"
-        mode: "0755"
+    - name: Name the work and stub directories
+      ansible.builtin.set_fact:
+        preflight_gate_work_dir: "{{ preflight_gate_tmp.path }}"
+        preflight_gate_stub_dir: "{{ preflight_gate_tmp.path }}/bin"
 
-    - name: Run each offline gate case
-      ansible.builtin.include_tasks: run_case.yml
-      loop: "{{ gate_test_cases }}"
-      loop_control:
-        loop_var: gate_case
-        label: "{{ gate_case.name }}"
+    - name: Run the offline gate cases with the recorded responder first on PATH
+      environment:
+        PATH: "{{ preflight_gate_stub_dir }}:{{ lookup('ansible.builtin.env', 'PATH') }}"
+      block:
+        - name: Create the stub directory
+          ansible.builtin.file:
+            path: "{{ preflight_gate_stub_dir }}"
+            state: directory
+            mode: "0755"
 
-    - name: Report the offline case count
-      ansible.builtin.debug:
-        msg: "PASS: {{ gate_test_cases | length }} offline preflight gate cases"
+        - name: Install the recorded pvesh responder
+          ansible.builtin.copy:
+            content: |
+              #!/bin/sh
+              printf '%s\n' "$*" >> {{ preflight_gate_work_dir }}/commands.log
+              case "$*" in
+                'get /cluster/ha/resources --output-format json') cat {{ preflight_gate_work_dir }}/ha-resources.json ;;
+                'get /cluster/replication --output-format json') cat {{ preflight_gate_work_dir }}/replication.json ;;
+                'get /cluster/ha/rules --output-format json') cat {{ preflight_gate_work_dir }}/rules.json ;;
+                'get /cluster/resources --output-format json') cat {{ preflight_gate_work_dir }}/resources.json ;;
+                get\ /nodes/*/qemu/*/config\ --output-format\ json) cat {{ preflight_gate_work_dir }}/guest-config.json ;;
+                *) printf '%s\n' 'unexpected pvesh request' >&2; exit 2 ;;
+              esac
+            dest: "{{ preflight_gate_stub_dir }}/pvesh"
+            mode: "0755"
+
+        - name: Run each offline gate case
+          ansible.builtin.include_tasks: run_case.yml
+          loop: "{{ gate_test_cases }}"
+          loop_control:
+            loop_var: gate_case
+            label: "{{ gate_case.name }}"
+
+        - name: Report the offline case count
+          ansible.builtin.debug:
+            msg: "PASS: {{ gate_test_cases | length }} offline preflight gate cases"
+      always:
+        - name: Remove the offline work directory
+          ansible.builtin.file:
+            path: "{{ preflight_gate_work_dir }}"
+            state: absent
