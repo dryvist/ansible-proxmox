@@ -117,6 +117,18 @@ No real service is touched.
   Default: `3` / `1`. Restart bound for every guest; relocate bound for the
   singleton class only.
 
+- `pve_ha_state`
+
+  Default: `started`. Desired state for singleton guests with a viable pvesr
+  replica.
+
+- `pve_ha_unrecoverable_state`
+
+  Default: `ignored`. Desired state for guests without a viable recovery node,
+  including `application_ha`, `immovable`, and extra SIDs without a replica.
+  `ignored` keeps these resources available to affinity rules without arming
+  the node-local pve-ha-lrm watchdog. Allowed values: `ignored` or `started`.
+
 - `pve_ha_pinned_max_relocate`
 
   Default: `0`. Relocate bound for `application_ha` and `immovable` guests —
