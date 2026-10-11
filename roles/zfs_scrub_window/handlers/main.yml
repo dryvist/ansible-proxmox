@@ -1,0 +1,7 @@
+---
+# Reload systemd after writing or removing scrub unit files. Docker has no
+# systemd manager to reload.
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'

@@ -80,7 +80,9 @@ postgres_standby_jobs: >-
         'source_dir': '/',
         'archive_dir': '/bulk/databases/postgres'},
        {'name': 'postgres-ai',
-        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-ai-1'] | default({})).hostname | default('postgres-ai-1')) ~ '.' ~ domain_from_tofu,
+        'source_host': 'root@' ~
+          (((containers_from_tofu | default({}))['postgres-ai-1'] | default({})).hostname
+           | default('postgres-ai-1')) ~ '.' ~ domain_from_tofu,
         'source_dir': '/',
         'archive_dir': '/bulk/databases/postgres-ai'}
      ] }}
@@ -109,6 +111,11 @@ postgres_standby_jobs: >-
 zfs_pools_vm_disk_properties:
   bulk/vm-915100-disk-1:
     sync: disabled
+
+# Scrubs on this HDD pool progress only off-peak.
+# Operator decision 2026-10-11.
+zfs_scrub_window_enabled: true
+zfs_scrub_window_pools: [bulk]
 
 # BMC address for the idrac_power role. This node has a BMC but carried no
 # address, so the role skipped it entirely -- including the chassis

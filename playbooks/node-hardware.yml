@@ -37,6 +37,12 @@
       tags:
         - node_scheduled_wake
 
+    # Pause active ZFS scrubs during peak hours and resume only a paused scrub.
+    # Inert unless a host opts pools into the nightly off-peak window.
+    - role: zfs_scrub_window
+      tags:
+        - zfs_scrub_window
+
     # Wake-on-LAN persistence for non-power-managed hosts (no BMC/iDRAC) that
     # are meant to stay always-on. Inert unless a host sets
     # wol_enable_enabled: true. BIOS/UEFI WoL must already be on;
