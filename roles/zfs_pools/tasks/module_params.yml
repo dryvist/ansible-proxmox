@@ -36,7 +36,18 @@
     group: root
     mode: "0644"
   register: zfs_pools_modprobe_render
+  # The initramfs loads ZFS before the root filesystem is mounted, so its
+  # bundled modprobe config wins over this file unless it is regenerated.
+  notify: Refresh ZFS initramfs and Proxmox ESPs
   when: zfs_pools_module_params_norm | length > 0
+
+- name: Force a ZFS initramfs refresh when requested
+  ansible.builtin.debug:
+    msg: >-
+      Refreshing the initramfs because zfs_pools_force_initramfs_refresh is enabled.
+  changed_when: true
+  notify: Refresh ZFS initramfs and Proxmox ESPs
+  when: zfs_pools_force_initramfs_refresh | bool
 
 # Applied at module load, so the running kernel keeps the OLD value until the
 # module reloads (i.e. reboot). Reloading zfs on a live hypervisor is not an

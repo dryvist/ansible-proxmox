@@ -1,0 +1,27 @@
+---
+# /etc/modprobe.d/zfs.conf is not available when ZFS loads from the initramfs
+# before the root filesystem mounts. A stale bundled copy therefore wins at
+# boot unless every installed initramfs is regenerated and the ESPs are synced.
+# Notified by name; the three handlers run in this order on one notification.
+- name: Update initramfs for all installed kernels
+  ansible.builtin.command:
+    cmd: update-initramfs -u -k all
+  changed_when: true
+  when: ansible_virtualization_type | default('') != 'docker'
+  listen: Refresh ZFS initramfs and Proxmox ESPs
+
+- name: Check for proxmox-boot-tool
+  ansible.builtin.stat:
+    path: /usr/sbin/proxmox-boot-tool
+  register: zfs_pools_proxmox_boot_tool
+  when: ansible_virtualization_type | default('') != 'docker'
+  listen: Refresh ZFS initramfs and Proxmox ESPs
+
+- name: Sync Proxmox ESPs
+  ansible.builtin.command:
+    cmd: proxmox-boot-tool refresh
+  changed_when: true
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - zfs_pools_proxmox_boot_tool.stat.exists | default(false)
+  listen: Refresh ZFS initramfs and Proxmox ESPs
