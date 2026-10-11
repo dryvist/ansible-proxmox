@@ -96,7 +96,7 @@ def render(dump_dir, map_path):
     return env.from_string(body).render(**variables)
 
 
-def run(archives, mapping):
+def run(archives, mapping, pools=()):
     """Run the script over a fixture dump dir; return the emitted key=value dict.
 
     `mapping` of None means no map file at all, which is the case the UNKNOWN
@@ -145,6 +145,22 @@ def run(archives, mapping):
         with open(ps_stub, "w") as fh:
             fh.write("#!/bin/sh\nexit 0\n")
         os.chmod(ps_stub, os.stat(ps_stub).st_mode | stat.S_IEXEC)
+
+        zpool_stub = os.path.join(binstub, "zpool")
+        capacity_values = " ".join(str(capacity) for _, capacity in pools)
+        pool_values = " ".join(
+            "'%s' '%s'" % (name, capacity) for name, capacity in pools
+        )
+        with open(zpool_stub, "w") as fh:
+            fh.write("#!/bin/sh\ncase \"$*\" in\n")
+            fh.write("  'list -Hpo capacity') printf '%s\\n' %s ;;\n" % (
+                "%s", capacity_values
+            ))
+            fh.write("  'list -Hpo name,capacity') printf '%s\\t%s\\n' %s ;;\n" % (
+                "%s", "%s", pool_values
+            ))
+            fh.write("esac\n")
+        os.chmod(zpool_stub, os.stat(zpool_stub).st_mode | stat.S_IEXEC)
 
         env = dict(os.environ, PATH=binstub + os.pathsep + os.environ["PATH"])
         result = subprocess.run([script], env=env, capture_output=True, text=True)
@@ -196,9 +212,14 @@ check("no map", run([qemu(RECYCLED, 4), lxc(RECYCLED, 19)], None),
 #    is not permanently warning — an alarm that is always on is not an alarm.
 check("clean", run([lxc(STABLE, 19), lxc(STABLE, 20)], {STABLE: "lxc"}),
       {"backup_type_change": "0", "backup_identity_mismatch": "0",
-       "backup_archive_ids": "1", "severity": "info"})
+       "backup_archive_ids": "1", "severity": "info",
+       "zpool_cap_max": "-1", "zpool_cap_pool": "unknown"})
+
+# 5. Report the fullest imported pool rather than the first pool in zpool's list.
+check("fullest pool", run([], {}, [("tank", 42), ("fast", 91), ("cold", 76)]),
+      {"zpool_cap_max": "91", "zpool_cap_pool": "fast"})
 
 if failures:
     print("FAIL: backup identity assertion\n  " + "\n  ".join(failures))
     sys.exit(1)
-print("PASS: backup identity assertion (4 cases)")
+print("PASS: backup identity and pool capacity assertion (5 cases)")
