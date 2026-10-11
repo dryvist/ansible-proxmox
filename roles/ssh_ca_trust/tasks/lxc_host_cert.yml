@@ -52,6 +52,8 @@
   loop: "{{ ssh_ca_trust_lxc_running }}"
   register: ssh_ca_trust_lxc_host_cert_probe
   changed_when: false
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
 
 - name: Decide which running containers need a (re)signed host certificate
   ansible.builtin.include_tasks: lxc_host_cert_decide.yml

@@ -36,6 +36,8 @@
     cmd: ssh-keygen -Lf {{ ssh_ca_trust_host_cert_path }}
   register: ssh_ca_trust_host_cert_probe
   changed_when: false
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
   when: ssh_ca_trust_host_cert_stat.stat.exists
   tags: [ssh_ca_trust]
 

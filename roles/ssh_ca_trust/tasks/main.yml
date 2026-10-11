@@ -22,6 +22,8 @@
     cmd: timedatectl show -p NTPSynchronized --value
   register: ssh_ca_trust_ntp
   changed_when: false
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
   failed_when: ssh_ca_trust_ntp.stdout != 'yes'
   when:
     - ssh_ca_trust_enabled | bool
@@ -34,6 +36,8 @@
     return_content: true
     follow_redirects: all
   register: ssh_ca_trust_fetched
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
   when: ssh_ca_trust_enabled | bool
   tags: [ssh_ca_trust]
 
@@ -46,6 +50,8 @@
       | ssh-keygen -l -f /dev/stdin | awk '{print $2}'
   register: ssh_ca_trust_fetched_fp
   changed_when: false
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
   when: ssh_ca_trust_enabled | bool
   tags: [ssh_ca_trust]
 
@@ -151,6 +157,8 @@
     cmd: sshd -T
   register: ssh_ca_trust_effective
   changed_when: false
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
   when:
     - ssh_ca_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
@@ -178,6 +186,8 @@
     cmd: grep -cE '^(ssh|ecdsa)-' /root/.ssh/authorized_keys
   register: ssh_ca_trust_static_keys
   changed_when: false
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
   failed_when: ssh_ca_trust_static_keys.stdout | int < 1
   when:
     - ssh_ca_trust_enabled | bool

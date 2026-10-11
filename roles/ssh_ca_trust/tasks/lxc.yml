@@ -20,6 +20,8 @@
     cmd: "set -o pipefail; pct list | awk 'NR>1 && $2==\"running\" {print $1}'"
   register: ssh_ca_trust_lxc_running_raw
   changed_when: false
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
 
 - name: List this node's non-running LXC containers
   ansible.builtin.shell:
@@ -27,6 +29,8 @@
     cmd: "set -o pipefail; pct list | awk 'NR>1 && $2!=\"running\" {print $1}'"
   register: ssh_ca_trust_lxc_stopped_raw
   changed_when: false
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
 
 - name: Build running / stopped container lists
   ansible.builtin.set_fact:
@@ -185,7 +189,7 @@
 - name: Record per-container hardened-sshd readiness
   ansible.builtin.set_fact:
     ssh_ca_trust_lxc_ready: >-
-      {{ ssh_ca_trust_lxc_ready | default({}) | combine({item.item: ('READY=1' in item.stdout)}) }}
+      {{ ssh_ca_trust_lxc_ready | default({}) | combine({item.item: ('READY=1' in (item.stdout | default('')))}) }}
   loop: "{{ ssh_ca_trust_lxc_push.results }}"
   loop_control:
     label: "{{ item.item }}"
