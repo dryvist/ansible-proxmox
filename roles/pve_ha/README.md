@@ -145,8 +145,8 @@ No real service is touched.
 
 - `pve_ha_immovable_guests`
 
-  Default: `{plex: ...}`. Guests that cannot relocate for a structural reason,
-  as `name: reason`. The only class that is declared.
+  Default: `{}`. Guests that cannot relocate for a structural reason, as
+  `name: reason`. The only class that is declared.
 
 - `pve_ha_class_application`
 

@@ -49,10 +49,11 @@ membership *is* the classification.
   self-fenced to get there.
 
 **`immovable`** — cannot relocate for a structural reason, declared in
-`pve_ha_immovable_guests` as `name: reason`. `plex` is the only one: its
-container config carries bind mounts (host directory paths, not zvols), and
-`pvesr` replicates zvols only, so it can be neither replicated nor
-live-migrated — now or later. It is `ignored` by default; setting
+`pve_ha_immovable_guests` as `name: reason`. None is declared by default. A
+typical reason is a container whose config carries bind mounts (host
+directory paths, not zvols): `pvesr` replicates zvols only, so it can be
+neither replicated nor live-migrated. An immovable guest is `ignored` by
+default; setting
 `pve_ha_unrecoverable_state: started` opts into in-place HA restarts, with
 `max_relocate` `0` so ha-manager never attempts a move that could only fail.
 Being immovable exempts it from the singleton replica requirement.
