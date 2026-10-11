@@ -177,11 +177,14 @@
     - crash_diagnostics
     - sysctl
 
+# Check mode writes nothing to disk and skips the read-back, so there is nothing to prove.
 - name: Read back the persisted sysctl file
   ansible.builtin.slurp:
     src: "{{ crash_diagnostics_sysctl_file }}"
   register: crash_diagnostics_sysctl_persisted
-  when: ansible_virtualization_type != 'docker'
+  when:
+    - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - crash_diagnostics
     - sysctl
@@ -197,7 +200,9 @@
   loop: "{{ crash_diagnostics_sysctl_settings }}"
   loop_control:
     label: "{{ item.name }}"
-  when: ansible_virtualization_type != 'docker'
+  when:
+    - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - crash_diagnostics
     - sysctl
