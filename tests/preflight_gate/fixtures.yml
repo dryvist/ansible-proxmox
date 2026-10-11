@@ -1,0 +1,105 @@
+---
+gate_inventory:
+  vms:
+    guest-1:
+      node: node-a
+      memory_mb: 2048
+      datastore: pool-a
+      vmid: 100
+      tags: [ha-managed]
+      ha_replication_target: node-b
+      disks:
+        - datastore: pool-a
+          path: vm-100-disk-0
+          interface: scsi0
+  containers:
+    guest-2:
+      node: node-a
+      memory_mb: 512
+      datastore: pool-ct
+      ansible_pct_vmid: 101
+      tags: []
+
+gate_inventory_unchecked:
+  vms:
+    guest-1:
+      node: node-a
+      memory_mb: 2048
+      datastore: pool-a
+      vmid: 100
+      tags: [ha-managed]
+      ha_replication_target: node-b
+      disks: []
+  containers: "{{ gate_inventory.containers }}"
+
+gate_devices:
+  - name: node-a
+    cf_physical_ram_mb: 8192
+
+gate_live_guests:
+  - name: guest-1
+    memory_mb: 2048
+    current_node: node-a
+    live_disks:
+      - interface: scsi0
+        datastore: pool-a
+  - name: guest-2
+    memory_mb: 512
+    current_node: node-a
+    live_disks:
+      - interface: rootfs
+        datastore: pool-ct
+
+gate_live_guests_missing_pool:
+  - name: guest-1
+    memory_mb: 2048
+    current_node: node-a
+    live_disks: []
+  - name: guest-2
+    memory_mb: 512
+    current_node: node-a
+    live_disks:
+      - interface: rootfs
+        datastore: pool-ct
+
+gate_ha_recovery:
+  ha_resources:
+    - sid: vm:100
+      max_relocate: 1
+  replication:
+    - guest: "100"
+      source: node-a
+      target: node-b
+      disable: 0
+  rules:
+    - type: node-affinity
+      strict: 1
+      resources: vm:100
+      nodes: node-a,node-b
+      affinity: positive
+      rule: fixture-replica
+  resources:
+    - type: qemu
+      vmid: 100
+      node: node-a
+  guest_config:
+    scsi0: pool-a:vm-100-disk-0,size=32G,replicate=1
+
+gate_ha_no_recovery:
+  ha_resources:
+    - sid: vm:100
+      max_relocate: 1
+  replication: []
+  rules:
+    - type: node-affinity
+      strict: 1
+      resources: vm:100
+      nodes: node-a,node-b
+      affinity: positive
+      rule: fixture-replica
+  resources:
+    - type: qemu
+      vmid: 100
+      node: node-a
+  guest_config:
+    scsi0: pool-a:vm-100-disk-0,size=32G,replicate=1
