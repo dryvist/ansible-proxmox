@@ -15,8 +15,8 @@
   ansible.builtin.assert:
     that:
       - lookup('ansible.builtin.env', 'NAUTOBOT_URL') | length > 0
-      - lookup('ansible.builtin.env', 'NAUTOBOT_READ_TOKEN') | length > 0
-    fail_msg: NAUTOBOT_URL and NAUTOBOT_READ_TOKEN must be non-empty for Nautobot preflight.
+      - lookup('ansible.builtin.env', 'NAUTOBOT_TOKEN') | length > 0
+    fail_msg: NAUTOBOT_URL and NAUTOBOT_TOKEN must be non-empty for Nautobot preflight.
   when: not (preflight_skip_fetch | default(false) | bool)
 
 - name: Evaluate published guest memory and storage against Nautobot
@@ -24,7 +24,7 @@
     name: jpe_ansible.nautobot.preflight
   vars:
     preflight_nautobot_url: "{{ lookup('ansible.builtin.env', 'NAUTOBOT_URL') }}"
-    preflight_read_token: "{{ lookup('ansible.builtin.env', 'NAUTOBOT_READ_TOKEN') }}"
+    preflight_read_token: "{{ lookup('ansible.builtin.env', 'NAUTOBOT_TOKEN') }}"
     preflight_desired_guests: "{{ preflight_gate_projection.guests }}"
 
 - name: Confirm Nautobot preflight coverage
