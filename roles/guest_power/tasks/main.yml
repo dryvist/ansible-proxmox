@@ -73,3 +73,12 @@
   until: "('status: ' ~ guest_power_wanted_status) in guest_power_verify.stdout"
   retries: "{{ guest_power_verify_retries }}"
   delay: "{{ guest_power_verify_delay_seconds }}"
+
+# The play runs on localhost and reaches the node through delegate_to, so the
+# node never appears in the play recap. playbooks/guest-power.yml reads the end
+# state back on the node itself through this group.
+- name: Hand the live node to the read-back play
+  ansible.builtin.add_host:
+    name: "{{ guest_power_matches[0].node }}"
+    groups: guest_power_node
+  changed_when: false

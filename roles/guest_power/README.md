@@ -8,7 +8,9 @@ Proxmox API token is involved.
 The role reads `pvesh get /cluster/resources` from the first `proxmox` node
 that answers, requires exactly one guest with the VMID and type, then runs
 `qm` or `pct` on the node placement reports and polls `status` until the wanted
-state. A start of a running guest or a stop of a stopped guest is a no-op.
+state. `playbooks/guest-power.yml` then reads the state back on that node in a
+play of its own, so the node appears in the play recap. A start of a running
+guest or a stop of a stopped guest is a no-op.
 Reboot and reset need a running guest. Check mode is refused.
 
 ## Usage
