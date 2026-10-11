@@ -1,0 +1,83 @@
+---
+# Read-only entry for HA relocation admission.
+- name: Read current HA resources for relocation admission
+  ansible.builtin.command: pvesh get /cluster/ha/resources --output-format json
+  register: pve_ha_resources_raw
+  changed_when: false
+
+- name: Reset collected relocation evidence
+  ansible.builtin.set_fact:
+    pve_ha_preflight_guest_configs: {}
+    pve_ha_replication_ct_by_host: {}
+    pve_ha_replication_vm_by_host: {}
+    pve_ha_replication_guests: []
+    pve_ha_unsafe_singletons: []
+
+- name: Map container names to Proxmox VMIDs
+  ansible.builtin.set_fact:
+    pve_ha_vmid_by_host: >-
+      {{ dict((containers_from_tofu | default({})) | dict2items
+              | selectattr('value.ansible_pct_vmid', 'defined')
+              | map(attribute='key') | list
+              | zip((containers_from_tofu | default({})) | dict2items
+                   | selectattr('value.ansible_pct_vmid', 'defined')
+                   | map(attribute='value.ansible_pct_vmid') | list)) }}
+
+- name: Map VM names to Proxmox VMIDs
+  ansible.builtin.set_fact:
+    pve_ha_vm_vmid_by_host: >-
+      {{ dict((vms_from_tofu | default({})) | dict2items
+              | selectattr('value.vmid', 'defined')
+              | map(attribute='key') | list
+              | zip((vms_from_tofu | default({})) | dict2items
+                   | selectattr('value.vmid', 'defined')
+                   | map(attribute='value.vmid') | list)) }}
+
+- name: Resolve the configured HA relocation scope
+  ansible.builtin.include_tasks: replication_scope.yml
+
+- name: Refuse HA members without published identities
+  ansible.builtin.assert:
+    that:
+      - (pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host) | list | length) == 0
+      - (pve_ha_vm_names | reject('in', pve_ha_vm_vmid_by_host) | list | length) == 0
+    fail_msg: >-
+      HA relocation admission cannot resolve configured members:
+      {{ (pve_ha_ct_hostnames | reject('in', pve_ha_vmid_by_host) | list)
+         + (pve_ha_vm_names | reject('in', pve_ha_vm_vmid_by_host) | list) }}.
+
+- name: Refuse HA members without a declared recovery node
+  ansible.builtin.assert:
+    that:
+      - pve_ha_unsafe_singletons | length == 0
+    fail_msg: >-
+      HA relocation admission failed: {{ pve_ha_unsafe_singletons }} have no
+      declared recovery node in published inventory.
+
+- name: Resolve planned relocation resources
+  ansible.builtin.set_fact:
+    pve_ha_managed_sids: >-
+      {{ (pve_ha_ct_hostnames | reject('in', pve_ha_unsafe_singletons)
+          | select('in', pve_ha_vmid_by_host)
+          | map('extract', pve_ha_vmid_by_host) | map('string')
+          | map('regex_replace', '^(.+)$', 'ct:\1') | list)
+         + (pve_ha_vm_names | reject('in', pve_ha_unsafe_singletons)
+            | select('in', pve_ha_vm_vmid_by_host)
+            | map('extract', pve_ha_vm_vmid_by_host) | map('string')
+            | map('regex_replace', '^(.+)$', 'vm:\1') | list)
+         + (pve_ha_extra_sids | default([])) }}
+    pve_ha_relocatable_sids: >-
+      {{ pve_ha_replication_guests | selectattr('viable')
+         | map(attribute='sid') | list }}
+
+- name: Read live relocation evidence and run HA admission
+  ansible.builtin.include_tasks: relocation_reads.yml
+
+- name: Confirm HA admission evaluated a relocating resource
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pve_ha_relocation_resources
+         | selectattr('max_relocate', 'defined')
+         | selectattr('max_relocate', 'gt', 0) | list | length) > 0
+    fail_msg: HA relocation admission did not evaluate any relocating resource.
