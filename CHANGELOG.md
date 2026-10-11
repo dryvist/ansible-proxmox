@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.21.0](https://github.com/dryvist/ansible-proxmox/compare/v2.20.1...v2.21.0) (2026-10-11)
+
+
+### Features
+
+* rename the Ada Lovelace GPU guest to llm-ada-lovelace-6X-16G ([e1e3cd1](https://github.com/dryvist/ansible-proxmox/commit/e1e3cd185f703f995168b9e5a7f0ac223335ee4e))
+* rename the Ada Lovelace GPU guest to llm-ada-lovelace-6X-16G ([20117b6](https://github.com/dryvist/ansible-proxmox/commit/20117b65ff585550e0720ffcea55f67083b4d7c0))
+
 ## [2.20.1](https://github.com/dryvist/ansible-proxmox/compare/v2.20.0...v2.20.1) (2026-10-09)
 
 
