@@ -31,4 +31,12 @@ pve_ha_this_pve_node: "{{ proxmox_node_name | default(inventory_hostname) }}"
 # because a relocation it cannot complete latches the resource in `error`.
 pve_ha_max_restart: 3
 pve_ha_max_relocate: 1
+# Desired HA state for recoverable singleton guests (viable pvesr replica).
 pve_ha_state: started
+
+# A node-local `started` resource arms the pve-ha-lrm watchdog; a storage I/O
+# stall can hold the LRM until that watchdog resets the node. Without a
+# recovery node, the CRM can only restart the guest in place. Keep such guests
+# as HA resources for their affinity rules, but leave them ignored by default.
+# Valid values: ignored or started.
+pve_ha_unrecoverable_state: ignored
