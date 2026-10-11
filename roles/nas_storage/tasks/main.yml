@@ -119,6 +119,8 @@
   run_once: true
   become: false
   no_log: true
+  # A read-only GET; uri has no check mode, and a check run needs the secrets to preview.
+  check_mode: false
   when:
     - nas_storage_managed_users | length > 0
     - nas_storage_bao_addr | length > 0
