@@ -1,0 +1,40 @@
+---
+- name: Map published guests to Nautobot preflight inputs
+  ansible.builtin.set_fact:
+    preflight_gate_projection: >-
+      {%- set result = namespace(guests={}, unchecked=[]) -%}
+      {%- for kind, entries in [('VM', vms_from_tofu | default({}, true)), ('container', containers_from_tofu | default({}, true))] -%}
+      {%- if entries is mapping -%}
+      {%- for name, guest in entries.items() -%}
+      {%- set errors = [] -%}{%- set disks = [] -%}
+      {%- if name is not string or name | length == 0 -%}{%- set _ = errors.append('guest name is missing') -%}{%- endif -%}
+      {%- if guest is not mapping -%}{%- set _ = errors.append('published guest record is invalid') -%}
+      {%- else -%}
+      {%- set node = guest.get('node') -%}{%- set memory = guest.get('memory_mb') -%}
+      {%- if node is not string or node | length == 0 -%}{%- set _ = errors.append('node is missing') -%}{%- endif -%}
+      {%- if memory is not integer or memory is boolean or memory <= 0 -%}{%- set _ = errors.append('memory_mb is missing or invalid') -%}{%- endif -%}
+      {%- if kind == 'VM' -%}
+      {%- set source = guest.get('disks', []) -%}
+      {%- if source is not sequence or source is string or source is mapping or source | length == 0 -%}{%- set _ = errors.append('VM disks are missing') -%}
+      {%- else -%}
+      {%- for disk in source -%}
+      {%- if (
+            disk is not mapping
+            or disk.get('interface') is not string
+            or disk.get('interface') | length == 0
+          ) -%}{%- set _ = errors.append('disk interface is missing') -%}
+      {%- elif disk.get('datastore') is not string or disk.get('datastore') | length == 0 -%}{%- set _ = errors.append('disk datastore is missing') -%}
+      {%- else -%}{%- set _ = disks.append({'interface': disk.interface, 'datastore_id': disk.datastore}) -%}{%- endif -%}
+      {%- endfor -%}{%- endif -%}
+      {%- else -%}
+      {%- set datastore = guest.get('datastore') -%}
+      {%- if datastore is not string or datastore | length == 0 -%}{%- set _ = errors.append('root datastore is missing') -%}
+      {%- else -%}{%- set _ = disks.append({'interface': 'rootfs', 'datastore_id': datastore}) -%}{%- endif -%}
+      {%- endif -%}{%- endif -%}
+      {%- if errors | length == 0 -%}
+      {%- set _ = result.guests.update({name: {'node': node, 'memory_mb': memory, 'disks': disks}}) -%}
+      {%- else -%}{%- set _ = result.unchecked.append({'guest': name, 'reason': errors | unique | join('; ')}) -%}{%- endif -%}
+      {%- endfor -%}
+      {%- else -%}{%- set _ = result.unchecked.append({'guest': kind ~ ' inventory', 'reason': 'published guest map is invalid'}) -%}{%- endif -%}
+      {%- endfor -%}
+      {{ {'guests': result.guests, 'unchecked': result.unchecked} }}
