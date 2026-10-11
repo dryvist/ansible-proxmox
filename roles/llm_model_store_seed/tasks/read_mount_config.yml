@@ -22,6 +22,8 @@
     label: "{{ item.hostname }}"
   register: llm_model_store_seed_configs
   changed_when: false
+  # A read-only pvesh get; a check run needs the live config to preview the seed.
+  check_mode: false
 
 - name: Find the exact mpN entry backing each container's declared models mount
   ansible.builtin.set_fact:
