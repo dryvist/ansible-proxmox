@@ -144,6 +144,8 @@
       - "'clocksource=' in pve_health_telemetry_sample.stdout"
       - "'guest_drift=' in pve_health_telemetry_sample.stdout"
       - "'backup_type_change=' in pve_health_telemetry_sample.stdout"
+      - "'zpool_cap_max=' in pve_health_telemetry_sample.stdout"
+      - "'zpool_cap_pool=' in pve_health_telemetry_sample.stdout"
     fail_msg: >-
       No usable health telemetry line found in the journal under tag
       '{{ pve_health_telemetry_tag }}'. Got: {{ pve_health_telemetry_sample.stdout | default('') | truncate(200) }}
