@@ -80,7 +80,9 @@
 - name: Write the signed host certificate
   ansible.builtin.copy:
     dest: "{{ ssh_ca_trust_host_cert_path }}"
-    content: "{{ ssh_ca_trust_host_cert_signed.json.data.signed_key }}"
+    # The sign POST is skipped under --check, so a check run previews a
+    # placeholder; a real run always writes the key the sign call returned.
+    content: "{{ '(signed in a real run)' if ansible_check_mode else ssh_ca_trust_host_cert_signed.json.data.signed_key }}"
     owner: root
     group: root
     mode: "0644"
