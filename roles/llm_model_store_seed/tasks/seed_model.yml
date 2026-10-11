@@ -20,6 +20,8 @@
     timeout: "{{ llm_model_store_seed_timeout }}"
   register: llm_model_store_seed_hf_meta
   changed_when: false
+  # A public read-only GET; a check run needs the real sha to preview the seed.
+  check_mode: false
 
 - name: "Require the pinned revision to contain {{ llm_model_store_seed_model.gguf }}"
   ansible.builtin.assert:
