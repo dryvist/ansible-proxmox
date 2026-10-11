@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Scheduled ZFS scrub {{ item.1.action }} for {{ item.0 }}
+Documentation=ansible role zfs_scrub_window
+
+[Service]
+Type=oneshot
+{% if item.1.action == 'resume' %}
+ExecCondition=/bin/sh -c 'zpool status {{ item.0 }} | grep -q "scrub paused"'
+ExecStart=/usr/sbin/zpool scrub {{ item.0 }}
+{% else %}
+ExecCondition=/bin/sh -c 'zpool status {{ item.0 }} | grep -q "scrub in progress"'
+ExecStart=/usr/sbin/zpool scrub -p {{ item.0 }}
+{% endif %}

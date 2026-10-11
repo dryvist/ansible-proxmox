@@ -1,0 +1,13 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    zfs_scrub_window_enabled: true
+    zfs_scrub_window_pools:
+      - testpool
+
+  roles:
+    - role: zfs_scrub_window
