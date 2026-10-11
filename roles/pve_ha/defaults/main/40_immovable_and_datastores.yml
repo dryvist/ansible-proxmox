@@ -9,11 +9,7 @@
 #
 # "Not replicated yet" is NOT immovable — that is a singleton missing its
 # replica, and the converge is supposed to fail on it.
-pve_ha_immovable_guests:
-  plex: >-
-    Its container config carries bind mounts (host directory paths, not
-    zvols). pvesr replicates zvols only, so a bind-mounted container can be
-    neither replicated nor live-migrated — now or later.
+pve_ha_immovable_guests: {}
 
 # Datastore ids present on every PVE node without being declared in
 # node_storage: the packaged directory store and the rpool-backed ZFS store the
