@@ -26,6 +26,8 @@
   delegate_to: "{{ idrac_power_controller }}"
   register: idrac_power_status
   changed_when: false
+  # Read-only; a check run needs the live chassis state to preview power actions.
+  check_mode: false
   no_log: true
   when:
     - idrac_power_enabled | bool
@@ -78,6 +80,7 @@
     - idrac_power_bmc_host | default('') | length > 0
     - ansible_virtualization_type | default('') != 'docker'
     - idrac_power_action == 'off'
+    - not ansible_check_mode
     - "'is off' not in (idrac_power_status.stdout | default(''))"
   tags:
     - idrac_power
@@ -117,6 +120,8 @@
   delegate_to: "{{ idrac_power_controller }}"
   register: idrac_power_chassis_status
   changed_when: false
+  # Read-only; a check run needs the live chassis policy to preview its reconciliation.
+  check_mode: false
   no_log: true
   when:
     - idrac_power_enabled | bool

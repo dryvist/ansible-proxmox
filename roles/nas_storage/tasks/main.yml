@@ -226,6 +226,8 @@
     cmd: "pdbedit -L -u {{ item.username }}"
   register: nas_storage_samba_user_checks
   changed_when: false
+  # Read-only; a check run needs existing Samba users to preview account changes.
+  check_mode: false
   failed_when: false
   no_log: true
   loop: "{{ nas_storage_resolved_users }}"

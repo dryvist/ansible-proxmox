@@ -6,6 +6,8 @@
     cmd: "pct config {{ item.value }}"
   register: lxc_features_cfg
   changed_when: false
+  # Read-only; a check run needs the live config to preview feature changes.
+  check_mode: false
   tags:
     - lxc_features
 

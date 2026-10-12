@@ -8,6 +8,8 @@
     cmd: "lspci -n -d 1000::0104"
   register: hba_storcli_pci_scan
   changed_when: false
+  # Read-only; a check run needs the PCI inventory to preview HBA management.
+  check_mode: false
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
@@ -130,6 +132,8 @@
           /eall/sall show J
       register: hba_storcli_drive_query
       changed_when: false
+      # Read-only; a check run needs drive states to preview passthrough validation.
+      check_mode: false
       when:
         - hba_storcli_resolved_path | default('', true) | length > 0
 

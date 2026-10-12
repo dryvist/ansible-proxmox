@@ -87,6 +87,8 @@
   ansible.builtin.command: dpkg-query -W -f='${Status}' pve-ha-manager
   register: node_watchdog_ha_manager
   changed_when: false
+  # Read-only; a check run needs package state to preview watchdog installation.
+  check_mode: false
   failed_when: false
 
 - name: Set the liveness-daemon availability fact

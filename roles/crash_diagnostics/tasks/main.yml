@@ -354,6 +354,8 @@
     cmd: blkid -U {{ crash_diagnostics_boot_partition_uuid }}
   register: crash_diagnostics_boot_device
   changed_when: false
+  # Read-only; a check run needs the device path to preview the boot-partition update.
+  check_mode: false
   when:
     - crash_diagnostics_boot_partition_uuid is defined
     - crash_diagnostics_boot_partition_uuid | length > 0

@@ -11,6 +11,8 @@
     argv: [date, -u, +%s]
   register: pve_full_system_stress_schedule_now
   changed_when: false
+  # Read-only; a check run needs current time to preview stage timing.
+  check_mode: false
 
 - name: Calculate a start time that cannot overlap the prior stage
   ansible.builtin.set_fact:

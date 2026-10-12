@@ -74,6 +74,8 @@
         cmd: proxmox-boot-tool status
       register: kernel_tuning_boot_status
       changed_when: false
+      # Read-only; a check run needs the boot mode to preview parameter changes.
+      check_mode: false
       failed_when: false
 
     - name: Set boot method fact
@@ -277,6 +279,7 @@
       # stray trailing newline would make int() silently return 0 and the
       # verification would falsely pass.
       failed_when: ((kernel_tuning_pkg_c6.stdout | trim | int(base=16)) // 4294967296) % 2 != 0
+      when: not ansible_check_mode
   rescue:
     - name: Fail loud — the C6 mitigation did not apply
       ansible.builtin.fail:

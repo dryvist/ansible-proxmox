@@ -157,6 +157,8 @@
   ansible.builtin.command: pvesh get /cluster/ha/resources --output-format json
   register: pve_ha_resources_raw
   changed_when: false
+  # Read-only; a check run needs live HA resources to preview enrollment.
+  check_mode: false
 
 - name: Parse existing HA resource SIDs
   ansible.builtin.set_fact:

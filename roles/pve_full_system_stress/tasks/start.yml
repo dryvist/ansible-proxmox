@@ -34,12 +34,16 @@
     argv: [cat, /proc/sys/kernel/random/uuid]
   register: pve_full_system_stress_id
   changed_when: false
+  # Read-only; a check run needs a run id to preview the scheduled stage inputs.
+  check_mode: false
 
 - name: Record the stress run start time in UTC
   ansible.builtin.command:
     argv: [date, -u, +%Y-%m-%dT%H:%M:%SZ]
   register: pve_full_system_stress_started_at
   changed_when: false
+  # Read-only; a check run needs the start time to preview stage inputs.
+  check_mode: false
 
 - name: Record the run id and UTC start time
   ansible.builtin.set_fact:
@@ -146,6 +150,8 @@
           - "{{ pve_full_system_stress_scratch_dataset }}"
       register: pve_full_system_stress_scratch_mount_result
       changed_when: false
+      # Read-only; a check run needs current dataset state to preview creation.
+      check_mode: false
       failed_when: false
       when: "'storage' in pve_full_system_stress_stages"
 
@@ -181,7 +187,9 @@
           - "{{ pve_full_system_stress_scratch_dataset }}"
       register: pve_full_system_stress_scratch_mount
       changed_when: false
-      when: "'storage' in pve_full_system_stress_stages"
+      when:
+        - not ansible_check_mode
+        - "'storage' in pve_full_system_stress_stages"
 
     - name: Verify the fio scratch path belongs to the dedicated dataset
       ansible.builtin.command:
@@ -195,6 +203,7 @@
       register: pve_full_system_stress_scratch_source
       changed_when: false
       when:
+        - not ansible_check_mode
         - "'storage' in pve_full_system_stress_stages"
         - pve_full_system_stress_scratch_mount.stdout != '-'
 
@@ -205,7 +214,9 @@
           - pve_full_system_stress_scratch_source.stdout == pve_full_system_stress_scratch_dataset
         fail_msg: The fio scratch dataset has no matching mounted ZFS path.
         quiet: true
-      when: "'storage' in pve_full_system_stress_stages"
+      when:
+        - not ansible_check_mode
+        - "'storage' in pve_full_system_stress_stages"
 
     - name: Read available scratch-dataset capacity
       ansible.builtin.command:
@@ -219,7 +230,9 @@
           - "{{ pve_full_system_stress_scratch_dataset }}"
       register: pve_full_system_stress_scratch_available
       changed_when: false
-      when: "'storage' in pve_full_system_stress_stages"
+      when:
+        - not ansible_check_mode
+        - "'storage' in pve_full_system_stress_stages"
 
     - name: Require fio to leave ten percent of available capacity free
       ansible.builtin.shell:
@@ -250,12 +263,14 @@
             exit 1
           }
       changed_when: false
-      when: "'storage' in pve_full_system_stress_stages"
+      when:
+        - not ansible_check_mode
+        - "'storage' in pve_full_system_stress_stages"
 
     - name: Set the unique fio scratch file path
       ansible.builtin.set_fact:
-        pve_full_system_stress_scratch_mountpoint: "{{ pve_full_system_stress_scratch_mount.stdout }}"
-        pve_full_system_stress_scratch_file: "{{ pve_full_system_stress_scratch_mount.stdout }}/fio-{{ pve_full_system_stress_run_id }}.dat"
+        pve_full_system_stress_scratch_mountpoint: "{{ '(placeholder in check mode)' if ansible_check_mode else pve_full_system_stress_scratch_mount.stdout }}"
+        pve_full_system_stress_scratch_file: "{{ '(placeholder in check mode)' if ansible_check_mode else pve_full_system_stress_scratch_mount.stdout ~ '/fio-' ~ pve_full_system_stress_run_id ~ '.dat' }}"
       when: "'storage' in pve_full_system_stress_stages"
 
     - name: Schedule the detached stress stages
