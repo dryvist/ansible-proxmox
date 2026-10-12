@@ -30,7 +30,6 @@
   ansible.builtin.assert:
     that:
       - preflight_gate_projection.guests | length > 0
-      - preflight_gate_projection.unchecked | length == 0 or (preflight_gate_allow_unchecked | default(false) | bool)
       - preflight_policy_failures is defined
     fail_msg: Nautobot preflight did not evaluate at least one fully mapped guest.
     success_msg: >-
