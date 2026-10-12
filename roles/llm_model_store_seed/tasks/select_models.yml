@@ -1,0 +1,29 @@
+---
+- name: Require every included model name to exist in the catalog
+  ansible.builtin.assert:
+    that:
+      - >-
+        llm_model_store_seed_include_names
+        | difference(llm_model_catalog_models | map(attribute='name') | list)
+        | length == 0
+    fail_msg: >-
+      Unknown model names in llm_model_store_seed_include_names:
+      {{ llm_model_store_seed_include_names
+         | difference(llm_model_catalog_models | map(attribute='name') | list)
+         | join(', ') }}.
+    quiet: true
+
+- name: Select GGUF-backed catalog models for this node
+  ansible.builtin.set_fact:
+    llm_model_store_seed_models: >-
+      {{
+        (llm_model_catalog_models
+         | selectattr('hf_repo', 'defined')
+         | list)
+        if llm_model_store_seed_include_names | length == 0
+        else
+        (llm_model_catalog_models
+         | selectattr('hf_repo', 'defined')
+         | selectattr('name', 'in', llm_model_store_seed_include_names)
+         | list)
+      }}

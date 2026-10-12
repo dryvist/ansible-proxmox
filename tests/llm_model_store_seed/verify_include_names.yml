@@ -1,0 +1,64 @@
+---
+- name: Verify llm_model_store_seed model include names
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    llm_model_store_seed_include_names: []
+
+  tasks:
+    - name: Load the pinned shared model catalog
+      ansible.builtin.include_role:
+        name: dryvist.homelab.llm_model_catalog
+        public: true
+
+    - name: Select all GGUF-backed models with an empty include list
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/select_models.yml
+
+    - name: Assert the empty include list selects every GGUF-backed model
+      ansible.builtin.assert:
+        that:
+          - >-
+            (llm_model_store_seed_models | map(attribute='name') | sort)
+            ==
+            (llm_model_catalog_models
+             | selectattr('hf_repo', 'defined')
+             | map(attribute='name') | sort)
+        quiet: true
+
+    - name: Select only the requested models
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/select_models.yml
+      vars:
+        llm_model_store_seed_include_names:
+          - qwen3-4b
+          - nomic-embed-text-v1.5
+          - bge-m3
+          - bge-reranker-v2-m3
+
+    - name: Assert the include list selects exactly the requested models
+      ansible.builtin.assert:
+        that:
+          - >-
+            (llm_model_store_seed_models | map(attribute='name') | sort)
+            ==
+            ['bge-m3', 'bge-reranker-v2-m3', 'nomic-embed-text-v1.5', 'qwen3-4b']
+        quiet: true
+
+    - name: Verify an unknown model name fails
+      block:
+        - name: Select a model name that is not in the catalog
+          ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/select_models.yml
+          vars:
+            llm_model_store_seed_include_names: [not-in-catalog]
+
+        - name: Fail if the unknown model name was accepted
+          ansible.builtin.fail:
+            msg: The unknown model name was accepted.
+
+      rescue:
+        - name: Assert the failure names the unknown model
+          ansible.builtin.assert:
+            that:
+              - "'Unknown model names' in ansible_failed_result.msg"
+              - "'not-in-catalog' in ansible_failed_result.msg"
+            quiet: true

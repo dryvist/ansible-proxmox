@@ -91,8 +91,9 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 ### Variables
 
-| Variable                         | Default                            | Purpose                                                                     |
-| -------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
-| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Shared model catalog; this role seeds only entries with the optional Hugging Face GGUF artifact fields |
-| `llm_model_store_seed_timeout`   | `3600`                             | Seconds allowed for the HF metadata lookup and the GGUF download            |
-| `llm_model_store_seed_file_mode` | `"0644"`                           | Mode of a seeded GGUF file                                                  |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `llm_model_catalog_models` | see `llm_model_catalog`'s defaults | Shared catalog; seeds entries with optional Hugging Face GGUF artifact fields |
+| `llm_model_store_seed_include_names` | `[]` | Catalog model names to seed; empty selects every GGUF-backed entry |
+| `llm_model_store_seed_timeout` | `3600` | Seconds allowed for the HF metadata lookup and the GGUF download |
+| `llm_model_store_seed_file_mode` | `"0644"` | Mode of a seeded GGUF file |

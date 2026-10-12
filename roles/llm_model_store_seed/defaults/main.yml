@@ -21,6 +21,9 @@ llm_model_store_seed_timeout: 3600
 # a models mount for them (e.g. a mount whose quota cannot hold the catalog).
 llm_model_store_seed_exclude_hostnames: []
 
+# Empty seeds every catalog model; otherwise only entries with a listed name are seeded.
+llm_model_store_seed_include_names: []
+
 # File mode for a seeded GGUF. World-readable: llama-server runs as the
 # guest's own service user, and this file is only ever reached read-only
 # through the fabric's ro bind mount.

@@ -283,6 +283,13 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/llm_model_store_seed/verify_exclude_hostnames.yml -i localhost, -c local
 
+      # The include list limits a node to catalog models its serving guest uses.
+      - name: Verify llm_model_store_seed model inclusion
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_include_names.yml -i localhost, -c local
+
       - name: Verify llm_model_store_seed attach on a protected container
         run: python3 tests/llm_model_store_seed/test_protected_attach.py
 

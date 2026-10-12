@@ -1,0 +1,7 @@
+---
+# This node seeds only the catalog models listed here.
+llm_model_store_seed_include_names:
+  - qwen3-4b
+  - nomic-embed-text-v1.5
+  - bge-m3
+  - bge-reranker-v2-m3
