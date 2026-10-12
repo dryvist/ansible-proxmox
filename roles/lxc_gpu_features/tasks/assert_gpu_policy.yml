@@ -1,0 +1,64 @@
+---
+# Policy preflight: only containers tagged gpu-passthrough may receive GPU
+# device access, and at most one such container may exist per Proxmox node.
+
+- name: Require the published container catalog and gpu-passthrough VMID list
+  ansible.builtin.assert:
+    that:
+      - containers_from_tofu is defined
+      - containers_from_tofu is mapping
+      - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is defined
+      - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is sequence
+      - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is not string
+    fail_msg: >-
+      GPU passthrough is disabled: the published container catalog and
+      gpu-passthrough VMID list must be supplied by playbooks/load_tofu.yml.
+      Refusing to write GPU access without that tag projection.
+  tags:
+    - lxc_gpu_features
+
+- name: Select gpu-passthrough entries from the published container catalog
+  ansible.builtin.set_fact:
+    lxc_gpu_features_gpu_passthrough_catalog_entries: >-
+      {{
+        containers_from_tofu | dict2items
+        | selectattr('value.tags', 'defined')
+        | selectattr('value.tags', 'contains', 'gpu-passthrough') | list
+      }}
+  tags:
+    - lxc_gpu_features
+
+- name: Require node and VMID metadata for every gpu-passthrough container
+  ansible.builtin.assert:
+    that:
+      - >-
+        lxc_gpu_features_gpu_passthrough_catalog_entries
+        | selectattr('value.node', 'defined') | list | length
+        == lxc_gpu_features_gpu_passthrough_catalog_entries | length
+      - >-
+        lxc_gpu_features_gpu_passthrough_catalog_entries
+        | selectattr('value.ansible_pct_vmid', 'defined') | list | length
+        == lxc_gpu_features_gpu_passthrough_catalog_entries | length
+      - >-
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu | map('string') | sort
+        == lxc_gpu_features_gpu_passthrough_catalog_entries
+           | map(attribute='value.ansible_pct_vmid') | map('string') | sort
+    fail_msg: >-
+      The gpu-passthrough projection must match catalog entries, and every
+      tagged entry must include node and ansible_pct_vmid metadata.
+  tags:
+    - lxc_gpu_features
+
+- name: Assert at most one gpu-passthrough container per Proxmox node
+  ansible.builtin.assert:
+    that:
+      - >-
+        lxc_gpu_features_gpu_passthrough_catalog_entries
+        | map(attribute='value.node') | unique | list | length
+        == lxc_gpu_features_gpu_passthrough_catalog_entries | length
+    fail_msg: >-
+      More than one container on Proxmox node is tagged gpu-passthrough
+      ({{ lxc_gpu_features_gpu_passthrough_catalog_entries | map(attribute='key') | list }});
+      at most one GPU-passthrough container is allowed per node.
+  tags:
+    - lxc_gpu_features

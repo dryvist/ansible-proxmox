@@ -43,6 +43,15 @@
 - name: Inject OpenTofu service -> vmid map for GPU passthrough onto proxmox hosts
   ansible.builtin.add_host:
     name: "{{ item }}"
+    lxc_gpu_features_gpu_passthrough_vmids_from_tofu: >-
+      {{
+        (tofu_data.containers | default({}) | dict2items)
+        | selectattr('value.tags', 'defined')
+        | selectattr('value.tags', 'contains', 'gpu-passthrough')
+        | selectattr('value.ansible_pct_vmid', 'defined')
+        | map(attribute='value.ansible_pct_vmid')
+        | map('string') | list
+      }}
     lxc_gpu_features_service_vmids_from_tofu: >-
       {{
         dict(
