@@ -3,7 +3,7 @@
   ansible.builtin.set_fact:
     preflight_gate_projection: >-
       {%- set result = namespace(guests={}, unchecked=[]) -%}
-      {%- for kind, entries in [('VM', vms_from_tofu | default({}, true)), ('container', containers_from_tofu | default({}, true))] -%}
+      {%- for kind, entries in [('VM', tofu_data.get('vms')), ('container', tofu_data.get('containers'))] -%}
       {%- if entries is mapping -%}
       {%- for name, guest in entries.items() -%}
       {%- set errors = [] -%}{%- set disks = [] -%}

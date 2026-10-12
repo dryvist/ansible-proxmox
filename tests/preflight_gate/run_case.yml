@@ -3,8 +3,9 @@
   block:
     - name: Set the synthetic published guest maps
       ansible.builtin.set_fact:
-        vms_from_tofu: "{{ gate_case.inventory.vms }}"
-        containers_from_tofu: "{{ gate_case.inventory.containers }}"
+        tofu_data: "{{ gate_case.inventory }}"
+        vms_from_tofu: "{{ gate_case.inventory.vms | default({}) }}"
+        containers_from_tofu: "{{ gate_case.inventory.containers | default({}) }}"
 
     - name: Write recorded Proxmox API responses
       ansible.builtin.copy:
@@ -36,7 +37,7 @@
       ansible.builtin.include_tasks: ../../playbooks/tasks/preflight_gate_ha.yml
       vars:
         pve_ha_ct_hostnames: []
-        pve_ha_vm_names: [guest-1]
+        pve_ha_vm_names: "{{ gate_case.ha_vm_names | default(['guest-1']) }}"
         pve_ha_extra_sids: []
       when: gate_case.run_ha | default(false)
 
@@ -67,7 +68,7 @@
   ansible.builtin.slurp:
     src: "{{ preflight_gate_work_dir }}/commands.log"
   register: preflight_gate_recorded_commands
-  when: gate_case.run_ha | default(false)
+  when: gate_case.run_ha | default(false) and not (gate_case.reads_skipped | default(false))
 
 - name: Confirm the HA tasks consumed recorded API responses
   ansible.builtin.assert:
@@ -78,7 +79,7 @@
       - "'get /cluster/resources --output-format json' in preflight_gate_recorded_commands.content | b64decode"
       - "'get /nodes/node-a/qemu/100/config --output-format json' in preflight_gate_recorded_commands.content | b64decode"
     fail_msg: The HA gate did not issue each expected read against the recorded API responses.
-  when: gate_case.run_ha | default(false)
+  when: gate_case.run_ha | default(false) and not (gate_case.reads_skipped | default(false))
 
 - name: Report the completed offline case
   ansible.builtin.debug:

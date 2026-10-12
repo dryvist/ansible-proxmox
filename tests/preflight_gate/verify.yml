@@ -54,6 +54,48 @@
         ha: "{{ gate_ha_recovery }}"
         expected_failure: Published inventory mapping incomplete
         must_not_contain: RAM preflight failed
+      - name: published VM map missing fails closed
+        inventory: "{{ {'containers': gate_inventory.containers} }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        expected_failure: Published inventory mapping incomplete
+        must_not_contain: RAM preflight failed
+      - name: published container map missing fails closed
+        inventory: "{{ {'vms': gate_inventory.vms} }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        expected_failure: Published inventory mapping incomplete
+        must_not_contain: RAM preflight failed
+      - name: HA member without a published identity
+        inventory: "{{ gate_inventory_no_vmid }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        run_ha: true
+        reads_skipped: true
+        expected_failure: HA relocation admission cannot resolve configured members
+        must_not_contain: RAM preflight failed
+      - name: HA member without a declared recovery node
+        inventory: "{{ gate_inventory_no_target }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        run_ha: true
+        reads_skipped: true
+        expected_failure: have no declared recovery node in published inventory
+        must_not_contain: RAM preflight failed
+      - name: HA admission that evaluates no relocating resource
+        inventory: "{{ gate_inventory }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_none }}"
+        ha_vm_names: []
+        run_ha: true
+        reads_skipped: true
+        expected_failure: did not evaluate any relocating resource
+        must_not_contain: RAM preflight failed
       - name: explicitly allowed unchecked guest is reported
         inventory: "{{ gate_inventory_unchecked }}"
         devices: "{{ gate_devices }}"
