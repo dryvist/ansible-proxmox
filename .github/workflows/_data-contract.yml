@@ -150,6 +150,9 @@ jobs:
       - name: Verify pve_proxman_operator gates and resume conditions
         run: python3 tests/test_proxman_operator.py
 
+      - name: Verify crash diagnostics memtest check-mode guards
+        run: python3 tests/test_crash_diagnostics_memtest_check_mode.py
+
       # pve_api_tokens mints cluster tokens and needs a real cluster, so its
       # mint decision and OpenBao read gate are pinned the same way.
       - name: Verify pve_api_tokens mint decision and read gate
