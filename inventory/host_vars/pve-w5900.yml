@@ -88,7 +88,9 @@ sanoid_tier_by_container:
 
 # VMs are tiered the same way, in their own map: a VM key and a container key
 # could otherwise collide silently and one would win at random.
-sanoid_tier_by_vm: {}
+sanoid_tier_by_vm:
+  docker-host: monthly
+  docker-host-540: monthly
 
 # Every container tofu places on this node, so a guest added later is covered
 # without editing this file. A hand-listed set fails by omission -- three of the
