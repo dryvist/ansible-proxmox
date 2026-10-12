@@ -1,0 +1,31 @@
+---
+- name: Exercise one gate guard case
+  block:
+    - name: Set the guard inputs
+      ansible.builtin.set_fact:
+        "{{ item.key }}": "{{ item.value }}"
+      loop: "{{ (guard_case.vars | default({})) | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Run the guard tasks
+      ansible.builtin.include_tasks: "{{ guard_case.tasks }}"
+
+    - name: Fail when an expected negative case passed
+      ansible.builtin.fail:
+        msg: "Expected failure was not raised for {{ guard_case.name }}."
+      when: guard_case.expected_failure is defined
+
+  rescue:
+    - name: Require the failure to name the expected guard
+      ansible.builtin.assert:
+        that:
+          - guard_case.expected_failure is defined
+          - guard_case.expected_failure in (ansible_failed_result | to_json)
+        fail_msg: >-
+          {{ guard_case.name }} failed for an unexpected reason:
+          {{ ansible_failed_result.msg | default('no failure message') }}
+
+- name: Report the completed guard case
+  ansible.builtin.debug:
+    msg: "PASS: {{ guard_case.name }}"

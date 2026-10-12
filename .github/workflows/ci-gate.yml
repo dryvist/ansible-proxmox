@@ -44,7 +44,7 @@ jobs:
           - 'tests/inventory_load/**'
           - 'tests/pve_ha_relocation/**'
           - 'playbooks/preflight_gate.yml'
-          - 'playbooks/tasks/preflight_gate_ha.yml'
+          - 'playbooks/tasks/preflight_gate*.yml'
           - 'tests/preflight_gate/**'
           - 'roles/guest_power/**'
           - 'tests/guest_power_contract.yml'

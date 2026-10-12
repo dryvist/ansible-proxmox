@@ -12,11 +12,10 @@
          if preflight_gate_projection.unchecked | length > 0 else 'All published guests were mapped.' }}
 
 - name: Require Nautobot connection settings
-  ansible.builtin.assert:
-    that:
-      - lookup('ansible.builtin.env', 'NAUTOBOT_URL') | length > 0
-      - lookup('ansible.builtin.env', 'NAUTOBOT_TOKEN') | length > 0
-    fail_msg: NAUTOBOT_URL and NAUTOBOT_TOKEN must be non-empty for Nautobot preflight.
+  ansible.builtin.include_tasks: preflight_gate_connection.yml
+  vars:
+    preflight_gate_nautobot_url: "{{ lookup('ansible.builtin.env', 'NAUTOBOT_URL') }}"
+    preflight_gate_nautobot_token: "{{ lookup('ansible.builtin.env', 'NAUTOBOT_TOKEN') }}"
   when: not (preflight_skip_fetch | default(false) | bool)
 
 - name: Evaluate published guest memory and storage against Nautobot

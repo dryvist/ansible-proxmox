@@ -1,0 +1,72 @@
+---
+- name: Verify the pre-flight gate refuses unsafe connections and skipped checks
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    gate_connection_tasks: ../../playbooks/tasks/preflight_gate_connection.yml
+    gate_receipt_tasks: ../../playbooks/tasks/preflight_gate_receipts.yml
+    gate_connection_cases:
+      - name: https URL with a token is accepted
+        tasks: "{{ gate_connection_tasks }}"
+        vars:
+          preflight_gate_nautobot_url: https://nautobot.example.test
+          preflight_gate_nautobot_token: fixture-token
+      - name: plain http URL is refused
+        tasks: "{{ gate_connection_tasks }}"
+        vars:
+          preflight_gate_nautobot_url: http://nautobot.example.test
+          preflight_gate_nautobot_token: fixture-token
+        expected_failure: "match('^https://')"
+      - name: empty URL is refused
+        tasks: "{{ gate_connection_tasks }}"
+        vars:
+          preflight_gate_nautobot_url: ""
+          preflight_gate_nautobot_token: fixture-token
+        expected_failure: preflight_gate_nautobot_url | length > 0
+      - name: empty token is refused
+        tasks: "{{ gate_connection_tasks }}"
+        vars:
+          preflight_gate_nautobot_url: https://nautobot.example.test
+          preflight_gate_nautobot_token: ""
+        expected_failure: preflight_gate_nautobot_token | length > 0
+  tasks:
+    - name: Run the connection guard cases
+      ansible.builtin.include_tasks: guard_case.yml
+      loop: "{{ gate_connection_cases }}"
+      loop_control:
+        loop_var: guard_case
+        label: "{{ guard_case.name }}"
+
+    - name: A run that completed no check is refused
+      ansible.builtin.include_tasks: guard_case.yml
+      vars:
+        guard_case:
+          name: no completion receipt at all
+          tasks: "{{ gate_receipt_tasks }}"
+          expected_failure: preflight_gate_receipt_nautobot
+
+    - name: Record only the Nautobot receipt
+      ansible.builtin.set_fact:
+        preflight_gate_receipt_nautobot: true
+
+    - name: A run that skipped the HA check is refused
+      ansible.builtin.include_tasks: guard_case.yml
+      vars:
+        guard_case:
+          name: HA completion receipt missing
+          tasks: "{{ gate_receipt_tasks }}"
+          expected_failure: preflight_gate_receipt_ha
+
+    - name: Record the HA receipt on a Proxmox host
+      ansible.builtin.add_host:
+        name: fixture-node
+        preflight_gate_receipt_ha: true
+
+    - name: A run that completed both checks is accepted
+      ansible.builtin.include_tasks: guard_case.yml
+      vars:
+        guard_case:
+          name: both completion receipts present
+          tasks: "{{ gate_receipt_tasks }}"
