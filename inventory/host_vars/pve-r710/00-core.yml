@@ -65,11 +65,9 @@ proxmox_monitoring_enable_healthchecks: false
 # the terraform-proxmox node_storage declaration, and syncoid creates the
 # per-disk leaves.
 #
-# Prereqs (verified live): root SSH pve-r710->source works (PVE cluster keys +
-# cluster_ssh_trust known_hosts); each source disk has a sanoid snapshot for
-# --no-sync-snap. Replicate the OS disk (0) and /opt/splunk config+indexes (2);
-# disk-1 was an empty leftover. Whole-disk for now; excluding the volatile index
-# tier is the tracked critical/volatile follow-up.
+# The Splunk jobs select scsi0 (OS) and virtio1 (configuration + logs) from the
+# published disk interfaces. The index tiers on virtio2 and virtio3 stay out of
+# snapshots and replication because Splunk owns their bucket archival.
 # These vars are only rendered when the syncoid role runs, which can happen
 # without load_tofu.yml if an operator scopes a run with --limit excluding
 # localhost (--limit filters hosts, not tags, so `tags: always` on the localhost
@@ -162,11 +160,17 @@ sanoid_datasets: >-
 postgres_standby_jobs: >-
   {{ [] if (domain_from_tofu | default('') | length == 0) else [
        {'name': 'postgres-ai',
-        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-ai-2'] | default({})).hostname | default('postgres-ai-2')) ~ '.' ~ domain_from_tofu,
+        'source_host': 'root@' ~
+          (((containers_from_tofu | default({}))['postgres-ai-2']
+            | default({})).hostname | default('postgres-ai-2'))
+          ~ '.' ~ domain_from_tofu,
         'source_dir': '/',
         'archive_dir': '/bulk/databases/postgres-ai'},
        {'name': 'postgres-apps',
-        'source_host': 'root@' ~ (((containers_from_tofu | default({}))['postgres-apps'] | default({})).hostname | default('postgres-apps')) ~ '.' ~ domain_from_tofu,
+        'source_host': 'root@' ~
+          (((containers_from_tofu | default({}))['postgres-apps']
+            | default({})).hostname | default('postgres-apps'))
+          ~ '.' ~ domain_from_tofu,
         'source_dir': '/',
         'archive_dir': '/bulk/databases/postgres-apps'}
      ] }}
