@@ -8,6 +8,7 @@
 #   node/guest CPU, RAM, disk, net, uptime -> PVE's native external metric
 #                                             server (configured by this role)
 #   zpool degradation                      -> ZED, already journal -> syslog
+#   zpool capacity                         -> sampled below; ZED only reports faults
 #   HA state transitions                   -> pve-ha-lrm/crm, already in journal
 #   quorum loss                            -> corosync, already in journal
 #   failed units                           -> systemd, already in journal
@@ -74,6 +75,20 @@ psi_field() {
 psi_mem="$(psi_field memory some)"; psi_mem="${psi_mem:-$UNKNOWN}"
 psi_io="$(psi_field io some)"; psi_io="${psi_io:-$UNKNOWN}"
 psi_cpu="$(psi_field cpu some)"; psi_cpu="${psi_cpu:-$UNKNOWN}"
+
+# --- pool capacity (no fill event from ZED) ---------------------------------
+zpool_cap_max="$UNKNOWN"
+zpool_cap_pool=unknown
+if command -v zpool >/dev/null 2>&1; then
+  zpool_cap_max="$(zpool list -Hpo capacity 2>/dev/null |
+    awk '$1 ~ /^[0-9]+$/ && $1 > max {max = $1} END {if (max != "") print max}')"
+  zpool_cap_max="${zpool_cap_max:-$UNKNOWN}"
+  if [ "$zpool_cap_max" != "$UNKNOWN" ]; then
+    zpool_cap_pool="$(zpool list -Hpo name,capacity 2>/dev/null |
+      awk -v max="$zpool_cap_max" '$2 == max {print $1; exit}')"
+    zpool_cap_pool="${zpool_cap_pool:-unknown}"
+  fi
+fi
 
 # --- onboot guest drift (not derivable from native metrics) ----------------
 #
@@ -232,6 +247,8 @@ logger -t "{{ pve_health_telemetry_tag }}" -p "$priority" \
   "psi_mem_avg60=$psi_mem" \
   "psi_io_avg60=$psi_io" \
   "psi_cpu_avg60=$psi_cpu" \
+  "zpool_cap_max=$zpool_cap_max" \
+  "zpool_cap_pool=$zpool_cap_pool" \
   "guests_onboot=$onboot" \
   "guests_running=$running" \
   "guest_drift=$guest_drift" \

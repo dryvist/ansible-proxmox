@@ -11,11 +11,19 @@ to this role**.
 already redundant across nodes does not need, and should not get, a
 block-level copy of its disk.
 
-| Class | Derived from | `max_relocate` | `pvesr` replica |
-| --- | --- | --- | --- |
-| `application_ha` | `pve_ha_anti_affinity_groups` | `0` | none |
-| `immovable` | `pve_ha_immovable_guests` | `0` | none |
-| `singleton` | default | `pve_ha_max_relocate` | **required** |
+| Class | Derived from | `max_relocate` | `pvesr` replica | Default resource state |
+| --- | --- | --- | --- | --- |
+| `application_ha` | `pve_ha_anti_affinity_groups` | `0` | none | `ignored` |
+| `immovable` | `pve_ha_immovable_guests` | `0` | none | `ignored` |
+| `singleton` | default | `pve_ha_max_relocate` | **required** | `started` |
+
+Only a `singleton` with a viable entry in `pve_ha_replication_guests` has a
+recovery node and uses `pve_ha_state` (default `started`). Other tier-0 SIDs
+use `pve_ha_unrecoverable_state` (default `ignored`); they remain HA resources
+so existing affinity rules can still reference them. A node-local `started`
+resource arms the pve-ha-lrm watchdog. If storage I/O stalls the LRM, the
+watchdog resets the node, while the CRM can only restart a non-recoverable
+guest in place. The unrecoverable state accepts `ignored` or `started`.
 
 **`application_ha`** — the service provides its own redundancy across nodes: a
 Raft quorum member, a DNS secondary with zone transfer, a keepalived VRRP
@@ -23,7 +31,9 @@ ingress pair, a streaming database primary/standby. Being in an anti-affinity
 group is already the assertion that a peer exists on another node, so that
 membership *is* the classification.
 
-- On a **crash**, HA auto-restarts the guest in place (`max_restart`).
+- With `pve_ha_unrecoverable_state: started`, HA auto-restarts the guest in
+  place (`max_restart`); the default `ignored` state leaves it in the resource
+  and affinity configuration without arming the node watchdog.
 - On a **node loss** the guest stays down, its peer serves, and it returns on
   boot. `max_relocate` is `0`: there is nowhere to go and nothing to gain.
 - It gets **no `pvesr` replica**, and that is a correctness point, not a
@@ -39,12 +49,14 @@ membership *is* the classification.
   self-fenced to get there.
 
 **`immovable`** — cannot relocate for a structural reason, declared in
-`pve_ha_immovable_guests` as `name: reason`. `plex` is the only one: its
-container config carries bind mounts (host directory paths, not zvols), and
-`pvesr` replicates zvols only, so it can be neither replicated nor
-live-migrated — now or later. It keeps the crash auto-restart it does benefit
-from, with `max_relocate` `0` so ha-manager never attempts a move that could
-only fail. Being immovable exempts it from the singleton replica requirement.
+`pve_ha_immovable_guests` as `name: reason`. None is declared by default. A
+typical reason is a container whose config carries bind mounts (host
+directory paths, not zvols): `pvesr` replicates zvols only, so it can be
+neither replicated nor live-migrated. An immovable guest is `ignored` by
+default; setting
+`pve_ha_unrecoverable_state: started` opts into in-place HA restarts, with
+`max_relocate` `0` so ha-manager never attempts a move that could only fail.
+Being immovable exempts it from the singleton replica requirement.
 
 "Not replicated yet" is **not** immovable. That is a singleton missing its
 replica, and the converge is supposed to fail on it. Two guards keep the

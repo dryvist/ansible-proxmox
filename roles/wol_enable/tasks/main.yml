@@ -24,6 +24,8 @@
     cmd: ip -o link
   register: wol_enable_link_listing
   changed_when: false
+  # Read-only; a check run needs the live value to preview Wake-on-LAN.
+  check_mode: false
   when:
     - wol_enable_enabled | bool
     - wol_enable_mac | trim | length > 0
@@ -75,6 +77,8 @@
     cmd: "ethtool {{ wol_enable_interface_resolved }}"
   register: wol_enable_ethtool
   changed_when: false
+  # Read-only; a check run needs the live value to preview Wake-on-LAN.
+  check_mode: false
   when:
     - wol_enable_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
@@ -141,6 +145,8 @@
     cmd: "ethtool -P {{ wol_enable_interface_resolved }}"
   register: wol_enable_permaddr
   changed_when: false
+  # Read-only; a check run needs the live value to preview Wake-on-LAN.
+  check_mode: false
   when:
     - wol_enable_enabled | bool
     - wol_enable_node_config | bool

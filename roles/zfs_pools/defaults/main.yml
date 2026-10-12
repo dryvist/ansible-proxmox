@@ -59,6 +59,10 @@ zfs_pools_import_units:
 # ON REBOOT, so anything tuned live must be declared here or it is lost.
 zfs_pools_module_params: "{{ zfs_pools_config.module_params | default({}) }}"
 
+# Set true once to repair nodes whose initramfs already has stale ZFS settings.
+# Normally a changed zfs.conf notifies the initramfs refresh automatically.
+zfs_pools_force_initramfs_refresh: false
+
 # Optional per-key explanation rendered as a comment above each option, so the
 # file explains WHY a non-default value was chosen rather than just asserting it.
 zfs_pools_module_param_comments:

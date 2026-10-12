@@ -81,7 +81,7 @@
   loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
   loop_control:
     label: "{{ zfs_pool.key }}/{{ item.key }}"
-  when: item.value.nfs_export_permissions is defined
+  when: item.value.nfs_export_permissions | default(none) is not none
   tags:
     - zfs_pools
 

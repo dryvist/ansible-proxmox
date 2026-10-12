@@ -135,6 +135,8 @@
     label: "{{ item.hostname }}"
   register: llm_model_store_seed_pending_after_attach
   changed_when: false
+  # Read-only; a check run needs the real value to preview the seed.
+  check_mode: false
 
 - name: Decide which attached mounts still need a restart
   ansible.builtin.include_tasks: check_mount_hotplug.yml

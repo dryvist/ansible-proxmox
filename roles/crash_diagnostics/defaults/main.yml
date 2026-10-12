@@ -116,6 +116,10 @@ crash_diagnostics_sysctl_settings:
     value: "1"
     comment: "Panic on hung task (task stuck in D state)"
 
+  - name: kernel.hung_task_timeout_secs
+    value: "{{ crash_diagnostics_hung_task_timeout_secs | default(120) }}"
+    comment: "Seconds a task may stay in D state before it counts as hung (kernel default 120)"
+
   # NMI handling
   - name: kernel.nmi_watchdog
     value: "1"

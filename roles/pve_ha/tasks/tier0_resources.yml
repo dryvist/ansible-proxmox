@@ -4,6 +4,15 @@
 # skipping replica-less singletons) and adds/enforces it in ha-manager.
 # Reuse the same hostname -> vmid projection load_tofu.yml builds for the
 # media/GPU feature maps, so a VMID renumber flows through with no edit.
+- name: Validate the state for guests without a recovery node
+  ansible.builtin.assert:
+    that:
+      - pve_ha_unrecoverable_state in ['ignored', 'started']
+    fail_msg: >-
+      pve_ha_unrecoverable_state must be `ignored` or `started`; got
+      `{{ pve_ha_unrecoverable_state }}`.
+    quiet: true
+
 - name: Map container hostname -> vmid from the tofu inventory
   ansible.builtin.set_fact:
     pve_ha_vmid_by_host: >-
@@ -99,10 +108,10 @@
       `ha_replication_target`.
   when: pve_ha_unsafe_singletons | length > 0 and not (pve_ha_fail_on_unresolved | bool)
 
-# Relocation is a CLASS property: only a singleton with a viable replica has
-# anywhere to go. An application_ha guest's peer covers the outage and an
-# immovable guest cannot move at all, so both get 0 — ha-manager never starts
-# a relocation that could only fail and latch the resource in `error`.
+# Replication scope contains only the derived singleton class, so its viable
+# entries are exactly the guests with a recovery node. The other SIDs have no
+# relocation path: application_ha peers cover the service, immovable guests
+# cannot move, and extra SIDs have no viable replica entry.
 - name: Resolve which managed SIDs are allowed to relocate
   ansible.builtin.set_fact:
     pve_ha_relocatable_sids: >-
@@ -161,7 +170,8 @@
 - name: Add tier-0 guests to HA (only those not yet managed)
   ansible.builtin.command: >-
     ha-manager add {{ item }}
-    --state {{ pve_ha_state }}
+    --state {{ pve_ha_state if item in pve_ha_relocatable_sids
+               else pve_ha_unrecoverable_state }}
     --max_restart {{ pve_ha_max_restart }}
     --max_relocate {{ pve_ha_max_relocate if item in pve_ha_relocatable_sids else pve_ha_pinned_max_relocate }}
   loop: "{{ pve_ha_managed_sids }}"
@@ -171,7 +181,8 @@
 - name: Enforce HA params on already-managed guests
   ansible.builtin.command: >-
     ha-manager set {{ item }}
-    --state {{ pve_ha_state }}
+    --state {{ pve_ha_state if item in pve_ha_relocatable_sids
+               else pve_ha_unrecoverable_state }}
     --max_restart {{ pve_ha_max_restart }}
     --max_relocate {{ pve_ha_max_relocate if item in pve_ha_relocatable_sids else pve_ha_pinned_max_relocate }}
   loop: "{{ pve_ha_managed_sids }}"

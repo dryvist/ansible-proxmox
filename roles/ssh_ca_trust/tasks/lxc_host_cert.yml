@@ -52,6 +52,8 @@
   loop: "{{ ssh_ca_trust_lxc_running }}"
   register: ssh_ca_trust_lxc_host_cert_probe
   changed_when: false
+  # Read-only; a check run needs the real value to preview the trust rollout.
+  check_mode: false
 
 - name: Decide which running containers need a (re)signed host certificate
   ansible.builtin.include_tasks: lxc_host_cert_decide.yml
@@ -84,7 +86,8 @@
       printf '%s' {{ item.json.data.signed_key | quote }} \
         | pct exec {{ item.item.ctid }} -- tee {{ ssh_ca_trust_host_cert_path }} > /dev/null
       pct exec {{ item.item.ctid }} -- chmod 0644 {{ ssh_ca_trust_host_cert_path }}
-  loop: "{{ ssh_ca_trust_lxc_host_cert_signed.results | default([]) }}"
+  # Under --check the sign POST is skipped, so its results carry no json.
+  loop: "{{ ssh_ca_trust_lxc_host_cert_signed.results | default([]) | selectattr('json', 'defined') | list }}"
   loop_control:
     label: "{{ item.item.ctid }}"
   changed_when: true

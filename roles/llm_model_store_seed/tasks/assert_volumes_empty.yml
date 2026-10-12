@@ -16,6 +16,8 @@
     label: "{{ item.hostname }} {{ item.key }}"
   register: llm_model_store_seed_empty_paths
   changed_when: false
+  # Read-only; a check run needs the real value to preview the seed.
+  check_mode: false
 
 - name: Read each resolved path
   ansible.builtin.stat:

@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@0aab1ddaecacea5dc9752b075e2ac10491af33bf # v1.11.3
+    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@1f09b25303a04bf276087348059671728ffea50a # v1.13.2
     with:
       molecule: false
       molecule_contract_filters: |
@@ -103,6 +103,9 @@ jobs:
           - 'roles/node_auto_poweroff/**'
           - 'roles/node_scheduled_wake/**'
           - 'molecule/node_scheduled_wake/**'
+        zfs_scrub_window:
+          - 'roles/zfs_scrub_window/**'
+          - 'molecule/zfs_scrub_window/**'
         nvidia_driver:
           - 'roles/nvidia_driver/**'
           - 'molecule/nvidia_driver/**'

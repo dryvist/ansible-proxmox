@@ -17,6 +17,10 @@
 # SLA — generous on purpose.
 llm_model_store_seed_timeout: 3600
 
+# Container hostnames this node never seeds, even when the inventory declares
+# a models mount for them (e.g. a mount whose quota cannot hold the catalog).
+llm_model_store_seed_exclude_hostnames: []
+
 # File mode for a seeded GGUF. World-readable: llama-server runs as the
 # guest's own service user, and this file is only ever reached read-only
 # through the fabric's ro bind mount.

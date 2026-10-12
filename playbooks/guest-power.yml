@@ -21,3 +21,20 @@
     - role: guest_power
       tags:
         - guest_power
+
+- name: Read the guest's end state back on its live node
+  hosts: guest_power_node
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Confirm the guest is in the wanted state
+      ansible.builtin.command:
+        argv: ["{{ hostvars['localhost'].guest_power_tool }}", status, "{{ guest_power_vmid }}"]
+      register: guest_power_readback
+      changed_when: false
+      failed_when: >-
+        ('status: ' ~ hostvars['localhost'].guest_power_wanted_status)
+        not in guest_power_readback.stdout
+      tags:
+        - guest_power

@@ -107,7 +107,7 @@
 - name: Add the home-pinned guests to HA (only those not yet managed)
   ansible.builtin.command: >-
     ha-manager add {{ item }}
-    --state {{ 'started'
+    --state {{ pve_ha_unrecoverable_state
                if pve_ha_status_by_vmid[item | regex_replace('^(ct|vm):', '')]
                   | default('') == 'running'
                else 'stopped' }}

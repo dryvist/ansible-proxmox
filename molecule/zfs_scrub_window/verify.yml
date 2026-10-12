@@ -1,0 +1,41 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Read the resume service unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/zfs-scrub-resume-testpool.service
+      register: zfs_scrub_resume_service
+
+    - name: Read the pause service unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/zfs-scrub-pause-testpool.service
+      register: zfs_scrub_pause_service
+
+    - name: Read the resume timer unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/zfs-scrub-resume-testpool.timer
+      register: zfs_scrub_resume_timer
+
+    - name: Read the pause timer unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/zfs-scrub-pause-testpool.timer
+      register: zfs_scrub_pause_timer
+
+    - name: Assert the units render the expected contract
+      ansible.builtin.assert:
+        that:
+          - "'ExecCondition=/bin/sh -c ' in (zfs_scrub_resume_service.content | b64decode)"
+          - "'zpool status testpool | grep -q \"scrub paused\"' in (zfs_scrub_resume_service.content | b64decode)"
+          - "'ExecStart=/usr/sbin/zpool scrub testpool' in (zfs_scrub_resume_service.content | b64decode)"
+          - "'ExecCondition=/bin/sh -c ' in (zfs_scrub_pause_service.content | b64decode)"
+          - "'zpool status testpool | grep -q \"scrub in progress\"' in (zfs_scrub_pause_service.content | b64decode)"
+          - "'ExecStart=/usr/sbin/zpool scrub -p testpool' in (zfs_scrub_pause_service.content | b64decode)"
+          - "'OnCalendar=*-*-* 01:00:00 UTC' in (zfs_scrub_resume_timer.content | b64decode)"
+          - "'Persistent=false' in (zfs_scrub_resume_timer.content | b64decode)"
+          - "'OnCalendar=*-*-* 07:00:00 UTC' in (zfs_scrub_pause_timer.content | b64decode)"
+          - "'Persistent=false' in (zfs_scrub_pause_timer.content | b64decode)"
+        fail_msg: "zfs_scrub_window units did not render the expected contract"

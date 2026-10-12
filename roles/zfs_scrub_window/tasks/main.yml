@@ -1,0 +1,108 @@
+---
+# Debian's ZFS cron can start a scrub at any time; these timers only pause or
+# resume an existing scrub, keeping progress inside the declared window.
+- name: Define the per-pool scrub service and timer pairs
+  ansible.builtin.set_fact:
+    zfs_scrub_window_units: >-
+      {{ zfs_scrub_window_pools | product([
+           {'action': 'resume', 'on_calendar': zfs_scrub_window_resume_oncalendar},
+           {'action': 'pause', 'on_calendar': zfs_scrub_window_pause_oncalendar}
+         ]) | list }}
+    zfs_scrub_window_active_pools: >-
+      {{ zfs_scrub_window_pools if (zfs_scrub_window_enabled | bool) else [] }}
+  tags:
+    - zfs_scrub_window
+
+- name: Render the per-pool scrub service units
+  ansible.builtin.template:
+    src: zfs-scrub.service.j2
+    dest: "/etc/systemd/system/zfs-scrub-{{ item.1.action }}-{{ item.0 }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ zfs_scrub_window_units }}"
+  loop_control:
+    label: "{{ item.1.action }} {{ item.0 }}"
+  when:
+    - zfs_scrub_window_enabled | bool
+  notify: Reload systemd daemon
+  tags:
+    - zfs_scrub_window
+
+- name: Render the per-pool scrub timer units
+  ansible.builtin.template:
+    src: zfs-scrub.timer.j2
+    dest: "/etc/systemd/system/zfs-scrub-{{ item.1.action }}-{{ item.0 }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ zfs_scrub_window_units }}"
+  loop_control:
+    label: "{{ item.1.action }} {{ item.0 }}"
+  when:
+    - zfs_scrub_window_enabled | bool
+  notify: Reload systemd daemon
+  tags:
+    - zfs_scrub_window
+
+# Apply the unit changes before enabling their timers.
+- name: Reload systemd before reconciling the timers
+  ansible.builtin.meta: flush_handlers
+
+- name: Set each scrub timer's enabled state from the feature flag
+  ansible.builtin.systemd:
+    name: "zfs-scrub-{{ item.1.action }}-{{ item.0 }}.timer"
+    enabled: "{{ zfs_scrub_window_enabled | bool }}"
+    state: "{{ 'started' if (zfs_scrub_window_enabled | bool) else 'stopped' }}"
+  loop: "{{ zfs_scrub_window_units }}"
+  loop_control:
+    label: "{{ item.1.action }} {{ item.0 }}"
+  when:
+    - zfs_scrub_window_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - zfs_scrub_window
+
+- name: List installed scrub timer units
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: "zfs-scrub-*.timer"
+    file_type: file
+  register: zfs_scrub_window_installed
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - zfs_scrub_window
+
+- name: Stop and disable orphaned scrub timers
+  ansible.builtin.systemd:
+    name: "{{ item.path | basename }}"
+    enabled: false
+    state: stopped
+  loop: "{{ zfs_scrub_window_installed.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  failed_when: false
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - >-
+      (item.path | basename | regex_replace('^zfs-scrub-(resume|pause)-(.+)\.timer$', '\2'))
+      not in zfs_scrub_window_active_pools
+  tags:
+    - zfs_scrub_window
+
+- name: Remove orphaned scrub unit files
+  ansible.builtin.file:
+    path: "{{ item.0.path | replace('.timer', item.1) }}"
+    state: absent
+  loop: "{{ zfs_scrub_window_installed.files | default([]) | product(['.timer', '.service']) | list }}"
+  loop_control:
+    label: "{{ item.0.path | replace('.timer', item.1) }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - >-
+      (item.0.path | basename | regex_replace('^zfs-scrub-(resume|pause)-(.+)\.timer$', '\2'))
+      not in zfs_scrub_window_active_pools
+  notify: Reload systemd daemon
+  tags:
+    - zfs_scrub_window
