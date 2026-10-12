@@ -27,6 +27,8 @@
     cmd: lsmod
   register: nvidia_driver_graphics_clock_cleanup_lsmod
   changed_when: false
+  # Read-only; a check run needs the live value to preview the driver state.
+  check_mode: false
   when:
     - nvidia_driver_graphics_clock_max_mhz is none
     - nvidia_driver_graphics_clock_existing_unit.stat.exists
@@ -83,6 +85,8 @@
     cmd: nvidia-smi --query-gpu=clocks.max.graphics --format=csv,noheader,nounits
   register: nvidia_driver_graphics_clock_range
   changed_when: false
+  # Read-only; a check run needs the live value to preview the driver state.
+  check_mode: false
   when:
     - nvidia_driver_enabled | bool
     - nvidia_driver_graphics_clock_max_mhz is not none

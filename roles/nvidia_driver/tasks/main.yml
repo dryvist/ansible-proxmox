@@ -17,6 +17,8 @@
     cmd: "lspci -n -d {{ nvidia_driver_pci_vendor_id }}:"
   register: nvidia_driver_lspci
   changed_when: false
+  # Read-only; a check run needs the live value to preview the driver state.
+  check_mode: false
   when:
     - nvidia_driver_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
@@ -190,6 +192,8 @@
     cmd: lsmod
   register: nvidia_driver_lsmod
   changed_when: false
+  # Read-only; a check run needs the live value to preview the driver state.
+  check_mode: false
   when:
     - nvidia_driver_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
