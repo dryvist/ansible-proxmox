@@ -20,6 +20,4 @@
     pve_ha_enabled: false
   tasks:
     - name: Run read-only HA relocation admission
-      ansible.builtin.include_role:
-        name: pve_ha
-        tasks_from: gate.yml
+      ansible.builtin.include_tasks: tasks/preflight_gate_ha.yml

@@ -1,5 +1,5 @@
 ---
-# Read-only entry for HA relocation admission.
+# Read-only HA relocation admission: composes the pve_ha role's own scope and relocation tasks, unchanged.
 - name: Read current HA resources for relocation admission
   ansible.builtin.command: pvesh get /cluster/ha/resources --output-format json
   register: pve_ha_resources_raw
@@ -34,7 +34,10 @@
                    | map(attribute='value.vmid') | list)) }}
 
 - name: Resolve the configured HA relocation scope
-  ansible.builtin.include_tasks: replication_scope.yml
+  ansible.builtin.include_role:
+    name: pve_ha
+    tasks_from: replication_scope.yml
+    public: true
 
 - name: Refuse HA members without published identities
   ansible.builtin.assert:
@@ -71,7 +74,10 @@
          | map(attribute='sid') | list }}
 
 - name: Read live relocation evidence and run HA admission
-  ansible.builtin.include_tasks: relocation_reads.yml
+  ansible.builtin.include_role:
+    name: pve_ha
+    tasks_from: relocation_reads.yml
+    public: true
 
 - name: Confirm HA admission evaluated a relocating resource
   ansible.builtin.assert:

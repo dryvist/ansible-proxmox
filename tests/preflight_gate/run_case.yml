@@ -33,9 +33,7 @@
         preflight_gate_allow_unchecked: "{{ gate_case.allow_unchecked | default(false) }}"
 
     - name: Run the read-only HA admission entry
-      ansible.builtin.include_role:
-        name: pve_ha
-        tasks_from: gate.yml
+      ansible.builtin.include_tasks: ../../playbooks/tasks/preflight_gate_ha.yml
       vars:
         pve_ha_ct_hostnames: []
         pve_ha_vm_names: [guest-1]
