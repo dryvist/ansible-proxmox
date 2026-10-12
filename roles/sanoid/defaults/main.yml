@@ -42,6 +42,15 @@ sanoid_templates:
     yearly: 3
     autosnap: "yes"
     autoprune: "yes"
+  monthly:
+    frequently: 0
+    hourly: 0
+    daily: 0
+    weekly: 0
+    monthly: 1
+    yearly: 0
+    autosnap: "yes"
+    autoprune: "yes"
   scratch:
     autosnap: "no"
     autoprune: "no"

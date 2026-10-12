@@ -197,3 +197,68 @@ pve_dataset_root_by_storage_json: >-
   {{ ns.sep }}"local-zfs": "rpool/data"
   }
 pve_dataset_root_by_storage: "{{ pve_dataset_root_by_storage_json | from_json }}"
+
+# Splunk protected-disk policy. It applies on whichever node the published
+# inventory places the Splunk VM, so it follows a move with no edit.
+#
+# Opt-in by INTERFACE, with no exclusion list: a disk is protected only by being
+# named here, so the hot/warm and cold index tiers (virtio2, virtio3) stay out
+# of every snapshot and replication policy as a stated decision -- Splunk owns
+# index durability through its own bucket archival.
+#
+# Volume names and the datastore come from the published `disks` list, which
+# carries the name Proxmox assigned. They are never built by counting: indices
+# are allocated per (vmid, storage) as next-free, so a counted name can be the
+# retained pre-move copy, a frozen dataset that snapshots perfectly while
+# capturing nothing.
+#
+# The interface list is iterated, not the disk list filtered, so an interface
+# that stops being published fails the converge instead of silently dropping
+# that disk's coverage. Every `| mandatory(...)` is bare: a `default()` on the
+# asserted value would satisfy it unconditionally.
+splunk_protected_disk_interfaces:
+  - scsi0 # OS disk
+  - virtio1 # configuration + logs
+
+splunk_protected_disks_json: >-
+  {%- set splunk = (splunk_vm_from_tofu | default({}, true)).splunk | default({}, true) -%}
+  {%- set disks = splunk.disks | mandatory(
+        'The Splunk VM publishes no .disks, so its dataset paths cannot be
+          resolved. Run playbooks/load_tofu.yml (it targets localhost, so any
+          --limit must include localhost); if the published inventory predates
+          the disks field, apply tofu-proxmox first. Refusing to guess a pool
+          or a volume name.') -%}
+  {%- set out = {} -%}
+  {%- for iface in splunk_protected_disk_interfaces -%}
+    {%- set message = (splunk.node | default('Splunk')) ~ ': the Splunk VM publishes no disk on interface "'
+          ~ iface ~ '", named in splunk_protected_disk_interfaces. Reconcile the list against published disks.' -%}
+    {%- set matches = disks | selectattr('interface', 'eq', iface) | list -%}
+    {%- if matches | length == 0 -%}
+      {{ undef(hint=message) | mandatory(message) }}
+    {%- endif -%}
+    {%- set _ = out.update({iface: matches[0]}) -%}
+  {%- endfor -%}
+  {{ out | to_json }}
+splunk_protected_disks_by_interface: "{{ splunk_protected_disks_json | from_json }}"
+
+sanoid_splunk_datasets_json: >-
+  {
+  {%- set splunk = (splunk_vm_from_tofu | default({}, true)).splunk | default({}, true) -%}
+  {%- set node = splunk.node | mandatory('The Splunk VM node cannot be resolved from splunk_vm_from_tofu.') -%}
+  {%- if node == (proxmox_node_name | default(inventory_hostname)) -%}
+    {%- set ns = namespace(sep='') -%}
+    {%- for iface in splunk_protected_disk_interfaces -%}
+      {%- set disk = splunk_protected_disks_by_interface[iface] -%}
+      {%- set datastore = disk.datastore | mandatory(node ~ ': Splunk disk on interface "' ~ iface ~ '" publishes no .datastore.') -%}
+      {%- set path = disk.path | mandatory(node ~ ': Splunk disk on interface "' ~ iface ~ '" publishes no .path.') -%}
+      {%- set root = pve_dataset_root_by_storage[datastore]
+            | mandatory(node ~ ': the Splunk disk on storage "' ~ datastore
+              ~ '" resolves to no ZFS dataset root. A dir-type storage has no
+              per-guest dataset and cannot be snapshotted; move that disk to a
+              zfspool storage or declare the storage in node_storage.') -%}
+      {{ ns.sep }}{{ (root ~ '/' ~ path) | to_json }}: {{ {'use_template': 'critical'} | to_json }}
+      {%- set ns.sep = ',' -%}
+    {%- endfor -%}
+  {%- endif -%}
+  }
+sanoid_splunk_datasets: "{{ sanoid_splunk_datasets_json | from_json }}"

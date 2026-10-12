@@ -8,15 +8,26 @@
 
 syncoid_jobs:
   - name: "splunk-{{ splunk_vmid }}-disk0"
-    source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-0"
-    target: "bulk/replica/{{ splunk_node }}/vm-{{ splunk_vmid }}-disk-0"
-  # disk-2 is the Splunk configuration + log volume (NOT indexes — those are on
-  # their own pool and are never replicated). Small, text, frequently edited:
-  # hourly, per syncoid_extra_schedules above.
+    source: >-
+      {{ 'root@' ~ splunk_node ~ ':' ~
+         hostvars[splunk_node].pve_dataset_root_by_storage[
+           splunk_protected_disks_by_interface['scsi0'].datastore] ~ '/' ~
+         splunk_protected_disks_by_interface['scsi0'].path }}
+    target: >-
+      {{ 'bulk/replica/' ~ splunk_node ~ '/' ~
+         splunk_protected_disks_by_interface['scsi0'].path }}
+  # Pull only the OS and configuration/log interfaces; Splunk owns index
+  # durability through bucket archival. The published volume names follow moves.
   - name: "splunk-{{ splunk_vmid }}-disk2"
     schedule: hourly
-    source: "root@{{ splunk_node }}:rpool/data/vm-{{ splunk_vmid }}-disk-2"
-    target: "bulk/replica/{{ splunk_node }}/vm-{{ splunk_vmid }}-disk-2"
+    source: >-
+      {{ 'root@' ~ splunk_node ~ ':' ~
+         hostvars[splunk_node].pve_dataset_root_by_storage[
+           splunk_protected_disks_by_interface['virtio1'].datastore] ~ '/' ~
+         splunk_protected_disks_by_interface['virtio1'].path }}
+    target: >-
+      {{ 'bulk/replica/' ~ splunk_node ~ '/' ~
+         splunk_protected_disks_by_interface['virtio1'].path }}
   # Object storage IS replicated, because it owns no redundancy of its own.
   #
   # This previously read that it was erasure-coded across nodes and therefore
