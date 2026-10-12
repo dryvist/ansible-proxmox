@@ -13,6 +13,13 @@ the `proxmox` host group. Service → VMID resolution is injected by
 run after that play (already imported first by `site.yml`). Tools come from the
 repo's Nix dev shell (`direnv allow`); no `pip`/`galaxy` step is required.
 
+The loader also supplies the full container catalog and VMIDs tagged
+`gpu-passthrough`. That tag is required for every writer target, and the role
+fails if its projection is missing, if more than one tagged container shares a
+node, or if an untagged live config already contains GPU device access. The
+only non-GPU character-device allow accepted in an untagged config is TUN
+`c 10:200`.
+
 ## Why this role exists (the contract split)
 
 The BPG Proxmox provider's API token **cannot** set arbitrary device
@@ -53,6 +60,9 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 | `lxc_gpu_features_nvidia_guest_features`   | NVIDIA device set   | Shared device set for `nvidia-gpu` guests         |
 | `lxc_gpu_features_service_vmids`           | from Tofu inventory | Service → current vmid                            |
 | `lxc_gpu_features_nvidia_vmids_from_tofu`  | from Tofu inventory | `nvidia-gpu` capability tag → current vmid          |
+| `lxc_gpu_features_container_catalog_from_tofu` | from Tofu inventory | Full container catalog used to enforce one tagged guest per node |
+| `lxc_gpu_features_gpu_passthrough_vmids_from_tofu` | required from Tofu inventory | String VMIDs tagged `gpu-passthrough`; no default, so missing projection fails closed |
+| `lxc_gpu_features_unsafe_gpu_access_regex` | role default | Lines that grant GPU access; TUN `c 10:200` is exempt |
 | `lxc_gpu_features_legacy_engine_vmids_from_tofu` | from Tofu inventory | Legacy guest to stop after the replacement pair is declared |
 | `lxc_gpu_features_engine_handoff_pre_stop` | `false` | Explicitly stop GPU guests before a selector-changing Tofu apply |
 | `lxc_gpu_features_engine_handoff_vmids_from_tofu` | from Tofu inventory | Legacy and engine GPU guest candidates for that pre-stop |

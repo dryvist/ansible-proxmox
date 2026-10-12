@@ -4,8 +4,8 @@
 
 # Play 1 — the role end to end. Under Docker every `pct`/enumerate task
 # short-circuits (ansible_virtualization_type == 'docker'), so this proves the
-# role converges cleanly, the service-keyed map loads, the service -> vmid join
-# resolves, and the skip guards hold on a host with no GPU.
+# role converges cleanly, its inventory projections resolve, and only the
+# single gpu-passthrough VMID remains in the writer map.
 - name: Converge — role defaults and skip guards
   hosts: all
   become: false
@@ -30,12 +30,11 @@
           - lxc_gpu_features_nvidia_resolved['90104'].nvidia | bool
           - lxc_gpu_features_nvidia_resolved['90105'].nvidia | bool
           - lxc_gpu_features_resolved['90102'].nvidia | bool
-          - lxc_gpu_features_resolved['90103'].nvidia | bool
-          - lxc_gpu_features_resolved['90104'].nvidia | bool
-          - lxc_gpu_features_resolved['90105'].nvidia | bool
+          - lxc_gpu_features_resolved | length == 1
+          - lxc_gpu_features_resolved.keys() | list == ['90102']
         fail_msg: >-
-          NVIDIA tags must preserve both service guests and select both engine
-          guests, while excluding the AMD fixture guest.
+          The role must filter all resolved NVIDIA candidates to the sole
+          gpu-passthrough-tagged VMID.
 
 # Play 2 — the NVIDIA line construction, against the ROLE'S OWN task file.
 #
@@ -77,7 +76,7 @@
     # entry would work but would not: role-internal variables are required to
     # carry the role's prefix, and a loop_var is the sanctioned exception. So
     # this is both the lint-clean form and the form production actually uses.
-    - name: Build and write the passthrough lines for each fixture container
+    - name: Build and write the passthrough lines for the tagged fixture container
       ansible.builtin.include_role:
         name: lxc_gpu_features
         tasks_from: configure_container
@@ -87,26 +86,6 @@
             dri: false
             kfd: false
             nvidia: true
-        - key: "{{ lxc_gpu_features_test_service_vmids['llm-blackwell-7-96'] }}"
-          value:
-            dri: false
-            kfd: false
-            nvidia: true
-        - key: "{{ lxc_gpu_features_test_engine_vmids.llama_cpp }}"
-          value:
-            dri: false
-            kfd: false
-            nvidia: true
-        - key: "{{ lxc_gpu_features_test_engine_vmids.vllm }}"
-          value:
-            dri: false
-            kfd: false
-            nvidia: true
-        - key: "{{ lxc_gpu_features_test_service_vmids['llm-fast'] }}"
-          value:
-            dri: true
-            kfd: true
-            nvidia: false
       loop_control:
         loop_var: gpu_ct
         label: "container {{ gpu_ct.key }}"

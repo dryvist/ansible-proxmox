@@ -24,6 +24,15 @@
 # Docker virtualization (molecule). No IPs, no secrets.
 lxc_gpu_features_map: {}
 
+# These two inventory projections are injected by playbooks/load_tofu.yml.
+# The GPU VMID list intentionally has no default: if the tag projection is
+# missing, the role fails before it can write device access.
+
+# Match active GPU device access in an untagged LXC config. The sole allowed
+# character-device rule is the estate's TUN device, c 10:200.
+lxc_gpu_features_unsafe_gpu_access_regex: >-
+  (?i)^(?!\s*#).*(?:/dev/(?:dri(?:/|\s|$)|kfd(?:/|\s|$)|nvidia\S*)|lxc\.mount\.entry\s*:\s*(?:/dev/?\s+\S+|\S+\s+/dev/?\s+)[^#]*\bbind\b|lxc\.cgroup2?\.devices\.allow\s*:\s*(?:a\b|c\s+(?!10:200(?:\s|$))\S+))
+
 # NVIDIA-tagged guests are projected from the published Tofu inventory. This
 # keeps passthrough membership out of service-name lists; the host role still
 # reads device majors from the live device nodes below.

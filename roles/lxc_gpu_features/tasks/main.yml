@@ -11,6 +11,72 @@
 # change — only tofu_inventory.json updates. Services without a resolved
 # vmid (not in the inventory) contribute nothing.
 
+- name: Require the published container catalog and gpu-passthrough VMID list
+  ansible.builtin.assert:
+    that:
+      - lxc_gpu_features_container_catalog_from_tofu is defined
+      - lxc_gpu_features_container_catalog_from_tofu is mapping
+      - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is defined
+      - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is sequence
+      - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is not string
+    fail_msg: >-
+      GPU passthrough is disabled: the published container catalog and
+      gpu-passthrough VMID list must be supplied by playbooks/load_tofu.yml.
+      Refusing to write GPU access without that tag projection.
+  tags:
+    - lxc_gpu_features
+
+- name: Select gpu-passthrough entries from the published container catalog
+  ansible.builtin.set_fact:
+    lxc_gpu_features_gpu_passthrough_catalog_entries: >-
+      {{
+        lxc_gpu_features_container_catalog_from_tofu | dict2items
+        | selectattr('value.tags', 'defined')
+        | selectattr('value.tags', 'contains', 'gpu-passthrough') | list
+      }}
+  tags:
+    - lxc_gpu_features
+
+- name: Require node and VMID metadata for every gpu-passthrough container
+  ansible.builtin.assert:
+    that:
+      - >-
+        lxc_gpu_features_gpu_passthrough_catalog_entries
+        | selectattr('value.node', 'defined') | list | length
+        == lxc_gpu_features_gpu_passthrough_catalog_entries | length
+      - >-
+        lxc_gpu_features_gpu_passthrough_catalog_entries
+        | selectattr('value.ansible_pct_vmid', 'defined') | list | length
+        == lxc_gpu_features_gpu_passthrough_catalog_entries | length
+      - >-
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu | map('string') | sort
+        == lxc_gpu_features_gpu_passthrough_catalog_entries
+           | map(attribute='value.ansible_pct_vmid') | map('string') | sort
+    fail_msg: >-
+      The gpu-passthrough projection must match catalog entries, and every
+      tagged entry must include node and ansible_pct_vmid metadata.
+  tags:
+    - lxc_gpu_features
+
+- name: Assert at most one gpu-passthrough container per Proxmox node
+  ansible.builtin.assert:
+    that:
+      - >-
+        lxc_gpu_features_gpu_passthrough_catalog_entries
+        | selectattr('value.node', 'equalto', lxc_gpu_features_gpu_passthrough_node)
+        | list | length <= 1
+    fail_msg: >-
+      More than one container on Proxmox node {{ lxc_gpu_features_gpu_passthrough_node }}
+      is tagged gpu-passthrough; at most one GPU-passthrough container is allowed per node.
+  loop: >-
+    {{ lxc_gpu_features_gpu_passthrough_catalog_entries
+       | map(attribute='value.node') | unique | list }}
+  loop_control:
+    loop_var: lxc_gpu_features_gpu_passthrough_node
+    label: "Proxmox node {{ lxc_gpu_features_gpu_passthrough_node }}"
+  tags:
+    - lxc_gpu_features
+
 - name: Select GPU services that have a vmid in the tofu inventory
   ansible.builtin.set_fact:
     lxc_gpu_features_selected: >-
@@ -59,6 +125,65 @@
   ansible.builtin.set_fact:
     lxc_gpu_features_resolved: >-
       {{ lxc_gpu_features_service_resolved | combine(lxc_gpu_features_nvidia_resolved) }}
+  tags:
+    - lxc_gpu_features
+
+- name: Restrict the GPU writer map to gpu-passthrough VMIDs
+  ansible.builtin.set_fact:
+    lxc_gpu_features_resolved: >-
+      {{
+        lxc_gpu_features_resolved | dict2items
+        | selectattr('key', 'in', lxc_gpu_features_gpu_passthrough_vmids_from_tofu | map('string') | list)
+        | list | items2dict
+      }}
+  tags:
+    - lxc_gpu_features
+
+- name: Find all LXC configuration files on this node
+  ansible.builtin.find:
+    paths: /etc/pve/lxc
+    patterns: "*.conf"
+    file_type: file
+    recurse: false
+  register: lxc_gpu_features_live_configs
+  check_mode: false
+  tags:
+    - lxc_gpu_features
+
+- name: Read all LXC configuration files on this node
+  ansible.builtin.slurp:
+    src: "{{ lxc_gpu_features_config_file.path }}"
+  loop: "{{ lxc_gpu_features_live_configs.files | default([]) }}"
+  loop_control:
+    loop_var: lxc_gpu_features_config_file
+    label: "{{ lxc_gpu_features_config_file.path }}"
+  register: lxc_gpu_features_live_config_contents
+  check_mode: false
+  tags:
+    - lxc_gpu_features
+
+- name: Refuse GPU device access in untagged LXC configurations
+  ansible.builtin.assert:
+    that:
+      - >-
+        (lxc_gpu_features_config_content.lxc_gpu_features_config_file.path
+         | basename | regex_replace('\\.conf$', '') | string)
+        in (lxc_gpu_features_gpu_passthrough_vmids_from_tofu | map('string') | list)
+        or
+        ((lxc_gpu_features_config_content.content | b64decode).splitlines()
+         | select('search', lxc_gpu_features_unsafe_gpu_access_regex)
+         | list | length == 0)
+    fail_msg: >-
+      Refusing GPU passthrough: untagged VMID
+      {{ lxc_gpu_features_config_content.lxc_gpu_features_config_file.path
+         | basename | regex_replace('\\.conf$', '') }} has GPU device access in
+      {{ lxc_gpu_features_config_content.lxc_gpu_features_config_file.path }}.
+      Remove the device lines or assign gpu-passthrough to the sole approved
+      container on this node.
+  loop: "{{ lxc_gpu_features_live_config_contents.results | default([]) }}"
+  loop_control:
+    loop_var: lxc_gpu_features_config_content
+    label: "{{ lxc_gpu_features_config_content.lxc_gpu_features_config_file.path }}"
   tags:
     - lxc_gpu_features
 

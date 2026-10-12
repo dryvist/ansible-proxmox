@@ -13,6 +13,19 @@
 # This is a PRIVILEGED LXC, so host GIDs map 1:1; the ollama service user is
 # added to render/video inside the container by the ansible-proxmox-apps role.
 
+- name: "Require gpu-passthrough tag for container {{ gpu_ct.key }}"
+  ansible.builtin.assert:
+    that:
+      - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is defined
+      - >-
+        (gpu_ct.key | string)
+        in (lxc_gpu_features_gpu_passthrough_vmids_from_tofu | default([]) | map('string') | list)
+    fail_msg: >-
+      Refusing GPU passthrough for container {{ gpu_ct.key }}: its VMID is not
+      in the published gpu-passthrough tag list.
+  tags:
+    - lxc_gpu_features
+
 - name: "Build GPU passthrough lines for container {{ gpu_ct.key }}"
   ansible.builtin.set_fact:
     lxc_gpu_features_lines: >-

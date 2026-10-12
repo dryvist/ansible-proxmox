@@ -35,6 +35,29 @@ provisioner:
           llm-blackwell-7-96: "{{ lxc_gpu_features_test_service_vmids['llm-blackwell-7-96'] }}"
           llama_cpp: "{{ lxc_gpu_features_test_engine_vmids.llama_cpp }}"
           vllm: "{{ lxc_gpu_features_test_engine_vmids.vllm }}"
+        lxc_gpu_features_container_catalog_from_tofu:
+          llm-fast:
+            node: test-pve-node
+            ansible_pct_vmid: "{{ lxc_gpu_features_test_service_vmids['llm-fast'] }}"
+            tags: []
+          llm-ada-lovelace-6X-16G:
+            node: test-pve-node
+            ansible_pct_vmid: "{{ lxc_gpu_features_test_service_vmids['llm-ada-lovelace-6X-16G'] }}"
+            tags: [gpu-passthrough, nvidia-gpu]
+          llm-blackwell-7-96:
+            node: test-pve-node
+            ansible_pct_vmid: "{{ lxc_gpu_features_test_service_vmids['llm-blackwell-7-96'] }}"
+            tags: [nvidia-gpu]
+          llama_cpp:
+            node: test-pve-node
+            ansible_pct_vmid: "{{ lxc_gpu_features_test_engine_vmids.llama_cpp }}"
+            tags: [nvidia-gpu]
+          vllm:
+            node: test-pve-node
+            ansible_pct_vmid: "{{ lxc_gpu_features_test_engine_vmids.vllm }}"
+            tags: [nvidia-gpu]
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu:
+          - "{{ lxc_gpu_features_test_service_vmids['llm-ada-lovelace-6X-16G'] | string }}"
         lxc_gpu_features_test_legacy_vmids:
           running: 90106
           stopped: 90107
