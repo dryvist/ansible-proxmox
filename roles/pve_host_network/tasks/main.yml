@@ -65,6 +65,8 @@
           - "{{ pve_host_network_primary_iface }}"
       register: pve_host_network_address_listing
       changed_when: false
+      # Read-only; a check run needs the current address to preview network files.
+      check_mode: false
       when:
         - pve_host_network_address | default('', true) | trim | length == 0
         - pve_host_network_primary_iface | length > 0

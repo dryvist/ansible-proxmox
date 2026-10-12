@@ -14,6 +14,8 @@
   register: idrac_kiosk_amd_fw_policy
   changed_when: false
   failed_when: false
+  # Read-only; a check run needs package availability to preview kiosk packages.
+  check_mode: false
   when: idrac_kiosk_enabled | bool
   tags:
     - idrac_kiosk
@@ -58,6 +60,8 @@
   register: idrac_kiosk_pve_firmware
   changed_when: false
   failed_when: false
+  # Read-only; a check run needs the installed firmware state to preview packages.
+  check_mode: false
   when: idrac_kiosk_enabled | bool
   tags:
     - idrac_kiosk

@@ -55,6 +55,8 @@
   ansible.builtin.command: systemd-detect-virt --container
   register: _ntp_virt_container
   changed_when: false
+  # Read-only; a check run needs the virtualization type to preview NTP setup.
+  check_mode: false
   failed_when: false
   tags:
     - ntp

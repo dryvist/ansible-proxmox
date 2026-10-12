@@ -48,6 +48,8 @@
     cmd: "pct status {{ media_ct.key }}"
   register: media_lxc_features_seed_status
   changed_when: false
+  # Read-only; a check run needs the live guest state to preview dataset seeding.
+  check_mode: false
   failed_when: false
   when:
     - not media_lxc_features_seed_mounted
@@ -83,6 +85,8 @@
       sh -c 'test -d "{{ media_cfg_mp.dst }}" && [ -n "$(ls -A "{{ media_cfg_mp.dst }}" 2>/dev/null)" ]'
   register: media_lxc_features_seed_src_populated
   changed_when: false
+  # Read-only; a check run needs live source contents to preview dataset seeding.
+  check_mode: false
   failed_when: false
   when:
     - not media_lxc_features_seed_mounted

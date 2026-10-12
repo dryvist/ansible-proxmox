@@ -200,6 +200,8 @@
     cmd: "pvenode config get"
   register: wol_enable_node_cfg
   changed_when: false
+  # Read-only; a check run needs current node config to preview WoL changes.
+  check_mode: false
   when:
     - wol_enable_enabled | bool
     - wol_enable_node_config | bool

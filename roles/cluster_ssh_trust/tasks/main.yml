@@ -159,6 +159,7 @@
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - cluster_ssh_trust
 
@@ -169,6 +170,7 @@
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - cluster_ssh_trust
 
@@ -186,6 +188,7 @@
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - cluster_ssh_trust
 
@@ -205,6 +208,7 @@
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - cluster_ssh_trust
 
@@ -220,6 +224,7 @@
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - cluster_ssh_trust
 
@@ -237,6 +242,7 @@
   when:
     - cluster_ssh_trust_enabled | bool
     - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - cluster_ssh_trust
 
@@ -276,6 +282,7 @@
     - cluster_ssh_trust_enabled | bool
     - cluster_ssh_trust_peer_ips | length > 0
     - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - cluster_ssh_trust
 
@@ -297,5 +304,6 @@
     - cluster_ssh_trust_enabled | bool
     - cluster_ssh_trust_peer_ips | length > 0
     - ansible_virtualization_type != 'docker'
+    - not ansible_check_mode
   tags:
     - cluster_ssh_trust
