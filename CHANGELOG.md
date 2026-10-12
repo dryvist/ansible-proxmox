@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.0](https://github.com/dryvist/ansible-proxmox/compare/v2.21.0...v2.22.0) (2026-10-12)
+
+
+### Features
+
+* **crash_diagnostics:** configurable hung_task_timeout_secs ([#1017](https://github.com/dryvist/ansible-proxmox/issues/1017)) ([7012f84](https://github.com/dryvist/ansible-proxmox/commit/7012f847a40172ea2cea3689608c564f28c2bc8d))
+* **crash_diagnostics:** configurable hung_task_timeout_secs, 600 s on one storage node ([7012f84](https://github.com/dryvist/ansible-proxmox/commit/7012f847a40172ea2cea3689608c564f28c2bc8d))
+* **llm-model-store-seed:** exclude named containers from seeding ([#1024](https://github.com/dryvist/ansible-proxmox/issues/1024)) ([1906abf](https://github.com/dryvist/ansible-proxmox/commit/1906abfe763de56b44233e467087e11d73ee61a0))
+* **pve_health_telemetry:** report the fullest zpool capacity ([#1026](https://github.com/dryvist/ansible-proxmox/issues/1026)) ([f6ad875](https://github.com/dryvist/ansible-proxmox/commit/f6ad875e40a376d962b68999ae05e7e66e4730a7))
+* **pve-api-tokens:** mint a read-only token and cluster CA for nautobot ([51ac384](https://github.com/dryvist/ansible-proxmox/commit/51ac3844a8e2655cb808115df297a95e2336cfc6))
+* **pve-api-tokens:** mint a read-only token and cluster CA for nautobot ([#1008](https://github.com/dryvist/ansible-proxmox/issues/1008)) ([fb3e694](https://github.com/dryvist/ansible-proxmox/commit/fb3e694cfd01462920bef7c6c8572e89b5aade6c))
+* **zfs_scrub_window:** pause and resume ZFS scrubs on an off-peak schedule ([#1015](https://github.com/dryvist/ansible-proxmox/issues/1015)) ([75d5b17](https://github.com/dryvist/ansible-proxmox/commit/75d5b171bb4a1cb00108842e57f5e61dea462636))
+
+
+### Bug Fixes
+
+* **crash-diagnostics:** skip the sysctl read-back proof in check mode ([#1018](https://github.com/dryvist/ansible-proxmox/issues/1018)) ([950c0b4](https://github.com/dryvist/ansible-proxmox/commit/950c0b49bad2a3b80ac64c496af7cbdfe4d4e4ed))
+* **guest-power:** read the end state back on the live node ([#1004](https://github.com/dryvist/ansible-proxmox/issues/1004)) ([9e6c104](https://github.com/dryvist/ansible-proxmox/commit/9e6c104901f61bb66d51881e8ff9e243bab09b23))
+* **llm-model-store-seed:** read the pinned HuggingFace blob metadata in check mode ([#1022](https://github.com/dryvist/ansible-proxmox/issues/1022)) ([9d261ae](https://github.com/dryvist/ansible-proxmox/commit/9d261aee4cfdfbb88da7dda2165ef09f215c6518))
+* **llm-model-store-seed:** run the volume path and config reads in check mode ([#1021](https://github.com/dryvist/ansible-proxmox/issues/1021)) ([d67fece](https://github.com/dryvist/ansible-proxmox/commit/d67fecef4bff0e137706eb19ff9199102218db08))
+* **pve_notifications:** send title and message on the ntfy webhook ([#1020](https://github.com/dryvist/ansible-proxmox/issues/1020)) ([8a82a56](https://github.com/dryvist/ansible-proxmox/commit/8a82a56904f2d93d7734a9b5441f26fa766cce2b))
+* **pve-ha:** drop the immovable declaration for a guest HA does not manage ([025bffa](https://github.com/dryvist/ansible-proxmox/commit/025bffa8b8eece6504e4bc17395858b73f69e719))
+* **pve-ha:** drop the immovable declaration for a guest HA does not manage ([#1011](https://github.com/dryvist/ansible-proxmox/issues/1011)) ([5a007b0](https://github.com/dryvist/ansible-proxmox/commit/5a007b0aeb5eeca13d9aab175c1f081a7a3d3cb9))
+* **pve-ha:** ignore HA resources that have no recovery node ([#1005](https://github.com/dryvist/ansible-proxmox/issues/1005)) ([0b9b57d](https://github.com/dryvist/ansible-proxmox/commit/0b9b57d15ee4eefc1d34e06fcd8b4ac53c453e5f))
+* **pve-health-telemetry:** skip the journal read-back proof in check mode ([#1014](https://github.com/dryvist/ansible-proxmox/issues/1014)) ([5fe7eb3](https://github.com/dryvist/ansible-proxmox/commit/5fe7eb320fda912068682946323979244cc6dfd5))
+* **pve-notifications:** read existing targets and matchers in check mode ([#1027](https://github.com/dryvist/ansible-proxmox/issues/1027)) ([e008a0c](https://github.com/dryvist/ansible-proxmox/commit/e008a0c277638e786cf47b85fbe3a31fb6ecfb37))
+* run read-only OpenBao and pvesh reads in check mode ([#1019](https://github.com/dryvist/ansible-proxmox/issues/1019)) ([2241a02](https://github.com/dryvist/ansible-proxmox/commit/2241a0214d5126a766810ed60c1155e9ea28d788))
+* **ssh-ca-trust:** preview host-cert installs in check mode ([#1025](https://github.com/dryvist/ansible-proxmox/issues/1025)) ([c02ebef](https://github.com/dryvist/ansible-proxmox/commit/c02ebef7aef218627a71c419470fef9a03b37111))
+* **ssh-ca-trust:** run read-only probes in check mode ([#1023](https://github.com/dryvist/ansible-proxmox/issues/1023)) ([cb3fc07](https://github.com/dryvist/ansible-proxmox/commit/cb3fc071dc3159c26a217582db19c6820e9fa3cd))
+* **wol-enable:** read link and NIC state in check mode ([#1028](https://github.com/dryvist/ansible-proxmox/issues/1028)) ([66aec9b](https://github.com/dryvist/ansible-proxmox/commit/66aec9b7684902f6937e542d6251ab2e9040f4d3))
+* **zfs-pools:** refresh initramfs when zfs.conf changes ([#1006](https://github.com/dryvist/ansible-proxmox/issues/1006)) ([7692db7](https://github.com/dryvist/ansible-proxmox/commit/7692db72344c7ccd1605837e20a74cb09b2cee58))
+* **zfs-pools:** treat a null nfs_export_permissions as not declared ([#1001](https://github.com/dryvist/ansible-proxmox/issues/1001)) ([2fb204f](https://github.com/dryvist/ansible-proxmox/commit/2fb204fb659e29e5f01df9e14b2e5a36f52f95d0))
+
 ## [2.21.0](https://github.com/dryvist/ansible-proxmox/compare/v2.20.1...v2.21.0) (2026-10-11)
 
 
