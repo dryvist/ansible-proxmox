@@ -1,0 +1,51 @@
+---
+# Refuse to proceed while any untagged LXC config on this node already holds
+# GPU device access. Live configs include containers Tofu does not manage.
+
+- name: Find all LXC configuration files on this node
+  ansible.builtin.find:
+    paths: /etc/pve/lxc
+    patterns: "*.conf"
+    file_type: file
+    recurse: false
+  register: lxc_gpu_features_live_configs
+  check_mode: false
+  tags:
+    - lxc_gpu_features
+
+- name: Read all LXC configuration files on this node
+  ansible.builtin.slurp:
+    src: "{{ lxc_gpu_features_config_file.path }}"
+  loop: "{{ lxc_gpu_features_live_configs.files | default([]) }}"
+  loop_control:
+    loop_var: lxc_gpu_features_config_file
+    label: "{{ lxc_gpu_features_config_file.path }}"
+  register: lxc_gpu_features_live_config_contents
+  check_mode: false
+  tags:
+    - lxc_gpu_features
+
+- name: Refuse GPU device access in untagged LXC configurations
+  ansible.builtin.assert:
+    that:
+      - >-
+        (lxc_gpu_features_config_content.lxc_gpu_features_config_file.path
+         | basename | regex_replace('\\.conf$', '') | string)
+        in (lxc_gpu_features_gpu_passthrough_vmids_from_tofu | map('string') | list)
+        or
+        ((lxc_gpu_features_config_content.content | b64decode).splitlines()
+         | select('search', lxc_gpu_features_unsafe_gpu_access_regex)
+         | list | length == 0)
+    fail_msg: >-
+      Refusing GPU passthrough: untagged VMID
+      {{ lxc_gpu_features_config_content.lxc_gpu_features_config_file.path
+         | basename | regex_replace('\\.conf$', '') }} has GPU device access in
+      {{ lxc_gpu_features_config_content.lxc_gpu_features_config_file.path }}.
+      Remove the device lines or assign gpu-passthrough to the sole approved
+      container on this node.
+  loop: "{{ lxc_gpu_features_live_config_contents.results | default([]) }}"
+  loop_control:
+    loop_var: lxc_gpu_features_config_content
+    label: "{{ lxc_gpu_features_config_content.lxc_gpu_features_config_file.path }}"
+  tags:
+    - lxc_gpu_features
