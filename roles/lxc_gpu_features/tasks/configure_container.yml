@@ -19,7 +19,7 @@
       - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is defined
       - >-
         (gpu_ct.key | string)
-        in (lxc_gpu_features_gpu_passthrough_vmids_from_tofu | default([]) | map('string') | list)
+        in (lxc_gpu_features_gpu_passthrough_vmids_from_tofu | map('string') | list)
     fail_msg: >-
       Refusing GPU passthrough for container {{ gpu_ct.key }}: its VMID is not
       in the published gpu-passthrough tag list.

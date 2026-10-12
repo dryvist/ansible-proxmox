@@ -30,7 +30,6 @@
           - lxc_gpu_features_nvidia_resolved['90104'].nvidia | bool
           - lxc_gpu_features_nvidia_resolved['90105'].nvidia | bool
           - lxc_gpu_features_resolved['90102'].nvidia | bool
-          - lxc_gpu_features_resolved | length == 1
           - lxc_gpu_features_resolved.keys() | list == ['90102']
         fail_msg: >-
           The role must filter all resolved NVIDIA candidates to the sole

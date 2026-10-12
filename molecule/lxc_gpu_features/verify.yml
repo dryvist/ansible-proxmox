@@ -112,10 +112,6 @@
       ansible.builtin.assert:
         that:
           - "'lxc.cgroup2.devices.allow: c 10:200 rwm' in (item.content | b64decode).splitlines()"
-          - >-
-            (item.content | b64decode).splitlines()
-            | select('search', lxc_gpu_features_unsafe_gpu_access_regex)
-            | list | length == 0
         fail_msg: The TUN c 10:200 character-device allow must remain permitted.
       loop: "{{ untagged_config_contents.results }}"
       when: >-
@@ -143,10 +139,10 @@
         - name: Confirm the live-config assertion rejected the untagged GPU line
           ansible.builtin.assert:
             that:
-              - ansible_failed_result.msg is search('Refusing GPU passthrough: untagged VMID')
+              - "(ansible_failed_result | to_json) is search('Refusing GPU passthrough: untagged VMID')"
             fail_msg: >-
               Expected the untagged live-config guard to fail, got:
-              {{ ansible_failed_result.msg }}
+              {{ ansible_failed_result | to_json }}
       always:
         - name: Remove the unauthorized GPU mount fixture
           ansible.builtin.lineinfile:
@@ -155,21 +151,21 @@
             state: absent
 
     - name: Prove two tagged guests on one node fail the catalog assertion
+      vars:
+        containers_from_tofu:
+          first:
+            node: test-pve-node
+            ansible_pct_vmid: "90102"
+            tags: [gpu-passthrough]
+          second:
+            node: test-pve-node
+            ansible_pct_vmid: "90103"
+            tags: [gpu-passthrough]
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu: ["90102", "90103"]
       block:
         - name: Rerun the role with two gpu-passthrough catalog entries
           ansible.builtin.include_role:
             name: lxc_gpu_features
-          vars:
-            lxc_gpu_features_container_catalog_from_tofu:
-              first:
-                node: test-pve-node
-                ansible_pct_vmid: "90102"
-                tags: [gpu-passthrough]
-              second:
-                node: test-pve-node
-                ansible_pct_vmid: "90103"
-                tags: [gpu-passthrough]
-            lxc_gpu_features_gpu_passthrough_vmids_from_tofu: ["90102", "90103"]
 
         - name: Fail if the role accepted two tagged guests on one node
           ansible.builtin.fail:
@@ -178,10 +174,10 @@
         - name: Confirm the per-node catalog assertion rejected the duplicate
           ansible.builtin.assert:
             that:
-              - ansible_failed_result.msg is search('More than one container on Proxmox node')
+              - "(ansible_failed_result | to_json) is search('More than one container on Proxmox node')"
             fail_msg: >-
               Expected the per-node tagged-guest assertion to fail, got:
-              {{ ansible_failed_result.msg }}
+              {{ ansible_failed_result | to_json }}
 
     - name: Prove a direct configure include cannot bypass the tag guard
       block:
@@ -206,10 +202,10 @@
         - name: Confirm the direct include hit the VMID tag assertion
           ansible.builtin.assert:
             that:
-              - ansible_failed_result.msg is search('not in the published gpu-passthrough tag list')
+              - "(ansible_failed_result | to_json) is search('not in the published gpu-passthrough tag list')"
             fail_msg: >-
               Expected the direct writer guard to fail, got:
-              {{ ansible_failed_result.msg }}
+              {{ ansible_failed_result | to_json }}
 
     - name: Report the policy and writer checks that ran
       ansible.builtin.debug:

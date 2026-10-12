@@ -5,8 +5,8 @@
 - name: Require the published container catalog and gpu-passthrough VMID list
   ansible.builtin.assert:
     that:
-      - lxc_gpu_features_container_catalog_from_tofu is defined
-      - lxc_gpu_features_container_catalog_from_tofu is mapping
+      - containers_from_tofu is defined
+      - containers_from_tofu is mapping
       - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is defined
       - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is sequence
       - lxc_gpu_features_gpu_passthrough_vmids_from_tofu is not string
@@ -21,7 +21,7 @@
   ansible.builtin.set_fact:
     lxc_gpu_features_gpu_passthrough_catalog_entries: >-
       {{
-        lxc_gpu_features_container_catalog_from_tofu | dict2items
+        containers_from_tofu | dict2items
         | selectattr('value.tags', 'defined')
         | selectattr('value.tags', 'contains', 'gpu-passthrough') | list
       }}
@@ -54,16 +54,11 @@
     that:
       - >-
         lxc_gpu_features_gpu_passthrough_catalog_entries
-        | selectattr('value.node', 'equalto', lxc_gpu_features_gpu_passthrough_node)
-        | list | length <= 1
+        | map(attribute='value.node') | unique | list | length
+        == lxc_gpu_features_gpu_passthrough_catalog_entries | length
     fail_msg: >-
-      More than one container on Proxmox node {{ lxc_gpu_features_gpu_passthrough_node }}
-      is tagged gpu-passthrough; at most one GPU-passthrough container is allowed per node.
-  loop: >-
-    {{ lxc_gpu_features_gpu_passthrough_catalog_entries
-       | map(attribute='value.node') | unique | list }}
-  loop_control:
-    loop_var: lxc_gpu_features_gpu_passthrough_node
-    label: "Proxmox node {{ lxc_gpu_features_gpu_passthrough_node }}"
+      More than one container on Proxmox node is tagged gpu-passthrough
+      ({{ lxc_gpu_features_gpu_passthrough_catalog_entries | map(attribute='key') | list }});
+      at most one GPU-passthrough container is allowed per node.
   tags:
     - lxc_gpu_features
