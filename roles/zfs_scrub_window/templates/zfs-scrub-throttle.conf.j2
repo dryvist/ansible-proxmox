@@ -1,0 +1,4 @@
+{{ ansible_managed | comment }}
+{% for name, value in zfs_scrub_window_module_params.items() -%}
+w /sys/module/zfs/parameters/{{ name }} - - - - {{ value }}
+{% endfor -%}

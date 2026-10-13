@@ -5,3 +5,8 @@
   ansible.builtin.systemd:
     daemon_reload: true
   when: ansible_virtualization_type | default('') != 'docker'
+
+- name: Apply ZFS scrub throttle
+  ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/zfs-scrub-window.conf
+  changed_when: true
+  when: ansible_virtualization_type | default('') != 'docker'
