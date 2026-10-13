@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -u
+exec 2>/dev/null
+
+SCRIPT_NAME=corosync
+OUTPUT_DIR=${OUTPUT_DIR:-{{ pve_textfile_collectors_textfile_dir | quote }}}
+TIMEOUT=${TIMEOUT:-{{ pve_textfile_collectors_timeout_seconds | quote }}}
+AWK=${AWK:-{{ pve_textfile_collectors_awk_command | quote }}}
+COROSYNC_CMAPCTL=${COROSYNC_CMAPCTL:-{{ pve_textfile_collectors_corosync_cmapctl_command | quote }}}
+COROSYNC_QUORUMTOOL=${COROSYNC_QUORUMTOOL:-{{ pve_textfile_collectors_corosync_quorumtool_command | quote }}}
+STARTED=$SECONDS
+SUCCESS=1
+TMP_FILE=${OUTPUT_DIR}/.${SCRIPT_NAME}.$$
+
+run() {
+  timeout "$TIMEOUT" "$@" 2>/dev/null
+}
+
+trap 'rm -f -- "$TMP_FILE"' EXIT
+
+: > "$TMP_FILE" || exit 0
+exec > "$TMP_FILE" || exit 0
+printf '# HELP pve_textfile_success Whether every command succeeded for a collector.\n'
+printf '# TYPE pve_textfile_success gauge\n'
+printf '# HELP pve_textfile_duration_seconds Collector execution duration in seconds.\n'
+printf '# TYPE pve_textfile_duration_seconds gauge\n'
+printf '# HELP pve_corosync_link_connected Whether a Corosync link is connected.\n'
+printf '# TYPE pve_corosync_link_connected gauge\n'
+printf '# HELP pve_corosync_link_latency_avg_microseconds Average latency for a Corosync link in microseconds.\n'
+printf '# TYPE pve_corosync_link_latency_avg_microseconds gauge\n'
+printf '# HELP pve_corosync_link_latency_max_microseconds Maximum latency for a Corosync link in microseconds.\n'
+printf '# TYPE pve_corosync_link_latency_max_microseconds gauge\n'
+printf '# HELP pve_corosync_quorate Whether the Corosync cluster has quorum.\n'
+printf '# TYPE pve_corosync_quorate gauge\n'
+printf '# HELP pve_corosync_votes Corosync vote counts by kind.\n'
+printf '# TYPE pve_corosync_votes gauge\n'
+
+if ! command -v "$COROSYNC_CMAPCTL" >/dev/null 2>&1 || ! command -v "$COROSYNC_QUORUMTOOL" >/dev/null 2>&1; then
+  printf 'pve_textfile_success{script="%s"} 1\n' "$SCRIPT_NAME"
+  printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"
+  exec 1>&-
+  run mv -f "$TMP_FILE" "${OUTPUT_DIR}/${SCRIPT_NAME}.prom" >/dev/null || true
+  exit 0
+fi
+
+if ! CMAP=$(run "$COROSYNC_CMAPCTL" -m stats); then
+  SUCCESS=0
+  CMAP=
+fi
+if ! QUORUM=$(run "$COROSYNC_QUORUMTOOL" -s); then
+  SUCCESS=0
+  QUORUM=
+fi
+
+if [ -n "$CMAP" ]; then
+  AWK_PROGRAM=$(cat <<'AWK_PROGRAM_EOF'
+    {
+      key = $1
+      value = $NF
+      count = split(key, part, "[.]")
+      if (count != 5 || part[1] != "stats" || part[2] != "knet") next
+      peer = part[3]
+      link = part[4]
+      field = part[5]
+      sub(/^node/, "", peer)
+      sub(/^link/, "", link)
+      id = peer SUBSEP link
+      if (!(id in seen)) { seen[id] = 1; order[++n] = id; peers[id] = peer; links[id] = link }
+      if (field == "connected") connected[id] = value
+      if (field == "latency") latency[id] = value
+      if (field == "latency_avg") average[id] = value
+      if (field == "latency_mean") mean[id] = value
+      if (field == "latency_max") maximum[id] = value
+    }
+    END {
+      for (i = 1; i <= n; i++) {
+        id = order[i]
+        avg = (id in average ? average[id] : (id in mean ? mean[id] : (id in latency ? latency[id] : 0)))
+        printf "%s\t%s\t%s\t%s\t%s\n", peers[id], links[id], (id in connected ? connected[id] : 0), avg, (id in maximum ? maximum[id] : 0)
+      }
+    }
+AWK_PROGRAM_EOF
+  )
+  if ! LINKS=$(run "$AWK" "$AWK_PROGRAM" <<< "$CMAP"); then
+    SUCCESS=0
+    LINKS=
+  fi
+  while IFS=$'\t' read -r PEER LINK CONNECTED LATENCY_AVG LATENCY_MAX; do
+    [ -n "$PEER" ] || continue
+    printf 'pve_corosync_link_connected{peer="%s",link="%s"} %s\n' "$PEER" "$LINK" "$CONNECTED"
+    printf 'pve_corosync_link_latency_avg_microseconds{peer="%s",link="%s"} %s\n' "$PEER" "$LINK" "$LATENCY_AVG"
+    printf 'pve_corosync_link_latency_max_microseconds{peer="%s",link="%s"} %s\n' "$PEER" "$LINK" "$LATENCY_MAX"
+  done <<< "$LINKS"
+fi
+
+if [ -n "$QUORUM" ]; then
+  AWK_PROGRAM=$(cat <<'AWK_PROGRAM_EOF'
+    /Quorate:[[:space:]]*Yes/ { quorate = 1; found = 1 }
+    /Quorate:[[:space:]]*No/ { quorate = 0; found = 1 }
+    /Expected votes:/ { expected = $NF }
+    /Total votes:/ { total = $NF }
+    /^Quorum:/ { quorum = $NF }
+    END {
+      if (!found || expected == "" || total == "" || quorum == "") exit 1
+      printf "%d\t%s\t%s\t%s\n", quorate, expected, total, quorum
+    }
+AWK_PROGRAM_EOF
+  )
+  if ! VOTES=$(run "$AWK" "$AWK_PROGRAM" <<< "$QUORUM"); then
+    SUCCESS=0
+  else
+    IFS=$'\t' read -r QUORATE EXPECTED TOTAL QUORUM_VOTES <<< "$VOTES"
+    printf 'pve_corosync_quorate %s\n' "$QUORATE"
+    printf 'pve_corosync_votes{kind="expected"} %s\n' "$EXPECTED"
+    printf 'pve_corosync_votes{kind="total"} %s\n' "$TOTAL"
+    printf 'pve_corosync_votes{kind="quorum"} %s\n' "$QUORUM_VOTES"
+  fi
+fi
+
+printf 'pve_textfile_success{script="%s"} %s\n' "$SCRIPT_NAME" "$SUCCESS"
+printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"
+exec 1>&-
+run mv -f "$TMP_FILE" "${OUTPUT_DIR}/${SCRIPT_NAME}.prom" >/dev/null || true
+exit 0

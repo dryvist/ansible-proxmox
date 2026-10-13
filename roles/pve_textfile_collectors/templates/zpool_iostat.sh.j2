@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -u
+exec 2>/dev/null
+
+SCRIPT_NAME=zpool_iostat
+OUTPUT_DIR=${OUTPUT_DIR:-{{ pve_textfile_collectors_textfile_dir | quote }}}
+TIMEOUT=${TIMEOUT:-{{ pve_textfile_collectors_timeout_seconds | quote }}}
+ZPOOL=${ZPOOL:-{{ pve_textfile_collectors_zpool_command | quote }}}
+AWK=${AWK:-{{ pve_textfile_collectors_awk_command | quote }}}
+STARTED=$SECONDS
+SUCCESS=1
+TMP_FILE=${OUTPUT_DIR}/.${SCRIPT_NAME}.$$
+
+run() {
+  timeout "$TIMEOUT" "$@" 2>/dev/null
+}
+
+trap 'rm -f -- "$TMP_FILE"' EXIT
+
+: > "$TMP_FILE" || exit 0
+exec > "$TMP_FILE" || exit 0
+printf '# HELP pve_textfile_success Whether every command succeeded for a collector.\n'
+printf '# TYPE pve_textfile_success gauge\n'
+printf '# HELP pve_textfile_duration_seconds Collector execution duration in seconds.\n'
+printf '# TYPE pve_textfile_duration_seconds gauge\n'
+printf '# HELP pve_zpool_read_ops Read operations per second.\n'
+printf '# TYPE pve_zpool_read_ops gauge\n'
+printf '# HELP pve_zpool_write_ops Write operations per second.\n'
+printf '# TYPE pve_zpool_write_ops gauge\n'
+printf '# HELP pve_zpool_read_bytes Read bytes per second.\n'
+printf '# TYPE pve_zpool_read_bytes gauge\n'
+printf '# HELP pve_zpool_write_bytes Write bytes per second.\n'
+printf '# TYPE pve_zpool_write_bytes gauge\n'
+printf '# HELP pve_zpool_wait_seconds ZFS I/O wait time in seconds by operation and wait kind.\n'
+printf '# TYPE pve_zpool_wait_seconds gauge\n'
+
+if ! POOLS=$(run "$ZPOOL" list -H -o name); then
+  SUCCESS=0
+  POOLS=
+fi
+
+while IFS= read -r POOL; do
+  [ -n "$POOL" ] || continue
+  if ! SAMPLE=$(run "$ZPOOL" iostat -Hpl -y "$POOL" 5 1); then
+    SUCCESS=0
+    continue
+  fi
+  AWK_PROGRAM=$(cat <<'AWK_PROGRAM_EOF'
+    $1 == pool && NF >= 15 {
+      printf "%s\t%s\t%s\t%s", $4, $5, $6, $7
+      for (i = 8; i <= 15; i++) printf "\t%.9f", $i / 1000000000
+      printf "\n"
+      found = 1
+      exit
+    }
+    END { if (!found) exit 1 }
+AWK_PROGRAM_EOF
+  )
+  if ! FIELDS=$(run "$AWK" -v pool="$POOL" "$AWK_PROGRAM" <<< "$SAMPLE"); then
+    SUCCESS=0
+    continue
+  fi
+  IFS=$'\t' read -r READ_OPS WRITE_OPS READ_BYTES WRITE_BYTES READ_TOTAL WRITE_TOTAL READ_DISK WRITE_DISK READ_SYNCQ WRITE_SYNCQ READ_ASYNCQ WRITE_ASYNCQ <<< "$FIELDS"
+  printf 'pve_zpool_read_ops{pool="%s"} %s\n' "$POOL" "$READ_OPS"
+  printf 'pve_zpool_write_ops{pool="%s"} %s\n' "$POOL" "$WRITE_OPS"
+  printf 'pve_zpool_read_bytes{pool="%s"} %s\n' "$POOL" "$READ_BYTES"
+  printf 'pve_zpool_write_bytes{pool="%s"} %s\n' "$POOL" "$WRITE_BYTES"
+  printf 'pve_zpool_wait_seconds{pool="%s",op="read",kind="total"} %s\n' "$POOL" "$READ_TOTAL"
+  printf 'pve_zpool_wait_seconds{pool="%s",op="write",kind="total"} %s\n' "$POOL" "$WRITE_TOTAL"
+  printf 'pve_zpool_wait_seconds{pool="%s",op="read",kind="disk"} %s\n' "$POOL" "$READ_DISK"
+  printf 'pve_zpool_wait_seconds{pool="%s",op="write",kind="disk"} %s\n' "$POOL" "$WRITE_DISK"
+  printf 'pve_zpool_wait_seconds{pool="%s",op="read",kind="syncq"} %s\n' "$POOL" "$READ_SYNCQ"
+  printf 'pve_zpool_wait_seconds{pool="%s",op="write",kind="syncq"} %s\n' "$POOL" "$WRITE_SYNCQ"
+  printf 'pve_zpool_wait_seconds{pool="%s",op="read",kind="asyncq"} %s\n' "$POOL" "$READ_ASYNCQ"
+  printf 'pve_zpool_wait_seconds{pool="%s",op="write",kind="asyncq"} %s\n' "$POOL" "$WRITE_ASYNCQ"
+done <<< "$POOLS"
+
+printf 'pve_textfile_success{script="%s"} %s\n' "$SCRIPT_NAME" "$SUCCESS"
+printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"
+exec 1>&-
+run mv -f "$TMP_FILE" "${OUTPUT_DIR}/${SCRIPT_NAME}.prom" >/dev/null || true
+exit 0

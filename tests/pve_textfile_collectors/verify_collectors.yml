@@ -1,0 +1,297 @@
+---
+- name: Verify the pve_textfile_collectors scripts with local fixtures
+  hosts: localhost
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Create the collector fixture workspace
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: pve-textfile-collectors-
+      register: pve_textfile_collectors_test_temp
+      changed_when: false
+
+    - name: Set the collector fixture path
+      ansible.builtin.set_fact:
+        pve_textfile_collectors_test_work: "{{ pve_textfile_collectors_test_temp.path }}"
+
+    - name: Create fixture directories
+      ansible.builtin.file:
+        path: "{{ pve_textfile_collectors_test_work }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - bin
+        - scripts
+        - output
+        - txgs/tank
+        - txgs/mirror
+
+    - name: Load collector defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/pve_textfile_collectors/defaults/main.yml"
+
+    - name: Install the fixture zpool command
+      ansible.builtin.copy:
+        dest: "{{ pve_textfile_collectors_test_work }}/bin/zpool"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          set -u
+          case "${1:-}" in
+            list)
+              if [[ "$*" == *"name,size,alloc,free,frag,cap"* ]]; then
+                printf '%s\n' 'tank 10000 5000 5000 20% 50%' 'mirror 20000 10000 10000 30% 50%'
+              else
+                printf '%s\n' tank mirror
+              fi
+              ;;
+            status)
+              case "${3:-}" in
+                tank)
+                  printf '%s\n' '  pool: tank' ' state: ONLINE' \
+                    ' scan: scrub in progress since Tue Oct  6 12:00:00 2026' \
+                    '        5.00% done, 00:20:00 to go' 'errors: No known data errors'
+                  ;;
+                mirror)
+                  printf '%s\n' '  pool: mirror' ' state: DEGRADED' \
+                    ' scan: scrub repaired 1000 in 00:10:00 with 2 errors on Mon Oct  5 10:00:00 2026' \
+                    'errors: No known data errors'
+                  ;;
+                *) exit 1 ;;
+              esac
+              ;;
+            iostat)
+              case "${4:-}" in
+                tank) printf '%s\n' 'tank 100 50 10 20 3000 4000 1000000000 2000000000 3000000000 4000000000 5000000000 6000000000 7000000000 8000000000' ;;
+                mirror) printf '%s\n' \
+                  'mirror 200 100 30 40 5000 6000 9000000000 10000000000 11000000000 12000000000 13000000000 14000000000 15000000000 16000000000' ;;
+                *) exit 1 ;;
+              esac
+              ;;
+            *) exit 1 ;;
+          esac
+
+    - name: Install the fixture Corosync statistics command
+      ansible.builtin.copy:
+        dest: "{{ pve_textfile_collectors_test_work }}/bin/corosync-cmapctl"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          printf '%s\n' \
+            'stats.knet.node2.link0.connected (u8) = 1' \
+            'stats.knet.node2.link0.latency_avg (u32) = 1000' \
+            'stats.knet.node2.link0.latency_max (u32) = 2000' \
+            'stats.knet.node2.link1.connected (u8) = 0' \
+            'stats.knet.node2.link1.latency_avg (u32) = 3000' \
+            'stats.knet.node2.link1.latency_max (u32) = 4000'
+
+    - name: Install the fixture Corosync quorum command
+      ansible.builtin.copy:
+        dest: "{{ pve_textfile_collectors_test_work }}/bin/corosync-quorumtool"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          printf '%s\n' 'Quorate: Yes' 'Expected votes: 3' 'Total votes: 3' 'Quorum: 2'
+
+    - name: Install the slow zpool fixture
+      ansible.builtin.copy:
+        dest: "{{ pve_textfile_collectors_test_work }}/bin/zpool-slow"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          sleep 10
+
+    - name: Create transaction group fixture data
+      ansible.builtin.copy:
+        dest: "{{ pve_textfile_collectors_test_work }}/txgs/{{ item }}/txgs"
+        mode: "0644"
+        content: |
+          txg      birth            state ndirty       nread        nwritten     reads    writes   otime        qtime        wtime        stime
+          1        1000             C     100          0            0            0        0        0            0            0            1000000000
+          2        2000             C     200          0            0            0        0        0            0            0            2000000000
+          3        3000             C     300          0            0            0        0        0            0            0            3000000000
+          4        4000             C     400          0            0            0        0        0            0            0            4000000000
+          5        5000             C     500          0            0            0        0        0            0            0            5000000000
+          6        6000             S     9000         0            0            0        0        0            0            0            0
+          7        7000             O     9500         0            0            0        0        0            0            0            0
+      loop:
+        - tank
+        - mirror
+
+    - name: Render all collector scripts into the fixture workspace
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/pve_textfile_collectors/templates/{{ item.key }}.sh.j2"
+        dest: "{{ pve_textfile_collectors_test_work }}/scripts/{{ item.key }}"
+        mode: "0755"
+      loop: "{{ pve_textfile_collectors_collectors | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      vars:
+        pve_textfile_collectors_textfile_dir: "{{ pve_textfile_collectors_test_work }}/output"
+
+    - name: Check rendered scripts with bash
+      ansible.builtin.command:
+        cmd: "bash -n {{ pve_textfile_collectors_test_work }}/scripts/{{ item.key }}"
+      changed_when: false
+      loop: "{{ pve_textfile_collectors_collectors | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Check whether shellcheck is available
+      ansible.builtin.command:
+        cmd: shellcheck --version
+      changed_when: false
+      failed_when: false
+      register: pve_textfile_collectors_shellcheck
+
+    - name: Lint rendered scripts with shellcheck when installed
+      ansible.builtin.command:
+        cmd: "shellcheck {{ pve_textfile_collectors_test_work }}/scripts/{{ item.key }}"
+      changed_when: false
+      loop: "{{ pve_textfile_collectors_collectors | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: pve_textfile_collectors_shellcheck.rc == 0
+
+    - name: Run all collectors against the fixture commands
+      ansible.builtin.command:
+        cmd: "{{ pve_textfile_collectors_test_work }}/scripts/{{ item.key }}"
+      environment:
+        TZ: UTC
+        OUTPUT_DIR: "{{ pve_textfile_collectors_test_work }}/output"
+        TIMEOUT: "2"
+        ZPOOL: "{{ pve_textfile_collectors_test_work }}/bin/zpool"
+        COROSYNC_CMAPCTL: "{{ pve_textfile_collectors_test_work }}/bin/corosync-cmapctl"
+        COROSYNC_QUORUMTOOL: "{{ pve_textfile_collectors_test_work }}/bin/corosync-quorumtool"
+        TXG_ROOT: "{{ pve_textfile_collectors_test_work }}/txgs"
+      changed_when: false
+      loop: "{{ pve_textfile_collectors_collectors | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      register: pve_textfile_collectors_run_results
+
+    - name: Assert collector commands stay silent on stderr
+      ansible.builtin.assert:
+        that:
+          - item.stderr == ''
+        quiet: true
+      loop: "{{ pve_textfile_collectors_run_results.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+
+    - name: Assert each collector writes a successful textfile metric
+      ansible.builtin.assert:
+        that:
+          - >-
+            ('pve_textfile_success{script="' ~ item.key ~ '"} 1')
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/' ~ item.key ~ '.prom')
+          - >-
+            ('pve_textfile_duration_seconds{script="' ~ item.key ~ '"}')
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/' ~ item.key ~ '.prom')
+        quiet: true
+      loop: "{{ pve_textfile_collectors_collectors | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Assert ZFS status, latency, transaction group, fill, and quorum metrics
+      ansible.builtin.assert:
+        that:
+          - >-
+            'pve_zpool_scan_state{pool="tank"} 1'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_status.prom')
+          - >-
+            'pve_zpool_scan_pct{pool="tank"} 5.00'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_status.prom')
+          - >-
+            'pve_zpool_scan_errors{pool="mirror"} 2'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_status.prom')
+          - >-
+            'pve_zpool_health{pool="mirror",state="DEGRADED"} 1'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_status.prom')
+          - >-
+            'pve_zpool_scan_end_time_seconds{pool="mirror"} 1791194400'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_status.prom')
+          - >-
+            'pve_zpool_read_ops{pool="mirror"} 30'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_iostat.prom')
+          - >-
+            'pve_zpool_wait_seconds{pool="mirror",op="write",kind="syncq"} 14.000000000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_iostat.prom')
+          - >-
+            'pve_zfs_txg_sync_seconds{pool="mirror",quantile="0.99"} 5.000000000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zfs_txg.prom')
+          - >-
+            'pve_zpool_cap_percent{pool="mirror"} 50'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/pool_fill.prom')
+          - >-
+            'pve_corosync_votes{kind="expected"} 3'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/corosync.prom')
+          - >-
+            'pve_corosync_link_latency_max_microseconds{peer="2",link="1"} 4000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/corosync.prom')
+          - >-
+            'pve_zpool_read_ops{pool="tank"} 10'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_iostat.prom')
+          - >-
+            'pve_zpool_wait_seconds{pool="tank",op="read",kind="total"} 1.000000000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_iostat.prom')
+          - >-
+            'pve_zpool_wait_seconds{pool="tank",op="write",kind="asyncq"} 8.000000000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_iostat.prom')
+          - >-
+            'pve_zfs_txg_dirty_bytes{pool="tank"} 500'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zfs_txg.prom')
+          - >-
+            'pve_zfs_txg_sync_seconds{pool="tank",quantile="0.5"} 3.000000000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zfs_txg.prom')
+          - >-
+            'pve_zfs_txg_sync_seconds{pool="tank",quantile="max"} 5.000000000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zfs_txg.prom')
+          - >-
+            'pve_zpool_size_bytes{pool="tank"} 10000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/pool_fill.prom')
+          - >-
+            'pve_zpool_frag_percent{pool="tank"} 20'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/pool_fill.prom')
+          - >-
+            'pve_corosync_link_connected{peer="2",link="0"} 1'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/corosync.prom')
+          - >-
+            'pve_corosync_link_connected{peer="2",link="1"} 0'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/corosync.prom')
+          - >-
+            'pve_corosync_link_latency_avg_microseconds{peer="2",link="0"} 1000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/corosync.prom')
+          - >-
+            'pve_corosync_link_latency_max_microseconds{peer="2",link="0"} 2000'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/corosync.prom')
+          - >-
+            'pve_corosync_quorate 1'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/corosync.prom')
+          - >-
+            'pve_corosync_votes{kind="quorum"} 2'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/corosync.prom')
+        quiet: true
+
+    - name: Run the status collector with a slow command and a short timeout
+      ansible.builtin.command:
+        cmd: "{{ pve_textfile_collectors_test_work }}/scripts/zpool_status"
+      environment:
+        OUTPUT_DIR: "{{ pve_textfile_collectors_test_work }}/output"
+        TIMEOUT: "1"
+        ZPOOL: "{{ pve_textfile_collectors_test_work }}/bin/zpool-slow"
+      async: 5
+      poll: 1
+      changed_when: false
+
+    - name: Assert a timed out collector reports failure without a partial file
+      ansible.builtin.assert:
+        that:
+          - >-
+            'pve_textfile_success{script="zpool_status"} 0'
+            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_status.prom')
+          - >-
+            'pve_zpool_scan_state{' not in
+            lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/zpool_status.prom')
+        quiet: true

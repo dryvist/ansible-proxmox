@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -u
+exec 2>/dev/null
+
+SCRIPT_NAME=zfs_txg
+OUTPUT_DIR=${OUTPUT_DIR:-{{ pve_textfile_collectors_textfile_dir | quote }}}
+TIMEOUT=${TIMEOUT:-{{ pve_textfile_collectors_timeout_seconds | quote }}}
+ZPOOL=${ZPOOL:-{{ pve_textfile_collectors_zpool_command | quote }}}
+AWK=${AWK:-{{ pve_textfile_collectors_awk_command | quote }}}
+TXG_ROOT=${TXG_ROOT:-{{ pve_textfile_collectors_txg_root | quote }}}
+STARTED=$SECONDS
+SUCCESS=1
+TMP_FILE=${OUTPUT_DIR}/.${SCRIPT_NAME}.$$
+
+run() {
+  timeout "$TIMEOUT" "$@" 2>/dev/null
+}
+
+trap 'rm -f -- "$TMP_FILE"' EXIT
+
+: > "$TMP_FILE" || exit 0
+exec > "$TMP_FILE" || exit 0
+printf '# HELP pve_textfile_success Whether every command succeeded for a collector.\n'
+printf '# TYPE pve_textfile_success gauge\n'
+printf '# HELP pve_textfile_duration_seconds Collector execution duration in seconds.\n'
+printf '# TYPE pve_textfile_duration_seconds gauge\n'
+printf '# HELP pve_zfs_txg_sync_seconds ZFS transaction group sync time in seconds by quantile.\n'
+printf '# TYPE pve_zfs_txg_sync_seconds gauge\n'
+printf '# HELP pve_zfs_txg_dirty_bytes Dirty bytes in the latest committed transaction group.\n'
+printf '# TYPE pve_zfs_txg_dirty_bytes gauge\n'
+
+if ! POOLS=$(run "$ZPOOL" list -H -o name); then
+  SUCCESS=0
+  POOLS=
+fi
+
+while IFS= read -r POOL; do
+  [ -n "$POOL" ] || continue
+  TXG_FILE=${TXG_ROOT}/${POOL}/txgs
+  if [ ! -r "$TXG_FILE" ]; then
+    SUCCESS=0
+    continue
+  fi
+  AWK_PROGRAM=$(cat <<'AWK_PROGRAM_EOF'
+    NF >= 12 && $1 ~ /^[0-9]+$/ && $3 == "C" && $12 ~ /^[0-9]+$/ {
+      count++
+      txg[count] = $1 + 0
+      dirty[count] = $4 + 0
+      sync[count] = $12 + 0
+      if (count > 100) {
+        for (i = 1; i < 101; i++) {
+          txg[i] = txg[i + 1]
+          dirty[i] = dirty[i + 1]
+          sync[i] = sync[i + 1]
+        }
+        count = 100
+      }
+    }
+    END {
+      latest_txg = -1
+      latest_dirty = 0
+      for (i = 1; i <= count; i++) {
+        if (txg[i] >= latest_txg) {
+          latest_txg = txg[i]
+          latest_dirty = dirty[i]
+        }
+        for (j = i; j > 1 && sync[j] < sync[j - 1]; j--) {
+          value = sync[j]
+          sync[j] = sync[j - 1]
+          sync[j - 1] = value
+        }
+      }
+      if (count == 0) { print "0\t0\t0\t0\t0"; exit }
+      rank50 = int(0.5 * count); if (rank50 < 0.5 * count) rank50++
+      rank90 = int(0.9 * count); if (rank90 < 0.9 * count) rank90++
+      rank99 = int(0.99 * count); if (rank99 < 0.99 * count) rank99++
+      printf "%.0f\t%.9f\t%.9f\t%.9f\t%.9f\n", latest_dirty, sync[rank50] / 1000000000, sync[rank90] / 1000000000, sync[rank99] / 1000000000, sync[count] / 1000000000
+    }
+AWK_PROGRAM_EOF
+  )
+  if ! FIELDS=$(run "$AWK" "$AWK_PROGRAM" < "$TXG_FILE"); then
+    SUCCESS=0
+    continue
+  fi
+  IFS=$'\t' read -r DIRTY_BYTES P50 P90 P99 MAXIMUM <<< "$FIELDS"
+  printf 'pve_zfs_txg_dirty_bytes{pool="%s"} %s\n' "$POOL" "$DIRTY_BYTES"
+  printf 'pve_zfs_txg_sync_seconds{pool="%s",quantile="0.5"} %s\n' "$POOL" "$P50"
+  printf 'pve_zfs_txg_sync_seconds{pool="%s",quantile="0.9"} %s\n' "$POOL" "$P90"
+  printf 'pve_zfs_txg_sync_seconds{pool="%s",quantile="0.99"} %s\n' "$POOL" "$P99"
+  printf 'pve_zfs_txg_sync_seconds{pool="%s",quantile="max"} %s\n' "$POOL" "$MAXIMUM"
+done <<< "$POOLS"
+
+printf 'pve_textfile_success{script="%s"} %s\n' "$SCRIPT_NAME" "$SUCCESS"
+printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"
+exec 1>&-
+run mv -f "$TMP_FILE" "${OUTPUT_DIR}/${SCRIPT_NAME}.prom" >/dev/null || true
+exit 0
