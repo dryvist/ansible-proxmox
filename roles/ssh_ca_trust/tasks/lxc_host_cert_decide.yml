@@ -4,18 +4,20 @@
 # molecule/ssh_ca_trust runs this exact file against a fixture probe.
 # Inside a folded scalar YAML does no escape processing, so a capture group
 # is written '\1'; '\\1' reaches regex_search as two backslashes and fails.
+# Principals are lowercase: ssh matches the lowercased dialed name against a principal exactly.
 - name: Decide whether each running container's host certificate needs (re)signing
   ansible.builtin.set_fact:
     ssh_ca_trust_lxc_host_cert_decisions: >-
       {{ (ssh_ca_trust_lxc_host_cert_decisions | default([])) + [{
            'ctid': item.item,
            'pubkey': (item.stdout | regex_search('PUBKEY=(.+)', '\1') | first),
-           'principal': (item.stdout | regex_search('HOSTNAME=(\S+)', '\1') | first) ~ '.' ~ ssh_ca_trust_host_cert_domain,
+           'principal': ((item.stdout | regex_search('HOSTNAME=(\S+)', '\1') | first) ~ '.' ~ ssh_ca_trust_host_cert_domain) | lower,
            'pre_fp': (item.stdout | regex_search('PREFP=(\S+)', '\1') | first),
            'needs_signing': (lookup('template', 'host_cert_needs_signing.j2', template_vars={
                'ssh_ca_trust_host_cert_present': (item.stdout | regex_search('PRESENT=(\d)', '\1') | first) == '1',
                'ssh_ca_trust_host_cert_probe_text': ((item.stdout | regex_search('PROBE_B64=(\S*)', '\1') | first) | default('', true) | b64decode),
-               'ssh_ca_trust_host_cert_expected_principal': (item.stdout | regex_search('HOSTNAME=(\S+)', '\1') | first) ~ '.' ~ ssh_ca_trust_host_cert_domain,
+               'ssh_ca_trust_host_cert_expected_principal':
+                 ((item.stdout | regex_search('HOSTNAME=(\S+)', '\1') | first) ~ '.' ~ ssh_ca_trust_host_cert_domain) | lower,
                'ssh_ca_trust_ca_trust_fetched_fp': ssh_ca_trust_fetched_fp.stdout,
                'ssh_ca_trust_host_cert_now': ssh_ca_trust_host_cert_now,
                'ssh_ca_trust_host_cert_renew_before_days': (ssh_ca_trust_host_cert_renew_before | regex_replace('d$', '') | int),

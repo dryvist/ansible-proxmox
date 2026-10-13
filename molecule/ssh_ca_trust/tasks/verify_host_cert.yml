@@ -133,7 +133,7 @@
         - item: 100
           stdout: |-
             PUBKEY=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample root@ct
-            HOSTNAME=ct-example
+            HOSTNAME=Ct-Example-96GB
             PRESENT=0
             PROBE_B64=
             PREFP=d41d8cd98f00b204e9800998ecf8427e  -
@@ -143,12 +143,12 @@
     that:
       - ssh_ca_trust_lxc_host_cert_decisions | length == 1
       - ssh_ca_trust_lxc_host_cert_decisions[0].pubkey == 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample root@ct'
-      - ssh_ca_trust_lxc_host_cert_decisions[0].principal == 'ct-example.example.test'
+      - ssh_ca_trust_lxc_host_cert_decisions[0].principal == 'ct-example-96gb.example.test'
       - ssh_ca_trust_lxc_host_cert_decisions[0].needs_signing | bool
       - ssh_ca_trust_lxc_host_cert_pre_fp[100] == 'd41d8cd98f00b204e9800998ecf8427e'
     fail_msg: >-
       tasks/lxc_host_cert_decide.yml must capture the whole public key line,
-      build the principal from HOSTNAME plus the domain, and sign when no
+      build the lowercase principal from HOSTNAME plus the domain, and sign when no
       certificate is present.
 
 # Reload regression: a cert-only renewal (dropin/CA/principals unchanged)
