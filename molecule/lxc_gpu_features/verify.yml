@@ -179,6 +179,52 @@
               Expected the per-node tagged-guest assertion to fail, got:
               {{ ansible_failed_result | to_json }}
 
+    - name: Accept one serving and one llm-gpu-small tagged guest on one node
+      vars:
+        containers_from_tofu:
+          serving:
+            node: test-pve-node
+            ansible_pct_vmid: "90102"
+            tags: [gpu-passthrough]
+          small:
+            node: test-pve-node
+            ansible_pct_vmid: "90103"
+            tags: [gpu-passthrough, llm-gpu-small]
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu: ["90102", "90103"]
+      ansible.builtin.include_role:
+        name: lxc_gpu_features
+        tasks_from: assert_gpu_policy
+
+    - name: Prove two llm-gpu-small tagged guests on one node fail the catalog assertion
+      vars:
+        containers_from_tofu:
+          first:
+            node: test-pve-node
+            ansible_pct_vmid: "90102"
+            tags: [gpu-passthrough, llm-gpu-small]
+          second:
+            node: test-pve-node
+            ansible_pct_vmid: "90103"
+            tags: [gpu-passthrough, llm-gpu-small]
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu: ["90102", "90103"]
+      block:
+        - name: Check the policy with two llm-gpu-small catalog entries
+          ansible.builtin.include_role:
+            name: lxc_gpu_features
+            tasks_from: assert_gpu_policy
+
+        - name: Fail if the policy accepted two llm-gpu-small guests on one node
+          ansible.builtin.fail:
+            msg: The policy accepted two llm-gpu-small guests on one node.
+      rescue:
+        - name: Confirm the per-node catalog assertion rejected the second small guest
+          ansible.builtin.assert:
+            that:
+              - "(ansible_failed_result | to_json) is search('More than one container on Proxmox node')"
+            fail_msg: >-
+              Expected the per-node llm-gpu-small assertion to fail, got:
+              {{ ansible_failed_result | to_json }}
+
     - name: Prove a direct configure include cannot bypass the tag guard
       block:
         - name: Include the writer directly for an untagged fixture VMID
