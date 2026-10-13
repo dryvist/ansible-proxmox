@@ -40,18 +40,18 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 ### Variables
 
-| Variable                                       | Default                                         | Purpose                                                                                                 |
-| ---------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `pve_node_exporter_version`                    | `1.9.1`                                         | Pinned upstream release.                                                                                |
-| `pve_node_exporter_download_url`               | GitHub releases URL                             | Override to a local mirror if nodes must not reach the internet at converge time.                       |
-| `pve_node_exporter_checksum`                   | `""`                                            | Optional `sha256:<hex>` pin for the tarball (from the release `sha256sums.txt`). Empty skips the check. |
-| `pve_node_exporter_listen_address`             | node's mgmt IP (`ansible_default_ipv4.address`) | Bind address.                                                                                           |
-| `pve_node_exporter_port`                       | `9100`                                          | Listen port.                                                                                            |
-| `pve_node_exporter_user`                       | `node-exporter`                                 | Service account.                                                                                        |
-| `pve_node_exporter_install_dir`                | `/opt/node_exporter`                            | Versioned install root.                                                                                 |
-| `pve_node_exporter_textfile_collector_enabled` | `true`                                          | Enable the textfile collector.                                                                          |
-| `pve_node_exporter_textfile_collector_dir`     | `/var/lib/node_exporter/textfile_collector`     | Drop `*.prom` files here to expose custom metrics.                                                      |
-| `pve_node_exporter_extra_args`                 | `[]`                                            | Extra CLI flags appended to `ExecStart`.                                                                |
+| Variable                                       | Default                                         | Purpose                                              |
+| ---------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
+| `pve_node_exporter_version`                    | `1.9.1`                                         | Pinned upstream release.                             |
+| `pve_node_exporter_download_url`               | GitHub releases URL                             | Override to a local mirror for offline converges.    |
+| `pve_node_exporter_checksum`                   | `""`                                            | Optional `sha256:<hex>` tarball pin; empty skips it. |
+| `pve_node_exporter_listen_address`             | node's mgmt IP (`ansible_default_ipv4.address`) | Bind address.                                        |
+| `pve_node_exporter_port`                       | `9100`                                          | Listen port.                                         |
+| `pve_node_exporter_user`                       | `node-exporter`                                 | Service account.                                     |
+| `pve_node_exporter_install_dir`                | `/opt/node_exporter`                            | Versioned install root.                              |
+| `pve_node_exporter_textfile_collector_enabled` | `true`                                          | Enable the textfile collector.                       |
+| `pve_node_exporter_textfile_collector_dir`     | `/var/lib/node_exporter/textfile_collector`     | Drop `*.prom` files here to expose custom metrics.   |
+| `pve_node_exporter_extra_args`                 | `[]`                                            | Extra CLI flags appended to `ExecStart`.             |
 
 ### Packaged hardware collectors
 
