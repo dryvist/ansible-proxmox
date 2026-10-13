@@ -1,9 +1,10 @@
 # pve_textfile_collectors
 
-The role installs five scheduled collectors that write Prometheus textfiles to
+The role installs six scheduled collectors that write Prometheus textfiles to
 the node_exporter textfile directory. Collectors report ZFS pool status and
 latency, transaction group sync time, pool fill, and Corosync link and quorum
-state. Each collector writes a success and duration metric.
+state, plus HA quorum, manager, fencing, and service state. Each collector
+writes a success and duration metric.
 
 ## Variables
 
@@ -18,7 +19,8 @@ state. Each collector writes a success and duration metric.
 | `pve_textfile_collectors_date_command` | `date` | Timestamp conversion command. |
 | `pve_textfile_collectors_corosync_cmapctl_command` | `corosync-cmapctl` | Corosync statistics command. |
 | `pve_textfile_collectors_corosync_quorumtool_command` | `corosync-quorumtool` | Corosync quorum command. |
-| `pve_textfile_collectors_collectors` | five enabled collectors | Collector interval and enabled settings. |
+| `pve_textfile_collectors_ha_manager_command` | `ha-manager` | HA manager status command. |
+| `pve_textfile_collectors_collectors` | six enabled collectors | Collector interval and enabled settings. |
 
 ## Metrics
 
@@ -48,6 +50,13 @@ state. Each collector writes a success and duration metric.
 | `pve_corosync_link_latency_max_microseconds` | `peer`, `link` | Maximum Corosync link latency in microseconds. |
 | `pve_corosync_quorate` | none | Whether the Corosync cluster has quorum. |
 | `pve_corosync_votes` | `kind` | Corosync votes for expected, total, or quorum. |
+| `pve_ha_quorum_ok` | none | Whether the HA manager reports quorum OK. |
+| `pve_ha_master_active` | `node` | Whether the HA master is active. |
+| `pve_ha_fencing_armed` | none | Whether HA fencing is armed. |
+| `pve_ha_lrm_state` | `node`, `state` | State reported by a local resource manager. |
+| `pve_ha_service_state` | `sid`, `node`, `state` | State reported by an HA service. |
 
 The Corosync collector emits no Corosync samples and reports success when the
 Corosync command tools are absent.
+The HA collector emits no HA samples and reports success when the `ha-manager`
+command is absent.
