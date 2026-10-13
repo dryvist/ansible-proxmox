@@ -1,13 +1,4 @@
 ---
-- name: Install the packaged hardware collector packages
-  ansible.builtin.apt:
-    name: "{{ pve_node_exporter_packaged_collectors_packages }}"
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
-  tags:
-    - pve_node_exporter
-
 - name: Create the packaged hardware collector output directory
   ansible.builtin.file:
     path: "{{ pve_node_exporter_packaged_collectors_dir }}"
@@ -15,6 +6,15 @@
     owner: root
     group: root
     mode: "0755"
+  tags:
+    - pve_node_exporter
+
+- name: Install the packaged hardware collector packages
+  ansible.builtin.apt:
+    name: "{{ pve_node_exporter_packaged_collectors_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
   tags:
     - pve_node_exporter
 
