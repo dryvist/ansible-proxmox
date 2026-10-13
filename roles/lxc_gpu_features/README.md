@@ -13,6 +13,17 @@ the `proxmox` host group. Service → VMID resolution is injected by
 run after that play (already imported first by `site.yml`). Tools come from the
 repo's Nix dev shell (`direnv allow`); no `pip`/`galaxy` step is required.
 
+The loader also supplies the VMIDs tagged `gpu-passthrough`. That tag is
+required for every writer target, and the role fails if its projection is
+missing, if a node holds more than one tagged serving container or more than
+one tagged `llm-gpu-small` container, or if an untagged
+live config on the node already contains GPU device access. The pattern that
+defines "GPU device access" is a role var (`vars/main.yml`), so inventory vars
+cannot weaken it. The only character-device allow accepted in an untagged
+config is TUN `c 10:200`. A container that still holds GPU lines from an
+earlier converge (for example a retired GPU guest) must have them removed
+before this role passes on its node.
+
 ## Why this role exists (the contract split)
 
 The BPG Proxmox provider's API token **cannot** set arbitrary device
@@ -47,17 +58,19 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 
 ## Feature sources
 
-| Var                                       | Default             | Purpose                                           |
-| ----------------------------------------- | ------------------- | ------------------------------------------------- |
-| `lxc_gpu_features_map`                    | legacy service map  | Service → device groups                          |
-| `lxc_gpu_features_nvidia_guest_features`   | NVIDIA device set   | Shared device set for `nvidia-gpu` guests         |
-| `lxc_gpu_features_service_vmids`           | from Tofu inventory | Service → current vmid                            |
-| `lxc_gpu_features_nvidia_vmids_from_tofu`  | from Tofu inventory | `nvidia-gpu` capability tag → current vmid          |
+| Var | Default | Purpose |
+| --- | --- | --- |
+| `lxc_gpu_features_map` | legacy service map | Service → device groups |
+| `lxc_gpu_features_nvidia_guest_features` | NVIDIA device set | Shared device set for `nvidia-gpu` guests |
+| `lxc_gpu_features_service_vmids` | from Tofu inventory | Service → current vmid |
+| `lxc_gpu_features_nvidia_vmids_from_tofu` | from Tofu inventory | `nvidia-gpu` capability tag → current vmid |
+| `containers_from_tofu` | from Tofu inventory | Container catalog (also used by `load_tofu.yml`); checked per node: one serving and one `llm-gpu-small` guest |
+| `lxc_gpu_features_gpu_passthrough_vmids_from_tofu` | required (Tofu) | VMIDs tagged `gpu-passthrough`; no default, so a missing projection fails closed |
 | `lxc_gpu_features_legacy_engine_vmids_from_tofu` | from Tofu inventory | Legacy guest to stop after the replacement pair is declared |
 | `lxc_gpu_features_engine_handoff_pre_stop` | `false` | Explicitly stop GPU guests before a selector-changing Tofu apply |
 | `lxc_gpu_features_engine_handoff_vmids_from_tofu` | from Tofu inventory | Legacy and engine GPU guest candidates for that pre-stop |
-| `lxc_gpu_features_dri_major`               | `226`               | `/dev/dri` char major                              |
-| `lxc_gpu_features_kfd_major`               | `235`               | `/dev/kfd` char major                              |
+| `lxc_gpu_features_dri_major` | `226` | `/dev/dri` char major |
+| `lxc_gpu_features_kfd_major` | `235` | `/dev/kfd` char major |
 
 VMIDs are resolved at run time from the published inventory, so renumbering a
 guest needs no service-to-VMID edit here. Engine guests use their immutable

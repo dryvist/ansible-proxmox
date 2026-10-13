@@ -125,6 +125,8 @@
     cmd: pct list
   register: media_lxc_features_pct_list
   changed_when: false
+  # Read-only; a check run needs the live container list to preview mount changes.
+  check_mode: false
   when: ansible_virtualization_type | default('') != 'docker'
   tags:
     - media_lxc_features

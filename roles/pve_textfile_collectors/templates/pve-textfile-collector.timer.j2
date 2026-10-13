@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Schedule Proxmox textfile collector {{ item.key }}
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec={{ item.value.interval_seconds }}s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,31 @@
+---
+- name: Create the packaged hardware collector output directory
+  ansible.builtin.file:
+    path: "{{ pve_node_exporter_packaged_collectors_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - pve_node_exporter
+
+- name: Install the packaged hardware collector packages
+  ansible.builtin.apt:
+    name: "{{ pve_node_exporter_packaged_collectors_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags:
+    - pve_node_exporter
+
+- name: Enable and start the packaged hardware collector timers
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: "{{ pve_node_exporter_packaged_collectors_timers }}"
+  when:
+    - not ansible_check_mode
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_node_exporter

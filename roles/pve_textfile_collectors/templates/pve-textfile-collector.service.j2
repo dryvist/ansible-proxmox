@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Proxmox textfile collector {{ item.key }}
+
+[Service]
+Type=oneshot
+User=root
+Nice=10
+TimeoutStartSec=90
+ExecStart={{ pve_textfile_collectors_script_dir }}/{{ item.key }}

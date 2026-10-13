@@ -1,0 +1,85 @@
+---
+- name: Verify the pve_node_exporter packaged collectors unit contract
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    pve_node_exporter_version: "1.12.1"
+    pve_node_exporter_user: node-exporter
+    pve_node_exporter_listen_address: fixture
+    pve_node_exporter_port: 9100
+    pve_node_exporter_textfile_collector_enabled: true
+    pve_node_exporter_textfile_collector_dir: /var/lib/node_exporter/textfile_collector
+    pve_node_exporter_packaged_collectors_enabled: false
+    pve_node_exporter_packaged_collectors_dir: /var/lib/prometheus/node-exporter
+    pve_node_exporter_extra_args: []
+    pve_node_exporter_test_template_path: >-
+      {{ playbook_dir }}/../../roles/pve_node_exporter/templates/node_exporter.service.j2
+    pve_node_exporter_test_tasks_path: >-
+      {{ playbook_dir }}/../../roles/pve_node_exporter/tasks/packaged_collectors.yml
+
+  tasks:
+    - name: Render the unit with packaged collectors enabled
+      ansible.builtin.set_fact:
+        pve_node_exporter_test_enabled_unit: >-
+          {{ lookup('ansible.builtin.template', pve_node_exporter_test_template_path) }}
+      vars:
+        pve_node_exporter_packaged_collectors_enabled: true
+
+    - name: Render the unit with packaged collectors disabled
+      ansible.builtin.set_fact:
+        pve_node_exporter_test_disabled_unit: >-
+          {{ lookup('ansible.builtin.template', pve_node_exporter_test_template_path) }}
+      vars:
+        pve_node_exporter_packaged_collectors_enabled: false
+
+    - name: Assert the unit includes both textfile collector directories when enabled
+      ansible.builtin.assert:
+        that:
+          - >-
+            '--collector.textfile.directory=/var/lib/node_exporter/textfile_collector'
+            in pve_node_exporter_test_enabled_unit
+          - "'--collector.textfile.directory=/var/lib/prometheus/node-exporter' in pve_node_exporter_test_enabled_unit"
+          - >-
+            (pve_node_exporter_test_enabled_unit
+            | regex_findall('--collector.textfile.directory=')) | length == 2
+        quiet: true
+
+    - name: Assert the unit includes only the original directory when disabled
+      ansible.builtin.assert:
+        that:
+          - >-
+            '--collector.textfile.directory=/var/lib/node_exporter/textfile_collector'
+            in pve_node_exporter_test_disabled_unit
+          - >-
+            '--collector.textfile.directory=/var/lib/prometheus/node-exporter'
+            not in pve_node_exporter_test_disabled_unit
+          - >-
+            (pve_node_exporter_test_disabled_unit
+            | regex_findall('--collector.textfile.directory=')) | length == 1
+        quiet: true
+
+    - name: Load the node_exporter role defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/pve_node_exporter/defaults/main.yml"
+
+    - name: Read the packaged collector task file
+      ansible.builtin.set_fact:
+        pve_node_exporter_packaged_collectors_task_source: >-
+          {{ lookup('ansible.builtin.file', pve_node_exporter_test_tasks_path) }}
+
+    - name: Assert the packaged collector task loops over the three default timers
+      ansible.builtin.assert:
+        that:
+          - pve_node_exporter_packaged_collectors_timers | length == 3
+          - >-
+            pve_node_exporter_packaged_collectors_timers
+            == [
+            'prometheus-node-exporter-smartmon.timer',
+            'prometheus-node-exporter-nvme.timer',
+            'prometheus-node-exporter-ipmitool-sensor.timer'
+            ]
+          - "'ansible.builtin.systemd:' in pve_node_exporter_packaged_collectors_task_source"
+          - "'loop:' in pve_node_exporter_packaged_collectors_task_source"
+          - "'pve_node_exporter_packaged_collectors_timers' in pve_node_exporter_packaged_collectors_task_source"
+        quiet: true

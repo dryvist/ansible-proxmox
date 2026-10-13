@@ -1,0 +1,12 @@
+---
+# Role vars, not defaults: this is a security control, so inventory group_vars
+# and host_vars must not be able to replace it with a weaker pattern.
+#
+# Matches an active (non-comment) config line that grants device access: a
+# /dev/dri, /dev/kfd or /dev/nvidia path (including Proxmox devN entries with
+# options after a comma), a bind of the whole /dev, or a character-device
+# cgroup allow. The sole allowed character-device rule is the estate's TUN
+# device, c 10:200, so any other allow is treated as GPU-capable (NVIDIA
+# majors are dynamic and cannot be listed).
+lxc_gpu_features_unsafe_gpu_access_regex: >-
+  (?i)^(?!\s*#).*(?:/dev/(?:dri(?![\w-])|kfd(?![\w-])|nvidia\S*)|lxc\.mount\.entry\s*:\s*(?:/dev/?\s+\S+|\S+\s+/dev/?\s+)[^#]*\br?bind\b|lxc\.cgroup2?\.devices\.allow\s*:\s*(?:a\b|c\s+(?!10:200(?:\s|$))\S+))

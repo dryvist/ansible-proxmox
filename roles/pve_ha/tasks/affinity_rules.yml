@@ -24,6 +24,8 @@
   ansible.builtin.command: pvesh get /cluster/ha/rules --output-format json
   register: pve_ha_rules_raw
   changed_when: false
+  # Read-only; a check run needs the live HA rules to preview reconciliation.
+  check_mode: false
 
 - name: Parse existing HA rule names
   ansible.builtin.set_fact:

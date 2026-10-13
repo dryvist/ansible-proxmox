@@ -354,6 +354,8 @@
     cmd: blkid -U {{ crash_diagnostics_boot_partition_uuid }}
   register: crash_diagnostics_boot_device
   changed_when: false
+  # Read-only; a check run needs the device path to preview the boot-partition update.
+  check_mode: false
   when:
     - crash_diagnostics_boot_partition_uuid is defined
     - crash_diagnostics_boot_partition_uuid | length > 0
@@ -405,7 +407,9 @@
     owner: root
     group: root
     mode: "0644"
+  # The temporary boot mount exists only on a real run.
   when:
+    - not ansible_check_mode
     - crash_diagnostics_memtest_source.stat is defined
     - crash_diagnostics_memtest_source.stat.exists
   tags:
@@ -433,7 +437,9 @@
     owner: root
     group: root
     mode: "0644"
+  # The temporary boot mount exists only on a real run.
   when:
+    - not ansible_check_mode
     - crash_diagnostics_boot_partition_uuid is defined
     - crash_diagnostics_memtest_source.stat is defined
     - crash_diagnostics_memtest_source.stat.exists

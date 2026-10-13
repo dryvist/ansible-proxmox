@@ -1,0 +1,37 @@
+---
+- name: Build Nautobot inputs from published inventory
+  ansible.builtin.include_tasks: preflight_gate_map.yml
+
+- name: Refuse unchecked published guests by default
+  ansible.builtin.assert:
+    that:
+      - preflight_gate_projection.unchecked | length == 0 or (preflight_gate_allow_unchecked | default(false) | bool)
+    fail_msg: "Published inventory mapping incomplete: {{ preflight_gate_projection.unchecked }}"
+    success_msg: >-
+      {{ 'Excluded unchecked guests: ' ~ (preflight_gate_projection.unchecked | map(attribute='guest') | list | join(', '))
+         if preflight_gate_projection.unchecked | length > 0 else 'All published guests were mapped.' }}
+
+- name: Require Nautobot connection settings
+  ansible.builtin.include_tasks: preflight_gate_connection.yml
+  vars:
+    preflight_gate_nautobot_url: "{{ lookup('ansible.builtin.env', 'NAUTOBOT_URL') }}"
+    preflight_gate_nautobot_token: "{{ lookup('ansible.builtin.env', 'NAUTOBOT_TOKEN') }}"
+  when: not (preflight_skip_fetch | default(false) | bool)
+
+- name: Evaluate published guest memory and storage against Nautobot
+  ansible.builtin.include_role:
+    name: jpe_ansible.nautobot.preflight
+  vars:
+    preflight_nautobot_url: "{{ lookup('ansible.builtin.env', 'NAUTOBOT_URL') }}"
+    preflight_read_token: "{{ lookup('ansible.builtin.env', 'NAUTOBOT_TOKEN') }}"
+    preflight_desired_guests: "{{ preflight_gate_projection.guests }}"
+
+- name: Confirm Nautobot preflight coverage
+  ansible.builtin.assert:
+    that:
+      - preflight_gate_projection.guests | length > 0
+      - preflight_policy_failures is defined
+    fail_msg: Nautobot preflight did not evaluate at least one fully mapped guest.
+    success_msg: >-
+      Nautobot preflight evaluated {{ preflight_gate_projection.guests | length }} guest(s).
+      Excluded unchecked guests: {{ preflight_gate_projection.unchecked | map(attribute='guest') | list }}.

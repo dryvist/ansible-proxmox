@@ -9,6 +9,8 @@
     cmd: pct list
   register: lxc_features_pct_list
   changed_when: false
+  # Read-only; a check run needs the live container list to preview feature changes.
+  check_mode: false
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - lxc_features_service_vmids_from_tofu | length > 0

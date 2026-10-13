@@ -24,6 +24,10 @@
 # Docker virtualization (molecule). No IPs, no secrets.
 lxc_gpu_features_map: {}
 
+# The gpu-passthrough VMID list is injected by playbooks/load_tofu.yml and has
+# no default on purpose: if the projection is missing, the role fails before it
+# can write device access. The GPU-access regex is a role var (vars/main.yml).
+
 # NVIDIA-tagged guests are projected from the published Tofu inventory. This
 # keeps passthrough membership out of service-name lists; the host role still
 # reads device majors from the live device nodes below.

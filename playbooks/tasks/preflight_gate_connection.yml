@@ -1,0 +1,8 @@
+---
+- name: Require Nautobot connection settings
+  ansible.builtin.assert:
+    that:
+      - preflight_gate_nautobot_url | length > 0
+      - preflight_gate_nautobot_url is match('^https://')
+      - preflight_gate_nautobot_token | length > 0
+    fail_msg: NAUTOBOT_URL must be an https URL and NAUTOBOT_TOKEN must be non-empty for Nautobot preflight.

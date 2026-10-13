@@ -39,5 +39,5 @@
     label: "container {{ item.item }}"
   when:
     - ansible_virtualization_type | default('') != 'docker'
-    - item.stdout | trim == 'status: running'
+    - "item.stdout | trim == 'status: running'"
   changed_when: true

@@ -49,6 +49,8 @@
   ansible.builtin.command: pvesh get /storage --output-format json
   register: pve_ha_storage_raw
   changed_when: false
+  # Read-only; a check run needs live storage config to preview replication jobs.
+  check_mode: false
   run_once: true
 
 - name: Parse storage-to-nodes availability (empty list = all nodes)
@@ -75,6 +77,8 @@
     label: "{{ item.hostname }}"
   register: pve_ha_guest_configs_raw
   changed_when: false
+  # Read-only; a check run needs live guest configs to preview storage eligibility.
+  check_mode: false
   run_once: true
 
 - name: Resolve each CONTAINER job's required storage ids from its volumes

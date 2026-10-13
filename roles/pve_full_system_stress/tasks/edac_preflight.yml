@@ -8,20 +8,41 @@
       for file in {{ pve_full_system_stress_ue_count_files }}; do
         [[ -r "$file" ]] || continue
         value=$(cat "$file")
-        [[ "$value" =~ ^[0-9]+$ ]]
+        if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+          printf 'invalid\n'
+          exit 0
+        fi
         total=$((total + value))
         found=1
       done
       if ((found == 0)); then
-        logger -t pve-full-system-stress -p daemon.err -- \
-          "pve_full_system_stress run={{ pve_full_system_stress_run_id }}" \
-          "stage={{ pve_full_system_stress_stage }} event=abort reason=edac_counters_unavailable"
-        exit 1
+        printf 'unavailable\n'
+      else
+        printf '%s\n' "$total"
       fi
-      printf '%s\n' "$total"
   register: pve_full_system_stress_ue_baseline
   changed_when: false
+  # Read-only; a check run needs EDAC counters to preview stress safety.
+  check_mode: false
   when: pve_full_system_stress_memory_ecc | bool
+
+- name: Log an EDAC counter read failure
+  ansible.builtin.command:
+    argv:
+      - logger
+      - -t
+      - pve-full-system-stress
+      - -p
+      - daemon.err
+      - --
+      - >-
+        pve_full_system_stress run={{ pve_full_system_stress_run_id }}
+        stage={{ pve_full_system_stress_stage }} event=abort
+        reason=edac_counters_{{ 'invalid' if pve_full_system_stress_ue_baseline.stdout == 'invalid' else 'unavailable' }}
+  changed_when: false
+  when:
+    - pve_full_system_stress_memory_ecc | bool
+    - pve_full_system_stress_ue_baseline.stdout is not match('^[0-9]+$')
 
 - name: Log the EDAC guard decision
   ansible.builtin.command:
@@ -43,6 +64,8 @@
 - name: Refuse the stage when EDAC already reports an uncorrected error
   ansible.builtin.assert:
     that:
+      - pve_full_system_stress_ue_baseline.rc == 0
+      - pve_full_system_stress_ue_baseline.stdout is match('^[0-9]+$')
       - pve_full_system_stress_ue_baseline.stdout | int == 0
     fail_msg: EDAC reports an uncorrected memory error; no stress stage may start.
     quiet: true

@@ -1,0 +1,79 @@
+---
+- name: Create the textfile collector script directory
+  ansible.builtin.file:
+    path: "{{ pve_textfile_collectors_script_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - pve_textfile_collectors
+
+- name: Ensure the node_exporter textfile output directory exists
+  ansible.builtin.file:
+    path: "{{ pve_textfile_collectors_textfile_dir }}"
+    state: directory
+    mode: "0755"
+  tags:
+    - pve_textfile_collectors
+
+- name: Render the textfile collector scripts
+  ansible.builtin.template:
+    src: "{{ item.key }}.sh.j2"
+    dest: "{{ pve_textfile_collectors_script_dir }}/{{ item.key }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ pve_textfile_collectors_collectors | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Reload systemd daemon
+  tags:
+    - pve_textfile_collectors
+
+- name: Render the textfile collector services
+  ansible.builtin.template:
+    src: pve-textfile-collector.service.j2
+    dest: "/etc/systemd/system/pve-textfile-collector-{{ item.key }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ pve_textfile_collectors_collectors | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Reload systemd daemon
+  tags:
+    - pve_textfile_collectors
+
+- name: Render the textfile collector timers
+  ansible.builtin.template:
+    src: pve-textfile-collector.timer.j2
+    dest: "/etc/systemd/system/pve-textfile-collector-{{ item.key }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ pve_textfile_collectors_collectors | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Reload systemd daemon
+  tags:
+    - pve_textfile_collectors
+
+- name: Reload systemd before reconciling the collector timers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - pve_textfile_collectors
+
+- name: Enable and start the textfile collector timers
+  ansible.builtin.systemd:
+    name: "pve-textfile-collector-{{ item.key }}.timer"
+    enabled: "{{ item.value.enabled | bool }}"
+    state: "{{ 'started' if (item.value.enabled | bool) else 'stopped' }}"
+  loop: "{{ pve_textfile_collectors_collectors | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - not ansible_check_mode
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_textfile_collectors

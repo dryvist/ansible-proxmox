@@ -33,6 +33,12 @@
                  | join(' ') }}
       changed_when: true
 
+    - name: Seed the untagged guest with its allowed TUN character-device rule
+      ansible.builtin.lineinfile:
+        path: "/etc/pve/lxc/{{ lxc_gpu_features_test_service_vmids['llm-fast'] }}.conf"
+        line: "lxc.cgroup2.devices.allow: c 10:200 rwm"
+        state: present
+
     - name: Create mocked pct status and shutdown behavior for lifecycle tests
       ansible.builtin.raw: |
         mkdir -p /run/mock-pct

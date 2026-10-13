@@ -24,6 +24,8 @@
     cmd: "pct exec {{ media_ct.key }} -- id -u {{ media_cfg_mp.owner_user }}"
   register: media_lxc_features_cfg_owner_uid
   changed_when: false
+  # Read-only; a check run needs the live uid to preview ownership changes.
+  check_mode: false
   failed_when: false
   when: media_cfg_mp.owner_user is defined
   tags:
@@ -34,6 +36,8 @@
     cmd: "pct exec {{ media_ct.key }} -- id -g {{ media_cfg_mp.owner_user }}"
   register: media_lxc_features_cfg_owner_gid
   changed_when: false
+  # Read-only; a check run needs the live gid to preview ownership changes.
+  check_mode: false
   failed_when: false
   when: media_cfg_mp.owner_user is defined
   tags:

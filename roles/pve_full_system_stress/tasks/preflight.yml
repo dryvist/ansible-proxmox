@@ -7,6 +7,8 @@
     argv: [pct, list]
   register: pve_full_system_stress_pct_list
   changed_when: false
+  # Read-only; a check run needs the live container list to preview GPU checks.
+  check_mode: false
 
 - name: Match declared NVIDIA guests to running LXC identifiers
   ansible.builtin.set_fact:
@@ -41,6 +43,8 @@
   loop: "{{ pve_full_system_stress_running_gpu_vmids }}"
   register: pve_full_system_stress_guest_units
   changed_when: false
+  # Read-only; a check run needs active guest services to preview stress safety.
+  check_mode: false
 
 - name: Collect active LLM-serving units from GPU guests
   ansible.builtin.set_fact:
@@ -93,6 +97,8 @@
     argv: [zpool, list, -H, -o, health, "{{ pve_full_system_stress_rpool }}"]
   register: pve_full_system_stress_pool_health
   changed_when: false
+  # Read-only; a check run needs pool health to preview stress safety.
+  check_mode: false
   failed_when: false
 
 - name: Log the storage-pool guard decision

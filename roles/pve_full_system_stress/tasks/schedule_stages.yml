@@ -37,6 +37,8 @@
         argv: [date, -u, +%s]
       register: pve_full_system_stress_schedule_base
       changed_when: false
+      # Read-only; a check run needs the schedule base to preview stage timing.
+      check_mode: false
 
     - name: Record each omitted stage
       ansible.builtin.command:

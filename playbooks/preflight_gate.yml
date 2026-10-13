@@ -1,0 +1,40 @@
+---
+- name: Load published Proxmox inventory
+  ansible.builtin.import_playbook: load_tofu.yml
+
+- name: Check published guest capacity and storage against Nautobot
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    preflight_gate_allow_unchecked: false
+  tasks:
+    - name: Run Nautobot guest preflight
+      ansible.builtin.include_tasks: tasks/preflight_gate.yml
+
+    - name: Record that the Nautobot preflight completed
+      ansible.builtin.set_fact:
+        preflight_gate_receipt_nautobot: true
+
+- name: Check HA relocation admission on one Proxmox node
+  hosts: "{{ pve_ha_config_host | default(groups.get('proxmox', ['localhost']) | first) }}"
+  become: true
+  gather_facts: false
+  vars:
+    pve_ha_enabled: false
+  tasks:
+    - name: Run read-only HA relocation admission
+      ansible.builtin.include_tasks: tasks/preflight_gate_ha.yml
+
+    - name: Record that the HA relocation admission completed
+      ansible.builtin.set_fact:
+        preflight_gate_receipt_ha: true
+
+- name: Confirm every gate check completed
+  hosts: localhost
+  become: false
+  gather_facts: false
+  tags: always
+  tasks:
+    - name: Require the completion receipts
+      ansible.builtin.import_tasks: tasks/preflight_gate_receipts.yml

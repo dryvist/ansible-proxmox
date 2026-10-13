@@ -43,6 +43,9 @@ jobs:
           - 'tests/guest_placement/**'
           - 'tests/inventory_load/**'
           - 'tests/pve_ha_relocation/**'
+          - 'playbooks/preflight_gate.yml'
+          - 'playbooks/tasks/preflight_gate*.yml'
+          - 'tests/preflight_gate/**'
           - 'roles/guest_power/**'
           - 'tests/guest_power_contract.yml'
           - 'tests/guest_power_contract_reject.yml'
@@ -181,6 +184,11 @@ jobs:
     needs: ci
     uses: ./.github/workflows/_data-contract.yml
 
+  role-contracts:
+    name: Role Contracts
+    needs: ci
+    uses: ./.github/workflows/_role-contracts.yml
+
   molecule:
     name: Molecule Test
     needs: ci
@@ -195,7 +203,7 @@ jobs:
 
   gate:
     name: Merge Gate
-    needs: [ci, data-contract, molecule]
+    needs: [ci, data-contract, role-contracts, molecule]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:

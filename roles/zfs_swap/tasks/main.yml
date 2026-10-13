@@ -6,6 +6,8 @@
     cmd: "zpool list {{ zfs_swap_pool }}"
   register: zfs_swap_pool_check
   changed_when: false
+  # Read-only; a check run needs pool state to preview swap configuration.
+  check_mode: false
   failed_when: false
   tags:
     - zfs_swap
@@ -22,6 +24,8 @@
         cmd: "zfs list {{ zfs_swap_pool }}/{{ zfs_swap_dataset }}"
       register: zfs_swap_check
       changed_when: false
+      # Read-only; a check run needs dataset state to preview swap configuration.
+      check_mode: false
       failed_when: false
 
     - name: Get system page size
@@ -29,6 +33,8 @@
         cmd: getconf PAGESIZE
       register: zfs_swap_page_size
       changed_when: false
+      # Read-only; a check run needs the page size to preview swap creation.
+      check_mode: false
 
     - name: Create ZFS swap ZVOL
       ansible.builtin.command:

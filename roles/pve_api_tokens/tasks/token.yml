@@ -19,6 +19,8 @@
     engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
     path: "apps/{{ pve_api_tokens_consumer.app }}"
   register: pve_api_tokens_stored
+  # Read-only; a check run needs stored token data to preview reconciliation.
+  check_mode: false
   failed_when: false
   delegate_to: localhost
   become: false
@@ -139,6 +141,8 @@
     engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
     path: "apps/{{ pve_api_tokens_consumer.app }}"
   register: pve_api_tokens_certificate_stored
+  # Read-only; a check run needs stored certificate data to preview publication.
+  check_mode: false
   failed_when: false
   delegate_to: localhost
   become: false

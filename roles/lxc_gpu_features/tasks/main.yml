@@ -11,6 +11,11 @@
 # change — only tofu_inventory.json updates. Services without a resolved
 # vmid (not in the inventory) contribute nothing.
 
+- name: Check the gpu-passthrough policy for the published inventory
+  ansible.builtin.include_tasks: assert_gpu_policy.yml
+  tags:
+    - lxc_gpu_features
+
 - name: Select GPU services that have a vmid in the tofu inventory
   ansible.builtin.set_fact:
     lxc_gpu_features_selected: >-
@@ -62,11 +67,29 @@
   tags:
     - lxc_gpu_features
 
+- name: Restrict the GPU writer map to gpu-passthrough VMIDs
+  ansible.builtin.set_fact:
+    lxc_gpu_features_resolved: >-
+      {{
+        lxc_gpu_features_resolved | dict2items
+        | selectattr('key', 'in', lxc_gpu_features_gpu_passthrough_vmids_from_tofu | map('string') | list)
+        | list | items2dict
+      }}
+  tags:
+    - lxc_gpu_features
+
+- name: Refuse GPU device access in untagged LXC configurations
+  ansible.builtin.include_tasks: scan_untagged_configs.yml
+  tags:
+    - lxc_gpu_features
+
 - name: Enumerate LXC containers present on this host
   ansible.builtin.command:
     cmd: pct list
   register: lxc_gpu_features_pct_list
   changed_when: false
+  # Read-only; a check run needs the live container list to preview GPU features.
+  check_mode: false
   when: ansible_virtualization_type | default('') != 'docker'
   tags:
     - lxc_gpu_features
@@ -181,6 +204,8 @@
       -name 'nvidia*' -type c -exec stat -c '%t %n' {} +
   register: lxc_gpu_features_nvidia_find
   changed_when: false
+  # Read-only; a check run needs the live device nodes to preview GPU mappings.
+  check_mode: false
   # An absent /dev/nvidia* set is not an error here — it is the "host driver not
   # installed, or the nodes did not survive the last reboot" case, which the
   # assert below names explicitly rather than letting find's exit code decide.

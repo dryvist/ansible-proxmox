@@ -9,6 +9,8 @@
     cmd: "pct status {{ lxc_gpu_features_legacy_guest.value }}"
   register: lxc_gpu_features_legacy_status_before
   changed_when: false
+  # Read-only; a check run needs the live guest state to preview the handoff.
+  check_mode: false
 
 - name: Log the previous GPU guest status decision
   ansible.builtin.debug:
@@ -34,8 +36,9 @@
   delay: 2
   until: >-
     lxc_gpu_features_legacy_status_after.stdout | trim == "status: stopped"
-  when: >-
-    lxc_gpu_features_legacy_status_before.stdout | trim == "status: running"
+  when:
+    - not ansible_check_mode
+    - 'lxc_gpu_features_legacy_status_before.stdout | trim == "status: running"'
 
 - name: Require the previous GPU guest to be stopped before passthrough changes
   ansible.builtin.assert:
@@ -49,3 +52,4 @@
     success_msg: >-
       GPU guest {{ lxc_gpu_features_legacy_guest.value }} is stopped;
       replacement passthrough may proceed.
+  when: not ansible_check_mode

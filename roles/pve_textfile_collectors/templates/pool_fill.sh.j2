@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -u
+exec 2>/dev/null
+
+SCRIPT_NAME=pool_fill
+OUTPUT_DIR=${OUTPUT_DIR:-{{ pve_textfile_collectors_textfile_dir | quote }}}
+TIMEOUT=${TIMEOUT:-{{ pve_textfile_collectors_timeout_seconds | quote }}}
+ZPOOL=${ZPOOL:-{{ pve_textfile_collectors_zpool_command | quote }}}
+AWK=${AWK:-{{ pve_textfile_collectors_awk_command | quote }}}
+STARTED=$SECONDS
+SUCCESS=1
+TMP_FILE=${OUTPUT_DIR}/.${SCRIPT_NAME}.$$
+
+run() {
+  timeout "$TIMEOUT" "$@" 2>/dev/null
+}
+
+trap 'rm -f -- "$TMP_FILE"' EXIT
+
+: > "$TMP_FILE" || exit 0
+exec > "$TMP_FILE" || exit 0
+printf '# HELP pve_textfile_success Whether every command succeeded for a collector.\n'
+printf '# TYPE pve_textfile_success gauge\n'
+printf '# HELP pve_textfile_duration_seconds Collector execution duration in seconds.\n'
+printf '# TYPE pve_textfile_duration_seconds gauge\n'
+printf '# HELP pve_zpool_size_bytes Total size of a ZFS pool in bytes.\n'
+printf '# TYPE pve_zpool_size_bytes gauge\n'
+printf '# HELP pve_zpool_alloc_bytes Allocated bytes in a ZFS pool.\n'
+printf '# TYPE pve_zpool_alloc_bytes gauge\n'
+printf '# HELP pve_zpool_free_bytes Free bytes in a ZFS pool.\n'
+printf '# TYPE pve_zpool_free_bytes gauge\n'
+printf '# HELP pve_zpool_frag_percent Fragmentation percentage of a ZFS pool.\n'
+printf '# TYPE pve_zpool_frag_percent gauge\n'
+printf '# HELP pve_zpool_cap_percent Capacity percentage of a ZFS pool.\n'
+printf '# TYPE pve_zpool_cap_percent gauge\n'
+
+if ! POOLS=$(run "$ZPOOL" list -Hp -o name,size,alloc,free,frag,cap); then
+  SUCCESS=0
+  POOLS=
+fi
+if [ -n "$POOLS" ]; then
+  AWK_PROGRAM=$(cat <<'AWK_PROGRAM_EOF'
+    NF >= 6 {
+      frag = $5
+      cap = $6
+      gsub(/%/, "", frag)
+      gsub(/%/, "", cap)
+      if (frag !~ /^[0-9]+([.][0-9]+)?$/) frag = 0
+      if (cap !~ /^[0-9]+([.][0-9]+)?$/) cap = 0
+      printf "%s\t%s\t%s\t%s\t%s\t%s\n", $1, $2, $3, $4, frag, cap
+    }
+AWK_PROGRAM_EOF
+  )
+  if ! FIELDS=$(run "$AWK" "$AWK_PROGRAM" <<< "$POOLS"); then
+    SUCCESS=0
+    FIELDS=
+  fi
+  while IFS=$'\t' read -r POOL SIZE ALLOC FREE FRAG CAP; do
+    [ -n "$POOL" ] || continue
+    printf 'pve_zpool_size_bytes{pool="%s"} %s\n' "$POOL" "$SIZE"
+    printf 'pve_zpool_alloc_bytes{pool="%s"} %s\n' "$POOL" "$ALLOC"
+    printf 'pve_zpool_free_bytes{pool="%s"} %s\n' "$POOL" "$FREE"
+    printf 'pve_zpool_frag_percent{pool="%s"} %s\n' "$POOL" "$FRAG"
+    printf 'pve_zpool_cap_percent{pool="%s"} %s\n' "$POOL" "$CAP"
+  done <<< "$FIELDS"
+fi
+
+printf 'pve_textfile_success{script="%s"} %s\n' "$SCRIPT_NAME" "$SUCCESS"
+printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"
+exec 1>&-
+run mv -f "$TMP_FILE" "${OUTPUT_DIR}/${SCRIPT_NAME}.prom" >/dev/null || true
+exit 0

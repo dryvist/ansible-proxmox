@@ -137,6 +137,8 @@
       fi
   register: pve_full_system_stress_status
   changed_when: false
+  # Read-only; a check run needs current unit and journal state for status output.
+  check_mode: false
 
 - name: Display full-system stress status and collected results
   ansible.builtin.debug:

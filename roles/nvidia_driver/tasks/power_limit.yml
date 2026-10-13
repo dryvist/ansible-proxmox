@@ -27,6 +27,8 @@
     cmd: nvidia-smi --query-gpu=power.min_limit,power.max_limit --format=csv,noheader,nounits
   register: nvidia_driver_power_limit_range
   changed_when: false
+  # Read-only; a check run needs the live value to preview the driver state.
+  check_mode: false
   when:
     - nvidia_driver_enabled | bool
     - nvidia_driver_power_limit_w is not none
@@ -113,6 +115,8 @@
     - nvidia_driver_power_limit_w is not none
     - ansible_virtualization_type | default('') != 'docker'
     - "'nouveau' not in nvidia_driver_lsmod.stdout"
+    # The read-back follows a write that --check skips.
+    - not ansible_check_mode
   tags:
     - nvidia_driver
     - nvidia_driver_power_limit
@@ -132,6 +136,8 @@
     - nvidia_driver_power_limit_w is not none
     - ansible_virtualization_type | default('') != 'docker'
     - "'nouveau' not in nvidia_driver_lsmod.stdout"
+    # The read-back follows a write that --check skips.
+    - not ansible_check_mode
   tags:
     - nvidia_driver
     - nvidia_driver_power_limit
@@ -173,6 +179,8 @@
         cmd: nvidia-smi --query-gpu=index,power.limit,power.default_limit --format=csv,noheader,nounits
       register: nvidia_driver_power_limit_defaults
       changed_when: false
+      # Read-only; a check run needs the live value to preview the driver state.
+      check_mode: false
 
     - name: Reset GPUs whose live power limit differs from the default
       ansible.builtin.command:
@@ -199,6 +207,8 @@
         that:
           - ((item.split(',')[0] | float) - (item.split(',')[1] | float)) | abs <= 1
         fail_msg: "GPU power limit {{ item.split(',')[0] | trim }} W is not its default {{ item.split(',')[1] | trim }} W."
-      loop: "{{ nvidia_driver_power_limit_reset_readback.stdout_lines }}"
+      loop: "{{ nvidia_driver_power_limit_reset_readback.stdout_lines | default([]) }}"
       loop_control:
         label: "{{ item | trim }} W (live,default)"
+      # The read-back follows a reset that --check skips.
+      when: not ansible_check_mode

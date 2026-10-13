@@ -1,0 +1,15 @@
+---
+# Every gate check records a receipt on completion; a tag or limit selection that skips a check leaves it missing.
+- name: Require every gate check to have completed in this run
+  ansible.builtin.assert:
+    that:
+      - preflight_gate_receipt_nautobot | default(false) | bool
+      - >-
+        (hostvars | dict2items
+         | selectattr('value.preflight_gate_receipt_ha', 'defined')
+         | selectattr('value.preflight_gate_receipt_ha') | list | length) > 0
+    fail_msg: >-
+      The pre-flight gate did not complete every check: Nautobot capacity and storage ran
+      ({{ preflight_gate_receipt_nautobot | default(false) }}), HA relocation admission ran on a node
+      ({{ hostvars | dict2items | selectattr('value.preflight_gate_receipt_ha', 'defined') | list | length > 0 }}).
+      A tag or limit selection that skips a check is refused.

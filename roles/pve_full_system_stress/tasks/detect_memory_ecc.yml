@@ -4,6 +4,8 @@
     argv: [dmidecode, --type, '16']
   register: pve_full_system_stress_memory_ecc_smbios
   changed_when: false
+  # Read-only; a check run needs ECC capability to preview stress preflight.
+  check_mode: false
   failed_when: false
 
 - name: Parse SMBIOS memory-array ECC capability

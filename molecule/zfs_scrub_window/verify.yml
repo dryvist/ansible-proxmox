@@ -25,6 +25,11 @@
         src: /etc/systemd/system/zfs-scrub-pause-testpool.timer
       register: zfs_scrub_pause_timer
 
+    - name: Read the ZFS scrub throttle tmpfiles configuration
+      ansible.builtin.slurp:
+        src: /etc/tmpfiles.d/zfs-scrub-window.conf
+      register: zfs_scrub_throttle
+
     - name: Assert the units render the expected contract
       ansible.builtin.assert:
         that:
@@ -38,4 +43,6 @@
           - "'Persistent=false' in (zfs_scrub_resume_timer.content | b64decode)"
           - "'OnCalendar=*-*-* 07:00:00 UTC' in (zfs_scrub_pause_timer.content | b64decode)"
           - "'Persistent=false' in (zfs_scrub_pause_timer.content | b64decode)"
+          - "'w /sys/module/zfs/parameters/zfs_vdev_scrub_max_active - - - - 1' in (zfs_scrub_throttle.content | b64decode)"
+          - "'w /sys/module/zfs/parameters/zfs_scan_vdev_limit - - - - 4194304' in (zfs_scrub_throttle.content | b64decode)"
         fail_msg: "zfs_scrub_window units did not render the expected contract"
