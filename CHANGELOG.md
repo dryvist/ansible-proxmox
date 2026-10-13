@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.0](https://github.com/dryvist/ansible-proxmox/compare/v2.22.0...v2.23.0) (2026-10-13)
+
+
+### Features
+
+* add the Nautobot pre-flight gate playbook ([#1039](https://github.com/dryvist/ansible-proxmox/issues/1039)) ([c4783ae](https://github.com/dryvist/ansible-proxmox/commit/c4783ae746127412b58fa6fc0e9df46617ca948d))
+* **sanoid:** add a monthly-only template for rebuildable VMs ([86ec003](https://github.com/dryvist/ansible-proxmox/commit/86ec003d2810c6189fdec3d11c7d5827b733015b))
+* **sanoid:** follow the Splunk VM across nodes ([5014f37](https://github.com/dryvist/ansible-proxmox/commit/5014f37cb3257eb25465d3b7fc73e296f3345d29))
+* **sanoid:** follow the Splunk VM across nodes and add a monthly tier ([#1038](https://github.com/dryvist/ansible-proxmox/issues/1038)) ([f2a4e46](https://github.com/dryvist/ansible-proxmox/commit/f2a4e4638553677ba44d46225ab91d47141c8888))
+* **zfs_scrub_window:** throttle scrub I/O through tmpfiles ([#1040](https://github.com/dryvist/ansible-proxmox/issues/1040)) ([0c24f9e](https://github.com/dryvist/ansible-proxmox/commit/0c24f9e4dc09dc307c549250495606b549520555))
+
+
+### Bug Fixes
+
+* **crash_diagnostics:** skip boot-partition memtest writes in check mode ([#1034](https://github.com/dryvist/ansible-proxmox/issues/1034)) ([967ec4b](https://github.com/dryvist/ansible-proxmox/commit/967ec4bfc6fc51e44aee58a75ba85e9ce148d4cb))
+* **zfs_scrub_window:** keep the timers of declared pools ([#1041](https://github.com/dryvist/ansible-proxmox/issues/1041)) ([8a1f126](https://github.com/dryvist/ansible-proxmox/commit/8a1f1261f7af01a5757228454e110d94b1cb74c0))
+
 ## [2.22.0](https://github.com/dryvist/ansible-proxmox/compare/v2.21.0...v2.22.0) (2026-10-12)
 
 
