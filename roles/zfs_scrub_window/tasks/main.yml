@@ -86,7 +86,7 @@
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - >-
-      (item.path | basename | regex_replace('^zfs-scrub-(resume|pause)-(.+)\.timer$', '\2'))
+      (item.path | basename | regex_replace('^zfs-scrub-(resume|pause)-(.+)\.timer$', '\\2'))
       not in zfs_scrub_window_active_pools
   tags:
     - zfs_scrub_window
@@ -101,7 +101,7 @@
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - >-
-      (item.0.path | basename | regex_replace('^zfs-scrub-(resume|pause)-(.+)\.timer$', '\2'))
+      (item.0.path | basename | regex_replace('^zfs-scrub-(resume|pause)-(.+)\.timer$', '\\2'))
       not in zfs_scrub_window_active_pools
   notify: Reload systemd daemon
   tags:
