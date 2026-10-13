@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -u
+exec 2>/dev/null
+
+SCRIPT_NAME=zpool_status
+OUTPUT_DIR=${OUTPUT_DIR:-{{ pve_textfile_collectors_textfile_dir | quote }}}
+TIMEOUT=${TIMEOUT:-{{ pve_textfile_collectors_timeout_seconds | quote }}}
+ZPOOL=${ZPOOL:-{{ pve_textfile_collectors_zpool_command | quote }}}
+AWK=${AWK:-{{ pve_textfile_collectors_awk_command | quote }}}
+DATE=${DATE:-{{ pve_textfile_collectors_date_command | quote }}}
+STARTED=$SECONDS
+SUCCESS=1
+TMP_FILE=${OUTPUT_DIR}/.${SCRIPT_NAME}.$$
+
+run() {
+  timeout "$TIMEOUT" "$@" 2>/dev/null
+}
+
+trap 'rm -f -- "$TMP_FILE"' EXIT
+
+: > "$TMP_FILE" || exit 0
+exec > "$TMP_FILE" || exit 0
+printf '# HELP pve_textfile_success Whether every command succeeded for a collector.\n'
+printf '# TYPE pve_textfile_success gauge\n'
+printf '# HELP pve_textfile_duration_seconds Collector execution duration in seconds.\n'
+printf '# TYPE pve_textfile_duration_seconds gauge\n'
+printf '# HELP pve_zpool_scan_state Scan state: 0 none, 1 scanning, 2 finished, 3 canceled or paused.\n'
+printf '# TYPE pve_zpool_scan_state gauge\n'
+printf '# HELP pve_zpool_scan_pct Percentage of the current scan completed.\n'
+printf '# TYPE pve_zpool_scan_pct gauge\n'
+printf '# HELP pve_zpool_scan_errors Errors reported by the most recent scan.\n'
+printf '# TYPE pve_zpool_scan_errors gauge\n'
+printf '# HELP pve_zpool_scan_end_time_seconds Unix time when the most recent scan ended, or zero.\n'
+printf '# TYPE pve_zpool_scan_end_time_seconds gauge\n'
+printf '# HELP pve_zpool_health Current ZFS pool health state.\n'
+printf '# TYPE pve_zpool_health gauge\n'
+
+if ! POOLS=$(run "$ZPOOL" list -H -o name); then
+  SUCCESS=0
+  POOLS=
+fi
+
+while IFS= read -r POOL; do
+  [ -n "$POOL" ] || continue
+  if ! STATUS=$(run "$ZPOOL" status -p "$POOL"); then
+    SUCCESS=0
+    continue
+  fi
+  AWK_PROGRAM=$(cat <<'AWK_PROGRAM_EOF'
+    BEGIN { state = "UNKNOWN"; scan_state = 0; pct = 0; errors = 0; ended = "" }
+    /^[[:space:]]*state:/ { state = $2 }
+    /^[[:space:]]*scan:/ {
+      scan = $0
+      if (scan ~ /in progress/) scan_state = 1
+      else if (scan ~ /canceled|cancelled|paused/) scan_state = 3
+      else if (scan ~ /repaired|resilvered|scrubbed/) scan_state = 2
+      if (scan ~ /with [0-9]+ errors/) {
+        sub(/^.*with /, "", scan)
+        errors = scan
+        sub(/[^0-9].*$/, "", errors)
+      }
+      if (scan ~ / on /) { sub(/^.* on /, "", scan); ended = scan }
+    }
+    /% done/ {
+      pct = $0
+      sub(/% done.*/, "", pct)
+      sub(/^.*[[:space:]]/, "", pct)
+    }
+    END { printf "%s\t%d\t%s\t%d\t%s\n", state, scan_state, pct, errors, ended }
+AWK_PROGRAM_EOF
+  )
+  if ! FIELDS=$(run "$AWK" "$AWK_PROGRAM" <<< "$STATUS"); then
+    SUCCESS=0
+    continue
+  fi
+  IFS=$'\t' read -r STATE SCAN_STATE SCAN_PCT SCAN_ERRORS SCAN_ENDED <<< "$FIELDS"
+  SCAN_END_TIME=0
+  if [ -n "$SCAN_ENDED" ]; then
+    if SCAN_END_TIME=$(run "$DATE" -d "$SCAN_ENDED" +%s); then
+      :
+    else
+      SUCCESS=0
+      SCAN_END_TIME=0
+    fi
+  fi
+  printf 'pve_zpool_scan_state{pool="%s"} %s\n' "$POOL" "$SCAN_STATE"
+  printf 'pve_zpool_scan_pct{pool="%s"} %s\n' "$POOL" "$SCAN_PCT"
+  printf 'pve_zpool_scan_errors{pool="%s"} %s\n' "$POOL" "$SCAN_ERRORS"
+  printf 'pve_zpool_scan_end_time_seconds{pool="%s"} %s\n' "$POOL" "$SCAN_END_TIME"
+  printf 'pve_zpool_health{pool="%s",state="%s"} 1\n' "$POOL" "$STATE"
+done <<< "$POOLS"
+
+printf 'pve_textfile_success{script="%s"} %s\n' "$SCRIPT_NAME" "$SUCCESS"
+printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"
+exec 1>&-
+run mv -f "$TMP_FILE" "${OUTPUT_DIR}/${SCRIPT_NAME}.prom" >/dev/null || true
+exit 0
