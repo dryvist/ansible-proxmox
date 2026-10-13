@@ -47,6 +47,10 @@ collections:
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
     version: 20fcb2f7063fe839c09fe02cc5da8a280e4d21ee
+  # renovate: datasource=git-refs depName=https://github.com/jpe-ansible/ansible-nautobot.git currentValue=main
+  - name: https://github.com/jpe-ansible/ansible-nautobot.git
+    type: git
+    version: 4c630c771cc92a8ea4975d9a3e87b54b10b328e6
 
 # No `roles:` section — inventory_resolve comes from the collection above, by
 # FQCN, for the reason stated there. Its old git-scm `roles:` entry installed

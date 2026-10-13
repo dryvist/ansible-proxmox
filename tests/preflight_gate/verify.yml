@@ -1,0 +1,158 @@
+---
+- name: Verify the preflight gate with offline fixtures
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars_files:
+    - fixtures.yml
+  vars:
+    gate_test_cases:
+      - name: good
+        inventory: "{{ gate_inventory }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        run_ha: true
+      - name: RAM over physical capacity
+        inventory: >-
+          {{ gate_inventory | combine(
+               {'vms': {'guest-1': {'memory_mb': 9216}}}, recursive=true) }}
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        expected_failure: RAM preflight failed for node-a
+        must_not_contain: Storage-pool preflight failed
+      - name: wrong storage pool
+        inventory: >-
+          {{ gate_inventory | combine(
+               {'vms': {'guest-1': {'disks': [{'interface': 'scsi0', 'datastore': 'pool-b'}]}}}, recursive=true) }}
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        expected_failure: Storage-pool preflight failed for guest-1/scsi0
+        must_not_contain: RAM preflight failed
+      - name: missing live storage pool
+        inventory: "{{ gate_inventory }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests_missing_pool }}"
+        ha: "{{ gate_ha_recovery }}"
+        expected_failure: Storage-pool preflight failed for guest-1/scsi0
+        must_not_contain: RAM preflight failed
+      - name: HA resource without safe recovery node
+        inventory: "{{ gate_inventory }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_no_recovery }}"
+        run_ha: true
+        expected_failure: HA relocation admission failed for vm:100
+        must_not_contain: RAM preflight failed
+      - name: unchecked guest fails by default
+        inventory: "{{ gate_inventory_unchecked }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        expected_failure: Published inventory mapping incomplete
+        must_not_contain: RAM preflight failed
+      - name: published VM map missing fails closed
+        inventory: "{{ {'containers': gate_inventory.containers} }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        expected_failure: Published inventory mapping incomplete
+        must_not_contain: RAM preflight failed
+      - name: published container map missing fails closed
+        inventory: "{{ {'vms': gate_inventory.vms} }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        expected_failure: Published inventory mapping incomplete
+        must_not_contain: RAM preflight failed
+      - name: HA member without a published identity
+        inventory: "{{ gate_inventory_no_vmid }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        run_ha: true
+        reads_skipped: true
+        expected_failure: HA relocation admission cannot resolve configured members
+        must_not_contain: RAM preflight failed
+      - name: HA member without a declared recovery node
+        inventory: "{{ gate_inventory_no_target }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        run_ha: true
+        reads_skipped: true
+        expected_failure: have no declared recovery node in published inventory
+        must_not_contain: RAM preflight failed
+      - name: HA admission that evaluates no relocating resource
+        inventory: "{{ gate_inventory }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_none }}"
+        ha_vm_names: []
+        run_ha: true
+        reads_skipped: true
+        expected_failure: did not evaluate any relocating resource
+        must_not_contain: RAM preflight failed
+      - name: explicitly allowed unchecked guest is reported
+        inventory: "{{ gate_inventory_unchecked }}"
+        devices: "{{ gate_devices }}"
+        live_guests: "{{ gate_live_guests }}"
+        ha: "{{ gate_ha_recovery }}"
+        allow_unchecked: true
+        unchecked_guest: guest-1
+  tasks:
+    - name: Create a private offline work directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: preflight-gate-
+      register: preflight_gate_tmp
+
+    - name: Name the work and stub directories
+      ansible.builtin.set_fact:
+        preflight_gate_work_dir: "{{ preflight_gate_tmp.path }}"
+        preflight_gate_stub_dir: "{{ preflight_gate_tmp.path }}/bin"
+
+    - name: Run the offline gate cases with the recorded responder first on PATH
+      environment:
+        PATH: "{{ preflight_gate_stub_dir }}:{{ lookup('ansible.builtin.env', 'PATH') }}"
+      block:
+        - name: Create the stub directory
+          ansible.builtin.file:
+            path: "{{ preflight_gate_stub_dir }}"
+            state: directory
+            mode: "0755"
+
+        - name: Install the recorded pvesh responder
+          ansible.builtin.copy:
+            content: |
+              #!/bin/sh
+              printf '%s\n' "$*" >> {{ preflight_gate_work_dir }}/commands.log
+              case "$*" in
+                'get /cluster/ha/resources --output-format json') cat {{ preflight_gate_work_dir }}/ha-resources.json ;;
+                'get /cluster/replication --output-format json') cat {{ preflight_gate_work_dir }}/replication.json ;;
+                'get /cluster/ha/rules --output-format json') cat {{ preflight_gate_work_dir }}/rules.json ;;
+                'get /cluster/resources --output-format json') cat {{ preflight_gate_work_dir }}/resources.json ;;
+                get\ /nodes/*/qemu/*/config\ --output-format\ json) cat {{ preflight_gate_work_dir }}/guest-config.json ;;
+                *) printf '%s\n' 'unexpected pvesh request' >&2; exit 2 ;;
+              esac
+            dest: "{{ preflight_gate_stub_dir }}/pvesh"
+            mode: "0755"
+
+        - name: Run each offline gate case
+          ansible.builtin.include_tasks: run_case.yml
+          loop: "{{ gate_test_cases }}"
+          loop_control:
+            loop_var: gate_case
+            label: "{{ gate_case.name }}"
+
+        - name: Report the offline case count
+          ansible.builtin.debug:
+            msg: "PASS: {{ gate_test_cases | length }} offline preflight gate cases"
+      always:
+        - name: Remove the offline work directory
+          ansible.builtin.file:
+            path: "{{ preflight_gate_work_dir }}"
+            state: absent

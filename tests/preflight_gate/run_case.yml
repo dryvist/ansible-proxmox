@@ -1,0 +1,86 @@
+---
+- name: Exercise one published-inventory preflight case
+  block:
+    - name: Set the synthetic published guest maps
+      ansible.builtin.set_fact:
+        tofu_data: "{{ gate_case.inventory }}"
+        vms_from_tofu: "{{ gate_case.inventory.vms | default({}) }}"
+        containers_from_tofu: "{{ gate_case.inventory.containers | default({}) }}"
+
+    - name: Write recorded Proxmox API responses
+      ansible.builtin.copy:
+        content: "{{ gate_case.ha[item.key] | to_json }}"
+        dest: "{{ preflight_gate_work_dir }}/{{ item.file }}"
+        mode: "0644"
+      loop:
+        - {key: ha_resources, file: ha-resources.json}
+        - {key: replication, file: replication.json}
+        - {key: rules, file: rules.json}
+        - {key: resources, file: resources.json}
+        - {key: guest_config, file: guest-config.json}
+
+    - name: Reset recorded Proxmox API calls
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ preflight_gate_work_dir }}/commands.log"
+        mode: "0644"
+
+    - name: Run published-inventory Nautobot preflight tasks
+      ansible.builtin.include_tasks: ../../playbooks/tasks/preflight_gate.yml
+      vars:
+        preflight_skip_fetch: true
+        preflight_nautobot_devices: "{{ gate_case.devices }}"
+        preflight_nautobot_guests: "{{ gate_case.live_guests }}"
+        preflight_gate_allow_unchecked: "{{ gate_case.allow_unchecked | default(false) }}"
+
+    - name: Run the read-only HA admission entry
+      ansible.builtin.include_tasks: ../../playbooks/tasks/preflight_gate_ha.yml
+      vars:
+        pve_ha_ct_hostnames: []
+        pve_ha_vm_names: "{{ gate_case.ha_vm_names | default(['guest-1']) }}"
+        pve_ha_extra_sids: []
+      when: gate_case.run_ha | default(false)
+
+    - name: Fail when an expected negative case passed
+      ansible.builtin.fail:
+        msg: "Expected failure was not raised for {{ gate_case.name }}."
+      when: gate_case.expected_failure is defined
+
+    - name: Confirm an allowed unchecked guest was excluded by name
+      ansible.builtin.assert:
+        that:
+          - gate_case.unchecked_guest in (preflight_gate_projection.unchecked | map(attribute='guest') | list)
+        fail_msg: The allowed unchecked guest was not listed in the projection.
+      when: gate_case.unchecked_guest is defined
+
+  rescue:
+    - name: Require the failure to name only the expected gate rule
+      ansible.builtin.assert:
+        that:
+          - gate_case.expected_failure is defined
+          - gate_case.expected_failure in (ansible_failed_result | to_json)
+          - gate_case.must_not_contain is not defined or gate_case.must_not_contain not in (ansible_failed_result | to_json)
+        fail_msg: >-
+          {{ gate_case.name }} failed for an unexpected reason:
+          {{ ansible_failed_result.msg | default('no failure message') }}
+
+- name: Read the Proxmox API call record
+  ansible.builtin.slurp:
+    src: "{{ preflight_gate_work_dir }}/commands.log"
+  register: preflight_gate_recorded_commands
+  when: gate_case.run_ha | default(false) and not (gate_case.reads_skipped | default(false))
+
+- name: Confirm the HA tasks consumed recorded API responses
+  ansible.builtin.assert:
+    that:
+      - "'get /cluster/ha/resources --output-format json' in preflight_gate_recorded_commands.content | b64decode"
+      - "'get /cluster/replication --output-format json' in preflight_gate_recorded_commands.content | b64decode"
+      - "'get /cluster/ha/rules --output-format json' in preflight_gate_recorded_commands.content | b64decode"
+      - "'get /cluster/resources --output-format json' in preflight_gate_recorded_commands.content | b64decode"
+      - "'get /nodes/node-a/qemu/100/config --output-format json' in preflight_gate_recorded_commands.content | b64decode"
+    fail_msg: The HA gate did not issue each expected read against the recorded API responses.
+  when: gate_case.run_ha | default(false) and not (gate_case.reads_skipped | default(false))
+
+- name: Report the completed offline case
+  ansible.builtin.debug:
+    msg: "PASS: {{ gate_case.name }}"
