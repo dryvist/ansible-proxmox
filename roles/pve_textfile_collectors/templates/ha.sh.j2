@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -u
+exec 2>/dev/null
+
+SCRIPT_NAME=ha
+OUTPUT_DIR=${OUTPUT_DIR:-{{ pve_textfile_collectors_textfile_dir | quote }}}
+TIMEOUT=${TIMEOUT:-{{ pve_textfile_collectors_timeout_seconds | quote }}}
+AWK=${AWK:-{{ pve_textfile_collectors_awk_command | quote }}}
+HA_MANAGER=${HA_MANAGER:-{{ pve_textfile_collectors_ha_manager_command | quote }}}
+STARTED=$SECONDS
+SUCCESS=1
+TMP_FILE=${OUTPUT_DIR}/.${SCRIPT_NAME}.$$
+
+run() {
+  timeout "$TIMEOUT" "$@" 2>/dev/null
+}
+
+trap 'rm -f -- "$TMP_FILE"' EXIT
+
+: > "$TMP_FILE" || exit 0
+exec > "$TMP_FILE" || exit 0
+printf '# HELP pve_textfile_success Whether every command succeeded for a collector.\n'
+printf '# TYPE pve_textfile_success gauge\n'
+printf '# HELP pve_textfile_duration_seconds Collector execution duration in seconds.\n'
+printf '# TYPE pve_textfile_duration_seconds gauge\n'
+printf '# HELP pve_ha_quorum_ok Whether the HA manager reports quorum OK.\n'
+printf '# TYPE pve_ha_quorum_ok gauge\n'
+printf '# HELP pve_ha_master_active Whether the HA master is active.\n'
+printf '# TYPE pve_ha_master_active gauge\n'
+printf '# HELP pve_ha_fencing_armed Whether HA fencing is armed.\n'
+printf '# TYPE pve_ha_fencing_armed gauge\n'
+printf '# HELP pve_ha_lrm_state Whether a local resource manager reports a state.\n'
+printf '# TYPE pve_ha_lrm_state gauge\n'
+printf '# HELP pve_ha_service_state Whether an HA service reports a state.\n'
+printf '# TYPE pve_ha_service_state gauge\n'
+
+if ! command -v "$HA_MANAGER" >/dev/null 2>&1; then
+  printf 'pve_textfile_success{script="%s"} 1\n' "$SCRIPT_NAME"
+  printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"
+  exec 1>&-
+  run mv -f "$TMP_FILE" "${OUTPUT_DIR}/${SCRIPT_NAME}.prom" >/dev/null || true
+  exit 0
+fi
+
+if ! HA_STATUS=$(run "$HA_MANAGER" status); then
+  SUCCESS=0
+  HA_STATUS=
+fi
+
+if [ "$SUCCESS" -eq 1 ]; then
+  AWK_PROGRAM=$(cat <<'AWK_PROGRAM_EOF'
+    function safe_token(value) {
+      return value ~ /^[A-Za-z0-9._:-]+$/
+    }
+    NR == 1 { quorum_ok = ($1 == "quorum" && $2 == "OK" && NF == 2) ? 1 : 0 }
+    $1 == "master" && !master_found && NF >= 3 {
+      node = $2
+      state = $3
+      sub(/^\(/, "", state)
+      sub(/[,)].*$/, "", state)
+      if (safe_token(node) && state != "") {
+        master_found = 1
+        master_node = node
+        master_active = (state == "active") ? 1 : 0
+      }
+    }
+    $1 == "fencing" {
+      fencing_found = 1
+      if ($2 == "armed") fencing_armed = 1
+    }
+    $1 == "lrm" && NF >= 3 {
+      node = $2
+      state = $3
+      if (state ~ /^\([A-Za-z0-9._:-]+([,)]|[[:space:]]|$)/) {
+        sub(/^\(/, "", state)
+        sub(/[,)].*$/, "", state)
+        if (safe_token(node) && safe_token(state)) {
+          lrm_count++
+          lrm_node[lrm_count] = node
+          lrm_state[lrm_count] = state
+        }
+      }
+    }
+    $1 == "service" && NF >= 4 {
+      sid = $2
+      node = $3
+      state = $4
+      if (node ~ /^\([A-Za-z0-9._:-]+,$/) {
+        sub(/^\(/, "", node)
+        sub(/,$/, "", node)
+        sub(/[,)].*$/, "", state)
+        if (safe_token(sid) && safe_token(node) && safe_token(state)) {
+          service_count++
+          service_sid[service_count] = sid
+          service_node[service_count] = node
+          service_state[service_count] = state
+        }
+      }
+    }
+    END {
+      printf "pve_ha_quorum_ok %d\n", quorum_ok
+      if (master_found) printf "pve_ha_master_active{node=\"%s\"} %d\n", master_node, master_active
+      if (fencing_found) printf "pve_ha_fencing_armed %d\n", fencing_armed
+      for (i = 1; i <= lrm_count; i++) {
+        printf "pve_ha_lrm_state{node=\"%s\",state=\"%s\"} 1\n", lrm_node[i], lrm_state[i]
+      }
+      for (i = 1; i <= service_count; i++) {
+        printf "pve_ha_service_state{sid=\"%s\",node=\"%s\",state=\"%s\"} 1\n", \
+          service_sid[i], service_node[i], service_state[i]
+      }
+    }
+AWK_PROGRAM_EOF
+  )
+  if ! HA_METRICS=$(run "$AWK" "$AWK_PROGRAM" <<< "$HA_STATUS"); then
+    SUCCESS=0
+    HA_METRICS=
+  fi
+fi
+
+if [ "$SUCCESS" -eq 1 ]; then
+  printf '%s\n' "$HA_METRICS"
+fi
+printf 'pve_textfile_success{script="%s"} %s\n' "$SCRIPT_NAME" "$SUCCESS"
+printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"
+exec 1>&-
+run mv -f "$TMP_FILE" "${OUTPUT_DIR}/${SCRIPT_NAME}.prom" >/dev/null || true
+exit 0
