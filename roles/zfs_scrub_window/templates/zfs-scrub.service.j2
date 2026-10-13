@@ -1,7 +1,7 @@
 {{ ansible_managed | comment }}
 [Unit]
 Description=Scheduled ZFS scrub {{ item.1.action }} for {{ item.0 }}
-Documentation=ansible role zfs_scrub_window
+Documentation=man:zpool-scrub(8)
 
 [Service]
 Type=oneshot
