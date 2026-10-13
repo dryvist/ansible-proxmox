@@ -46,6 +46,22 @@ pve_node_exporter_install_dir: /opt/node_exporter
 pve_node_exporter_textfile_collector_enabled: true
 pve_node_exporter_textfile_collector_dir: /var/lib/node_exporter/textfile_collector
 
+# Control installation and activation of Debian's packaged hardware collectors.
+pve_node_exporter_packaged_collectors_enabled: true
+# Set the directory where the packaged collectors write metric files.
+pve_node_exporter_packaged_collectors_dir: /var/lib/prometheus/node-exporter
+# Set the packages installed for the packaged hardware collectors.
+pve_node_exporter_packaged_collectors_packages:
+  - prometheus-node-exporter-collectors
+  - smartmontools
+  - nvme-cli
+  - ipmitool
+# Set the packaged hardware collector timers enabled by this role.
+pve_node_exporter_packaged_collectors_timers:
+  - prometheus-node-exporter-smartmon.timer
+  - prometheus-node-exporter-nvme.timer
+  - prometheus-node-exporter-ipmitool-sensor.timer
+
 # Extra CLI flags appended verbatim to the service ExecStart (e.g.
 # ["--no-collector.wifi"]).
 pve_node_exporter_extra_args: []

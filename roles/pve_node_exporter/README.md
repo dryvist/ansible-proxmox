@@ -13,7 +13,11 @@ host metrics (CPU, memory, disk, ZFS, network) on port `9100`.
    `/usr/local/bin/node_exporter` — only rewritten on a version bump.
 4. Optionally creates the textfile-collector directory so scripts can publish
    custom metrics by dropping `*.prom` files.
-5. Deploys a hardened systemd unit and enables/starts the service.
+5. When packaged collectors are enabled, installs their configured packages,
+   creates their output directory, and enables the SMART, NVMe, and IPMI sensor
+   timers. The service reads that directory as a second textfile-collector
+   source.
+6. Deploys a hardened systemd unit and enables/starts the service.
 
 Re-runs are no-ops; bumping `pve_node_exporter_version` (plus checksum) rolls
 the fleet forward on the next converge.
@@ -48,6 +52,16 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 | `pve_node_exporter_textfile_collector_enabled` | `true`                                          | Enable the textfile collector.                                                                          |
 | `pve_node_exporter_textfile_collector_dir`     | `/var/lib/node_exporter/textfile_collector`     | Drop `*.prom` files here to expose custom metrics.                                                      |
 | `pve_node_exporter_extra_args`                 | `[]`                                            | Extra CLI flags appended to `ExecStart`.                                                                |
+
+### Packaged hardware collectors
+
+With `pve_node_exporter_packaged_collectors_enabled: true` (default) the role installs the
+packages in `pve_node_exporter_packaged_collectors_packages` (`prometheus-node-exporter-collectors`,
+`smartmontools`, `nvme-cli`, `ipmitool`), creates `pve_node_exporter_packaged_collectors_dir`
+(`/var/lib/prometheus/node-exporter`), and enables the timers in
+`pve_node_exporter_packaged_collectors_timers` (SMART, NVMe, IPMI sensor). Each timer skips hosts
+without the matching hardware. The service reads the directory through a second
+`--collector.textfile.directory` flag.
 
 ## Verification
 

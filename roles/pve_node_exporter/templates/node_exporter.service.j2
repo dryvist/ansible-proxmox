@@ -11,7 +11,8 @@ User={{ pve_node_exporter_user }}
 Group={{ pve_node_exporter_user }}
 ExecStart=/usr/local/bin/node_exporter \
     --web.listen-address={{ pve_node_exporter_listen_address }}:{{ pve_node_exporter_port }}{% if pve_node_exporter_textfile_collector_enabled %} \
-    --collector.textfile.directory={{ pve_node_exporter_textfile_collector_dir }}{% endif %}{% for arg in pve_node_exporter_extra_args %} \
+    --collector.textfile.directory={{ pve_node_exporter_textfile_collector_dir }}{% endif %}{% if pve_node_exporter_packaged_collectors_enabled %} \
+    --collector.textfile.directory={{ pve_node_exporter_packaged_collectors_dir }}{% endif %}{% for arg in pve_node_exporter_extra_args %} \
     {{ arg }}{% endfor %}
 
 Restart=on-failure

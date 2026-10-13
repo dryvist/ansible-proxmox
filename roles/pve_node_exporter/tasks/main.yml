@@ -92,6 +92,12 @@
   tags:
     - pve_node_exporter
 
+- name: Configure the packaged hardware collectors
+  ansible.builtin.include_tasks: packaged_collectors.yml
+  when: pve_node_exporter_packaged_collectors_enabled
+  tags:
+    - pve_node_exporter
+
 - name: Flush handlers to apply systemd changes
   ansible.builtin.meta: flush_handlers
   tags:
