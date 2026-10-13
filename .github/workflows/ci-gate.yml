@@ -184,6 +184,11 @@ jobs:
     needs: ci
     uses: ./.github/workflows/_data-contract.yml
 
+  role-contracts:
+    name: Role Contracts
+    needs: ci
+    uses: ./.github/workflows/_role-contracts.yml
+
   molecule:
     name: Molecule Test
     needs: ci
@@ -198,7 +203,7 @@ jobs:
 
   gate:
     name: Merge Gate
-    needs: [ci, data-contract, molecule]
+    needs: [ci, data-contract, role-contracts, molecule]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
