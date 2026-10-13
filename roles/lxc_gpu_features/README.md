@@ -64,7 +64,7 @@ lxc.mount.entry: /dev/kfd dev/kfd none bind,optional,create=file
 | `lxc_gpu_features_nvidia_guest_features` | NVIDIA device set | Shared device set for `nvidia-gpu` guests |
 | `lxc_gpu_features_service_vmids` | from Tofu inventory | Service → current vmid |
 | `lxc_gpu_features_nvidia_vmids_from_tofu` | from Tofu inventory | `nvidia-gpu` capability tag → current vmid |
-| `containers_from_tofu` | from Tofu inventory | Container catalog (also used by `load_tofu.yml`); checked for one serving and one `llm-gpu-small` tagged guest per node |
+| `containers_from_tofu` | from Tofu inventory | Container catalog (also used by `load_tofu.yml`); checked per node: one serving and one `llm-gpu-small` guest |
 | `lxc_gpu_features_gpu_passthrough_vmids_from_tofu` | required (Tofu) | VMIDs tagged `gpu-passthrough`; no default, so a missing projection fails closed |
 | `lxc_gpu_features_legacy_engine_vmids_from_tofu` | from Tofu inventory | Legacy guest to stop after the replacement pair is declared |
 | `lxc_gpu_features_engine_handoff_pre_stop` | `false` | Explicitly stop GPU guests before a selector-changing Tofu apply |
