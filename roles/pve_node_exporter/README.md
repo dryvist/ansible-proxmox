@@ -13,8 +13,8 @@ host metrics (CPU, memory, disk, ZFS, network) on port `9100`.
    `/usr/local/bin/node_exporter` — only rewritten on a version bump.
 4. Optionally creates the textfile-collector directory so scripts can publish
    custom metrics by dropping `*.prom` files.
-5. When packaged collectors are enabled, installs their configured packages,
-   creates their output directory, and enables the SMART, NVMe, and IPMI sensor
+5. When packaged collectors are enabled, creates their output directory, installs
+   their configured packages, and enables the SMART, NVMe, and IPMI sensor
    timers. The service reads that directory as a second textfile-collector
    source.
 6. Deploys a hardened systemd unit and enables/starts the service.
@@ -55,10 +55,11 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 ### Packaged hardware collectors
 
-With `pve_node_exporter_packaged_collectors_enabled: true` (default) the role installs the
-packages in `pve_node_exporter_packaged_collectors_packages` (`prometheus-node-exporter-collectors`,
-`smartmontools`, `nvme-cli`, `ipmitool`), creates `pve_node_exporter_packaged_collectors_dir`
-(`/var/lib/prometheus/node-exporter`), and enables the timers in
+With `pve_node_exporter_packaged_collectors_enabled: true` (default) the role creates
+`pve_node_exporter_packaged_collectors_dir` (`/var/lib/prometheus/node-exporter`) before
+installing the packages in `pve_node_exporter_packaged_collectors_packages`
+(`prometheus-node-exporter-collectors`, `smartmontools`, `nvme-cli`, `ipmitool`), because the
+package starts its timers on install and the collector units write into that directory, and enables the timers in
 `pve_node_exporter_packaged_collectors_timers` (SMART, NVMe, IPMI sensor). Each timer skips hosts
 without the matching hardware. The service reads the directory through a second
 `--collector.textfile.directory` flag.
