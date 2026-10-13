@@ -106,3 +106,25 @@
   notify: Reload systemd daemon
   tags:
     - zfs_scrub_window
+
+- name: Render the ZFS scrub throttle tmpfiles configuration
+  ansible.builtin.template:
+    src: zfs-scrub-throttle.conf.j2
+    dest: /etc/tmpfiles.d/zfs-scrub-window.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - zfs_scrub_window_enabled | bool
+  notify: Apply ZFS scrub throttle
+  tags:
+    - zfs_scrub_window
+
+- name: Remove the ZFS scrub throttle tmpfiles configuration when disabled
+  ansible.builtin.file:
+    path: /etc/tmpfiles.d/zfs-scrub-window.conf
+    state: absent
+  when:
+    - not (zfs_scrub_window_enabled | bool)
+  tags:
+    - zfs_scrub_window
