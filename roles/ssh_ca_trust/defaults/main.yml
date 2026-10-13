@@ -111,5 +111,5 @@ ssh_ca_trust_host_cert_domain: >-
 # never from a fact gathered off the guest, so a compromised guest cannot
 # choose the identity a signed host certificate is issued for (see
 # tasks/lxc.yml's matching note for the pct-exec path).
-ssh_ca_trust_host_cert_fqdn: "{{ inventory_hostname }}.{{ ssh_ca_trust_host_cert_domain }}"
+ssh_ca_trust_host_cert_fqdn: "{{ (inventory_hostname ~ '.' ~ ssh_ca_trust_host_cert_domain) | lower }}"
 ssh_ca_trust_host_cert_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
