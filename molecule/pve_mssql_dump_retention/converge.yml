@@ -1,0 +1,36 @@
+---
+- name: Converge dump retention fixtures
+  hosts: all
+  become: false
+  gather_facts: false
+
+  vars:
+    pve_mssql_dump_retention_fixture_root: /tmp/pve-mssql-dump-retention
+    pve_mssql_dump_retention_fixture_source: "{{ pve_mssql_dump_retention_fixture_root }}/source"
+    pve_mssql_dump_retention_fixture_archive: "{{ pve_mssql_dump_retention_fixture_root }}/bulk/mssql-crash-dumps"
+    pve_mssql_dump_retention_fixture_bad_source: "{{ pve_mssql_dump_retention_fixture_root }}/bad-source"
+    pve_mssql_dump_retention_fixture_bad_archive: "{{ pve_mssql_dump_retention_fixture_root }}/corrupt-bulk/mssql-crash-dumps"
+    ansible_mounts:
+      - mount: "{{ pve_mssql_dump_retention_fixture_root }}/bulk"
+        device: bulk/backups
+        fstype: zfs
+      - mount: "{{ pve_mssql_dump_retention_fixture_root }}/corrupt-bulk"
+        device: bulk/backups
+        fstype: zfs
+    pve_mssql_dump_retention_fixture_old_names:
+      - core.sqlservr.01_01_2020_00_00_00.1.d
+      - core.sqlservr.01_02_2020_00_00_00.2.d
+      - core.sqlservr.01_03_2020_00_00_00.3.d
+    pve_mssql_dump_retention_fixture_new_names:
+      - core.sqlservr.10_12_2026_00_00_00.1.d
+      - core.sqlservr.10_13_2026_00_00_00.2.d
+    pve_mssql_dump_retention_fixture_matching_names: >-
+      {{ pve_mssql_dump_retention_fixture_old_names +
+      pve_mssql_dump_retention_fixture_new_names }}
+
+  tasks:
+    - name: Build source and mounted archive fixtures
+      ansible.builtin.import_tasks: tasks/prepare_fixtures.yml
+
+    - name: Exercise dry run, pruning, idempotency, and corrupt archive handling
+      ansible.builtin.import_tasks: tasks/exercise.yml

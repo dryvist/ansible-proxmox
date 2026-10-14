@@ -1,0 +1,17 @@
+---
+- name: Count matching dump directories remaining on the source volume
+  ansible.builtin.find:
+    paths: "{{ pve_mssql_dump_retention_source_dir }}"
+    file_type: directory
+    recurse: false
+    use_regex: true
+    patterns:
+      - '^core\.sqlservr\.\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}\.\d+\.d$'
+  register: pve_mssql_dump_retention_remaining_dirs
+
+- name: Print SQL Server dump retention totals
+  ansible.builtin.debug:
+    msg:
+      archived_count: "{{ pve_mssql_dump_retention_archived | length }}"
+      apparent_bytes_freed: "{{ pve_mssql_dump_retention_archived | map(attribute='bytes') | sum }}"
+      matching_directories_remaining: "{{ pve_mssql_dump_retention_remaining_dirs.files | length }}"

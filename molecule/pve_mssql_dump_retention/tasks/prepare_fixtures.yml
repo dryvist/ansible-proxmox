@@ -1,0 +1,88 @@
+---
+- name: Reset the isolated fixture tree
+  ansible.builtin.file:
+    path: "{{ pve_mssql_dump_retention_fixture_root }}"
+    state: absent
+
+- name: Create fixture roots
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ pve_mssql_dump_retention_fixture_root }}"
+    - "{{ pve_mssql_dump_retention_fixture_source }}"
+    - "{{ pve_mssql_dump_retention_fixture_root }}/bulk"
+    - "{{ pve_mssql_dump_retention_fixture_bad_source }}"
+    - "{{ pve_mssql_dump_retention_fixture_root }}/corrupt-bulk"
+
+- name: Create matching and unrelated source directories
+  ansible.builtin.file:
+    path: "{{ pve_mssql_dump_retention_fixture_source }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ pve_mssql_dump_retention_fixture_matching_names + ['not-a-dump'] }}"
+
+- name: Populate source dump directories and the unrelated directory
+  ansible.builtin.copy:
+    content: "fixture data for {{ item }}\n"
+    dest: "{{ pve_mssql_dump_retention_fixture_source }}/{{ item }}/dump.txt"
+    mode: "0644"
+  loop: "{{ pve_mssql_dump_retention_fixture_matching_names + ['not-a-dump'] }}"
+
+- name: Set three matching directories older than the retention age
+  ansible.builtin.file:
+    path: "{{ pve_mssql_dump_retention_fixture_source }}/{{ item.name }}"
+    state: directory
+    modification_time: "{{ item.mtime }}"
+    modification_time_format: "%Y%m%d%H%M.%S"
+    mode: "0755"
+  loop:
+    - name: core.sqlservr.01_01_2020_00_00_00.1.d
+      mtime: "202001010000.00"
+    - name: core.sqlservr.01_02_2020_00_00_00.2.d
+      mtime: "202001020000.00"
+    - name: core.sqlservr.01_03_2020_00_00_00.3.d
+      mtime: "202001030000.00"
+
+- name: Create a stray source file
+  ansible.builtin.copy:
+    content: "keep this file\n"
+    dest: "{{ pve_mssql_dump_retention_fixture_source }}/stray.log"
+    mode: "0644"
+
+- name: Create one old source for the corrupt archive case
+  ansible.builtin.file:
+    path: "{{ pve_mssql_dump_retention_fixture_bad_source }}/core.sqlservr.01_04_2020_00_00_00.4.d"
+    state: directory
+    mode: "0755"
+
+- name: Populate the corrupt archive source
+  ansible.builtin.copy:
+    content: "source to retain after a failed verification\n"
+    dest: "{{ pve_mssql_dump_retention_fixture_bad_source }}/core.sqlservr.01_04_2020_00_00_00.4.d/dump.txt"
+    mode: "0644"
+
+- name: Set the corrupt archive source mtime to old
+  ansible.builtin.file:
+    path: "{{ pve_mssql_dump_retention_fixture_bad_source }}/core.sqlservr.01_04_2020_00_00_00.4.d"
+    state: directory
+    modification_time: "202001040000.00"
+    modification_time_format: "%Y%m%d%H%M.%S"
+    mode: "0755"
+
+- name: Create the corrupt archive directory
+  ansible.builtin.file:
+    path: "{{ pve_mssql_dump_retention_fixture_bad_archive }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create a pre-existing corrupt archive
+  ansible.builtin.copy:
+    content: "corrupt archive\n"
+    dest: "{{ pve_mssql_dump_retention_fixture_bad_archive }}/core.sqlservr.01_04_2020_00_00_00.4.d.tar.zst"
+    owner: root
+    group: root
+    mode: "0600"

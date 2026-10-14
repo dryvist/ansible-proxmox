@@ -1,0 +1,4 @@
+---
+- name: Run SQL Server dump retention when enabled
+  ansible.builtin.include_tasks: run.yml
+  when: pve_mssql_dump_retention_enabled

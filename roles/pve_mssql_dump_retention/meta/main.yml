@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: pve_mssql_dump_retention
+  author: dryvist
+  description: Verify compressed archives before pruning old SQL Server dump directories
+  license: MIT
+  min_ansible_version: '2.19'
+dependencies: []
