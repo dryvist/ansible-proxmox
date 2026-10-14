@@ -21,6 +21,8 @@ an invalid existing archive is left untouched. The reported byte total is the
 sum of apparent regular-file sizes in source directories removed during the
 run.
 
+The host needs `tar` and `zstd`.
+
 ## Variables
 
 | Variable | Default | Description |

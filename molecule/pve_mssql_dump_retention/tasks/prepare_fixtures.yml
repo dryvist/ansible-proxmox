@@ -1,4 +1,13 @@
 ---
+- name: Install the archive tools the role runs
+  ansible.builtin.apt:
+    name:
+      - tar
+      - zstd
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
 - name: Reset the isolated fixture tree
   ansible.builtin.file:
     path: "{{ pve_mssql_dump_retention_fixture_root }}"
