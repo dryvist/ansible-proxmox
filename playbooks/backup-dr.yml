@@ -69,6 +69,12 @@
       vars:
         pve_config_backup_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/pve-config-backup"
 
+    # Archive old dump directories only after the compressed copy verifies.
+    # Inert on every host unless explicitly enabled in host variables.
+    - role: pve_mssql_dump_retention
+      tags:
+        - pve_mssql_dump_retention
+
     # ntfy webhook + matchers for vzdump failures, HA fencing, replication
     # failures, and package updates. Additive-only against
     # /etc/pve/notifications.cfg (see roles/pve_notifications/README.md).

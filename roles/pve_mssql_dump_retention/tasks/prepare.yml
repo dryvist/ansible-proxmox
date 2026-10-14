@@ -1,0 +1,138 @@
+---
+- name: Validate SQL Server dump retention paths and limits
+  ansible.builtin.assert:
+    that:
+      - pve_mssql_dump_retention_source_dir | length > 1
+      - pve_mssql_dump_retention_archive_dir | length > 1
+      - pve_mssql_dump_retention_source_dir is match('^/.+')
+      - pve_mssql_dump_retention_archive_dir is match('^/.+')
+      - >-
+        (pve_mssql_dump_retention_source_dir | regex_replace('/+$', '')) !=
+        (pve_mssql_dump_retention_archive_dir | regex_replace('/+$', ''))
+      - pve_mssql_dump_retention_age_days | int >= 0
+      - pve_mssql_dump_retention_keep_newest | int >= 0
+      - pve_mssql_dump_retention_max_dirs_per_run | int > 0
+    fail_msg: "SQL Server dump retention needs distinct absolute paths and non-negative limits."
+    quiet: true
+
+- name: Inspect the dump source directory
+  ansible.builtin.stat:
+    path: "{{ pve_mssql_dump_retention_source_dir }}"
+    follow: false
+  register: pve_mssql_dump_retention_source_stat
+
+- name: Inspect the archive directory and its parent
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "{{ pve_mssql_dump_retention_archive_dir }}"
+    - "{{ pve_mssql_dump_retention_archive_dir | dirname }}"
+  register: pve_mssql_dump_retention_archive_stats
+
+- name: Require existing source and archive parent directories
+  ansible.builtin.assert:
+    that:
+      - pve_mssql_dump_retention_source_stat.stat.isdir | default(false)
+      - not (pve_mssql_dump_retention_source_stat.stat.islnk | default(false))
+      - >-
+        not pve_mssql_dump_retention_archive_stats.results[0].stat.exists or
+        (pve_mssql_dump_retention_archive_stats.results[0].stat.isdir | default(false))
+      - not (pve_mssql_dump_retention_archive_stats.results[0].stat.islnk | default(false))
+      - pve_mssql_dump_retention_archive_stats.results[1].stat.isdir | default(false)
+      - not (pve_mssql_dump_retention_archive_stats.results[1].stat.islnk | default(false))
+    fail_msg: "The source must be a directory and the archive parent must already exist."
+    quiet: true
+
+- name: Require the archive parent to be a mounted bulk ZFS dataset
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_mounts | default([])
+        | selectattr('mount', 'defined')
+        | selectattr('mount', 'equalto', pve_mssql_dump_retention_archive_dir | dirname)
+        | selectattr('fstype', 'defined')
+        | selectattr('fstype', 'equalto', 'zfs')
+        | selectattr('device', 'defined')
+        | selectattr('device', 'match', '^bulk(/|$)')
+        | list | length) > 0
+      - >-
+        (ansible_mounts | default([])
+        | selectattr('mount', 'defined')
+        | selectattr('mount', 'equalto', pve_mssql_dump_retention_archive_dir)
+        | list | length) == 0
+    fail_msg: >-
+      The archive parent must be mounted from a bulk ZFS dataset, and the
+      archive directory must not replace that mount with another filesystem.
+    quiet: true
+
+- name: Ensure the archive directory has restricted root ownership
+  ansible.builtin.file:
+    path: "{{ pve_mssql_dump_retention_archive_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: not pve_mssql_dump_retention_dry_run
+
+- name: Find matching dump directories
+  ansible.builtin.find:
+    paths: "{{ pve_mssql_dump_retention_source_dir }}"
+    file_type: directory
+    recurse: false
+    use_regex: true
+    patterns:
+      - '^core\.sqlservr\.\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}\.\d+\.d$'
+  register: pve_mssql_dump_retention_dirs
+
+# Newest directories stay on the volume regardless of age; of the rest, only
+# those older than age_days are taken, oldest first, one bounded batch per run.
+- name: Set aside the newest directories
+  ansible.builtin.set_fact:
+    pve_mssql_dump_retention_beyond_newest: >-
+      {{ (pve_mssql_dump_retention_dirs.files | sort(attribute='mtime'))[:
+      [0, pve_mssql_dump_retention_dirs.files | length - pve_mssql_dump_retention_keep_newest | int] | max] }}
+
+- name: Select this run's batch of old directories
+  ansible.builtin.set_fact:
+    pve_mssql_dump_retention_candidates: >-
+      {{ (pve_mssql_dump_retention_beyond_newest |
+      selectattr('mtime', 'lt', pve_mssql_dump_retention_cutoff | int) |
+      list)[: pve_mssql_dump_retention_max_dirs_per_run | int] }}
+  vars:
+    pve_mssql_dump_retention_cutoff: "{{ now(utc=true).timestamp() | int - pve_mssql_dump_retention_age_days | int * 86400 }}"
+
+- name: Initialize sized dump candidates
+  ansible.builtin.set_fact:
+    pve_mssql_dump_retention_sized_candidates: []
+
+- name: Find regular files in each selected dump directory
+  ansible.builtin.find:
+    paths: "{{ item.path }}"
+    file_type: file
+    recurse: true
+    hidden: true
+  loop: "{{ pve_mssql_dump_retention_candidates }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  register: pve_mssql_dump_retention_candidate_files
+
+- name: Record apparent regular-file bytes for each candidate
+  ansible.builtin.set_fact:
+    pve_mssql_dump_retention_sized_candidates: >-
+      {{ pve_mssql_dump_retention_sized_candidates +
+      [item.item | combine({'bytes': (item.files | map(attribute='size') | sum)})] }}
+  loop: "{{ pve_mssql_dump_retention_candidate_files.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path | basename }}"
+
+- name: Initialize archived totals
+  ansible.builtin.set_fact:
+    pve_mssql_dump_retention_archived: []
+
+- name: Report the dry-run candidate set
+  ansible.builtin.debug:
+    msg:
+      candidate_names: "{{ pve_mssql_dump_retention_sized_candidates | map(attribute='path') | map('basename') | list }}"
+      apparent_bytes: "{{ pve_mssql_dump_retention_sized_candidates | map(attribute='bytes') | sum }}"
+  when: pve_mssql_dump_retention_dry_run

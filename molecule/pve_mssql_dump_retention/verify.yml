@@ -1,0 +1,102 @@
+---
+- name: Verify SQL Server dump retention
+  hosts: all
+  become: false
+  gather_facts: false
+
+  vars:
+    pve_mssql_dump_retention_fixture_root: /tmp/pve-mssql-dump-retention
+    pve_mssql_dump_retention_fixture_source: "{{ pve_mssql_dump_retention_fixture_root }}/source"
+    pve_mssql_dump_retention_fixture_archive: "{{ pve_mssql_dump_retention_fixture_root }}/bulk/mssql-crash-dumps"
+    pve_mssql_dump_retention_fixture_bad_source: "{{ pve_mssql_dump_retention_fixture_root }}/bad-source"
+    pve_mssql_dump_retention_fixture_bad_archive: "{{ pve_mssql_dump_retention_fixture_root }}/corrupt-bulk/mssql-crash-dumps"
+    pve_mssql_dump_retention_fixture_old_names:
+      - core.sqlservr.01_01_2020_00_00_00.1.d
+      - core.sqlservr.01_02_2020_00_00_00.2.d
+      - core.sqlservr.01_03_2020_00_00_00.3.d
+    pve_mssql_dump_retention_fixture_new_names:
+      - core.sqlservr.10_12_2026_00_00_00.1.d
+      - core.sqlservr.10_13_2026_00_00_00.2.d
+
+  tasks:
+    - name: Inspect retained matching directories
+      ansible.builtin.find:
+        paths: "{{ pve_mssql_dump_retention_fixture_source }}"
+        file_type: directory
+        recurse: false
+        use_regex: true
+        patterns:
+          - '^core\.sqlservr\.\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}\.\d+\.d$'
+      register: pve_mssql_dump_retention_retained_dirs
+
+    - name: Inspect final archive files
+      ansible.builtin.find:
+        paths: "{{ pve_mssql_dump_retention_fixture_archive }}"
+        file_type: file
+        recurse: false
+      register: pve_mssql_dump_retention_final_archives
+
+    - name: Assert retention kept the newest four and archived only the oldest
+      ansible.builtin.assert:
+        that:
+          - >-
+            (pve_mssql_dump_retention_retained_dirs.files | map(attribute='path')
+            | map('basename') | sort) ==
+            ((pve_mssql_dump_retention_fixture_old_names[1:] +
+              pve_mssql_dump_retention_fixture_new_names) | sort)
+          - >-
+            (pve_mssql_dump_retention_final_archives.files | map(attribute='path')
+            | map('basename') | sort) ==
+            [pve_mssql_dump_retention_fixture_old_names[0] ~ '.tar.zst']
+        fail_msg: "The final source and archive sets do not match the retention contract."
+        quiet: true
+
+    - name: Confirm each archive is readable
+      ansible.builtin.command:
+        argv:
+          - tar
+          - --zstd
+          - -tf
+          - "{{ item.path }}"
+      loop: "{{ pve_mssql_dump_retention_final_archives.files }}"
+      register: pve_mssql_dump_retention_readable_archives
+      changed_when: false
+      failed_when: pve_mssql_dump_retention_readable_archives.rc != 0
+
+    - name: Assert each archive contains its dump directory and file
+      ansible.builtin.assert:
+        that:
+          - item.stdout_lines | length >= 2
+        quiet: true
+      loop: "{{ pve_mssql_dump_retention_readable_archives.results }}"
+
+    - name: Inspect unrelated content and the corrupt archive source
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ pve_mssql_dump_retention_fixture_source }}/not-a-dump"
+        - "{{ pve_mssql_dump_retention_fixture_source }}/stray.log"
+        - "{{ pve_mssql_dump_retention_fixture_bad_source }}/core.sqlservr.01_04_2020_00_00_00.4.d"
+        - "{{ pve_mssql_dump_retention_fixture_bad_archive }}/core.sqlservr.01_04_2020_00_00_00.4.d.tar.zst"
+      register: pve_mssql_dump_retention_preserved_stats
+
+    - name: Assert unrelated paths and the corrupt archive remain
+      ansible.builtin.assert:
+        that:
+          - pve_mssql_dump_retention_preserved_stats.results[0].stat.isdir
+          - pve_mssql_dump_retention_preserved_stats.results[1].stat.isreg
+          - pve_mssql_dump_retention_preserved_stats.results[2].stat.isdir
+          - pve_mssql_dump_retention_preserved_stats.results[3].stat.isreg
+        fail_msg: "Retention removed unrelated data or the corrupt archive source."
+        quiet: true
+
+    - name: Read back the pre-existing corrupt archive
+      ansible.builtin.slurp:
+        src: "{{ pve_mssql_dump_retention_fixture_bad_archive }}/core.sqlservr.01_04_2020_00_00_00.4.d.tar.zst"
+      register: pve_mssql_dump_retention_corrupt_archive
+
+    - name: Assert the corrupt archive was left untouched
+      ansible.builtin.assert:
+        that:
+          - pve_mssql_dump_retention_corrupt_archive.content | b64decode == 'corrupt archive\n'
+        quiet: true

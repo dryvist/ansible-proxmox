@@ -1,0 +1,8 @@
+---
+pve_mssql_dump_retention_enabled: false
+pve_mssql_dump_retention_dry_run: true
+pve_mssql_dump_retention_age_days: 30
+pve_mssql_dump_retention_keep_newest: 5
+pve_mssql_dump_retention_max_dirs_per_run: 40
+pve_mssql_dump_retention_archive_dir: ""
+pve_mssql_dump_retention_source_dir: ""

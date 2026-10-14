@@ -1,0 +1,59 @@
+---
+- name: Test the compressed archive stream
+  ansible.builtin.command:
+    argv:
+      - zstd
+      - --test
+      - --
+      - "{{ pve_mssql_dump_retention_verify_archive }}"
+  register: pve_mssql_dump_retention_zstd_test
+  changed_when: false
+  failed_when: pve_mssql_dump_retention_zstd_test.rc != 0
+
+- name: Compare every archived member with the live dump directory
+  ansible.builtin.command:
+    argv:
+      - tar
+      - --zstd
+      - --diff
+      - --file
+      - "{{ pve_mssql_dump_retention_verify_archive }}"
+      - --directory
+      - "{{ pve_mssql_dump_retention_verify_source | dirname }}"
+      - --
+      - "{{ pve_mssql_dump_retention_verify_member }}"
+  register: pve_mssql_dump_retention_tar_diff
+  changed_when: false
+  failed_when: pve_mssql_dump_retention_tar_diff.rc != 0
+
+- name: Count live dump directory members
+  ansible.builtin.find:
+    paths: "{{ pve_mssql_dump_retention_verify_source }}"
+    file_type: any
+    recurse: true
+    hidden: true
+  register: pve_mssql_dump_retention_source_members
+
+- name: List archived dump directory members
+  ansible.builtin.command:
+    argv:
+      - tar
+      - --zstd
+      - --quoting-style=escape
+      - -tf
+      - "{{ pve_mssql_dump_retention_verify_archive }}"
+  register: pve_mssql_dump_retention_archive_members
+  changed_when: false
+  failed_when: pve_mssql_dump_retention_archive_members.rc != 0
+
+- name: Require the archive and source member counts to match
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pve_mssql_dump_retention_archive_members.stdout_lines | length) ==
+        ((pve_mssql_dump_retention_source_members.files | length) + 1)
+      - >-
+        (pve_mssql_dump_retention_archive_members.stdout_lines | unique | length) ==
+        (pve_mssql_dump_retention_archive_members.stdout_lines | length)
+    fail_msg: "The archive members do not match the live dump directory one to one."
+    quiet: true
