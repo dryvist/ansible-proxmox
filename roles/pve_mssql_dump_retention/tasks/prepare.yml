@@ -90,12 +90,15 @@
 - name: Set aside the newest directories
   ansible.builtin.set_fact:
     pve_mssql_dump_retention_beyond_newest: >-
-      {{ (pve_mssql_dump_retention_dirs.files | sort(attribute='mtime'))[: [0, pve_mssql_dump_retention_dirs.files | length - pve_mssql_dump_retention_keep_newest | int] | max] }}
+      {{ (pve_mssql_dump_retention_dirs.files | sort(attribute='mtime'))[:
+      [0, pve_mssql_dump_retention_dirs.files | length - pve_mssql_dump_retention_keep_newest | int] | max] }}
 
 - name: Select this run's batch of old directories
   ansible.builtin.set_fact:
     pve_mssql_dump_retention_candidates: >-
-      {{ (pve_mssql_dump_retention_beyond_newest | selectattr('mtime', 'lt', pve_mssql_dump_retention_cutoff | int) | list)[: pve_mssql_dump_retention_max_dirs_per_run | int] }}
+      {{ (pve_mssql_dump_retention_beyond_newest |
+      selectattr('mtime', 'lt', pve_mssql_dump_retention_cutoff | int) |
+      list)[: pve_mssql_dump_retention_max_dirs_per_run | int] }}
   vars:
     pve_mssql_dump_retention_cutoff: "{{ now(utc=true).timestamp() | int - pve_mssql_dump_retention_age_days | int * 86400 }}"
 

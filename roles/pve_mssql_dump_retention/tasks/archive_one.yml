@@ -73,11 +73,10 @@
     pve_mssql_dump_retention_verify_member: "{{ pve_mssql_dump_retention_current_name }}"
   when: not pve_mssql_dump_retention_final_stat.stat.exists
 
-- name: Atomically move the verified partial archive into place without overwriting
+- name: Atomically move the verified partial archive into place
   ansible.builtin.command:
     argv:
       - mv
-      - --no-clobber
       - --no-target-directory
       - --
       - "{{ pve_mssql_dump_retention_current_partial }}"
