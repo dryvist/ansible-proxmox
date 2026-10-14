@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.24.0](https://github.com/dryvist/ansible-proxmox/compare/v2.23.0...v2.24.0) (2026-10-13)
+
+
+### Features
+
+* **pve_node_exporter:** collect SMART, NVMe and IPMI sensor metrics with the packaged collectors ([#1044](https://github.com/dryvist/ansible-proxmox/issues/1044)) ([8da6b6e](https://github.com/dryvist/ansible-proxmox/commit/8da6b6edc88fdda5ca1db5f80e99a7a1ac2f63d9))
+* **pve_textfile_collectors:** add an HA state collector ([#1051](https://github.com/dryvist/ansible-proxmox/issues/1051)) ([136320c](https://github.com/dryvist/ansible-proxmox/commit/136320c7f0e955f146587fe879ea37728987009c))
+* **pve_textfile_collectors:** add ZFS and Corosync textfile collectors ([#1048](https://github.com/dryvist/ansible-proxmox/issues/1048)) ([0c46916](https://github.com/dryvist/ansible-proxmox/commit/0c469161ccd56b12e74bbaa881d07d5bd7d8d257))
+
+
+### Bug Fixes
+
+* **lxc_gpu_features:** allow one serving and one llm-gpu-small gpu-passthrough guest per node ([#1045](https://github.com/dryvist/ansible-proxmox/issues/1045)) ([4bea217](https://github.com/dryvist/ansible-proxmox/commit/4bea217ce5a27950acf582d763e96072aa87e2cf))
+* **lxc_gpu_features:** quote the running-state conditional of the restart handler ([#1046](https://github.com/dryvist/ansible-proxmox/issues/1046)) ([dd50581](https://github.com/dryvist/ansible-proxmox/commit/dd5058107c1b7cc7cbbde20cd189222a7039e4e6))
+* **pve_node_exporter:** create the packaged collector directory before installing the packages ([#1049](https://github.com/dryvist/ansible-proxmox/issues/1049)) ([23115ac](https://github.com/dryvist/ansible-proxmox/commit/23115ac6c011a8f77e7b44653b99fc9540e35aa5))
+* **ssh_ca_trust:** issue host certificates with lowercase principals ([#1050](https://github.com/dryvist/ansible-proxmox/issues/1050)) ([7e04b62](https://github.com/dryvist/ansible-proxmox/commit/7e04b62ca709a373507d9cf219f3d123c9b7314c))
+* **zfs_scrub_window:** use a valid Documentation URI in the scrub units ([#1047](https://github.com/dryvist/ansible-proxmox/issues/1047)) ([74acedc](https://github.com/dryvist/ansible-proxmox/commit/74acedcef9a57514f188a2cd25374e604c9ccb0a))
+
 ## [2.23.0](https://github.com/dryvist/ansible-proxmox/compare/v2.22.0...v2.23.0) (2026-10-13)
 
 
