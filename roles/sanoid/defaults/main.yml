@@ -69,7 +69,7 @@ sanoid_replica_templates:
     autosnap: "no"
     autoprune: "yes"
     frequently: 0
-    # Keep the newest hourly snapshot shared with the source after replication.
+    # The newest hourly is the newest replicated instant.
     hourly: 1
     daily: 14
     weekly: 0

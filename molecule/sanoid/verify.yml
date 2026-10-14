@@ -18,13 +18,20 @@
       ansible.builtin.set_fact:
         sanoid_conf_lines: "{{ sanoid_conf_text.splitlines() | map('trim') | list }}"
 
+    - name: Map each stanza header to its keys
+      ansible.builtin.set_fact:
+        sanoid_conf_block: "{{ sanoid_conf_block | default({}) | combine({item: sanoid_stanza_tail[: sanoid_stanza_tail.index('')]}) }}"
+      vars:
+        sanoid_stanza_tail: "{{ sanoid_conf_lines[sanoid_conf_lines.index(item) + 1 :] + [''] }}"
+      loop: "{{ sanoid_conf_lines | select('match', '^\\[') | list }}"
+
     - name: Assert templates and dataset assignments rendered
       ansible.builtin.assert:
         that:
           - "'[template_critical]' in sanoid_conf_text"
           - "'[template_scratch]' in sanoid_conf_text"
           - >-
-            sanoid_conf_lines[sanoid_conf_lines.index('[template_replica]') + 1:][:8] == [
+            sanoid_conf_block['[template_replica]'] == [
               'autoprune = yes',
               'autosnap = no',
               'daily = 14',
@@ -39,11 +46,7 @@
           # scratch dataset opts out of snapshots
           - "'[nvme1/siem/cribl-pq]' in sanoid_conf_text"
           - "'[bulk/replica/source/recursive]' in sanoid_conf_text"
-          - >-
-            sanoid_conf_lines[sanoid_conf_lines.index('[bulk/replica/source/recursive]') + 1:][:2] ==
-            ['recursive = yes', 'use_template = replica']
-          - >-
-            sanoid_conf_lines[sanoid_conf_lines.index('[bulk/replica/source/nonrecursive]') + 1:][:2] ==
-            ['use_template = replica', '']
+          - sanoid_conf_block['[bulk/replica/source/recursive]'] == ['recursive = yes', 'use_template = replica']
+          - sanoid_conf_block['[bulk/replica/source/nonrecursive]'] == ['use_template = replica']
           - "'[bulk/replica/stale/hand-thinned]' not in sanoid_conf_text"
         fail_msg: "sanoid.conf did not render the expected templates/datasets"

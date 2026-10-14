@@ -39,10 +39,12 @@ Quote `yes`/`no` values — sanoid wants literal `yes`/`no`, and unquoted YAML
 coerces them to booleans.
 
 With `sanoid_replica_retention_enabled`, the role derives stanzas only for
-`syncoid_jobs` targets and retains the newest hourly snapshot shared with the
-source plus 14 daily and 6 monthly snapshots.
-If replication is interrupted longer than the source's own retention window,
-no common snapshot remains on both sides, so incremental replication cannot
+`syncoid_jobs` targets (all datasets under a recursive target included) and
+retains the newest hourly snapshot, 14 daily and 6 monthly snapshots; sanoid
+prunes `autosnap_*` names only. The newest hourly is the newest replicated
+instant, so a common snapshot normally survives each run. If replication
+stops for longer than the retention windows of source and target overlap, no
+common snapshot remains on both sides and incremental replication cannot
 resume from a shared snapshot.
 
 ## Usage
