@@ -40,7 +40,7 @@ idrac_power_controller: >-
   }}
 
 # Seconds to wait for the target's SSH after power-on, and the poll budget
-# (x10s, so 60 => 10 min) to confirm a graceful power-off completed. Old rack
+# (10 s each, so 60 => 10 min) to confirm a graceful power-off completed. Old rack
 # hardware (e.g. a Dell R710) can take ~10 minutes to POST and boot, so these
 # default generously; tune per host if your hardware is faster/slower.
 idrac_power_boot_timeout: 720
