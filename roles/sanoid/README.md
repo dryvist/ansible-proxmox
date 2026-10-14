@@ -21,8 +21,8 @@ ansible-galaxy install -r requirements.yml
 
 - Installs the `sanoid` package, renders `/etc/sanoid/sanoid.conf`, and enables
   `sanoid.timer`.
-- Snapshots only the datasets you assign in `sanoid_datasets`; templates alone
-  take nothing. The role is inert until datasets are assigned.
+- Configures only datasets assigned in `sanoid_datasets` or live `syncoid_jobs`
+  targets when replica retention is enabled; templates alone take no snapshots.
 - Package install + timer are skipped under Docker so molecule can converge.
 
 ## Variables
@@ -33,9 +33,17 @@ ansible-galaxy install -r requirements.yml
 | `sanoid_timer_enabled` | `true`                     | Enable/start `sanoid.timer`                        |
 | `sanoid_templates`     | critical / media / scratch | Retention templates by criticality tier            |
 | `sanoid_datasets`      | `{}`                       | Map of `dataset => { use_template, recursive, … }` |
+| `sanoid_replica_retention_enabled` | `false` | Add retention stanzas for live syncoid targets |
 
 Quote `yes`/`no` values — sanoid wants literal `yes`/`no`, and unquoted YAML
 coerces them to booleans.
+
+With `sanoid_replica_retention_enabled`, the role derives stanzas only for
+`syncoid_jobs` targets and retains the newest hourly snapshot shared with the
+source plus 14 daily and 6 monthly snapshots.
+If replication is interrupted longer than the source's own retention window,
+no common snapshot remains on both sides, so incremental replication cannot
+resume from a shared snapshot.
 
 ## Usage
 

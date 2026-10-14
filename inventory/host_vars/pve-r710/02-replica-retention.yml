@@ -1,0 +1,3 @@
+---
+# Sanoid retention for the live replica targets: every syncoid_jobs target gets it.
+sanoid_replica_retention_enabled: true
