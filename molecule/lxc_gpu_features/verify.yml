@@ -227,6 +227,106 @@
               Expected the per-node llm-gpu-small assertion to fail, got:
               {{ ansible_failed_result | to_json }}
 
+    - name: Accept one serving and one llm-gpu-classify tagged guest on one node
+      vars:
+        containers_from_tofu:
+          serving:
+            node: test-pve-node
+            ansible_pct_vmid: "90301"
+            tags: [gpu-passthrough]
+          classify:
+            node: test-pve-node
+            ansible_pct_vmid: "90302"
+            tags: [gpu-passthrough, llm-gpu-classify]
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu: ["90301", "90302"]
+      block:
+        - name: Check the policy with a serving and a classifier catalog entry
+          ansible.builtin.include_role:
+            name: lxc_gpu_features
+            tasks_from: assert_gpu_policy
+
+    - name: Accept one serving, one small, and one classifier guest on one node
+      vars:
+        containers_from_tofu:
+          serving:
+            node: test-pve-node
+            ansible_pct_vmid: "90401"
+            tags: [gpu-passthrough]
+          small:
+            node: test-pve-node
+            ansible_pct_vmid: "90402"
+            tags: [gpu-passthrough, llm-gpu-small]
+          classify:
+            node: test-pve-node
+            ansible_pct_vmid: "90403"
+            tags: [gpu-passthrough, llm-gpu-classify]
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu: ["90401", "90402", "90403"]
+      block:
+        - name: Check the policy with serving, small, and classifier entries
+          ansible.builtin.include_role:
+            name: lxc_gpu_features
+            tasks_from: assert_gpu_policy
+
+    - name: Prove two llm-gpu-classify tagged guests on one node fail the catalog assertion
+      vars:
+        containers_from_tofu:
+          first:
+            node: test-pve-node
+            ansible_pct_vmid: "90501"
+            tags: [gpu-passthrough, llm-gpu-classify]
+          second:
+            node: test-pve-node
+            ansible_pct_vmid: "90502"
+            tags: [gpu-passthrough, llm-gpu-classify]
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu: ["90501", "90502"]
+      block:
+        - name: Check the policy with two classifier catalog entries
+          ansible.builtin.include_role:
+            name: lxc_gpu_features
+            tasks_from: assert_gpu_policy
+
+        - name: Fail if the policy accepted two llm-gpu-classify guests on one node
+          ansible.builtin.fail:
+            msg: The policy accepted two llm-gpu-classify guests on one node.
+      rescue:
+        - name: Confirm the per-node catalog assertion rejected the second classifier
+          ansible.builtin.assert:
+            that:
+              - "(ansible_failed_result | to_json) is search('More than one container on Proxmox node')"
+            fail_msg: >-
+              Expected the per-node llm-gpu-classify assertion to fail, got:
+              {{ ansible_failed_result | to_json }}
+
+    - name: Ignore small and classifier tags without gpu-passthrough
+      vars:
+        containers_from_tofu:
+          serving:
+            node: test-pve-node
+            ansible_pct_vmid: "90601"
+            tags: [gpu-passthrough]
+          classify_one:
+            node: test-pve-node
+            ansible_pct_vmid: "90602"
+            tags: [llm-gpu-classify]
+          classify_two:
+            node: test-pve-node
+            ansible_pct_vmid: "90603"
+            tags: [llm-gpu-classify]
+          small_one:
+            node: test-pve-node
+            ansible_pct_vmid: "90604"
+            tags: [llm-gpu-small]
+          small_two:
+            node: test-pve-node
+            ansible_pct_vmid: "90605"
+            tags: [llm-gpu-small]
+        lxc_gpu_features_gpu_passthrough_vmids_from_tofu: ["90601"]
+      block:
+        - name: Check the policy ignores untagged secondary role entries
+          ansible.builtin.include_role:
+            name: lxc_gpu_features
+            tasks_from: assert_gpu_policy
+
     - name: Prove a direct configure include cannot bypass the tag guard
       block:
         - name: Include the writer directly for an untagged fixture VMID
@@ -260,5 +360,6 @@
         msg: >-
           Verified the tagged NVIDIA writer, all untagged configs, the TUN
           exception, refusal of untagged live GPU access, duplicate catalog
-          rejection, and the direct-include guard across
+          rejection, serving/small/classifier limits, ignored secondary tags
+          without gpu-passthrough, and the direct-include guard across
           {{ expected_nvidia_lines | length }} expected NVIDIA lines.
