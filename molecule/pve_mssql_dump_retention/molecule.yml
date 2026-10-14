@@ -11,3 +11,13 @@ provisioner:
   config_options:
     defaults:
       roles_path: ${MOLECULE_SCENARIO_DIRECTORY}/../../roles
+scenario:
+  # Converge rebuilds its fixture tree and the role then deletes archived sources,
+  # so a second converge cannot report zero changes; idempotence is asserted in the
+  # exercise tasks (second run is a no-op) instead.
+  test_sequence:
+    - destroy
+    - create
+    - converge
+    - verify
+    - destroy
