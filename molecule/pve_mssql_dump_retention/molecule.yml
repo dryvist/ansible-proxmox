@@ -16,8 +16,13 @@ scenario:
   # so a second converge cannot report zero changes; idempotence is asserted in the
   # exercise tasks (second run is a no-op) instead.
   test_sequence:
+    - dependency
+    - cleanup
     - destroy
+    - syntax
     - create
+    - prepare
     - converge
     - verify
+    - cleanup
     - destroy
