@@ -44,6 +44,18 @@
     fail_msg: "The source must be a directory and the archive parent must already exist."
     quiet: true
 
+- name: Refresh mount facts when the archive parent is missing from the known facts
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - mounts
+  when: >-
+    (ansible_mounts | default([])
+    | selectattr('mount', 'defined')
+    | selectattr('mount', 'equalto', pve_mssql_dump_retention_archive_dir | dirname)
+    | list | length) == 0
+
 - name: Require the archive parent to be a mounted bulk ZFS dataset
   ansible.builtin.assert:
     that:
