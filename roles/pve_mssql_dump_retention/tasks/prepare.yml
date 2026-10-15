@@ -44,34 +44,35 @@
     fail_msg: "The source must be a directory and the archive parent must already exist."
     quiet: true
 
-- name: Refresh mount facts when the archive parent is missing from the known facts
-  ansible.builtin.setup:
-    gather_subset:
-      - "!all"
-      - "!min"
-      - mounts
-  when: >-
-    (ansible_mounts | default([])
-    | selectattr('mount', 'defined')
-    | selectattr('mount', 'equalto', pve_mssql_dump_retention_archive_dir | dirname)
-    | list | length) == 0
+# ansible_mounts omits ZFS datasets (it keeps only devices that start with "/"), so the mount table comes from findmnt.
+- name: Read the mount table
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - --raw
+      - --noheadings
+      - --output
+      - TARGET,SOURCE,FSTYPE
+  register: pve_mssql_dump_retention_findmnt
+  changed_when: false
+  check_mode: false
+  when: pve_mssql_dump_retention_mount_table is not defined
+
+- name: Record the mount table
+  ansible.builtin.set_fact:
+    pve_mssql_dump_retention_mount_table: "{{ pve_mssql_dump_retention_findmnt.stdout_lines }}"
+  when: pve_mssql_dump_retention_mount_table is not defined
 
 - name: Require the archive parent to be a mounted bulk ZFS dataset
   ansible.builtin.assert:
     that:
       - >-
-        (ansible_mounts | default([])
-        | selectattr('mount', 'defined')
-        | selectattr('mount', 'equalto', pve_mssql_dump_retention_archive_dir | dirname)
-        | selectattr('fstype', 'defined')
-        | selectattr('fstype', 'equalto', 'zfs')
-        | selectattr('device', 'defined')
-        | selectattr('device', 'match', '^bulk(/|$)')
+        (pve_mssql_dump_retention_mount_table
+        | select('match', '^' ~ (pve_mssql_dump_retention_archive_dir | dirname | regex_escape) ~ ' bulk(/\\S*)? zfs$')
         | list | length) > 0
       - >-
-        (ansible_mounts | default([])
-        | selectattr('mount', 'defined')
-        | selectattr('mount', 'equalto', pve_mssql_dump_retention_archive_dir)
+        (pve_mssql_dump_retention_mount_table
+        | select('match', '^' ~ (pve_mssql_dump_retention_archive_dir | regex_escape) ~ ' ')
         | list | length) == 0
     fail_msg: >-
       The archive parent must be mounted from a bulk ZFS dataset, and the

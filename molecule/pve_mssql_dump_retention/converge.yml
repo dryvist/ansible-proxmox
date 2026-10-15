@@ -10,13 +10,9 @@
     pve_mssql_dump_retention_fixture_archive: "{{ pve_mssql_dump_retention_fixture_root }}/bulk/mssql-crash-dumps"
     pve_mssql_dump_retention_fixture_bad_source: "{{ pve_mssql_dump_retention_fixture_root }}/bad-source"
     pve_mssql_dump_retention_fixture_bad_archive: "{{ pve_mssql_dump_retention_fixture_root }}/corrupt-bulk/mssql-crash-dumps"
-    ansible_mounts:
-      - mount: "{{ pve_mssql_dump_retention_fixture_root }}/bulk"
-        device: bulk/backups
-        fstype: zfs
-      - mount: "{{ pve_mssql_dump_retention_fixture_root }}/corrupt-bulk"
-        device: bulk/backups
-        fstype: zfs
+    pve_mssql_dump_retention_mount_table:
+      - "{{ pve_mssql_dump_retention_fixture_root }}/bulk bulk/backups zfs"
+      - "{{ pve_mssql_dump_retention_fixture_root }}/corrupt-bulk bulk/backups zfs"
     pve_mssql_dump_retention_fixture_old_names:
       - core.sqlservr.01_01_2020_00_00_00.1.d
       - core.sqlservr.01_02_2020_00_00_00.2.d
