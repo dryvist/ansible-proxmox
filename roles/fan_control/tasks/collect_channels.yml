@@ -1,0 +1,35 @@
+---
+- name: Collect detected fan speed channels
+  ansible.builtin.set_fact:
+    fan_control_speed_channels: "{{ fan_control_speed_channels + [fan_control_channel_record] }}"
+  vars:
+    fan_control_channel_record:
+      d_type: "{{ fan_control_device.d_type }}"
+      device_uid: "{{ fan_control_device.uid }}"
+      device_name: "{{ fan_control_device.name }}"
+      channel_name: "{{ fan_control_channel.key }}"
+      controllable: "{{ fan_control_channel.value.speed_options.fixed_enabled | bool }}"
+  loop: "{{ fan_control_device.info.channels | dict2items }}"
+  loop_control:
+    loop_var: fan_control_channel
+    label: "{{ fan_control_device.name }} {{ fan_control_channel.key }}"
+  when:
+    - fan_control_channel.value.speed_options is mapping
+    - fan_control_channel.value.speed_options.fixed_enabled is defined
+
+- name: Keep channels supporting manual duty control
+  ansible.builtin.set_fact:
+    fan_control_channels: "{{ fan_control_channels + [fan_control_channel_record] }}"
+  vars:
+    fan_control_channel_record:
+      d_type: "{{ fan_control_device.d_type }}"
+      device_uid: "{{ fan_control_device.uid }}"
+      device_name: "{{ fan_control_device.name }}"
+      channel_name: "{{ fan_control_channel.key }}"
+  loop: "{{ fan_control_device.info.channels | dict2items }}"
+  loop_control:
+    loop_var: fan_control_channel
+    label: "{{ fan_control_device.name }} {{ fan_control_channel.key }}"
+  when:
+    - fan_control_channel.value.speed_options is mapping
+    - fan_control_channel.value.speed_options.fixed_enabled | bool

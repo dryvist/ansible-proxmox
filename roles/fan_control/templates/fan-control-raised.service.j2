@@ -1,0 +1,12 @@
+[Unit]
+Description=Activate raised fan mode
+After=coolercontrold.service
+Requires=coolercontrold.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/curl --fail --silent --show-error --request POST {{ fan_control_api_url }}/modes-active/{{ fan_control_raised_mode_uid }}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

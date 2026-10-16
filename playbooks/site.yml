@@ -152,6 +152,11 @@
         - pve_node_exporter
         - node_exporter
 
+    - role: fan_control
+      when: fan_control | default(false) | bool
+      tags:
+        - fan_control
+
     - role: pve_textfile_collectors
       tags:
         - pve_textfile_collectors
