@@ -16,7 +16,6 @@
 # The onboard uplink is pinned by permanent MAC to nic0. The bridge and
 # Wake-on-LAN role resolves the current kernel name from the same MAC.
 fan_control: true
-cribl_edge_node_exporter_scrape_enabled: true
 
 wol_enable_enabled: true
 wol_enable_interface: nic0
