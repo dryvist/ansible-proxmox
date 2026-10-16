@@ -15,6 +15,8 @@
 #
 # The onboard uplink is pinned by permanent MAC to nic0. The bridge and
 # Wake-on-LAN role resolves the current kernel name from the same MAC.
+fan_control: true
+
 wol_enable_enabled: true
 wol_enable_interface: nic0
 wol_enable_mac: "{{ pve_host_network_uplink_mac }}"

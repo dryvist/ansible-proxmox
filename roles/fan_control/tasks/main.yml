@@ -1,0 +1,371 @@
+---
+- name: Configure CoolerControl fan management
+  when: fan_control | default(false) | bool
+  block:
+    - name: Require a supported active fan mode
+      ansible.builtin.assert:
+        that:
+          - fan_control_active_mode in ['raised', 'benchmark-100']
+        fail_msg: fan_control_active_mode must be raised or benchmark-100.
+        quiet: true
+
+    - name: Require Debian 13
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Debian'
+          - ansible_facts.distribution_major_version == '13'
+        fail_msg: CoolerControl installation is supported here only on Debian 13.
+        quiet: true
+
+    - name: Install APT repository prerequisites
+      ansible.builtin.apt:
+        name:
+          - curl
+          - jq
+          - python3-debian
+        state: present
+
+    - name: Install CoolerControl archive key
+      ansible.builtin.get_url:
+        url: https://apt.coolercontrol.org/coolercontrol-archive-keyring.gpg
+        dest: /usr/share/keyrings/coolercontrol-archive-keyring.gpg
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Configure the official CoolerControl stable repository
+      ansible.builtin.deb822_repository:
+        name: coolercontrol
+        types: [deb]
+        uris: [https://apt.coolercontrol.org/debian]
+        suites: [stable]
+        components: [main]
+        signed_by: /usr/share/keyrings/coolercontrol-archive-keyring.gpg
+        state: present
+
+    - name: Install CoolerControl and the it87 DKMS module
+      ansible.builtin.apt:
+        name:
+          - "coolercontrold={{ fan_control_coolercontrol_version }}"
+          - it87-dkms
+        state: present
+        update_cache: true
+
+    - name: Enable and start CoolerControl daemon
+      ansible.builtin.systemd_service:
+        name: coolercontrold.service
+        enabled: true
+        state: started
+
+    - name: Read the CoolerControl write token from OpenBao
+      community.hashi_vault.vault_kv2_get:
+        url: "{{ fan_control_bao_addr }}"
+        token: "{{ fan_control_bao_token }}"
+        engine_mount_point: "{{ fan_control_bao_kv_mount }}"
+        path: "{{ fan_control_bao_path }}"
+      register: _fan_control_openbao_secret
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Require the CoolerControl write token
+      ansible.builtin.assert:
+        that:
+          - _fan_control_openbao_secret.secret.fan_control_write_token | default('', true) | length > 0
+        fail_msg: The OpenBao fan-control write credential is missing.
+        quiet: true
+      no_log: true
+
+    - name: Retain the CoolerControl bearer header for this converge
+      ansible.builtin.set_fact:
+        fan_control_api_headers:
+          Authorization: "Bearer {{ _fan_control_openbao_secret.secret.fan_control_write_token }}"
+      no_log: true
+
+    - name: Store the CoolerControl bearer header for boot activation
+      ansible.builtin.copy:
+        content: "Authorization: Bearer {{ _fan_control_openbao_secret.secret.fan_control_write_token }}\n"
+        dest: /etc/coolercontrol/fan-control.headers
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Wait for the local CoolerControl API
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/devices"
+        method: GET
+        headers: "{{ fan_control_api_headers }}"
+        return_content: true
+        status_code: 200
+      register: _fan_control_devices
+      retries: 12
+      delay: 5
+      until: _fan_control_devices.status | default(0) == 200
+      no_log: true
+
+    - name: Find CPU and GPU temperature devices
+      ansible.builtin.set_fact:
+        fan_control_cpu_devices: >-
+          {{ _fan_control_devices.json.devices
+             | selectattr('d_type', 'equalto', 'CPU')
+             | selectattr('info.temps') | list }}
+        fan_control_gpu_devices: >-
+          {{ _fan_control_devices.json.devices
+             | selectattr('d_type', 'equalto', 'GPU')
+             | selectattr('info.temps') | list }}
+
+    - name: Require CPU and NVIDIA GPU temperature sources
+      ansible.builtin.assert:
+        that:
+          - fan_control_cpu_devices | length > 0
+          - fan_control_gpu_devices | length == 1
+        fail_msg: >-
+          CoolerControl did not expose exactly one GPU and at least one CPU
+          temperature source. Check NVIDIA NVML support and sensor discovery.
+        quiet: true
+
+    - name: Initialize controllable channel lists
+      ansible.builtin.set_fact:
+        fan_control_channels: []
+        fan_control_speed_channels: []
+
+    - name: Collect motherboard and GPU fan channels
+      ansible.builtin.include_tasks: collect_channels.yml
+      loop: "{{ _fan_control_devices.json.devices }}"
+      loop_control:
+        loop_var: fan_control_device
+        label: "{{ fan_control_device.name }}"
+      when: fan_control_device.d_type in ['Hwmon', 'GPU']
+
+    - name: Require every motherboard and GPU fan channel to be controllable
+      ansible.builtin.assert:
+        that:
+          - fan_control_channels | selectattr('d_type', 'equalto', 'Hwmon') | list | length > 0
+          - fan_control_channels | selectattr('d_type', 'equalto', 'GPU') | list | length > 0
+          - (fan_control_speed_channels | length) == (fan_control_channels | length)
+        fail_msg: >-
+          CoolerControl did not expose controllable motherboard and GPU fan
+          channels. Check it87 support, BIOS fan control and NVML.
+        quiet: true
+
+    - name: Select temperature sources for the raised curves
+      ansible.builtin.set_fact:
+        fan_control_cpu_temp_source:
+          device_uid: "{{ fan_control_cpu_devices[0].uid }}"
+          temp_name: "{{ fan_control_cpu_devices[0].info.temps | dict2items | map(attribute='key') | first }}"
+        fan_control_gpu_temp_source:
+          device_uid: "{{ fan_control_gpu_devices[0].uid }}"
+          temp_name: "{{ fan_control_gpu_devices[0].info.temps | dict2items | map(attribute='key') | first }}"
+
+    - name: Read configured functions
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/functions"
+        method: GET
+        headers: "{{ fan_control_api_headers }}"
+        return_content: true
+        status_code: 200
+      register: _fan_control_functions
+      no_log: true
+
+    - name: Create or update the identity function
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/functions"
+        method: >-
+          {{ 'PUT' if (_fan_control_functions.json.functions
+          | selectattr('uid', 'equalto', fan_control_function_uid) | list | length) > 0
+          else 'POST' }}
+        headers: "{{ fan_control_api_headers }}"
+        body_format: json
+        body:
+          uid: "{{ fan_control_function_uid }}"
+          name: Raised response
+          f_type: Identity
+          duty_minimum: 1
+          duty_maximum: 100
+          step_size_min_decreasing: 1
+          step_size_max_decreasing: 100
+          threshold_hopping: false
+        status_code: [200, 201]
+      no_log: true
+
+    - name: Read configured profiles
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/profiles"
+        method: GET
+        headers: "{{ fan_control_api_headers }}"
+        return_content: true
+        status_code: 200
+      register: _fan_control_profiles
+      no_log: true
+
+    - name: Create or update raised profiles
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/profiles"
+        method: >-
+          {{ 'PUT' if (_fan_control_profiles.json.profiles
+          | selectattr('uid', 'equalto', item.uid) | list | length) > 0
+          else 'POST' }}
+        headers: "{{ fan_control_api_headers }}"
+        body_format: json
+        body: "{{ item }}"
+        status_code: [200, 201]
+      no_log: true
+      loop:
+        - uid: "{{ fan_control_board_profile_uid }}"
+          name: Raised motherboard
+          function_uid: "{{ fan_control_function_uid }}"
+          p_type: Graph
+          temp_source: "{{ fan_control_cpu_temp_source }}"
+          speed_profile: "{{ fan_control_board_curve }}"
+        - uid: "{{ fan_control_gpu_profile_uid }}"
+          name: Raised GPU
+          function_uid: "{{ fan_control_function_uid }}"
+          p_type: Graph
+          temp_source: "{{ fan_control_gpu_temp_source }}"
+          speed_profile: "{{ fan_control_gpu_curve }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Apply the raised profile to every controllable board and GPU fan
+      ansible.builtin.uri:
+        url: >-
+          {{ fan_control_api_url }}/devices/{{ item.device_uid | urlencode
+          }}/settings/{{ item.channel_name | urlencode }}/profile
+        method: PUT
+        headers: "{{ fan_control_api_headers }}"
+        body_format: json
+        body:
+          profile_uid: >-
+            {{ fan_control_gpu_profile_uid if item.d_type == 'GPU'
+            else fan_control_board_profile_uid }}
+        status_code: 200
+      loop: "{{ fan_control_channels }}"
+      loop_control:
+        label: "{{ item.device_name }} {{ item.channel_name }}"
+      no_log: true
+
+    - name: Read existing modes
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/modes"
+        method: GET
+        headers: "{{ fan_control_api_headers }}"
+        return_content: true
+        status_code: 200
+      register: _fan_control_modes
+      no_log: true
+
+    - name: Refresh the raised mode snapshot
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/modes/{{ item.uid }}/settings"
+        method: PUT
+        headers: "{{ fan_control_api_headers }}"
+        status_code: 200
+      loop: "{{ _fan_control_modes.json.modes | selectattr('name', 'equalto', 'raised') | list }}"
+      register: _fan_control_raised_refresh
+      loop_control:
+        label: raised
+      no_log: true
+
+    - name: Create the raised mode when it is not present
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/modes"
+        method: POST
+        headers: "{{ fan_control_api_headers }}"
+        body_format: json
+        body:
+          name: raised
+        return_content: true
+        status_code: [200, 201]
+      when: _fan_control_modes.json.modes | selectattr('name', 'equalto', 'raised') | list | length == 0
+      register: _fan_control_raised_create
+      no_log: true
+
+    - name: Resolve the raised mode UID
+      ansible.builtin.set_fact:
+        fan_control_raised_mode_uid: >-
+          {{ (_fan_control_modes.json.modes
+              | selectattr('name', 'equalto', 'raised') | list | first).uid
+             if (_fan_control_modes.json.modes
+                 | selectattr('name', 'equalto', 'raised') | list | length) > 0
+             else _fan_control_raised_create.json.uid }}
+
+    - name: Set every controllable channel to 100 percent
+      ansible.builtin.uri:
+        url: >-
+          {{ fan_control_api_url }}/devices/{{ item.device_uid | urlencode
+          }}/settings/{{ item.channel_name | urlencode }}/manual
+        method: PUT
+        headers: "{{ fan_control_api_headers }}"
+        body_format: json
+        body:
+          speed_fixed: 100
+        status_code: 200
+      loop: "{{ fan_control_channels }}"
+      loop_control:
+        label: "{{ item.device_name }} {{ item.channel_name }}"
+      no_log: true
+
+    - name: Refresh the benchmark mode snapshot
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/modes/{{ item.uid }}/settings"
+        method: PUT
+        headers: "{{ fan_control_api_headers }}"
+        status_code: 200
+      loop: "{{ _fan_control_modes.json.modes | selectattr('name', 'equalto', 'benchmark-100') | list }}"
+      loop_control:
+        label: benchmark-100
+      no_log: true
+
+    - name: Create the benchmark mode when it is not present
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/modes"
+        method: POST
+        headers: "{{ fan_control_api_headers }}"
+        body_format: json
+        body:
+          name: benchmark-100
+        return_content: true
+        status_code: [200, 201]
+      when: _fan_control_modes.json.modes | selectattr('name', 'equalto', 'benchmark-100') | list | length == 0
+      register: _fan_control_benchmark_create
+      no_log: true
+
+    - name: Resolve the benchmark mode UID
+      ansible.builtin.set_fact:
+        fan_control_benchmark_mode_uid: >-
+          {{ (_fan_control_modes.json.modes
+              | selectattr('name', 'equalto', 'benchmark-100') | list | first).uid
+             if (_fan_control_modes.json.modes
+                 | selectattr('name', 'equalto', 'benchmark-100') | list | length) > 0
+             else _fan_control_benchmark_create.json.uid }}
+
+    - name: Resolve the active mode UID
+      ansible.builtin.set_fact:
+        fan_control_active_mode_uid: >-
+          {{ fan_control_raised_mode_uid
+             if fan_control_active_mode == 'raised'
+             else fan_control_benchmark_mode_uid }}
+
+    - name: Persist raised mode activation for boot
+      ansible.builtin.template:
+        src: fan-control-raised.service.j2
+        dest: /etc/systemd/system/fan-control-raised.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable and start raised fan mode activation
+      ansible.builtin.systemd_service:
+        name: fan-control-raised.service
+        daemon_reload: true
+        enabled: true
+        state: started
+
+    - name: Activate the selected mode
+      ansible.builtin.uri:
+        url: "{{ fan_control_api_url }}/modes-active/{{ fan_control_active_mode_uid | urlencode }}"
+        method: POST
+        headers: "{{ fan_control_api_headers }}"
+        status_code: 200
+      no_log: true
