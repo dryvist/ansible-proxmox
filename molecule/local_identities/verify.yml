@@ -13,18 +13,20 @@
       ansible.builtin.getent:
         database: passwd
 
-    - name: Confirm both accounts exist
+    - name: Confirm all administrative accounts exist
       ansible.builtin.assert:
         that:
           - "'jevans' in ansible_facts.getent_passwd"
           - "'admin' in ansible_facts.getent_passwd"
-        fail_msg: "local_identities did not create both accounts"
+          - "'host-admin' in ansible_facts.getent_passwd"
+        fail_msg: "local_identities did not create all enabled accounts"
 
-    - name: Confirm both sudoers files are present and valid
+    - name: Confirm sudoers files are present and valid
       ansible.builtin.command: "visudo -cf /etc/sudoers.d/{{ item }}"
       loop:
         - jevans
         - admin
+        - host-admin
       changed_when: false
 
     # Read rather than grep: a missing file makes grep exit non-zero, which

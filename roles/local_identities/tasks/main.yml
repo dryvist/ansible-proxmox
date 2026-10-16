@@ -106,6 +106,32 @@
 # only via the OpenBao SSH CA (ssh_ca_trust_principals), which is the point
 # of a break-glass account that is not a standing, always-open door.
 
+- name: Create the host-admin account
+  ansible.builtin.user:
+    name: "{{ local_identities_host_admin_user }}"
+    shell: "{{ local_identities_host_admin_shell }}"
+    create_home: true
+    state: present
+  when:
+    - local_identities_enabled | bool
+    - local_identities_host_admin_enabled | bool
+  tags:
+    - local_identities
+
+- name: Grant host-admin passwordless sudo
+  ansible.builtin.copy:
+    content: "{{ local_identities_host_admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: "{{ local_identities_sudoers_dir }}/{{ local_identities_host_admin_user }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+  when:
+    - local_identities_enabled | bool
+    - local_identities_host_admin_enabled | bool
+  tags:
+    - local_identities
+
 # --- backup ingress service account ---
 # Deliberately has no sudo task: it is a write-into-one-directory identity, not
 # an administrative one.

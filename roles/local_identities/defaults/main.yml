@@ -1,6 +1,6 @@
 ---
-# local_identities — real named Linux accounts to replace shared-root
-# administration. Two accounts:
+# local_identities — named Linux accounts for human and access-tier logins.
+# Three administrative accounts:
 #
 #   jevans — the human operator. Passwordless sudo, key-based SSH (both the
 #            static declared key AND the OpenBao SSH CA principal), so a
@@ -10,6 +10,7 @@
 #            owns the "must survive a CA outage" static break-glass key on
 #            root; `admin` is the CA-cert-only complement for routine
 #            break-glass work that does not need root itself).
+#   host-admin — opt-in administrative access tier, CA-certificate-only.
 #
 # Neither account is exclusive of `root` -- root access is not removed here.
 # This role is additive: it creates a better path, it does not close the old
@@ -30,6 +31,10 @@ local_identities_jevans_ssh_public_key: "{{ lookup('env', 'VM_SSH_PUBLIC_KEY') |
 local_identities_admin_enabled: true
 local_identities_admin_user: admin
 local_identities_admin_shell: /bin/bash
+
+local_identities_host_admin_enabled: false
+local_identities_host_admin_user: "{{ host_admin_user | default('host-admin') }}"
+local_identities_host_admin_shell: /bin/bash
 
 # Both accounts get NOPASSWD sudo -- they exist specifically to replace
 # `ssh root@host`, so gating every command behind a password prompt would
