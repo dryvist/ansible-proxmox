@@ -6,4 +6,4 @@ HostCertificate {{ ssh_ca_trust_host_cert_path }}
 {% endif %}
 PasswordAuthentication no
 KbdInteractiveAuthentication no
-AllowUsers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra) | join(' ') }}
+AllowUsers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra + ([ssh_ca_trust_host_admin_user] if item | string in ssh_ca_trust_host_admin_guest_vmids else [])) | unique | join(' ') }}

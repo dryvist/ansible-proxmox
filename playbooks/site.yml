@@ -271,10 +271,15 @@
         # only ansible-splunk's runner requests the new principal so far, and
         # removing `ansible` before the rest follow would lock out every
         # converge that still asks for it.
-        ssh_ca_trust_principals:
-          root: [ansible, semaphore]
-          jevans: [jevans]
-          admin: [admin]
+        ssh_ca_trust_principals: >-
+          {{
+            {
+              'root': ['ansible', 'semaphore'],
+              'jevans': ['jevans'],
+              'admin': ['admin']
+            }
+            | combine(ssh_ca_trust_principals_host_overrides | default({}), recursive=true)
+          }}
 
     # Read-only PVE API tokens for consumer apps, published to OpenBao.
     - role: pve_api_tokens
@@ -314,6 +319,16 @@
 # here rather than left standalone: roles/pve_ha/README.md.
 - name: Configure Proxmox VE HA for tier-0 guests
   import_playbook: ha.yml
+
+- name: Create host-admin on opted-in GPU guests
+  hosts: host_admin_gpu_guests
+  become: true
+  gather_facts: true
+  roles:
+    - role: local_identities
+      local_identities_jevans_enabled: false
+      local_identities_admin_enabled: false
+      local_identities_host_admin_enabled: true
 
 # Starts the containers allowlisted in inventory/group_vars/all.yml
 # (container_start_services), on the node each is placed on. Inert when the

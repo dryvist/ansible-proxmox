@@ -5,6 +5,8 @@
   gather_facts: true
 
   vars:
+    host_admin_user: host-admin
+    local_identities_host_admin_enabled: true
     local_identities_jevans_ssh_public_key: >-
       ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGmoleculetestfixturekeyonly test@molecule
 

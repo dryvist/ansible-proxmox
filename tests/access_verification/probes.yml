@@ -1,0 +1,148 @@
+---
+- name: Create a private verification directory
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: access-verification-
+  register: access_work
+
+- name: Save pinned host keys for strict SSH checking
+  ansible.builtin.copy:
+    content: "{{ lookup('ansible.builtin.env', 'SSH_KNOWN_HOSTS') }}"
+    dest: "{{ access_work.path }}/known_hosts"
+    mode: "0600"
+
+- name: Create a short-lived signing key
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -q
+      - -t
+      - ed25519
+      - -N
+      - ""
+      - -f
+      - "{{ access_work.path }}/id"
+  changed_when: false
+
+- name: Log in to OpenBao with the documented SSH-signing AppRole
+  ansible.builtin.uri:
+    url: "{{ lookup('ansible.builtin.env', 'VAULT_ADDR') }}/v1/auth/approle/login"
+    method: POST
+    body_format: json
+    body:
+      role_id: "{{ lookup('ansible.builtin.env', 'OPENBAO_APPROLE_AGENT_SSH_SIGN_ROLE_ID') }}"
+      secret_id: "{{ lookup('ansible.builtin.env', 'OPENBAO_APPROLE_AGENT_SSH_SIGN_SECRET_ID') }}"
+    status_code: 200
+    return_content: true
+  register: access_bao_login
+  no_log: true
+
+- name: Sign the verification key with a 45-minute certificate
+  ansible.builtin.uri:
+    url: "{{ lookup('ansible.builtin.env', 'VAULT_ADDR') }}/v1/ssh-client-ca/sign/automation-ai"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ access_bao_login.json.auth.client_token }}"
+    body_format: json
+    body:
+      public_key: "{{ lookup('ansible.builtin.file', access_work.path ~ '/id.pub') }}"
+      ttl: 45m
+    status_code: 200
+    return_content: true
+  register: access_signed_cert
+  no_log: true
+
+- name: Save the signed certificate
+  ansible.builtin.copy:
+    content: "{{ access_signed_cert.json.data.signed_key }}"
+    dest: "{{ access_work.path }}/id-cert.pub"
+    mode: "0600"
+  no_log: true
+
+- name: Verify sudo access on each mapped target
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -o
+      - BatchMode=yes
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - "UserKnownHostsFile={{ access_work.path }}/known_hosts"
+      - -o
+      - "CertificateFile={{ access_work.path }}/id-cert.pub"
+      - -i
+      - "{{ access_work.path }}/id"
+      - "{{ item.login }}@{{ item.host }}"
+      - sudo
+      - -n
+      - true
+  loop: "{{ access_ssh_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: access_positive_results
+  changed_when: false
+  failed_when: false
+
+- name: Select a representative Proxmox host outside the mapped set
+  ansible.builtin.assert:
+    that:
+      - groups['proxmox'] | difference(['pve-w5900']) | length > 0
+    fail_msg: The inventory needs one Proxmox host outside the mapped set.
+
+- name: Select a representative Proxmox host outside the mapped set
+  ansible.builtin.set_fact:
+    access_negative_host: "{{ (groups['proxmox'] | difference(['pve-w5900']) | first) }}"
+
+- name: Verify the same certificate is refused outside the mapped set
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -o
+      - BatchMode=yes
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - "UserKnownHostsFile={{ access_work.path }}/known_hosts"
+      - -o
+      - "CertificateFile={{ access_work.path }}/id-cert.pub"
+      - -i
+      - "{{ access_work.path }}/id"
+      - "root@{{ hostvars[access_negative_host].ansible_host }}"
+      - true
+  register: access_negative_result
+  changed_when: false
+  failed_when: false
+
+- name: Report the access summary table
+  ansible.builtin.debug:
+    msg: |
+      Case | Status
+      --- | ---
+      {% for result in access_positive_results.results %}
+      {{ result.item.name }} | {{ 'PASS' if result.rc == 0 else 'FAIL' }}
+      {% endfor %}
+      outside_scope_refusal | {{ 'PASS' if access_negative_result.rc != 0 and 'Permission denied' in access_negative_result.stderr else 'FAIL' }}
+      {% for service_case in access_service_cases %}
+      {{ service_case.name }} | {{ service_case.status | upper }}
+      {% endfor %}
+
+- name: Enforce the verification verdict
+  ansible.builtin.assert:
+    that:
+      - access_positive_results.results | selectattr('rc', 'ne', 0) | list | length == 0
+      - access_negative_result.rc != 0
+      - "'Permission denied' in access_negative_result.stderr"
+      - access_service_cases | selectattr('status', 'equalto', 'pending') | list | length == 0
+      - access_service_cases | map(attribute='status') | difference(['pending', 'active']) | list | length == 0
+      - access_service_cases | selectattr('status', 'equalto', 'active') | list | length == access_service_probe_results | length
+      - access_service_probe_results | selectattr('status', 'ne', 'PASS') | list | length == 0
+    fail_msg: >-
+      Access verification failed or remains incomplete. Pending service
+      identities keep the run non-zero until their credentials and safe
+      read/write API contracts are provisioned.
+    success_msg: All scoped SSH and service read/write assertions passed.
