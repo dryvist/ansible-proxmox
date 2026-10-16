@@ -5,7 +5,7 @@ Requires=coolercontrold.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/curl --fail --silent --show-error --request POST {{ fan_control_api_url }}/modes-active/{{ fan_control_raised_mode_uid }}
+ExecStart=/usr/bin/curl --fail --silent --show-error --request POST --header @/etc/coolercontrol/fan-control.headers {{ fan_control_api_url }}/modes-active/{{ fan_control_raised_mode_uid }}
 RemainAfterExit=yes
 
 [Install]

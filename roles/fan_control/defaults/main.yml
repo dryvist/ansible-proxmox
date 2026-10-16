@@ -1,6 +1,14 @@
 ---
 fan_control_api_url: http://127.0.0.1:11987
+# renovate: datasource=github-releases depName=codifryed/coolercontrol
 fan_control_coolercontrol_version: "5.0.1"
+fan_control_active_mode: raised
+fan_control_bao_addr: >-
+  {{ lookup('env', 'BAO_ADDR')
+     | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
+fan_control_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
+fan_control_bao_kv_mount: secret
+fan_control_bao_path: apps/fan-control-write
 fan_control_board_curve:
   - [30, 55]
   - [40, 70]
