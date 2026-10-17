@@ -1,0 +1,27 @@
+---
+- name: Publish the service-generated fan-control write token
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_prompt:
+    - name: fan_control_write_token
+      prompt: Enter the service-generated write token
+      private: true
+  tasks:
+    - name: Publish the token through the shared OpenBao publisher
+      ansible.builtin.include_role:
+        name: dryvist.homelab.openbao_secrets
+        tasks_from: publish.yml
+      vars:
+        openbao_secrets_publish_app: fan-control-write
+        openbao_secrets_publish_data:
+          fan_control_write_token: "{{ fan_control_write_token }}"
+      no_log: true
+
+    - name: Require the publisher to complete the write
+      ansible.builtin.assert:
+        that:
+          - openbao_secrets_publish_ready | default(false) | bool
+        fail_msg: The service-generated token was not published.
+        quiet: true
+      no_log: true
