@@ -73,10 +73,6 @@ jobs:
         docker_lxc_features:
           - 'roles/docker_lxc_features/**'
           - 'molecule/docker_lxc_features/**'
-        nvidia_driver:
-          - 'roles/nvidia_driver/**'
-          - 'molecule/nvidia_driver/**'
-          - 'tests/nvidia_driver/**'
         git_mirror:
           - 'roles/git_mirror/**'
           - 'molecule/git_mirror/**'
@@ -116,6 +112,7 @@ jobs:
         nvidia_driver:
           - 'roles/nvidia_driver/**'
           - 'molecule/nvidia_driver/**'
+          - 'tests/nvidia_driver/**'
         postgres_standby:
           - 'roles/postgres_standby/**'
           - 'molecule/postgres_standby/**'
