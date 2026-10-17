@@ -124,6 +124,7 @@
           CoolerControl did not expose exactly one GPU and at least one CPU
           temperature source. Check NVIDIA NVML support and sensor discovery.
         quiet: true
+      when: fan_control_active_mode == 'raised'
 
     - name: Initialize controllable channel lists
       ansible.builtin.set_fact:
@@ -142,12 +143,51 @@
       ansible.builtin.assert:
         that:
           - fan_control_channels | selectattr('d_type', 'equalto', 'Hwmon') | list | length > 0
-          - fan_control_channels | selectattr('d_type', 'equalto', 'GPU') | list | length > 0
+          - >-
+            fan_control_active_mode != 'raised'
+            or fan_control_channels | selectattr('d_type', 'equalto', 'GPU') | list | length > 0
           - (fan_control_speed_channels | length) == (fan_control_channels | length)
         fail_msg: >-
-          CoolerControl did not expose controllable motherboard and GPU fan
-          channels. Check it87 support, BIOS fan control and NVML.
+          CoolerControl did not expose controllable fan channels for the selected
+          mode. Check it87 support, BIOS fan control and GPU NVML support.
         quiet: true
+
+    - name: Read every host PWM and fan RPM before max mode
+      ansible.builtin.command:
+        argv:
+          - find
+          - -L
+          - -regextype
+          - posix-extended
+          - /sys/class/hwmon
+          - -type
+          - f
+          - (
+          - -regex
+          - .*/name
+          - -o
+          - -regex
+          - .*/pwm[0-9]+
+          - -o
+          - -regex
+          - .*/pwm[0-9]+_enable
+          - -o
+          - -regex
+          - .*/fan[0-9]+_input
+          - )
+          - -print
+          - -exec
+          - cat
+          - "{}"
+          - ";"
+      register: _fan_control_hwmon_before
+      changed_when: false
+      when: fan_control_active_mode == 'benchmark-100'
+
+    - name: Report every host PWM and fan RPM before max mode
+      ansible.builtin.debug:
+        var: _fan_control_hwmon_before.stdout_lines
+      when: fan_control_active_mode == 'benchmark-100'
 
     - name: Select temperature sources for the raised curves
       ansible.builtin.set_fact:
@@ -157,6 +197,7 @@
         fan_control_gpu_temp_source:
           device_uid: "{{ fan_control_gpu_devices[0].uid }}"
           temp_name: "{{ fan_control_gpu_devices[0].info.temps | dict2items | map(attribute='key') | first }}"
+      when: fan_control_active_mode == 'raised'
 
     - name: Read configured functions
       ansible.builtin.uri:
@@ -167,6 +208,7 @@
         status_code: 200
       register: _fan_control_functions
       no_log: true
+      when: fan_control_active_mode == 'raised'
 
     - name: Create or update the identity function
       ansible.builtin.uri:
@@ -188,6 +230,7 @@
           threshold_hopping: false
         status_code: [200, 201]
       no_log: true
+      when: fan_control_active_mode == 'raised'
 
     - name: Read configured profiles
       ansible.builtin.uri:
@@ -198,6 +241,7 @@
         status_code: 200
       register: _fan_control_profiles
       no_log: true
+      when: fan_control_active_mode == 'raised'
 
     - name: Create or update raised profiles
       ansible.builtin.uri:
@@ -226,6 +270,7 @@
           speed_profile: "{{ fan_control_gpu_curve }}"
       loop_control:
         label: "{{ item.name }}"
+      when: fan_control_active_mode == 'raised'
 
     - name: Apply the raised profile to every controllable board and GPU fan
       ansible.builtin.uri:
@@ -244,6 +289,7 @@
       loop_control:
         label: "{{ item.device_name }} {{ item.channel_name }}"
       no_log: true
+      when: fan_control_active_mode == 'raised'
 
     - name: Read existing modes
       ansible.builtin.uri:
@@ -266,6 +312,7 @@
       loop_control:
         label: raised
       no_log: true
+      when: fan_control_active_mode == 'raised'
 
     - name: Create the raised mode when it is not present
       ansible.builtin.uri:
@@ -277,7 +324,9 @@
           name: raised
         return_content: true
         status_code: [200, 201]
-      when: _fan_control_modes.json.modes | selectattr('name', 'equalto', 'raised') | list | length == 0
+      when:
+        - fan_control_active_mode == 'raised'
+        - _fan_control_modes.json.modes | selectattr('name', 'equalto', 'raised') | list | length == 0
       register: _fan_control_raised_create
       no_log: true
 
@@ -289,6 +338,7 @@
              if (_fan_control_modes.json.modes
                  | selectattr('name', 'equalto', 'raised') | list | length) > 0
              else _fan_control_raised_create.json.uid }}
+      when: fan_control_active_mode == 'raised'
 
     - name: Set every controllable channel to 100 percent
       ansible.builtin.uri:
@@ -387,3 +437,40 @@
         headers: "{{ fan_control_api_headers }}"
         status_code: 200
       no_log: true
+
+    - name: Read every host PWM and fan RPM after max mode
+      ansible.builtin.command:
+        argv:
+          - find
+          - -L
+          - -regextype
+          - posix-extended
+          - /sys/class/hwmon
+          - -type
+          - f
+          - (
+          - -regex
+          - .*/name
+          - -o
+          - -regex
+          - .*/pwm[0-9]+
+          - -o
+          - -regex
+          - .*/pwm[0-9]+_enable
+          - -o
+          - -regex
+          - .*/fan[0-9]+_input
+          - )
+          - -print
+          - -exec
+          - cat
+          - "{}"
+          - ";"
+      register: _fan_control_hwmon_after
+      changed_when: false
+      when: fan_control_active_mode == 'benchmark-100'
+
+    - name: Report every host PWM and fan RPM after max mode
+      ansible.builtin.debug:
+        var: _fan_control_hwmon_after.stdout_lines
+      when: fan_control_active_mode == 'benchmark-100'
