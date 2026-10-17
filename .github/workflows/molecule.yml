@@ -92,6 +92,7 @@ jobs:
     needs: discover
     if: ${{ needs.discover.outputs.scenarios != '[]' }}
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 15 }}
     strategy:
       # LOAD-BEARING. These ran as serial steps in one job, so the first failing
       # scenario left every later one `skipped` — and in a run listing a skipped
@@ -100,7 +101,9 @@ jobs:
       # scenarios behind it reported nothing at all. Each scenario now gets its
       # own independent verdict.
       fail-fast: false
-      max-parallel: 6
+      # 12 of the org's 20 concurrent standard runners: a full matrix finishes
+      # in three waves without starving other repositories' CI.
+      max-parallel: 12
       matrix:
         scenario: ${{ fromJSON(needs.discover.outputs.scenarios) }}
     steps:

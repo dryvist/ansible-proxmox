@@ -15,6 +15,34 @@ permissions:
   contents: read
 
 jobs:
+  guest-recovery:
+    name: Verify guest recovery contracts and playbook syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 10 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+
+      - name: Verify the guest recovery and ZFS NFS export contracts
+        run: python -m pytest -q tests/test_guest_recovery_contract.py tests/test_zfs_nfs_export_permissions.py
+
+      - name: Syntax-check the guest recovery playbook
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook --syntax-check -i tests/guest_recovery/hosts.yml playbooks/guest-recovery.yml
+
   pve-node-exporter:
     name: Verify pve_node_exporter unit contract
     runs-on: ubuntu-latest
