@@ -15,7 +15,7 @@ def test_export_permissions_require_a_declared_nfs_export():
         if task["name"].startswith("Require an NFS export when dataset export permissions")
     )
 
-    assert guard["when"] == "item.value.nfs_export_permissions is defined"
+    assert guard["when"] == "item.value.nfs_export_permissions | default(none) is not none"
     assert guard["ansible.builtin.assert"]["that"] == [
         "item.value.nfs_export is defined",
         "item.value.nfs_export | string | length > 0",
@@ -40,7 +40,7 @@ def test_root_squashed_directory_permissions_follow_the_export_restriction():
     )
 
     assert set_export < validate < set_permissions
-    assert EXPORT_TASKS[validate]["when"] == "zfs_dataset.value.nfs_export_permissions is defined"
+    assert EXPORT_TASKS[validate]["when"] == "zfs_dataset.value.nfs_export_permissions | default(none) is not none"
     assert all(
         task["check_mode"] is False
         for task in EXPORT_TASKS
@@ -68,4 +68,4 @@ def test_root_squashed_directory_permissions_follow_the_export_restriction():
     assert permissions["owner"] == "{{ zfs_dataset.value.nfs_export_permissions.owner }}"
     assert permissions["group"] == "{{ zfs_dataset.value.nfs_export_permissions.group }}"
     assert permissions["mode"] == "{{ zfs_dataset.value.nfs_export_permissions.mode }}"
-    assert EXPORT_TASKS[set_permissions]["when"] == "zfs_dataset.value.nfs_export_permissions is defined"
+    assert EXPORT_TASKS[set_permissions]["when"] == "zfs_dataset.value.nfs_export_permissions | default(none) is not none"
