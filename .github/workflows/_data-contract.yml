@@ -25,6 +25,7 @@ jobs:
   verify-inventory:
     name: Verify Inventory Load
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -210,6 +211,16 @@ jobs:
       # distinction is pinned here instead.
       - name: Verify pve_notifications builds its ntfy URL from the ingress subdomain
         run: python3 tests/pve_notifications/test_contract.py
+
+      - name: Verify guest recovery contracts and playbook syntax
+        run: |
+          python -m pytest -q \
+            tests/test_guest_recovery_contract.py \
+            tests/test_zfs_nfs_export_permissions.py
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook --syntax-check \
+            -i tests/guest_recovery/hosts.yml playbooks/guest-recovery.yml
 
       # Backup identity: every other signal a backup job produces asserts only
       # that it RAN, so a guest id recycled onto a different guest keeps every
