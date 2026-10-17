@@ -347,17 +347,35 @@
              if fan_control_active_mode == 'raised'
              else fan_control_benchmark_mode_uid }}
 
-    - name: Persist raised mode activation for boot
+    - name: Check for the legacy raised-mode activation unit
+      ansible.builtin.stat:
+        path: /etc/systemd/system/fan-control-raised.service
+      register: _fan_control_legacy_service
+
+    - name: Disable the legacy raised-mode activation unit
+      ansible.builtin.systemd_service:
+        name: fan-control-raised.service
+        enabled: false
+        state: stopped
+      when: _fan_control_legacy_service.stat.exists
+
+    - name: Remove the legacy raised-mode activation unit
+      ansible.builtin.file:
+        path: /etc/systemd/system/fan-control-raised.service
+        state: absent
+      when: _fan_control_legacy_service.stat.exists
+
+    - name: Persist selected mode activation for boot
       ansible.builtin.template:
-        src: fan-control-raised.service.j2
-        dest: /etc/systemd/system/fan-control-raised.service
+        src: fan-control-active.service.j2
+        dest: /etc/systemd/system/fan-control-active.service
         owner: root
         group: root
         mode: "0644"
 
-    - name: Enable and start raised fan mode activation
+    - name: Enable and start selected fan mode activation
       ansible.builtin.systemd_service:
-        name: fan-control-raised.service
+        name: fan-control-active.service
         daemon_reload: true
         enabled: true
         state: started
