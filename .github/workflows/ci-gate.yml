@@ -2,7 +2,7 @@
 # CI Gate — thin wrapper around the shared ansible CI gate.
 #
 # Lint and Molecule change detection live in
-# dryvist/.github/.github/workflows/_ansible-ci.yml. This wrapper runs the
+# JacobPEvans/.github/.github/workflows/_ansible-ci.yml. This wrapper runs the
 # selected local scenario matrix and aggregates it with the data contract.
 #
 # The shared workflow runs with emit_gate:false and this wrapper aggregates its
@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@41ca3a7c0f8853acbfa38ef905a6231cdddf968d # v1.19.0
+    uses: JacobPEvans/.github/.github/workflows/_ansible-ci.yml@v1
     with:
       molecule: false
       molecule_contract_filters: |

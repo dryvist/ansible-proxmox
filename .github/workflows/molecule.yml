@@ -122,7 +122,7 @@ jobs:
       # section, so a dependency can go missing with a zero exit status.
       # Cache Galaxy content keyed on requirements.yml. Exact hits refresh only
       # the floating homelab-contracts tag; misses force-install the requirements.
-      # Same key/paths as dryvist/.github's _ansible-ci.yml so a warm run of
+      # Same key/paths as JacobPEvans/.github's _ansible-ci.yml so a warm run of
       # either workflow warms the other.
       - name: Cache Ansible Galaxy content
         id: galaxy-cache
