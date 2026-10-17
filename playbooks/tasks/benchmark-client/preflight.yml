@@ -11,7 +11,7 @@
 - name: Read the GPU guest configuration for bridge, VLAN, and storage
   ansible.builtin.command:
     argv:
-      - qm
+      - pct
       - config
       - "{{ gpu_guest_vmid | string }}"
   register: benchmark_client_gpu_config
@@ -28,7 +28,7 @@
          | regex_replace('^net0:\s*', '') }}
     benchmark_client_source_disk: >-
       {{ benchmark_client_gpu_config.stdout_lines
-         | select('match', '^(scsi|virtio|sata|ide)[0-9]+:')
+         | select('match', '^rootfs:')
          | list | first | default('') }}
   when:
     - inventory_hostname == node
@@ -41,7 +41,7 @@
       - benchmark_client_source_disk | regex_search('^[^:]+:\s*[^:]+:.+$') is not none
     fail_msg: >-
       The selected guest must have a tagged bridge and a disk whose storage
-      can host the benchmark client.
+      can host the benchmark client (GPU guests are containers).
     quiet: true
   when:
     - inventory_hostname == node
