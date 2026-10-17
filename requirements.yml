@@ -34,7 +34,7 @@ collections:
   # renovate: datasource=git-refs depName=https://github.com/jpe-ansible/ansible-nautobot.git currentValue=main
   - name: https://github.com/jpe-ansible/ansible-nautobot.git
     type: git
-    version: 4c630c771cc92a8ea4975d9a3e87b54b10b328e6
+    version: 10171fee91eef0624c62fe156b97adbe688ac247
 
 # No `roles:` section — inventory_resolve comes from the collection above, by
 # FQCN, for the reason stated there. Its old git-scm `roles:` entry installed
