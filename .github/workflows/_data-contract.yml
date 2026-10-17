@@ -1,7 +1,7 @@
 ---
 # Repo-specific data-contract checks for ansible-proxmox.
 #
-# ansible-lint is centralized in dryvist/.github/_ansible-ci.yml and molecule
+# ansible-lint is centralized in JacobPEvans/.github/_ansible-ci.yml and molecule
 # lives in molecule.yml. The jobs here assert THIS repo's data contract: that
 # the published OpenTofu inventory resolves and loads, and that pve_ha derives
 # its replication targets correctly. Both are fixture-driven and cheap, so they
@@ -48,7 +48,7 @@ jobs:
       # Cache Galaxy content keyed on requirements.yml. On a hit the collections
       # (and any roles) are already present, so the install below is skipped;
       # on a miss (requirements.yml changed) it runs and repopulates the cache.
-      # Same key/paths as dryvist/.github's _ansible-ci.yml so a warm run of
+      # Same key/paths as JacobPEvans/.github's _ansible-ci.yml so a warm run of
       # either workflow warms the other.
       - name: Cache Ansible Galaxy content
         id: galaxy-cache

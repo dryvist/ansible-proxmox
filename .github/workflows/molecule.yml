@@ -123,7 +123,7 @@ jobs:
       # Cache Galaxy content keyed on requirements.yml. On a hit the collections
       # (and any roles) are already present, so the install below is skipped;
       # on a miss (requirements.yml changed) it runs and repopulates the cache.
-      # Same key/paths as dryvist/.github's _ansible-ci.yml so a warm run of
+      # Same key/paths as JacobPEvans/.github's _ansible-ci.yml so a warm run of
       # either workflow warms the other.
       - name: Cache Ansible Galaxy content
         id: galaxy-cache
