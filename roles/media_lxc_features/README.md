@@ -14,7 +14,7 @@ repo and installing collection dependencies:
 ```bash
 git clone https://github.com/dryvist/ansible-proxmox.git
 cd ansible-proxmox
-ansible-galaxy install -r requirements.yml --force
+ansible-galaxy install -r requirements.yml
 ```
 
 ## Why this role exists (the contract split)
