@@ -1,0 +1,136 @@
+---
+- name: Skip nodes other than the selected node
+  ansible.builtin.debug:
+    msg: "This request targets a different inventory node."
+  when: inventory_hostname != node
+- name: Read the target container config path
+  ansible.builtin.stat:
+    path: "{{ benchmark_client_config_path }}"
+  register: benchmark_client_target_file
+  when: inventory_hostname == node
+- name: Read the GPU guest configuration for bridge, VLAN, and storage
+  ansible.builtin.command:
+    argv:
+      - qm
+      - config
+      - "{{ gpu_guest_vmid | string }}"
+  register: benchmark_client_gpu_config
+  changed_when: false
+  check_mode: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+- name: Parse the source guest network and storage settings
+  ansible.builtin.set_fact:
+    benchmark_client_source_net0: >-
+      {{ (benchmark_client_gpu_config.stdout_lines
+          | select('match', '^net0:') | list | first | default(''))
+         | regex_replace('^net0:\s*', '') }}
+    benchmark_client_source_disk: >-
+      {{ benchmark_client_gpu_config.stdout_lines
+         | select('match', '^(scsi|virtio|sata|ide)[0-9]+:')
+         | list | first | default('') }}
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+- name: Require a source bridge, VLAN tag, and disk storage
+  ansible.builtin.assert:
+    that:
+      - benchmark_client_source_net0 | regex_findall('bridge=([^,]+)') | length == 1
+      - benchmark_client_source_net0 | regex_findall('tag=([^,]+)') | length == 1
+      - benchmark_client_source_disk | regex_search('^[^:]+:\s*[^:]+:.+$') is not none
+    fail_msg: >-
+      The selected guest must have a tagged bridge and a disk whose storage
+      can host the benchmark client.
+    quiet: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+- name: Derive the benchmark client bridge, VLAN, and storage
+  ansible.builtin.set_fact:
+    benchmark_client_bridge: "{{ benchmark_client_source_net0 | regex_findall('bridge=([^,]+)') | first }}"
+    benchmark_client_vlan: "{{ benchmark_client_source_net0 | regex_findall('tag=([^,]+)') | first }}"
+    benchmark_client_storage: "{{ benchmark_client_source_disk | regex_replace('^[^:]+:\\s*([^:]+):.*$', '\\1') }}"
+    benchmark_client_net0: >-
+      name=eth0,bridge={{ benchmark_client_source_net0 | regex_findall('bridge=([^,]+)') | first }},
+      tag={{ benchmark_client_source_net0 | regex_findall('tag=([^,]+)') | first }},firewall=1,ip=dhcp
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+- name: Read an existing client configuration
+  ansible.builtin.command:
+    argv:
+      - pct
+      - config
+      - "{{ vmid | string }}"
+  register: benchmark_client_existing_config
+  changed_when: false
+  check_mode: false
+  when:
+    - inventory_hostname == node
+    - benchmark_client_target_file.stat.exists
+- name: Derive the existing client tag
+  ansible.builtin.set_fact:
+    benchmark_client_existing_tags: >-
+      {{ (benchmark_client_existing_config.stdout_lines
+          | select('match', '^tags:') | list | first | default(''))
+         | regex_replace('^tags:\s*', '') }}
+  when:
+    - inventory_hostname == node
+    - benchmark_client_target_file.stat.exists
+- name: Refuse to change or destroy a client without its ownership tag
+  ansible.builtin.assert:
+    that:
+      - benchmark_client_existing_tags | regex_search('(^|;)benchmark-client($|;)') is not none
+    fail_msg: "The target guest exists without the benchmark-client ownership tag."
+    quiet: true
+  when:
+    - inventory_hostname == node
+    - benchmark_client_target_file.stat.exists
+- name: Read the existing client status
+  ansible.builtin.command:
+    argv:
+      - pct
+      - status
+      - "{{ vmid | string }}"
+  register: benchmark_client_status
+  changed_when: false
+  check_mode: false
+  when:
+    - inventory_hostname == node
+    - benchmark_client_target_file.stat.exists
+- name: Explain the absent check-mode result
+  ansible.builtin.debug:
+    msg: "Check mode found a tagged target; stop and destroy are skipped."
+  when:
+    - inventory_hostname == node
+    - state == 'absent'
+    - benchmark_client_target_file.stat.exists
+    - ansible_check_mode
+- name: Stop the tagged client before destruction
+  ansible.builtin.command:
+    argv:
+      - pct
+      - stop
+      - "{{ vmid | string }}"
+  changed_when: true
+  when:
+    - inventory_hostname == node
+    - state == 'absent'
+    - benchmark_client_target_file.stat.exists
+    - "'status: running' in benchmark_client_status.stdout"
+    - not ansible_check_mode
+- name: Destroy the tagged benchmark client
+  ansible.builtin.command:
+    argv:
+      - pct
+      - destroy
+      - "{{ vmid | string }}"
+      - --purge
+      - "1"
+  changed_when: true
+  when:
+    - inventory_hostname == node
+    - state == 'absent'
+    - benchmark_client_target_file.stat.exists
+    - not ansible_check_mode
