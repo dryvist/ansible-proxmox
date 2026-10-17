@@ -215,9 +215,23 @@
           changed_when: true
           loop: "{{ guest_recovery_pids }}"
 
+        # A killed task can sit with SIGKILL pending until the guest has memory to exit.
+        - name: Wait for the service cgroup to empty
+          ansible.builtin.command:
+            argv:
+              - cat
+              - "/sys/fs/cgroup/lxc/{{ vmid }}/ns/system.slice/{{ unit }}/cgroup.procs"
+          register: guest_recovery_cgroup_after_kill
+          changed_when: false
+          retries: 60
+          delay: 5
+          until: guest_recovery_cgroup_after_kill.stdout | trim == ''
+
         - name: Stop the service unit inside the guest
           ansible.builtin.command:
             argv:
+              - timeout
+              - "120"
               - pct
               - exec
               - "{{ vmid | string }}"
@@ -226,17 +240,6 @@
               - stop
               - "{{ unit }}"
           changed_when: true
-
-        - name: Wait for the service cgroup to empty
-          ansible.builtin.command:
-            argv:
-              - cat
-              - "/sys/fs/cgroup/lxc/{{ vmid }}/ns/system.slice/{{ unit }}/cgroup.procs"
-          register: guest_recovery_cgroup_after_kill
-          changed_when: false
-          retries: 10
-          delay: 1
-          until: guest_recovery_cgroup_after_kill.stdout | trim == ''
 
       always:
         - name: Restore the original guest memory setting
