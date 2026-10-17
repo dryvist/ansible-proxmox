@@ -1,0 +1,24 @@
+---
+- name: Verify NVIDIA power-limit profiles
+  hosts: all
+  gather_facts: false
+  connection: local
+
+  vars:
+    proxmox_user_from_tofu: test-read
+
+  tasks:
+    - name: Verify the selected profile resolves to its declared limit
+      ansible.builtin.assert:
+        that:
+          - nvidia_driver_power_limit_profile in nvidia_driver_power_limit_profiles_w
+          - >-
+            nvidia_driver_power_limit_w | int ==
+            nvidia_driver_power_limit_profiles_w[nvidia_driver_power_limit_profile] | int
+          - >-
+            nvidia_driver_power_limit_profile != 'default' or
+            nvidia_driver_power_limit_w | int == 300
+          - >-
+            nvidia_driver_power_limit_profile != 'benchmark' or
+            nvidia_driver_power_limit_w | int == 325
+      when: nvidia_driver_power_limit_profiles_w is defined
