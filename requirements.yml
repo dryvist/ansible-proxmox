@@ -13,7 +13,7 @@ collections:
   # Ceiling at <2.0.0: validate_certs default flips to true at 2.0.0; opt in
   # deliberately rather than inherit the change silently.
   - name: community.proxmox
-    version: ">=2.0.0,<2.1.0"
+    version: ">=2.1.0,<2.2.0"
 
   # Shared homelab roles (cribl_edge, cribl_packs, inventory_resolve). A
   # collection, not `roles:`
