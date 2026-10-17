@@ -68,7 +68,7 @@ server(s), and Proxmox VE 8.x.
 ```bash
 git clone https://github.com/JacobPEvans/ansible-proxmox.git
 cd ansible-proxmox
-ansible-galaxy install -r requirements.yml
+ansible-galaxy install -r requirements.yml --force
 cp inventory/hosts.yml.example inventory/hosts.yml
 # Edit inventory/hosts.yml with your server details
 ```
