@@ -67,10 +67,14 @@ nvidia_driver_gpu_burn_enabled: true
 nvidia_driver_gpu_burn_compute: "120"
 nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda-13.2
 
-# No cap: the card runs at its factory default limit (300 W). The last cap,
-# kept for reference if thermals regress:
-# nvidia_driver_power_limit_w: 270
-nvidia_driver_power_limit_w: null
+# The benchmark profile raises this GPU's power limit to the driver's 325 W
+# maximum. The default profile keeps the existing 300 W limit.
+nvidia_driver_power_limit_profile: default
+nvidia_driver_power_limit_profiles_w:
+  default: 300
+  benchmark: 325
+nvidia_driver_power_limit_w: >-
+  {{ nvidia_driver_power_limit_profiles_w[nvidia_driver_power_limit_profile] }}
 
 # Every core runs the performance governor.
 kernel_tuning_cpu_governor: performance

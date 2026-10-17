@@ -120,6 +120,7 @@ jobs:
         nvidia_driver:
           - 'roles/nvidia_driver/**'
           - 'molecule/nvidia_driver/**'
+          - 'tests/nvidia_driver/**'
         postgres_standby:
           - 'roles/postgres_standby/**'
           - 'molecule/postgres_standby/**'

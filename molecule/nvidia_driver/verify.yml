@@ -4,7 +4,13 @@
   become: false
   gather_facts: false
 
+  vars_files:
+    - ../../inventory/host_vars/pve-w5900.yml
+
   tasks:
+    - name: Verify power-limit profile selection
+      ansible.builtin.import_tasks: ../../tests/nvidia_driver/power_limit_profile_tasks.yml
+
     - name: Stat the artifacts the role manages
       ansible.builtin.stat:
         path: "{{ item }}"

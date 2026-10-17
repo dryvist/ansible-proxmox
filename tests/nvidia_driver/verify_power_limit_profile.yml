@@ -1,0 +1,12 @@
+---
+- name: Verify NVIDIA power-limit profiles
+  hosts: all
+  gather_facts: false
+  connection: local
+
+  vars:
+    proxmox_user_from_tofu: test-read
+
+  tasks:
+    - name: Verify power-limit profile selection
+      ansible.builtin.import_tasks: power_limit_profile_tasks.yml
