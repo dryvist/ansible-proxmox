@@ -11,7 +11,9 @@ IMAGES = ROOT / "playbooks/tasks/benchmark-client/images.yml"
 
 def test_client_pins_the_x86_64_vllm_image_by_default() -> None:
     playbook = yaml.safe_load(PLAYBOOK.read_text())
-    tools = playbook[0]["vars"]["benchmark_client_default_tools"]
+    assert playbook[0]["ansible.builtin.import_playbook"] == "load_tofu.yml"
+    validation = next(play for play in playbook if play["name"] == "Validate the benchmark client request")
+    tools = validation["vars"]["benchmark_client_default_tools"]
     assert tools["vllm_client_image"] == "vllm/vllm-openai-cpu:v0.31.0-x86_64"
 
 
@@ -27,3 +29,12 @@ def test_client_pulls_and_verifies_vllm_image_only_for_present_state() -> None:
     assert verify["ansible.builtin.assert"]["that"] == [
         "benchmark_client_vllm_image_verification.rc == 0"
     ]
+
+
+def test_engine_verification_can_be_skipped_for_an_offline_client() -> None:
+    tasks = yaml.safe_load(IMAGES.read_text())
+    engine_check = tasks[
+        [task["name"] for task in tasks].index("Verify the engine API responds from the client")
+    ]
+
+    assert "verify_engine | default(true) | bool" in engine_check["when"]

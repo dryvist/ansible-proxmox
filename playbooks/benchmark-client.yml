@@ -1,4 +1,7 @@
 ---
+- name: Load OpenTofu host services
+  ansible.builtin.import_playbook: load_tofu.yml
+
 - name: Validate the benchmark client request
   hosts: localhost
   connection: local

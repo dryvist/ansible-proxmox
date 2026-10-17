@@ -123,3 +123,4 @@
     - inventory_hostname == node
     - state == 'present'
     - not ansible_check_mode
+    - verify_engine | default(true) | bool
