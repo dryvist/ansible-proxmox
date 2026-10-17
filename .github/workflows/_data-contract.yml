@@ -45,10 +45,8 @@ jobs:
       # silently skips `collections:`, so either half on its own can leave the
       # play to fail later on a missing dependency. Passing `-p` also makes
       # `install` drop collections — so no install path here, deliberately.
-      # Cache Galaxy content keyed on requirements.yml. Exact hits refresh only
-      # the floating homelab-contracts tag; misses force-install the requirements.
-      # Same key/paths as dryvist/.github's _ansible-ci.yml so a warm run of
-      # either workflow warms the other.
+      # Cache Galaxy content keyed on requirements.yml; a hit refreshes only the
+      # floating homelab-contracts tag. Same key/paths as the central _ansible-ci.yml.
       - name: Cache Ansible Galaxy content
         id: galaxy-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
