@@ -92,7 +92,7 @@ jobs:
     needs: discover
     if: ${{ needs.discover.outputs.scenarios != '[]' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 15 }}
     strategy:
       # LOAD-BEARING. These ran as serial steps in one job, so the first failing
       # scenario left every later one `skipped` — and in a run listing a skipped
