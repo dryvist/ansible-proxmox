@@ -54,3 +54,24 @@ def test_proxmox_benchmark_upgrade_converges_driver_and_checks_kernel_mismatch()
     condition = " ".join(reboot["when"])
     assert "ansible_kernel != pve_upgrade_kernel_version" in condition
     assert "pve_upgrade_result is changed" in condition
+
+
+def test_pve_upgrade_preserves_the_major_version_without_a_version_pin() -> None:
+    defaults = yaml.safe_load((ROOT / "roles/pve_upgrade/defaults/main.yml").read_text())
+    tasks = yaml.safe_load((ROOT / "roles/pve_upgrade/tasks/main.yml").read_text())
+    block = next(
+        task["block"]
+        for task in tasks
+        if task["name"] == "Upgrade the node, always returning it to normal HA scheduling"
+    )
+    names = [task["name"] for task in block]
+    before = block[names.index("Query Proxmox VE version before the package upgrade")]
+    after = block[names.index("Query Proxmox VE version")]
+
+    assert "pve_upgrade_expected_version" not in defaults
+    assert before["ansible.builtin.command"]["cmd"] == "pveversion"
+    assert after["ansible.builtin.command"]["cmd"] == "pveversion"
+    assert before["when"] == "not ansible_check_mode"
+    assert after["when"] == "not ansible_check_mode"
+    assert names.index(before["name"]) < names.index("Update apt cache")
+    assert "Require the Proxmox VE major version to remain unchanged" in names

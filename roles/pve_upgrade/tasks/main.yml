@@ -80,6 +80,13 @@
   tags:
     - pve_upgrade
   block:
+    - name: Query Proxmox VE version before the package upgrade
+      ansible.builtin.command:
+        cmd: pveversion
+      register: pve_upgrade_pveversion_before
+      changed_when: false
+      when: not ansible_check_mode
+
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: true
@@ -153,10 +160,42 @@
           {{ pve_upgrade_kernel_version }}; refusing to reboot.
       when: nvidia_driver_enabled | default(false) | bool
 
+    - name: Recheck quorum headroom before this node reboots
+      ansible.builtin.include_role:
+        name: pve_quorum_guard
+      when: pve_upgrade_reboot | bool
+
+    - name: Read cluster vote membership before reboot
+      ansible.builtin.command:
+        cmd: pvecm status
+      register: pve_upgrade_cluster_status_before_reboot
+      changed_when: false
+      check_mode: false
+      when: pve_upgrade_reboot | bool
+
+    - name: Require every configured vote before reboot
+      ansible.builtin.assert:
+        that:
+          - pve_upgrade_cluster_status_before_reboot.stdout is search('Quorate:\s+Yes')
+          - >-
+            (pve_upgrade_cluster_status_before_reboot.stdout
+            | regex_findall('Expected votes:\s+(\d+)') | first | default('0') | int)
+            == pve_quorum_guard_highest_expected | int
+          - >-
+            (pve_upgrade_cluster_status_before_reboot.stdout
+            | regex_findall('Total votes:\s+(\d+)') | first | default('0') | int)
+            == pve_quorum_guard_highest_expected | int
+        fail_msg: >-
+          Refusing to reboot until pvecm status reports a quorate cluster with
+          every configured vote present.
+        quiet: true
+      when: pve_upgrade_reboot | bool
+
     - name: Reboot when the running kernel differs from the selected installed kernel
       ansible.builtin.reboot:
         reboot_timeout: "{{ pve_upgrade_reboot_timeout | int }}"
         msg: Reboot triggered by ansible pve_upgrade role
+      register: pve_upgrade_reboot_result
       when:
         - pve_upgrade_reboot | bool
         - >-
@@ -166,6 +205,46 @@
           (pve_upgrade_kernel_version is none
            and (pve_upgrade_result is changed
                 or pve_upgrade_kernel_packages_result is changed))
+
+    - name: Wait for quorum and every expected vote after reboot
+      ansible.builtin.command:
+        cmd: pvecm status
+      register: pve_upgrade_cluster_status_after_reboot
+      until:
+        - pve_upgrade_cluster_status_after_reboot.stdout is search('Quorate:\s+Yes')
+        - >-
+          (pve_upgrade_cluster_status_after_reboot.stdout
+          | regex_findall('Expected votes:\s+(\d+)') | first | default('0') | int)
+          == pve_quorum_guard_highest_expected | int
+        - >-
+          (pve_upgrade_cluster_status_after_reboot.stdout
+          | regex_findall('Total votes:\s+(\d+)') | first | default('0') | int)
+          == pve_quorum_guard_highest_expected | int
+      retries: "{{ pve_upgrade_reboot_timeout | int // 10 }}"
+      delay: 10
+      changed_when: false
+      check_mode: false
+
+    - name: Wait for HA resources to clear error and fence states
+      ansible.builtin.command:
+        cmd: pvesh get /cluster/ha/resources --output-format json
+      register: pve_upgrade_ha_resources_after_reboot
+      until: >-
+        pve_upgrade_ha_resources_after_reboot.rc == 0
+        and
+        (pve_upgrade_ha_resources_after_reboot.stdout | from_json
+        | selectattr('status', 'defined')
+        | selectattr('status', 'search', '(?i)(error|fenc)')
+        | list | length == 0)
+        and
+        (pve_upgrade_ha_resources_after_reboot.stdout | from_json
+        | selectattr('state', 'defined')
+        | selectattr('state', 'search', '(?i)(error|fenc)')
+        | list | length == 0)
+      retries: "{{ pve_upgrade_reboot_timeout | int // 10 }}"
+      delay: 10
+      changed_when: false
+      check_mode: false
 
     # pveversion is read-only, but skip the verify in check mode: a dry run has
     # not actually upgraded anything, so asserting the new version would falsely
@@ -177,14 +256,31 @@
       changed_when: false
       when: not ansible_check_mode
 
-    - name: Assert the node is on the expected PVE version
+    - name: Require both pveversion outputs to include a major version
       ansible.builtin.assert:
         that:
-          - pve_upgrade_expected_version in pve_upgrade_pveversion.stdout
+          - pve_upgrade_pveversion_before.stdout | regex_findall('pve-manager/([0-9]+)') | length == 1
+          - pve_upgrade_pveversion.stdout | regex_findall('pve-manager/([0-9]+)') | length == 1
+        fail_msg: >-
+          Could not read the Proxmox VE major version before and after the
+          upgrade.
+        quiet: true
+      when: not ansible_check_mode
+
+    - name: Require the Proxmox VE major version to remain unchanged
+      ansible.builtin.assert:
+        that:
+          - >-
+            (pve_upgrade_pveversion_before.stdout
+            | regex_findall('pve-manager/([0-9]+)') | first | int)
+            ==
+            (pve_upgrade_pveversion.stdout
+            | regex_findall('pve-manager/([0-9]+)') | first | int)
         success_msg: "pveversion reports {{ pve_upgrade_pveversion.stdout }}"
         fail_msg: >-
-          Expected '{{ pve_upgrade_expected_version }}' in pveversion output but got:
-          {{ pve_upgrade_pveversion.stdout | default('(pveversion not run)') }}
+          pveversion major version changed from
+          {{ pve_upgrade_pveversion_before.stdout }} to
+          {{ pve_upgrade_pveversion.stdout }}.
       when: not ansible_check_mode
 
   always:
