@@ -17,5 +17,4 @@ def test_client_installs_docker_engine_and_cli() -> None:
     )
     argv = install["ansible.builtin.command"]["argv"]
 
-    assert "docker.io" in argv
-    assert "docker-cli" in argv
+    assert {"docker.io", "docker-cli"} <= set(argv)
