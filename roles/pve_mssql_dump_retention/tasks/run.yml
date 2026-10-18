@@ -1,0 +1,13 @@
+---
+- name: Prepare SQL Server dump retention candidates
+  ansible.builtin.import_tasks: prepare.yml
+
+- name: Archive and prune verified dump directories
+  ansible.builtin.include_tasks: archive_one.yml
+  loop: "{{ pve_mssql_dump_retention_sized_candidates }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: not pve_mssql_dump_retention_dry_run
+
+- name: Report SQL Server dump retention totals
+  ansible.builtin.import_tasks: report.yml

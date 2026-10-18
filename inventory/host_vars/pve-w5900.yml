@@ -15,6 +15,9 @@
 #
 # The onboard uplink is pinned by permanent MAC to nic0. The bridge and
 # Wake-on-LAN role resolves the current kernel name from the same MAC.
+fan_control: true
+fan_control_active_mode: benchmark-100
+
 wol_enable_enabled: true
 wol_enable_interface: nic0
 wol_enable_mac: "{{ pve_host_network_uplink_mac }}"
@@ -36,6 +39,16 @@ pve_host_network_uplink_mac: "10:ff:e0:c4:32:db"
 # not per-host, because host and guest userspace must match exactly and a
 # per-host override would let this node's pin drift from pve-w1700's.
 
+# Enable the host-admin login on this node and on GPU guests placed here.
+local_identities_host_admin_enabled: true
+ssh_ca_trust_principals_host_overrides: >-
+  {{ {host_admin_user: ssh_ca_trust_host_admin_principals} }}
+ssh_ca_trust_host_admin_guest_tags:
+  - gpu-passthrough
+  - llm-gpu
+  - llm-vllm
+  - nvidia-gpu
+
 # Keep the boot kernel, its headers, and DKMS build on the same tested ABI.
 # renovate: ignore — hold the NVIDIA-tested kernel ABI until a later DKMS pair is validated.
 pve_upgrade_kernel_version: "7.0.14-8-pve"
@@ -54,10 +67,14 @@ nvidia_driver_gpu_burn_enabled: true
 nvidia_driver_gpu_burn_compute: "120"
 nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda-13.2
 
-# No cap: the card runs at its factory default limit (300 W). The last cap,
-# kept for reference if thermals regress:
-# nvidia_driver_power_limit_w: 270
-nvidia_driver_power_limit_w: null
+# The benchmark profile raises this GPU's power limit to the driver's 325 W
+# maximum. The default profile keeps the existing 300 W limit.
+nvidia_driver_power_limit_profile: default
+nvidia_driver_power_limit_profiles_w:
+  default: 300
+  benchmark: 325
+nvidia_driver_power_limit_w: >-
+  {{ nvidia_driver_power_limit_profiles_w[nvidia_driver_power_limit_profile] }}
 
 # Every core runs the performance governor.
 kernel_tuning_cpu_governor: performance

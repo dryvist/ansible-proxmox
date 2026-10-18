@@ -60,3 +60,18 @@ sanoid_templates:
 #     "rpool/data/nas": { use_template: critical, recursive: "yes" }
 #     "nvme1/siem/cribl-pq": { use_template: scratch }
 sanoid_datasets: {}
+
+# Optional retention policy for live syncoid replica targets.
+sanoid_replica_retention_enabled: false
+sanoid_replica_datasets: {}
+sanoid_replica_templates:
+  replica:
+    autosnap: "no"
+    autoprune: "yes"
+    frequently: 0
+    # The newest hourly is the newest replicated instant.
+    hourly: 1
+    daily: 14
+    weekly: 0
+    monthly: 6
+    yearly: 0

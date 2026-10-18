@@ -37,6 +37,49 @@
     ssh_ca_trust_lxc_running: "{{ ssh_ca_trust_lxc_running_raw.stdout_lines }}"
     ssh_ca_trust_lxc_stopped: "{{ ssh_ca_trust_lxc_stopped_raw.stdout_lines }}"
 
+- name: Select host-admin GPU guests from the published inventory
+  ansible.builtin.set_fact:
+    ssh_ca_trust_host_admin_guest_vmids: >-
+      {%- set ns = namespace(vmids=[]) -%}
+      {%- for guest in (containers_from_tofu | default({}, true) | dict2items) -%}
+        {%- if guest.value.node | default('') == (proxmox_node_name | default(inventory_hostname))
+              and guest.value.ansible_pct_vmid is defined
+              and ((guest.value.tags | default([]))
+                   | intersect(ssh_ca_trust_host_admin_guest_tags | default([]))
+                   | length > 0) -%}
+          {%- set ns.vmids = ns.vmids + [guest.value.ansible_pct_vmid | string] -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.vmids | to_json | from_json }}
+
+- name: Add running host-admin GPU guests to account convergence
+  ansible.builtin.add_host:
+    name: "{{ item.key }}"
+    groups: host_admin_gpu_guests
+    ansible_host: "{{ ansible_host }}"
+    ansible_connection: community.proxmox.proxmox_pct_remote
+    ansible_user: root
+    ansible_ssh_private_key_file: "{{ lookup('env', 'PROXMOX_SSH_KEY_PATH') | default(omit, true) }}"
+    proxmox_vmid: "{{ item.value.ansible_pct_vmid }}"
+    access_verification_host: "{{ item.value.fqdn }}"
+    host_admin_user: "{{ host_admin_user }}"
+    local_identities_jevans_enabled: false
+    local_identities_admin_enabled: false
+    local_identities_host_admin_enabled: true
+  loop: "{{ containers_from_tofu | default({}, true) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - item.value.ansible_pct_vmid is defined
+    - item.value.fqdn is defined
+    - item.value.node | default('') == (proxmox_node_name | default(inventory_hostname))
+    - item.value.ansible_pct_vmid | string in ssh_ca_trust_lxc_running
+    - >-
+      (item.value.tags | default([])
+       | intersect(ssh_ca_trust_host_admin_guest_tags | default([]))
+       | length) > 0
+  changed_when: false
+
 - name: Report stopped containers as CA-trust blockers
   ansible.builtin.debug:
     msg: >-
@@ -93,6 +136,12 @@
       printf '%s\n' {% for principal in principals %}"{{ principal }}" {% endfor %}\
         | pct exec {{ item }} -- tee {{ ssh_ca_trust_principals_dir }}/{{ user }} > /dev/null
       {% endfor %}
+      {% if item | string in ssh_ca_trust_host_admin_guest_vmids %}
+      printf '%s\n' {% for principal in ssh_ca_trust_host_admin_principals %}"{{ principal }}" {% endfor %}\
+        | pct exec {{ item }} -- tee {{ ssh_ca_trust_principals_dir }}/{{ ssh_ca_trust_host_admin_user }} > /dev/null
+      {% else %}
+      pct exec {{ item }} -- rm -f {{ ssh_ca_trust_principals_dir }}/{{ ssh_ca_trust_host_admin_user }}
+      {% endif %}
       # Best-effort, non-fatal: install openssh-server only on an apt-based
       # guest that doesn't already have it. A non-apt guest (e.g. an
       # "unmanaged" NixOS container) or one whose install fails is left alone
@@ -156,7 +205,7 @@
         echo "$effective" | grep -qx 'passwordauthentication no' || fail=1
         echo "$effective" | grep -qx 'kbdinteractiveauthentication no' || fail=1
         echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}' || fail=1
-        echo "$effective" | grep -qx "allowusers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra) | join(' ') }}" || fail=1
+        echo "$effective" | grep -qx "allowusers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra + ([ssh_ca_trust_host_admin_user] if item | string in ssh_ca_trust_host_admin_guest_vmids else [])) | unique | join(' ') }}" || fail=1
         {% if ssh_ca_trust_host_cert_enabled | bool %}
         echo "$effective" | grep -qF 'hostcertificate {{ ssh_ca_trust_host_cert_path }}' || fail=1
         {% endif %}

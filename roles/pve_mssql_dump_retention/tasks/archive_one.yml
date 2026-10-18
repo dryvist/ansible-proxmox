@@ -1,0 +1,98 @@
+---
+- name: Set paths for the selected dump directory
+  ansible.builtin.set_fact:
+    pve_mssql_dump_retention_current_name: "{{ item.path | basename }}"
+    pve_mssql_dump_retention_current_archive: >-
+      {{ pve_mssql_dump_retention_archive_dir }}/{{ item.path | basename }}.tar.zst
+    pve_mssql_dump_retention_current_partial: >-
+      {{ pve_mssql_dump_retention_archive_dir }}/{{ item.path | basename }}.tar.zst.partial
+
+- name: Inspect an existing final archive
+  ansible.builtin.stat:
+    path: "{{ pve_mssql_dump_retention_current_archive }}"
+    follow: false
+  register: pve_mssql_dump_retention_final_stat
+
+- name: Require an existing final archive to be a regular file
+  ansible.builtin.assert:
+    that:
+      - pve_mssql_dump_retention_final_stat.stat.isreg | default(false)
+      - not (pve_mssql_dump_retention_final_stat.stat.islnk | default(false))
+    fail_msg: "An existing final archive path is not a regular file."
+    quiet: true
+  when: pve_mssql_dump_retention_final_stat.stat.exists
+
+- name: Verify a pre-existing final archive before pruning its source
+  ansible.builtin.include_tasks: verify_archive.yml
+  vars:
+    pve_mssql_dump_retention_verify_archive: "{{ pve_mssql_dump_retention_current_archive }}"
+    pve_mssql_dump_retention_verify_source: "{{ item.path }}"
+    pve_mssql_dump_retention_verify_member: "{{ pve_mssql_dump_retention_current_name }}"
+  when: pve_mssql_dump_retention_final_stat.stat.exists
+
+- name: Inspect any previous partial archive
+  ansible.builtin.stat:
+    path: "{{ pve_mssql_dump_retention_current_partial }}"
+    follow: false
+  register: pve_mssql_dump_retention_partial_stat
+  when: not pve_mssql_dump_retention_final_stat.stat.exists
+
+- name: Require a previous partial archive to be a regular file
+  ansible.builtin.assert:
+    that:
+      - pve_mssql_dump_retention_partial_stat.stat.isreg | default(false)
+      - not (pve_mssql_dump_retention_partial_stat.stat.islnk | default(false))
+    fail_msg: "An existing partial archive path is not a regular file."
+    quiet: true
+  when:
+    - not pve_mssql_dump_retention_final_stat.stat.exists
+    - pve_mssql_dump_retention_partial_stat.stat.exists | default(false)
+
+- name: Create a compressed archive from the selected dump directory
+  ansible.builtin.command:
+    argv:
+      - tar
+      - --zstd
+      - --create
+      - --file
+      - "{{ pve_mssql_dump_retention_current_partial }}"
+      - --directory
+      - "{{ pve_mssql_dump_retention_source_dir }}"
+      - --
+      - "{{ pve_mssql_dump_retention_current_name }}"
+  register: pve_mssql_dump_retention_tar_create
+  changed_when: true
+  failed_when: pve_mssql_dump_retention_tar_create.rc != 0
+  when: not pve_mssql_dump_retention_final_stat.stat.exists
+
+- name: Verify the partial archive before finalizing it
+  ansible.builtin.include_tasks: verify_archive.yml
+  vars:
+    pve_mssql_dump_retention_verify_archive: "{{ pve_mssql_dump_retention_current_partial }}"
+    pve_mssql_dump_retention_verify_source: "{{ item.path }}"
+    pve_mssql_dump_retention_verify_member: "{{ pve_mssql_dump_retention_current_name }}"
+  when: not pve_mssql_dump_retention_final_stat.stat.exists
+
+- name: Atomically move the verified partial archive into place
+  ansible.builtin.command:
+    argv:
+      - mv
+      - --no-target-directory
+      - --
+      - "{{ pve_mssql_dump_retention_current_partial }}"
+      - "{{ pve_mssql_dump_retention_current_archive }}"
+  register: pve_mssql_dump_retention_archive_move
+  changed_when: pve_mssql_dump_retention_archive_move.rc == 0
+  failed_when: pve_mssql_dump_retention_archive_move.rc != 0
+  when: not pve_mssql_dump_retention_final_stat.stat.exists
+
+- name: Remove exactly the verified source dump directory
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+
+- name: Record the successfully pruned dump directory
+  ansible.builtin.set_fact:
+    pve_mssql_dump_retention_archived: >-
+      {{ pve_mssql_dump_retention_archived +
+      [{'name': pve_mssql_dump_retention_current_name, 'bytes': item.bytes}] }}

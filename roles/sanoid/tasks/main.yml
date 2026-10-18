@@ -3,6 +3,37 @@
 # Package install and the systemd timer are skipped under Docker (molecule);
 # config rendering still runs so the contract can be verified in-container.
 
+- name: Validate replica retention targets
+  ansible.builtin.assert:
+    that:
+      - sanoid_replica_job_targets | length > 0
+      - sanoid_replica_job_targets | select('match', '^bulk/replica/') | length == sanoid_replica_job_targets | length
+    fail_msg: "Replica retention requires non-empty syncoid targets under bulk/replica/."
+  vars:
+    sanoid_replica_job_targets: "{{ syncoid_jobs | default([]) | map(attribute='target') | list }}"
+  when: sanoid_replica_retention_enabled
+  tags:
+    - sanoid
+
+- name: Add live replica datasets to the retention policy
+  ansible.builtin.set_fact:
+    sanoid_replica_datasets: >-
+      {{
+        sanoid_replica_datasets | combine({
+          item.target: {'use_template': 'replica'} |
+          combine(
+            {'recursive': 'yes'}
+            if '--recursive' in sanoid_replica_job_options.split() else {}
+          )
+        })
+      }}
+  vars:
+    sanoid_replica_job_options: "{{ item.options | default(syncoid_default_options | default('')) }}"
+  loop: "{{ syncoid_jobs | default([]) }}"
+  when: sanoid_replica_retention_enabled
+  tags:
+    - sanoid
+
 - name: Install sanoid
   ansible.builtin.apt:
     name: "{{ sanoid_package }}"

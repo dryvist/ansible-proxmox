@@ -42,9 +42,8 @@ ssh_ca_trust_extra_ca_keys: []
 
 # principal -> login-user map for THIS host class (per-group data,
 # default-deny: a principal reaches a user only where a group opts in).
-# PVE-node default: only the `ansible` principal may become root. The
-# `ai-agent` principal is NEVER a hypervisor root — it maps to guest-level
-# accounts on hosts that opt in via group_vars.
+# PVE-node default: only the `ansible` principal may become root. Additional
+# access-tier mappings are supplied by inventory on explicitly selected hosts.
 ssh_ca_trust_principals:
   root: [ansible]
 
@@ -63,6 +62,10 @@ ssh_ca_trust_lxc_principals:
 # PLUS this list, so such a container isn't silently locked out by a
 # principal map that only covers the automation login.
 ssh_ca_trust_lxc_allow_users_extra: []
+
+ssh_ca_trust_host_admin_user: host-admin
+ssh_ca_trust_host_admin_principals: [ai-agent]
+ssh_ca_trust_host_admin_guest_vmids: []
 
 # Per-container hardened-sshd readiness, keyed by CTID, populated by
 # tasks/lxc.yml. A role default (not a mid-task set_fact) so it stays a

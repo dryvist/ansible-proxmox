@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.0](https://github.com/dryvist/ansible-proxmox/compare/v2.25.0...v2.26.0) (2026-10-15)
+
+
+### Features
+
+* **pve_mssql_dump_retention:** archive then prune SQL Server dump directories ([#1062](https://github.com/dryvist/ansible-proxmox/issues/1062)) ([72a7ed8](https://github.com/dryvist/ansible-proxmox/commit/72a7ed8e224762b858ea550ee996141cfdf9b501))
+* **sanoid:** add opt-in retention policy for syncoid replica targets ([#1061](https://github.com/dryvist/ansible-proxmox/issues/1061)) ([ad734fb](https://github.com/dryvist/ansible-proxmox/commit/ad734fb38687734725d7c3155f855a373b1959f7))
+
+
+### Bug Fixes
+
+* **pve_mssql_dump_retention:** read the mount table with findmnt ([5ff33d3](https://github.com/dryvist/ansible-proxmox/commit/5ff33d323e5bb86a4483ce86e572747bcce5e2d8))
+* **pve_mssql_dump_retention:** read the mount table with findmnt ([#1065](https://github.com/dryvist/ansible-proxmox/issues/1065)) ([2cb123c](https://github.com/dryvist/ansible-proxmox/commit/2cb123c6d28fc45fbdcc33ac40853a748fc33730))
+* **pve_mssql_dump_retention:** refresh mount facts before the mount assertion ([#1064](https://github.com/dryvist/ansible-proxmox/issues/1064)) ([b88b670](https://github.com/dryvist/ansible-proxmox/commit/b88b6707e3747b42e9d6cba04c9fa0eabf8616ae))
+
 ## [2.25.0](https://github.com/dryvist/ansible-proxmox/compare/v2.24.0...v2.25.0) (2026-10-14)
 
 

@@ -29,6 +29,11 @@ pve_ha_enabled: true
 # built from Tofu node tags in playbooks/load_tofu.yml.
 nvidia_driver_enabled: "{{ 'nvidia_gpu_nodes' in group_names }}"
 
+# Access-tier login used where inventory explicitly enables this account.
+host_admin_user: host-admin
+ssh_ca_trust_host_admin_principals: [ai-agent]
+ssh_ca_trust_host_admin_guest_tags: []
+
 # Cribl Edge's native GPU metrics require NVIDIA's nvidia-smi utility. Reuse the
 # driver opt-in derived from the node's NVIDIA capability group.
 cribl_edge_gpu_mode: >-
@@ -38,8 +43,9 @@ cribl_edge_gpu_mode: >-
 # containers (ssh-certificate-authority ADR). Additive + lockout-guarded (a
 # static break-glass key must still authenticate before the role finishes) and
 # the pinned SSH_CA_FINGERPRINT is verified fail-closed. Principals are
-# deny-by-default: PVE root:[ansible], LXC root:[ansible] — ai-agent is never a
-# hypervisor root. Stopped containers are reported as blockers, not failures.
+# deny-by-default: PVE and LXC root:[ansible,semaphore]. The host-admin account
+# accepts ai-agent only where inventory opts in. Stopped containers are
+# reported as blockers, not failures.
 ssh_ca_trust_rollout_enabled: true
 # Also issue CA-signed SSH host certificates to the nodes and their running
 # containers, so clients trust one @cert-authority line instead of pinning

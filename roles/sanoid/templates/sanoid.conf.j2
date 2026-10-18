@@ -1,13 +1,17 @@
 # Managed by Ansible — do not edit manually.
 # ZFS snapshot retention (sanoid). https://github.com/jimsalterjrs/sanoid
-{% for tname, opts in sanoid_templates | dictsort %}
+{% set rendered_templates = sanoid_templates | combine(
+  sanoid_replica_templates if sanoid_replica_retention_enabled else {}
+) %}{% for tname, opts in rendered_templates | dictsort %}
 
 [template_{{ tname }}]
 {% for k, v in opts | dictsort %}
         {{ k }} = {{ v }}
 {% endfor %}
 {% endfor %}
-{% for ds, opts in sanoid_datasets | dictsort %}
+{% set rendered_datasets = sanoid_datasets | combine(
+  sanoid_replica_datasets if sanoid_replica_retention_enabled else {}
+) %}{% for ds, opts in rendered_datasets | dictsort %}
 
 [{{ ds }}]
 {% for k, v in opts | dictsort %}

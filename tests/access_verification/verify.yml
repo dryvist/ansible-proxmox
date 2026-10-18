@@ -1,0 +1,113 @@
+---
+- name: Load the published guest inventory
+  import_playbook: ../../playbooks/load_tofu.yml
+
+- name: Verify scoped SSH access and report pending service identities
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    # Each service stays pending until its OpenBao path and safe API read/write
+    # contract are provisioned. Pending entries keep the verdict non-zero.
+    access_service_cases:
+      - {name: grafana-read, status: pending}
+      - {name: metrics-read, status: pending}
+      - {name: logs-read, status: pending}
+      - {name: cribl-read, status: pending}
+      - {name: traces-read, status: pending}
+      - {name: clickhouse-read, status: pending}
+      - {name: langfuse-read, status: pending}
+      - {name: splunk-read, status: pending}
+      - {name: nautobot-read, status: pending, login: svc-mcp-ro}
+    access_service_probe_results: []
+  tasks:
+    - name: Require the target node and signing inputs
+      ansible.builtin.assert:
+        that:
+          - "'pve-w5900' in groups['proxmox']"
+          - hostvars['pve-w5900'].local_identities_host_admin_enabled | bool
+          - hostvars['pve-w5900'].ssh_ca_trust_host_admin_guest_tags | length > 0
+          - lookup('ansible.builtin.env', 'SSH_ACCESS_MAC_HOST') | length > 0
+          - lookup('ansible.builtin.env', 'SSH_KNOWN_HOSTS') | length > 0
+          - lookup('ansible.builtin.env', 'VAULT_ADDR') | length > 0
+          - lookup('ansible.builtin.env', 'OPENBAO_APPROLE_AGENT_SSH_SIGN_ROLE_ID') | length > 0
+          - lookup('ansible.builtin.env', 'OPENBAO_APPROLE_AGENT_SSH_SIGN_SECRET_ID') | length > 0
+        fail_msg: >-
+          Access verification needs the opted-in PVE node, its published guest
+          inventory, the Mac target, pinned host keys, and the documented
+          short-lived SSH signing inputs.
+
+    - name: Select the opted-in GPU guests from the published inventory
+      ansible.builtin.set_fact:
+        access_gpu_guests_json: >-
+          {%- set node = hostvars['pve-w5900'] -%}
+          {%- set rows = namespace(items=[]) -%}
+          {%- for guest in (hostvars['localhost'].tofu_data.containers | default({}, true) | dict2items) -%}
+            {%- if guest.value.node | default('') == node.proxmox_node_name
+                  and guest.value.fqdn is defined
+                  and guest.value.ansible_pct_vmid is defined
+                  and ((guest.value.tags | default([]))
+                       | intersect(node.ssh_ca_trust_host_admin_guest_tags)
+                       | length > 0) -%}
+              {%- set rows.items = rows.items + [{
+                    'name': 'gpu_guest_' ~ (rows.items | length + 1),
+                    'host': guest.value.fqdn,
+                    'login': node.host_admin_user
+                  }] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ rows.items | to_json }}
+
+    - name: Decode the GPU guest targets
+      ansible.builtin.set_fact:
+        access_gpu_guests: "{{ access_gpu_guests_json | from_json }}"
+
+    - name: Require at least one published GPU guest
+      ansible.builtin.assert:
+        that:
+          - access_gpu_guests | length > 0
+        fail_msg: The published inventory has no opted-in GPU guests to verify.
+
+    - name: Build the access target list
+      ansible.builtin.set_fact:
+        access_ssh_targets: >-
+          {{ [
+               {
+                 'name': 'pve_host',
+                 'host': hostvars['pve-w5900'].ansible_host,
+                 'login': hostvars['pve-w5900'].host_admin_user
+               },
+               {
+                 'name': 'mac_studio',
+                 'host': lookup('ansible.builtin.env', 'SSH_ACCESS_MAC_HOST'),
+                 'login': hostvars['pve-w5900'].host_admin_user
+               }
+             ] + access_gpu_guests }}
+
+    - name: Run the access probes
+      block:
+        - name: Run the certificate and service identity checks
+          ansible.builtin.include_tasks: probes.yml
+      always:
+        - name: Revoke the temporary OpenBao token
+          ansible.builtin.uri:
+            url: "{{ lookup('ansible.builtin.env', 'VAULT_ADDR') }}/v1/auth/token/revoke-self"
+            method: POST
+            headers:
+              X-Vault-Token: "{{ access_bao_login.json.auth.client_token }}"
+            status_code: [200, 204]
+          when:
+            - access_bao_login is defined
+            - access_bao_login.json | default({}) is mapping
+            - access_bao_login.json.auth | default({}) is mapping
+            - access_bao_login.json.auth.client_token | default('') | length > 0
+          no_log: true
+
+        - name: Remove the temporary key and certificate
+          ansible.builtin.file:
+            path: "{{ access_work.path }}"
+            state: absent
+          when:
+            - access_work is defined
+            - access_work.path is defined

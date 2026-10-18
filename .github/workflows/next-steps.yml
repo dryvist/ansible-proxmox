@@ -20,5 +20,5 @@ concurrency:
 
 jobs:
   next-steps:
-    uses: dryvist/ai-workflows/.github/workflows/cc-next-steps.yml@70d7a6ad0d566017d6c063c5786b997084f3f5c4 # v0.48.7
+    uses: JacobPEvans/.github-ai/.github/workflows/cc-next-steps.yml@v1
     secrets: inherit

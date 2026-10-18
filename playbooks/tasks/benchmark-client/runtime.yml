@@ -1,0 +1,222 @@
+---
+- name: Update package indexes in the client
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - apt-get
+      - update
+  register: benchmark_client_apt_update
+  changed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Upgrade all benchmark-client packages
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - env
+      - DEBIAN_FRONTEND=noninteractive
+      - apt-get
+      - full-upgrade
+      - --yes
+  register: benchmark_client_apt_upgrade
+  changed_when: "'0 upgraded' not in benchmark_client_apt_upgrade.stdout"
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Install Docker and benchmark runtime prerequisites
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - env
+      - DEBIAN_FRONTEND=noninteractive
+      - apt-get
+      - install
+      - --yes
+      - --no-install-recommends
+      - ca-certificates
+      - curl
+      - docker.io
+      - docker-cli
+      - python3
+      - python3-venv
+  register: benchmark_client_apt_install
+  changed_when: >-
+    'Unpacking ' in benchmark_client_apt_install.stdout or
+    'Setting up ' in benchmark_client_apt_install.stdout
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Read Docker service state
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - systemctl
+      - "{{ item }}"
+      - docker
+  loop:
+    - is-active
+    - is-enabled
+  register: benchmark_client_docker_state
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Enable and start Docker when inactive
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - systemctl
+      - enable
+      - --now
+      - docker
+  register: benchmark_client_docker_enable
+  changed_when: >-
+    benchmark_client_docker_state.results[0].stdout != 'active' or
+    benchmark_client_docker_state.results[1].stdout != 'enabled'
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - >-
+      benchmark_client_docker_state.results[0].stdout != 'active' or
+      benchmark_client_docker_state.results[1].stdout != 'enabled'
+    - not ansible_check_mode
+  failed_when: benchmark_client_docker_enable.rc != 0
+- name: Read the installed uv version
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - /usr/local/bin/uv
+      - --version
+  register: benchmark_client_uv_version
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Install the pinned uv release when needed
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - bash
+      - -euo
+      - pipefail
+      - -c
+      - >-
+        curl --proto '=https' --tlsv1.2 -LsSf
+        https://astral.sh/uv/{{ benchmark_client_tools.uv }}/install.sh
+        | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
+  changed_when: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - benchmark_client_uv_version.rc != 0 or benchmark_client_uv_version.stdout.split()[:2] | join(' ') != 'uv ' ~ benchmark_client_tools.uv
+    - not ansible_check_mode
+- name: Read the installed Node version
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - /usr/local/bin/node
+      - --version
+  register: benchmark_client_node_version
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Install the pinned Node release when needed
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - bash
+      - -euo
+      - pipefail
+      - -c
+      - |
+        version='{{ benchmark_client_tools.node }}'
+        archive="node-v${version}-linux-x64.tar.xz"
+        temporary_directory="$(mktemp -d)"
+        trap 'rm -rf "$temporary_directory"' EXIT
+        cd "$temporary_directory"
+        curl -fsSLo "${temporary_directory}/${archive}" "https://nodejs.org/dist/v${version}/${archive}"
+        curl -fsSL "https://nodejs.org/dist/v${version}/SHASUMS256.txt" \
+          | grep -F "  ${archive}" \
+          | sha256sum --check --status
+        mkdir -p "/opt/node-v${version}"
+        tar -xJf "${temporary_directory}/${archive}" -C "/opt/node-v${version}" --strip-components=1
+        for binary in node npm npx; do
+          ln -sfn "/opt/node-v${version}/bin/${binary}" "/usr/local/bin/${binary}"
+        done
+  changed_when: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - benchmark_client_node_version.rc != 0 or benchmark_client_node_version.stdout != 'v' ~ benchmark_client_tools.node
+    - not ansible_check_mode
+- name: Verify the installed tool versions
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - "{{ item.command }}"
+      - "{{ item.argument }}"
+  loop:
+    - command: /usr/local/bin/uv
+      argument: --version
+    - command: /usr/local/bin/node
+      argument: --version
+  loop_control:
+    label: "{{ item.command }}"
+  register: benchmark_client_tool_versions
+  changed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Require the pinned tool versions
+  ansible.builtin.assert:
+    that:
+      - benchmark_client_tool_versions.results[0].stdout.split()[:2] | join(' ') == 'uv ' ~ benchmark_client_tools.uv
+      - benchmark_client_tool_versions.results[1].stdout == 'v' ~ benchmark_client_tools.node
+    fail_msg: "The benchmark client does not have the requested uv and Node versions."
+    quiet: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode

@@ -68,7 +68,7 @@ server(s), and Proxmox VE 8.x.
 ```bash
 git clone https://github.com/JacobPEvans/ansible-proxmox.git
 cd ansible-proxmox
-ansible-galaxy install -r requirements.yml
+ansible-galaxy install -r requirements.yml --force
 cp inventory/hosts.yml.example inventory/hosts.yml
 # Edit inventory/hosts.yml with your server details
 ```
@@ -283,4 +283,4 @@ pushes to `main` or `develop` run the full matrix. Required validation is
 aggregated by `Merge Gate`. Public pull-request CI stays on GitHub-hosted
 runners.
 
-See the canonical policy in the `dryvist/.github` README, “Ansible CI policy.”
+See the canonical policy in the `JacobPEvans/.github` README, “Ansible CI policy.”

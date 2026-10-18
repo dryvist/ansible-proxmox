@@ -59,6 +59,7 @@
         ssh_ca_trust_lxc_principals:
           root: [ansible, semaphore]
         ssh_ca_trust_lxc_allow_users_extra: []
+        ssh_ca_trust_host_admin_guest_vmids: []
       block:
         - name: Install openssh-server for the hardening-drop-in test
           ansible.builtin.apt:

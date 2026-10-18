@@ -1,0 +1,5 @@
+---
+pve_mssql_dump_retention_enabled: true
+pve_mssql_dump_retention_dry_run: false
+pve_mssql_dump_retention_source_dir: /rpool/data/subvol-130-disk-1/log
+pve_mssql_dump_retention_archive_dir: /bulk/backups/mssql-crash-dumps

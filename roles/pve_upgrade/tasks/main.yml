@@ -153,15 +153,19 @@
           {{ pve_upgrade_kernel_version }}; refusing to reboot.
       when: nvidia_driver_enabled | default(false) | bool
 
-    - name: Reboot when packages changed (new kernel takes effect on reboot)
+    - name: Reboot when the running kernel differs from the selected installed kernel
       ansible.builtin.reboot:
         reboot_timeout: "{{ pve_upgrade_reboot_timeout | int }}"
         msg: Reboot triggered by ansible pve_upgrade role
       when:
         - pve_upgrade_reboot | bool
         - >-
-          pve_upgrade_result is changed
-          or pve_upgrade_kernel_packages_result is changed
+          (pve_upgrade_kernel_version is not none
+           and ansible_kernel != pve_upgrade_kernel_version)
+          or
+          (pve_upgrade_kernel_version is none
+           and (pve_upgrade_result is changed
+                or pve_upgrade_kernel_packages_result is changed))
 
     # pveversion is read-only, but skip the verify in check mode: a dry run has
     # not actually upgraded anything, so asserting the new version would falsely

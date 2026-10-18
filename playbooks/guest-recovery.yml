@@ -1,0 +1,257 @@
+---
+- name: Validate the guest recovery request
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Require a valid target and recovery request
+      ansible.builtin.assert:
+        that:
+          - node is defined
+          - node | string in (groups['proxmox'] | default([]))
+          - vmid is defined
+          - vmid | string is match('^[1-9][0-9]{2,8}$')
+          - mode is defined
+          - mode in ['unit-stop', 'unit-kill', 'guest-restart']
+          - reason is defined
+          - reason | string | trim | length > 0
+          - >-
+            mode not in ['unit-stop', 'unit-kill'] or
+            (unit | default('')) is match('^[A-Za-z0-9_.@:-]+\.service$')
+          - >-
+            (memory_headroom_mb | default(0, true) | string)
+            is match('^[0-9]+$')
+          - >-
+            mode == 'unit-kill' or
+            memory_headroom_mb | default(0, true) | int == 0
+        fail_msg: >-
+          Provide an inventory node from the proxmox group, a numeric VMID,
+          one supported mode, a reason, and a valid service unit for unit modes.
+        quiet: true
+
+    - name: Log the requested recovery action
+      ansible.builtin.debug:
+        msg: >-
+          Recovery request: mode={{ mode }}, node={{ node }}, vmid={{ vmid }},
+          unit={{ unit | default('not-applicable', true) }},
+          memory_headroom_mb={{ memory_headroom_mb | default(0, true) }},
+          reason={{ reason }}.
+
+    - name: Explain the read-only check-mode result
+      ansible.builtin.debug:
+        msg: >-
+          Check mode validated this request. No Proxmox commands were run.
+      when: ansible_check_mode
+
+- name: Recover the guest on the selected Proxmox node
+  hosts: proxmox
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Explain that check mode skips recovery commands
+      ansible.builtin.debug:
+        msg: >-
+          Check mode is active; recovery commands are skipped for this request.
+      when:
+        - inventory_hostname == node
+        - ansible_check_mode
+
+    - name: Stop a guest service through pct exec
+      ansible.builtin.command:
+        argv:
+          - pct
+          - exec
+          - "{{ vmid | string }}"
+          - --
+          - systemctl
+          - stop
+          - "{{ unit }}"
+      changed_when: true
+      when:
+        - inventory_hostname == node
+        - mode == 'unit-stop'
+        - not ansible_check_mode
+
+    - name: Restart the guest with stop-start fallback
+      when:
+        - inventory_hostname == node
+        - mode == 'guest-restart'
+        - not ansible_check_mode
+      block:
+        - name: Request a guest reboot
+          ansible.builtin.command:
+            argv:
+              - pct
+              - reboot
+              - "{{ vmid | string }}"
+          changed_when: true
+      rescue:
+        - name: Stop the guest when reboot fails
+          ansible.builtin.command:
+            argv:
+              - pct
+              - stop
+              - "{{ vmid | string }}"
+          changed_when: true
+
+        - name: Start the guest after the fallback stop
+          ansible.builtin.command:
+            argv:
+              - pct
+              - start
+              - "{{ vmid | string }}"
+          changed_when: true
+
+    - name: Kill the service cgroup and restore temporary memory headroom
+      when:
+        - inventory_hostname == node
+        - mode == 'unit-kill'
+        - not ansible_check_mode
+      block:
+        - name: Read the guest cgroup memory current value
+          ansible.builtin.slurp:
+            src: "/sys/fs/cgroup/lxc/{{ vmid }}/memory.current"
+          register: guest_recovery_memory_current
+
+        - name: Read the guest cgroup memory high value
+          ansible.builtin.slurp:
+            src: "/sys/fs/cgroup/lxc/{{ vmid }}/memory.high"
+          register: guest_recovery_memory_high
+
+        - name: Read the guest cgroup memory maximum
+          ansible.builtin.slurp:
+            src: "/sys/fs/cgroup/lxc/{{ vmid }}/memory.max"
+          register: guest_recovery_memory_max
+
+        - name: Read the guest configuration
+          ansible.builtin.command:
+            argv:
+              - pct
+              - config
+              - "{{ vmid | string }}"
+          register: guest_recovery_config
+          changed_when: false
+
+        - name: Read processes in the service cgroup
+          ansible.builtin.slurp:
+            src: "/sys/fs/cgroup/lxc/{{ vmid }}/ns/system.slice/{{ unit }}/cgroup.procs"
+          register: guest_recovery_cgroup_procs
+
+        - name: Parse the original memory setting and cgroup process list
+          ansible.builtin.set_fact:
+            guest_recovery_memory_config_lines: >-
+              {{ guest_recovery_config.stdout_lines
+                 | select('match', '^memory:') | list }}
+            guest_recovery_original_memory_mb: >-
+              {{ (guest_recovery_config.stdout_lines
+                  | select('match', '^memory: [0-9]+$') | list | first
+                  | default('') | regex_replace('^memory: ', '')) }}
+            guest_recovery_memory_max_bytes: >-
+              {{ guest_recovery_memory_max.content | b64decode | trim }}
+            guest_recovery_headroom_mb: >-
+              {{ memory_headroom_mb | default(0, true) | int }}
+            guest_recovery_pids: >-
+              {{ (guest_recovery_cgroup_procs.content | b64decode).splitlines()
+                 | map('trim') | reject('equalto', '') | list }}
+
+        - name: Require a usable memory limit and numeric cgroup processes
+          ansible.builtin.assert:
+            that:
+              - guest_recovery_memory_config_lines | length <= 1
+              - >-
+                guest_recovery_memory_config_lines | length == 0 or
+                guest_recovery_original_memory_mb is match('^[0-9]+$')
+              - >-
+                guest_recovery_headroom_mb == 0 or
+                (guest_recovery_memory_max_bytes is match('^[0-9]+$') and
+                guest_recovery_memory_max_bytes | int > 0)
+              - guest_recovery_pids | length > 0
+              - >-
+                guest_recovery_pids | select('match', '^[0-9]+$') | list | length
+                == guest_recovery_pids | length
+            fail_msg: >-
+              The guest memory configuration or service cgroup process list is
+              not safe to use for this request.
+            quiet: true
+
+        - name: Log the captured cgroup memory readings
+          ansible.builtin.debug:
+            msg: >-
+              Guest cgroup memory bytes: current={{ guest_recovery_memory_current.content
+              | b64decode | trim }}, high={{ guest_recovery_memory_high.content
+              | b64decode | trim }}, max={{ guest_recovery_memory_max_bytes }}.
+
+        - name: Add temporary memory headroom when requested
+          ansible.builtin.command:
+            argv:
+              - pct
+              - set
+              - "{{ vmid | string }}"
+              - -memory
+              - >-
+                {{ ((guest_recovery_memory_max_bytes | int + 1048575) // 1048576
+                    + guest_recovery_headroom_mb) | string }}
+          changed_when: true
+          when: guest_recovery_headroom_mb | int > 0
+
+        - name: Stop service processes before killing the cgroup
+          ansible.builtin.command:
+            argv:
+              - kill
+              - -STOP
+              - "{{ item }}"
+          changed_when: true
+          loop: "{{ guest_recovery_pids }}"
+
+        - name: Kill service processes from the host
+          ansible.builtin.command:
+            argv:
+              - kill
+              - -KILL
+              - "{{ item }}"
+          changed_when: true
+          loop: "{{ guest_recovery_pids }}"
+
+        # A killed task can sit with SIGKILL pending until the guest has memory to exit.
+        - name: Wait for the service cgroup to empty
+          ansible.builtin.command:
+            argv:
+              - cat
+              - "/sys/fs/cgroup/lxc/{{ vmid }}/ns/system.slice/{{ unit }}/cgroup.procs"
+          register: guest_recovery_cgroup_after_kill
+          changed_when: false
+          retries: 60
+          delay: 5
+          until: guest_recovery_cgroup_after_kill.stdout | trim == ''
+
+        - name: Stop the service unit inside the guest
+          ansible.builtin.command:
+            argv:
+              - timeout
+              - "120"
+              - pct
+              - exec
+              - "{{ vmid | string }}"
+              - --
+              - systemctl
+              - stop
+              - "{{ unit }}"
+          changed_when: true
+
+      always:
+        - name: Restore the original guest memory setting
+          ansible.builtin.command:
+            argv: >-
+              {{ ['pct', 'set', vmid | string, '-delete', 'memory']
+                 if (guest_recovery_memory_config_lines | default([]) | length == 0)
+                 else ['pct', 'set', vmid | string, '-memory', guest_recovery_original_memory_mb] }}
+          changed_when: true
+          when:
+            - guest_recovery_headroom_mb | default(0) | int > 0
+            - >-
+              guest_recovery_memory_config_lines is defined and
+              (guest_recovery_memory_config_lines | length == 0 or
+              guest_recovery_original_memory_mb is match('^[0-9]+$'))

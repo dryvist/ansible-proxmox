@@ -1,0 +1,129 @@
+---
+- name: Explain the present check-mode result
+  ansible.builtin.debug:
+    msg: >-
+      Check mode validated the source guest and target tag; client
+      provisioning and in-container checks are skipped.
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - ansible_check_mode
+- name: Create the unprivileged benchmark client
+  ansible.builtin.command:
+    argv:
+      - pct
+      - create
+      - "{{ vmid | string }}"
+      - "{{ template }}"
+      - --rootfs
+      - "{{ benchmark_client_storage }}:{{ disk_gb }}"
+      - --cores
+      - "{{ cores | string }}"
+      - --memory
+      - "{{ memory_mb | string }}"
+      - --features
+      - nesting=1,keyctl=1
+      - --net0
+      - "{{ benchmark_client_net0 | regex_replace('\\s+', '') }}"
+      - --hostname
+      - "benchmark-client-{{ vmid }}"
+      - --tags
+      - benchmark-client
+      - --unprivileged
+      - "1"
+      - --onboot
+      - "0"
+  changed_when: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not benchmark_client_target_file.stat.exists
+    - not ansible_check_mode
+- name: Read the provisioned client configuration
+  ansible.builtin.command:
+    argv:
+      - pct
+      - config
+      - "{{ vmid | string }}"
+  register: benchmark_client_config
+  changed_when: false
+  check_mode: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Derive the provisioned client tags
+  ansible.builtin.set_fact:
+    benchmark_client_config_tags: >-
+      {{ (benchmark_client_config.stdout_lines
+          | select('match', '^tags:') | list | first | default(''))
+         | regex_replace('^tags:\s*', '') }}
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Require the client configuration to match this request
+  ansible.builtin.assert:
+    that:
+      - benchmark_client_config_tags is search('(^|;)benchmark-client($|;)')
+      - >-
+        (benchmark_client_config.stdout_lines
+         | select('match', '^cores:') | list | first | default(''))
+        is search('^cores:\s*' ~ (cores | string) ~ '$')
+      - >-
+        (benchmark_client_config.stdout_lines
+         | select('match', '^memory:') | list | first | default(''))
+        is search('^memory:\s*' ~ (memory_mb | string) ~ '$')
+      - >-
+        (benchmark_client_config.stdout_lines
+         | select('match', '^net0:') | list | first | default(''))
+        is search('bridge=' ~ benchmark_client_bridge ~ '.*tag=' ~ benchmark_client_vlan)
+      - >-
+        (benchmark_client_config.stdout_lines
+         | select('match', '^rootfs:') | list | first | default(''))
+        is search('^rootfs:\s*' ~ benchmark_client_storage ~ ':')
+      - >-
+        (benchmark_client_config.stdout_lines
+         | select('match', '^features:') | list | first | default(''))
+        is search('nesting=1')
+      - >-
+        (benchmark_client_config.stdout_lines
+         | select('match', '^features:') | list | first | default(''))
+        is search('keyctl=1')
+      - >-
+        (benchmark_client_config.stdout_lines
+         | select('match', '^unprivileged:') | list | first | default(''))
+        is search('^unprivileged:\s*1$')
+    fail_msg: >-
+      The tagged client configuration differs from the requested CPU,
+      memory, bridge, VLAN, or storage. Destroy and recreate it to change sizing.
+    quiet: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Read the client status after provisioning
+  ansible.builtin.command:
+    argv:
+      - pct
+      - status
+      - "{{ vmid | string }}"
+  register: benchmark_client_status_after
+  changed_when: false
+  check_mode: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Start the benchmark client when stopped
+  ansible.builtin.command:
+    argv:
+      - pct
+      - start
+      - "{{ vmid | string }}"
+  changed_when: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - "'status: stopped' in benchmark_client_status_after.stdout"
+    - not ansible_check_mode

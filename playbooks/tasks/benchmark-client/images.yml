@@ -1,0 +1,126 @@
+---
+- name: Inspect which images are already present
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - docker
+      - image
+      - inspect
+      - "{{ item }}"
+  loop: "{{ benchmark_client_images }}"
+  loop_control:
+    label: "{{ item.split('@') | first }}"
+  register: benchmark_client_image_inspections
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Pull missing digest-pinned images
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - docker
+      - pull
+      - "{{ item.item }}"
+  loop: "{{ benchmark_client_image_inspections.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.split('@') | first }}"
+  changed_when: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - item.rc != 0
+    - not ansible_check_mode
+- name: Inspect the pinned x86_64 vLLM client image
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - docker
+      - image
+      - inspect
+      - "{{ benchmark_client_tools.vllm_client_image }}"
+  register: benchmark_client_vllm_image_inspection
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Pull the pinned x86_64 vLLM client image when missing
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - docker
+      - pull
+      - "{{ benchmark_client_tools.vllm_client_image }}"
+  changed_when: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - benchmark_client_vllm_image_inspection.rc != 0
+    - not ansible_check_mode
+- name: Verify the pinned x86_64 vLLM client image
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - docker
+      - image
+      - inspect
+      - "{{ benchmark_client_tools.vllm_client_image }}"
+  register: benchmark_client_vllm_image_verification
+  changed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Require the pinned x86_64 vLLM client image
+  ansible.builtin.assert:
+    that:
+      - benchmark_client_vllm_image_verification.rc == 0
+    fail_msg: "The pinned x86_64 vLLM client image is not available in the benchmark client."
+    quiet: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Verify the engine API responds from the client
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - curl
+      - --fail
+      - --silent
+      - --show-error
+      - --max-time
+      - "10"
+      - --output
+      - /dev/null
+      - "{{ engine_url | regex_replace('/+$', '') }}/models"
+  register: benchmark_client_engine_check
+  changed_when: false
+  no_log: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+    - verify_engine | default(true) | bool

@@ -1,0 +1,149 @@
+---
+- name: Run the dry-run fixture
+  ansible.builtin.include_role:
+    name: pve_mssql_dump_retention
+  vars:
+    pve_mssql_dump_retention_enabled: true
+    pve_mssql_dump_retention_dry_run: true
+    pve_mssql_dump_retention_source_dir: "{{ pve_mssql_dump_retention_fixture_source }}"
+    pve_mssql_dump_retention_archive_dir: "{{ pve_mssql_dump_retention_fixture_archive }}"
+    pve_mssql_dump_retention_age_days: 30
+    pve_mssql_dump_retention_keep_newest: 4
+    pve_mssql_dump_retention_max_dirs_per_run: 40
+
+- name: Inspect dry-run source directories
+  ansible.builtin.find:
+    paths: "{{ pve_mssql_dump_retention_fixture_source }}"
+    file_type: directory
+    recurse: false
+    use_regex: true
+    patterns:
+      - '^core\.sqlservr\.\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}\.\d+\.d$'
+  register: pve_mssql_dump_retention_dry_run_dirs
+
+- name: Confirm dry run created no archive directory and changed no source dirs
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ pve_mssql_dump_retention_fixture_archive }}"
+    - "{{ pve_mssql_dump_retention_fixture_source }}/not-a-dump"
+    - "{{ pve_mssql_dump_retention_fixture_source }}/stray.log"
+  register: pve_mssql_dump_retention_dry_run_stats
+
+- name: Assert dry run leaves the fixture unchanged
+  ansible.builtin.assert:
+    that:
+      - pve_mssql_dump_retention_dry_run_dirs.files | length == 5
+      - not pve_mssql_dump_retention_dry_run_stats.results[0].stat.exists
+      - pve_mssql_dump_retention_dry_run_stats.results[1].stat.isdir
+      - pve_mssql_dump_retention_dry_run_stats.results[2].stat.isreg
+    fail_msg: "The dry run changed the archive or source fixture."
+    quiet: true
+
+- name: Run archive and prune with the four-newest margin
+  ansible.builtin.include_role:
+    name: pve_mssql_dump_retention
+  vars:
+    pve_mssql_dump_retention_enabled: true
+    pve_mssql_dump_retention_dry_run: false
+    pve_mssql_dump_retention_source_dir: "{{ pve_mssql_dump_retention_fixture_source }}"
+    pve_mssql_dump_retention_archive_dir: "{{ pve_mssql_dump_retention_fixture_archive }}"
+    pve_mssql_dump_retention_age_days: 30
+    pve_mssql_dump_retention_keep_newest: 4
+    pve_mssql_dump_retention_max_dirs_per_run: 40
+
+- name: Inspect source directories after pruning
+  ansible.builtin.find:
+    paths: "{{ pve_mssql_dump_retention_fixture_source }}"
+    file_type: directory
+    recurse: false
+    use_regex: true
+    patterns:
+      - '^core\.sqlservr\.\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}\.\d+\.d$'
+  register: pve_mssql_dump_retention_after_prune_dirs
+
+- name: Inspect created archives
+  ansible.builtin.find:
+    paths: "{{ pve_mssql_dump_retention_fixture_archive }}"
+    file_type: file
+    recurse: false
+  register: pve_mssql_dump_retention_created_archives
+
+- name: Assert only the oldest directory outside the newest four was archived
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pve_mssql_dump_retention_created_archives.files | map(attribute='path')
+        | map('basename') | sort) ==
+        [pve_mssql_dump_retention_fixture_old_names[0] ~ '.tar.zst']
+      - >-
+        (pve_mssql_dump_retention_after_prune_dirs.files | map(attribute='path')
+        | map('basename') | sort) ==
+        ((pve_mssql_dump_retention_fixture_old_names[1:] +
+          pve_mssql_dump_retention_fixture_new_names) | sort)
+    fail_msg: "The real run did not archive and retain the expected dump directories."
+    quiet: true
+
+- name: Confirm unrelated source content remains
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ pve_mssql_dump_retention_fixture_source }}/not-a-dump"
+    - "{{ pve_mssql_dump_retention_fixture_source }}/stray.log"
+  register: pve_mssql_dump_retention_unrelated_stats
+
+- name: Assert unrelated content is untouched
+  ansible.builtin.assert:
+    that:
+      - pve_mssql_dump_retention_unrelated_stats.results[0].stat.isdir
+      - pve_mssql_dump_retention_unrelated_stats.results[1].stat.isreg
+    quiet: true
+
+- name: Run retention a second time
+  ansible.builtin.include_role:
+    name: pve_mssql_dump_retention
+  vars:
+    pve_mssql_dump_retention_enabled: true
+    pve_mssql_dump_retention_dry_run: false
+    pve_mssql_dump_retention_source_dir: "{{ pve_mssql_dump_retention_fixture_source }}"
+    pve_mssql_dump_retention_archive_dir: "{{ pve_mssql_dump_retention_fixture_archive }}"
+    pve_mssql_dump_retention_age_days: 30
+    pve_mssql_dump_retention_keep_newest: 4
+    pve_mssql_dump_retention_max_dirs_per_run: 40
+
+- name: Assert the second run has no candidates or archived directories
+  ansible.builtin.assert:
+    that:
+      - pve_mssql_dump_retention_candidates | length == 0
+      - pve_mssql_dump_retention_archived | length == 0
+    fail_msg: "The second retention run was not a no-op."
+    quiet: true
+
+- name: Mark the corrupt archive run as not yet failed
+  ansible.builtin.set_fact:
+    pve_mssql_dump_retention_corrupt_run_failed: false
+
+- name: Require a corrupted pre-existing archive to stop before deletion
+  block:
+    - name: Run retention against a corrupted final archive
+      ansible.builtin.include_role:
+        name: pve_mssql_dump_retention
+      vars:
+        pve_mssql_dump_retention_enabled: true
+        pve_mssql_dump_retention_dry_run: false
+        pve_mssql_dump_retention_source_dir: "{{ pve_mssql_dump_retention_fixture_bad_source }}"
+        pve_mssql_dump_retention_archive_dir: "{{ pve_mssql_dump_retention_fixture_bad_archive }}"
+        pve_mssql_dump_retention_age_days: 30
+        pve_mssql_dump_retention_keep_newest: 0
+        pve_mssql_dump_retention_max_dirs_per_run: 40
+  rescue:
+    - name: Record the expected verification failure
+      ansible.builtin.set_fact:
+        pve_mssql_dump_retention_corrupt_run_failed: true
+
+- name: Assert the corrupted archive stopped the run
+  ansible.builtin.assert:
+    that:
+      - pve_mssql_dump_retention_corrupt_run_failed
+    fail_msg: "The corrupted pre-existing archive did not stop retention."
+    quiet: true

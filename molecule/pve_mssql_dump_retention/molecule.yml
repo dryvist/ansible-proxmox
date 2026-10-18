@@ -1,0 +1,28 @@
+---
+platforms:
+  - name: proxmox-pve-mssql-dump-retention-test
+    image: "${MOLECULE_IMAGE:-geerlingguy/docker-debian12-ansible:latest}"
+    pre_build_image: true
+    privileged: true
+    tmpfs:
+      - /run
+      - /tmp
+provisioner:
+  config_options:
+    defaults:
+      roles_path: ${MOLECULE_SCENARIO_DIRECTORY}/../../roles
+scenario:
+  # Converge rebuilds its fixture tree and the role then deletes archived sources,
+  # so a second converge cannot report zero changes; idempotence is asserted in the
+  # exercise tasks (second run is a no-op) instead.
+  test_sequence:
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - cleanup
+    - destroy

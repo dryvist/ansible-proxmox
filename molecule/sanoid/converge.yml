@@ -14,6 +14,14 @@
         recursive: "yes"
       "nvme1/siem/cribl-pq":
         use_template: scratch
+    sanoid_replica_retention_enabled: true
+    syncoid_default_options: "--recursive --no-sync-snap --quiet"
+    syncoid_jobs:
+      - name: replica-recursive
+        target: bulk/replica/source/recursive
+      - name: replica-nonrecursive
+        options: "--no-sync-snap --quiet"
+        target: bulk/replica/source/nonrecursive
 
   roles:
     - role: sanoid

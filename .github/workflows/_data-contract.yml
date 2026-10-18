@@ -45,11 +45,8 @@ jobs:
       # silently skips `collections:`, so either half on its own can leave the
       # play to fail later on a missing dependency. Passing `-p` also makes
       # `install` drop collections — so no install path here, deliberately.
-      # Cache Galaxy content keyed on requirements.yml. On a hit the collections
-      # (and any roles) are already present, so the install below is skipped;
-      # on a miss (requirements.yml changed) it runs and repopulates the cache.
-      # Same key/paths as dryvist/.github's _ansible-ci.yml so a warm run of
-      # either workflow warms the other.
+      # Cache Galaxy content keyed on requirements.yml; a hit refreshes only the
+      # floating homelab-contracts tag. Same key/paths as the central _ansible-ci.yml.
       - name: Cache Ansible Galaxy content
         id: galaxy-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -66,6 +63,13 @@ jobs:
       - name: Install Ansible dependencies
         if: steps.galaxy-cache.outputs.cache-hit != 'true'
         run: ansible-galaxy install -r requirements.yml --force
+
+      - name: Refresh homelab-contracts major tag
+        if: steps.galaxy-cache.outputs.cache-hit == 'true'
+        run: >-
+          ansible-galaxy collection install
+          'git+https://github.com/dryvist/homelab-contracts.git#/ansible/,v5'
+          --force
 
       # load_tofu.yml (imported by verify_inventory.yml) include_role's the
       # shared inventory_resolve role by FQCN, so this run is what proves the

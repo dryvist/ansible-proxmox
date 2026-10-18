@@ -92,6 +92,7 @@ jobs:
     needs: discover
     if: ${{ needs.discover.outputs.scenarios != '[]' }}
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 15 }}
     strategy:
       # LOAD-BEARING. These ran as serial steps in one job, so the first failing
       # scenario left every later one `skipped` — and in a run listing a skipped
@@ -100,7 +101,9 @@ jobs:
       # scenarios behind it reported nothing at all. Each scenario now gets its
       # own independent verdict.
       fail-fast: false
-      max-parallel: 6
+      # 12 of the org's 20 concurrent standard runners: a full matrix finishes
+      # in three waves without starving other repositories' CI.
+      max-parallel: 12
       matrix:
         scenario: ${{ fromJSON(needs.discover.outputs.scenarios) }}
     steps:
@@ -120,10 +123,9 @@ jobs:
       # `install` covers both sections of requirements.yml. Do not narrow this to
       # `collection install` or `role install` — each silently ignores the other
       # section, so a dependency can go missing with a zero exit status.
-      # Cache Galaxy content keyed on requirements.yml. On a hit the collections
-      # (and any roles) are already present, so the install below is skipped;
-      # on a miss (requirements.yml changed) it runs and repopulates the cache.
-      # Same key/paths as dryvist/.github's _ansible-ci.yml so a warm run of
+      # Cache Galaxy content keyed on requirements.yml. Exact hits refresh only
+      # the floating homelab-contracts tag; misses force-install the requirements.
+      # Same key/paths as JacobPEvans/.github's _ansible-ci.yml so a warm run of
       # either workflow warms the other.
       - name: Cache Ansible Galaxy content
         id: galaxy-cache
@@ -136,7 +138,14 @@ jobs:
 
       - name: Install Ansible dependencies
         if: steps.galaxy-cache.outputs.cache-hit != 'true'
-        run: ansible-galaxy install -r requirements.yml
+        run: ansible-galaxy install -r requirements.yml --force
+
+      - name: Refresh homelab-contracts major tag
+        if: steps.galaxy-cache.outputs.cache-hit == 'true'
+        run: >-
+          ansible-galaxy collection install
+          'git+https://github.com/dryvist/homelab-contracts.git#/ansible/,v5'
+          --force
 
       # The shared workflow supplies only scenario names declared in this
       # caller's filter map; the full-matrix fallback discovers directories.

@@ -36,6 +36,47 @@ class CiScopeContract(unittest.TestCase):
         self.assertIn("- '.github/workflows/molecule.yml'", GATE)
         self.assertIn("tests/workflow_policy/**", GATE)
 
+    def test_guest_recovery_and_shared_test_paths_have_contract_checks(self):
+        contract_section = GATE.split("molecule_contract_filters: |", 1)[1].split(
+            "molecule_scenario_filters: |", 1
+        )[0]
+        contract_patterns = re.findall(
+            r"^\s+- '([^']+)'$", contract_section, re.MULTILINE
+        )
+        scenario_section = GATE.split("molecule_scenario_filters: |", 1)[1].split(
+            "# Opt in to the shared Renovate-annotation gate", 1
+        )[0]
+        scenario_patterns = re.findall(
+            r"^\s+- '([^']+)'$", scenario_section, re.MULTILINE
+        )
+        covered_paths = [
+            "playbooks/guest-recovery.yml",
+            "tests/guest_recovery/hosts.yml",
+            "tests/test_guest_recovery_contract.py",
+            "tests/test_zfs_nfs_export_permissions.py",
+            "tests/pve_bulk_data_compare/__init__.py",
+            "tests/pve_notifications/__init__.py",
+            "tests/zfs_capacity_monitor/__init__.py",
+            "tests/zfs_fault_alert/__init__.py",
+        ]
+
+        for changed_path in covered_paths:
+            self.assertTrue(
+                any(
+                    fnmatch.fnmatchcase(changed_path, pattern)
+                    for pattern in contract_patterns
+                ),
+                f"contract-tested path is not mapped: {changed_path}",
+            )
+
+        self.assertFalse(
+            any(
+                fnmatch.fnmatchcase("tests/unclassified/test_new.py", pattern)
+                for pattern in contract_patterns + scenario_patterns
+            ),
+            "unmapped test paths must keep the shared full-matrix fallback",
+        )
+
     def test_paths_from_promotion_failure_are_covered_by_scenarios_or_contracts(self):
         contract_section = GATE.split("molecule_contract_filters: |", 1)[1].split(
             "molecule_scenario_filters: |", 1

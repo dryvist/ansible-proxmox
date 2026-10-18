@@ -2,7 +2,7 @@
 # CI Gate — thin wrapper around the shared ansible CI gate.
 #
 # Lint and Molecule change detection live in
-# dryvist/.github/.github/workflows/_ansible-ci.yml. This wrapper runs the
+# JacobPEvans/.github/.github/workflows/_ansible-ci.yml. This wrapper runs the
 # selected local scenario matrix and aggregates it with the data contract.
 #
 # The shared workflow runs with emit_gate:false and this wrapper aggregates its
@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@1f09b25303a04bf276087348059671728ffea50a # v1.13.2
+    uses: JacobPEvans/.github/.github/workflows/_ansible-ci.yml@v1
     with:
       molecule: false
       molecule_contract_filters: |
@@ -50,6 +50,14 @@ jobs:
           - 'tests/guest_power_contract.yml'
           - 'tests/guest_power_contract_reject.yml'
           - 'tests/guest_power_parse_case.yml'
+          - 'playbooks/guest-recovery.yml'
+          - 'tests/guest_recovery/**'
+          - 'tests/test_guest_recovery_contract.py'
+          - 'tests/test_zfs_nfs_export_permissions.py'
+          - 'tests/pve_bulk_data_compare/**'
+          - 'tests/pve_notifications/**'
+          - 'tests/zfs_capacity_monitor/**'
+          - 'tests/zfs_fault_alert/**'
           - 'roles/container_start/**'
           - 'tests/container_start_contract.yml'
           - 'tests/container_start_parse_case.yml'
@@ -112,6 +120,7 @@ jobs:
         nvidia_driver:
           - 'roles/nvidia_driver/**'
           - 'molecule/nvidia_driver/**'
+          - 'tests/nvidia_driver/**'
         postgres_standby:
           - 'roles/postgres_standby/**'
           - 'molecule/postgres_standby/**'
