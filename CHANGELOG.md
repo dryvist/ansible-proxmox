@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.28.1](https://github.com/dryvist/ansible-proxmox/compare/v2.28.0...v2.28.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **benchmark-client:** prefetch the serving-version vLLM image ([dec2a40](https://github.com/dryvist/ansible-proxmox/commit/dec2a404448adb8ae9e8e2841f6356dd29fff80b))
+* **benchmark-client:** prefetch vLLM 0.32 x86_64 image ([#1100](https://github.com/dryvist/ansible-proxmox/issues/1100)) ([d0cb7eb](https://github.com/dryvist/ansible-proxmox/commit/d0cb7eb816cfae8d272d77a9ca94eea342470451))
+
 ## [2.28.0](https://github.com/dryvist/ansible-proxmox/compare/v2.27.0...v2.28.0) (2026-10-18)
 
 
