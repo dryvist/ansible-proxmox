@@ -8,11 +8,11 @@
     nvidia_driver_power_limit_profile: default
   when: nvidia_driver_power_limit_profiles_w is defined
 
-- name: Verify the benchmark profile selects the 325 W limit
+- name: Verify the max profile selects the 325 W limit
   ansible.builtin.assert:
     that:
       - nvidia_driver_power_limit_profiles_w[nvidia_driver_power_limit_profile] | int == 325
       - nvidia_driver_power_limit_w | int == 325
   vars:
-    nvidia_driver_power_limit_profile: benchmark
+    nvidia_driver_power_limit_profile: max
   when: nvidia_driver_power_limit_profiles_w is defined

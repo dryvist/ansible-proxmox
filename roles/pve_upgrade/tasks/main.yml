@@ -175,31 +175,32 @@
            and (pve_upgrade_result is changed
                 or pve_upgrade_kernel_packages_result is changed))
 
-    - name: Wait for every expected vote after the reboot
-      ansible.builtin.include_tasks: wait_full_quorum.yml
+    - name: Wait for quorum and HA resources after reboot
       when: pve_upgrade_reboot_result.rebooted | default(false)
+      block:
+        - name: Wait for every expected vote after the reboot
+          ansible.builtin.include_tasks: wait_full_quorum.yml
 
-    - name: Wait for HA resources to clear error and fence states
-      ansible.builtin.command:
-        cmd: pvesh get /cluster/ha/resources --output-format json
-      register: pve_upgrade_ha_resources_after_reboot
-      until: >-
-        pve_upgrade_ha_resources_after_reboot.rc == 0
-        and
-        (pve_upgrade_ha_resources_after_reboot.stdout | from_json
-        | selectattr('status', 'defined')
-        | selectattr('status', 'search', '(?i)(error|fenc)')
-        | list | length == 0)
-        and
-        (pve_upgrade_ha_resources_after_reboot.stdout | from_json
-        | selectattr('state', 'defined')
-        | selectattr('state', 'search', '(?i)(error|fenc)')
-        | list | length == 0)
-      retries: "{{ pve_upgrade_reboot_timeout | int // 10 }}"
-      delay: 10
-      changed_when: false
-      check_mode: false
-      when: pve_upgrade_reboot_result.rebooted | default(false)
+        - name: Wait for HA resources to clear error and fence states
+          ansible.builtin.command:
+            cmd: pvesh get /cluster/ha/resources --output-format json
+          register: pve_upgrade_ha_resources_after_reboot
+          until: >-
+            pve_upgrade_ha_resources_after_reboot.rc == 0
+            and
+            (pve_upgrade_ha_resources_after_reboot.stdout | from_json
+            | selectattr('status', 'defined')
+            | selectattr('status', 'search', '(?i)(error|fenc)')
+            | list | length == 0)
+            and
+            (pve_upgrade_ha_resources_after_reboot.stdout | from_json
+            | selectattr('state', 'defined')
+            | selectattr('state', 'search', '(?i)(error|fenc)')
+            | list | length == 0)
+          retries: "{{ pve_upgrade_reboot_timeout | int // 10 }}"
+          delay: 10
+          changed_when: false
+          check_mode: false
 
     # pveversion is read-only, but skip the verify in check mode: a dry run has
     # not actually upgraded anything, so asserting the new version would falsely
