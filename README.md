@@ -153,20 +153,18 @@ The selection is apt's own
 `Acquire::http::Proxy` value and a pair cannot be expressed as config. Run it
 with console access available; the node reboots.
 
-The playbook defaults `upgrade_nodes` to `proxmox`. Set it to one inventory
-host for a single-node run. Runs skip UTC Saturdays after the first Saturday
-of the month; manual runs on other weekdays proceed. Before snapshots and each
-reboot, the playbook requires full voter membership and at least one vote of
-quorum headroom. It uses the existing iDRAC role for configured offline voters,
-waits for full membership, and checks quorum and HA resource status after each
-reboot.
+`upgrade_nodes` selects targets (blank or unset means `proxmox`). A Saturday
+after the 7th (UTC) targets nothing, so the weekly schedule acts on the first
+Saturday of the month. Powered-off voters are powered on first; each node is
+touched only while the cluster is quorate with every expected vote and one vote
+of headroom, and after its reboot the run waits for full votes and healthy HA.
 
 ```bash
 # Test (power-on, snapshot, and reboot are skipped in check mode):
-./scripts/run-ansible.sh playbooks/upgrade.yml -e upgrade_nodes=proxmox --check --diff
+./scripts/run-ansible.sh playbooks/upgrade.yml --check --diff
 
 # Apply:
-./scripts/run-ansible.sh playbooks/upgrade.yml -e upgrade_nodes=proxmox
+./scripts/run-ansible.sh playbooks/upgrade.yml -e upgrade_nodes=<node>
 ```
 
 `playbooks/snapshot.yml` is also runnable on its own. If a node's root layout

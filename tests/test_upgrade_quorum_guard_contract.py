@@ -5,60 +5,58 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+PLAYBOOK = yaml.safe_load((ROOT / "playbooks/upgrade.yml").read_text())
+ROLE = yaml.safe_load((ROOT / "roles/pve_upgrade/tasks/main.yml").read_text())
+WAIT = yaml.safe_load((ROOT / "roles/pve_upgrade/tasks/wait_full_quorum.yml").read_text())
 
 
-def _task(tasks: list[dict], name: str) -> dict:
-    return next(task for task in tasks if task["name"] == name)
+def _block() -> list[dict]:
+    return next(t["block"] for t in ROLE if t.get("name") == "Upgrade the node, always returning it to normal HA scheduling")
 
 
-def test_upgrade_targets_and_uses_the_utc_first_saturday_guard() -> None:
-    playbook = yaml.safe_load((ROOT / "playbooks/upgrade.yml").read_text())
-    snapshot = yaml.safe_load((ROOT / "playbooks/snapshot.yml").read_text())[0]
-    upgrade = playbook[-1]
-
-    assert playbook[0]["hosts"] == "localhost"
-    tasks = playbook[0]["tasks"]
-    date = _task(tasks, "Read the UTC weekday and day of month")
-    assert date["ansible.builtin.command"]["argv"] == ["date", "-u", "+%u %d"]
-    skip = _task(tasks, "Mark upgrades outside the first-Saturday window")
-    expression = skip["ansible.builtin.set_fact"]["upgrade_schedule_skip"]
-    assert "| int == 6" in expression
+def test_targets_resolve_once_with_first_saturday_and_blank_defaults() -> None:
+    resolve = PLAYBOOK[0]
+    assert resolve["hosts"] == "localhost"
+    expression = resolve["tasks"][0]["ansible.builtin.set_fact"]["upgrade_hosts"]
+    assert "now(utc=true, fmt='%w') == '6'" in expression
     assert "| int > 7" in expression
-    assert "{{ upgrade_nodes | default('proxmox') }}" == upgrade["hosts"]
-    assert "{{ upgrade_nodes | default('proxmox') }}" == snapshot["hosts"]
-    assert any(task.get("ansible.builtin.meta") == "end_host" for task in upgrade["pre_tasks"])
-    assert any(task.get("ansible.builtin.meta") == "end_host" for task in snapshot["pre_tasks"])
+    assert "upgrade_nodes | default('proxmox', true)" in expression
+    group = resolve["tasks"][2]["ansible.builtin.add_host"]
+    assert group["groups"] == "upgrade_targets"
+    assert PLAYBOOK[-1]["hosts"] == "upgrade_targets"
+    snapshot = next(p for p in PLAYBOOK if p.get("import_playbook") == "snapshot.yml")
+    assert snapshot["vars"]["pve_snapshot_hosts"] == "upgrade_targets"
 
 
-def test_upgrade_checks_full_quorum_before_snapshots_and_before_each_reboot() -> None:
-    playbook = yaml.safe_load((ROOT / "playbooks/upgrade.yml").read_text())
-    snapshot_index = next(i for i, play in enumerate(playbook) if "import_playbook" in play)
-    preflight = playbook[snapshot_index - 1]
-    upgrade = playbook[-1]
+def test_voters_power_on_and_each_node_needs_full_votes_and_headroom() -> None:
+    power = PLAYBOOK[1]
+    assert all("groups['upgrade_targets'] | default([]) | length > 0" in t["when"] for t in power["tasks"])
+    roles = [t.get("ansible.builtin.include_role", {}) for t in power["tasks"]]
+    assert {"name": "idrac_power"} in roles
+    assert {"name": "pve_upgrade", "tasks_from": "wait_full_quorum"} in roles
 
-    assert preflight["vars"]["pve_quorum_guard_min_headroom"] == 1
-    assert preflight["roles"][0]["role"] == "pve_quorum_guard"
-    assert any(
-        task["name"] == "Require all configured voters before snapshots"
-        for task in preflight["pre_tasks"]
-    )
-    start_guard = _task(upgrade["pre_tasks"], "Recheck quorum headroom before starting this node")
-    assert start_guard["ansible.builtin.import_role"]["name"] == "pve_quorum_guard"
+    upgrade = PLAYBOOK[-1]
+    assert upgrade["serial"] == 1
+    assert upgrade["vars"]["pve_quorum_guard_min_headroom"] == 1
+    assert upgrade["vars"]["pve_quorum_guard_powered_off_voters"] == []
+    pre = upgrade["pre_tasks"]
+    assert pre[0]["ansible.builtin.include_role"] == {"name": "pve_upgrade", "tasks_from": "wait_full_quorum"}
+    assert pre[1]["ansible.builtin.import_role"] == {"name": "pve_quorum_guard"}
 
-    role_tasks = yaml.safe_load((ROOT / "roles/pve_upgrade/tasks/main.yml").read_text())
-    block = _task(role_tasks, "Upgrade the node, always returning it to normal HA scheduling")["block"]
-    names = [task["name"] for task in block]
-    guard_index = names.index("Recheck quorum headroom before this node reboots")
-    reboot_index = names.index("Reboot when the running kernel differs from the selected installed kernel")
-    assert guard_index < reboot_index
-    assert block[guard_index]["ansible.builtin.include_role"]["name"] == "pve_quorum_guard"
-    assert names.index("Require every configured vote before reboot") < reboot_index
 
-    cluster_wait = _task(block, "Wait for quorum and every expected vote after reboot")
-    assert cluster_wait["ansible.builtin.command"]["cmd"] == "pvecm status"
-    assert cluster_wait["changed_when"] is False
-    ha_wait = _task(block, "Wait for HA resources to clear error and fence states")
-    assert ha_wait["ansible.builtin.command"]["cmd"] == (
-        "pvesh get /cluster/ha/resources --output-format json"
-    )
-    assert ha_wait["changed_when"] is False
+def test_reboot_is_followed_by_vote_and_ha_waits() -> None:
+    names = [t["name"] for t in _block()]
+    reboot = names.index("Reboot when the running kernel differs from the selected installed kernel")
+    assert names.index("Wait for every expected vote after the reboot") > reboot
+    assert names.index("Wait for HA resources to clear error and fence states") > reboot
+    wait = WAIT[0]
+    assert wait["ansible.builtin.command"]["cmd"] == "pvecm status"
+    assert any("Total votes" in c for c in wait["until"])
+
+
+def test_major_version_is_asserted_without_a_pin() -> None:
+    defaults = yaml.safe_load((ROOT / "roles/pve_upgrade/defaults/main.yml").read_text())
+    assert "pve_upgrade_expected_version" not in defaults
+    names = [t["name"] for t in _block()]
+    assert names.index("Query Proxmox VE version before the package upgrade") < names.index("Update apt cache")
+    assert "Assert the Proxmox VE major version is unchanged" in names
