@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.27.0](https://github.com/dryvist/ansible-proxmox/compare/v2.26.0...v2.27.0) (2026-10-18)
+
+
+### Features
+
+* add parameterized guest recovery playbook ([#1079](https://github.com/dryvist/ansible-proxmox/issues/1079)) ([f3f4256](https://github.com/dryvist/ansible-proxmox/commit/f3f4256080a7c5a735d57e0b48bdd977b939807f))
+* add scoped SSH access verification ([#1070](https://github.com/dryvist/ansible-proxmox/issues/1070)) ([f5dfd29](https://github.com/dryvist/ansible-proxmox/commit/f5dfd29eca696f1cbd8398ef56228e1d83627ce3))
+* configure reusable fan modes ([#1069](https://github.com/dryvist/ansible-proxmox/issues/1069)) ([31ee9e9](https://github.com/dryvist/ansible-proxmox/commit/31ee9e99ce1e44fcd48620cabd972dd579c13d91))
+* **fan-control:** add scoped publisher entry point ([#1074](https://github.com/dryvist/ansible-proxmox/issues/1074)) ([8216100](https://github.com/dryvist/ansible-proxmox/commit/8216100c12b4e1bdb6e41204fe1a308ba8083fce))
+* **fan-control:** report mode-scoped maximum fan state ([#1072](https://github.com/dryvist/ansible-proxmox/issues/1072)) ([4ba500e](https://github.com/dryvist/ansible-proxmox/commit/4ba500edb59ede9bd3d3852e8b5d6b5d777e68bf))
+* **nvidia_driver:** add GPU power-limit profiles ([#1082](https://github.com/dryvist/ansible-proxmox/issues/1082)) ([2bd6772](https://github.com/dryvist/ansible-proxmox/commit/2bd67728b4926e21d6082e62d49ceaa75757e046))
+* **playbooks:** add benchmark client lifecycle automation ([#1080](https://github.com/dryvist/ansible-proxmox/issues/1080)) ([edee269](https://github.com/dryvist/ansible-proxmox/commit/edee269aa5ca102c4f8f343e9c2ab4846e08cc30))
+* prepare Proxmox layers for benchmark blocks ([#1089](https://github.com/dryvist/ansible-proxmox/issues/1089)) ([cb855b5](https://github.com/dryvist/ansible-proxmox/commit/cb855b5d49efd00602f263eb5204e96f9438c312))
+
+
+### Bug Fixes
+
+* **benchmark-client:** call uv and Node by their installed paths ([#1086](https://github.com/dryvist/ansible-proxmox/issues/1086)) ([ef0a8da](https://github.com/dryvist/ansible-proxmox/commit/ef0a8daed97b0e5bccec865e8803271ffd8466f9))
+* **benchmark-client:** compare only the uv version number ([#1087](https://github.com/dryvist/ansible-proxmox/issues/1087)) ([cd5d2b0](https://github.com/dryvist/ansible-proxmox/commit/cd5d2b08f33a7552ebcd60f6449849da0ae6c8d0))
+* **benchmark-client:** install Docker CLI with the engine ([#1088](https://github.com/dryvist/ansible-proxmox/issues/1088)) ([f172b17](https://github.com/dryvist/ansible-proxmox/commit/f172b177b39a72b27ce61a5a9a3ad74f43212964))
+* **benchmark-client:** normalize ownership tags before validation ([#1084](https://github.com/dryvist/ansible-proxmox/issues/1084)) ([9a0829c](https://github.com/dryvist/ansible-proxmox/commit/9a0829c130d8fa914b98d1b8879a4d76b6dbeb92))
+* **benchmark-client:** verify the Node.js archive from its download directory ([#1085](https://github.com/dryvist/ansible-proxmox/issues/1085)) ([96c5b96](https://github.com/dryvist/ansible-proxmox/commit/96c5b96cb1c4115ee792290a234a6634a990d410))
+* **fan-control:** persist selected mode at boot ([5cf1de8](https://github.com/dryvist/ansible-proxmox/commit/5cf1de87f42df772f67abf672582b4ad96058871))
+* honor selected fan mode at boot ([#1071](https://github.com/dryvist/ansible-proxmox/issues/1071)) ([5cf1de8](https://github.com/dryvist/ansible-proxmox/commit/5cf1de87f42df772f67abf672582b4ad96058871))
+* load Tofu inventory for benchmark client ([bdbb5fd](https://github.com/dryvist/ansible-proxmox/commit/bdbb5fd1b63cfa63b3617e4719c77017163d58d4))
+* load Tofu inventory for benchmark clients ([#1083](https://github.com/dryvist/ansible-proxmox/issues/1083)) ([bdbb5fd](https://github.com/dryvist/ansible-proxmox/commit/bdbb5fd1b63cfa63b3617e4719c77017163d58d4))
+* **pve_mssql_dump_retention:** run the retention live on the SQL Server host ([#1066](https://github.com/dryvist/ansible-proxmox/issues/1066)) ([d9ff8a8](https://github.com/dryvist/ansible-proxmox/commit/d9ff8a80076a2a143fb5163aaced0b7827dcd166))
+
+
+### Performance
+
+* **ci:** narrow Molecule selection and raise matrix concurrency ([#1081](https://github.com/dryvist/ansible-proxmox/issues/1081)) ([3e3444a](https://github.com/dryvist/ansible-proxmox/commit/3e3444a0cb28c7ce0b1939c1dd4cc2362c8c0f04))
+
 ## [2.26.0](https://github.com/dryvist/ansible-proxmox/compare/v2.25.0...v2.26.0) (2026-10-15)
 
 
