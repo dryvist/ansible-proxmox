@@ -90,7 +90,7 @@
       - exec
       - "{{ vmid | string }}"
       - --
-      - uv
+      - /usr/local/bin/uv
       - --version
   register: benchmark_client_uv_version
   changed_when: false
@@ -127,7 +127,7 @@
       - exec
       - "{{ vmid | string }}"
       - --
-      - node
+      - /usr/local/bin/node
       - --version
   register: benchmark_client_node_version
   changed_when: false
@@ -178,9 +178,9 @@
       - "{{ item.command }}"
       - "{{ item.argument }}"
   loop:
-    - command: uv
+    - command: /usr/local/bin/uv
       argument: --version
-    - command: node
+    - command: /usr/local/bin/node
       argument: --version
   loop_control:
     label: "{{ item.command }}"
