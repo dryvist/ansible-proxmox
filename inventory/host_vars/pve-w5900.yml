@@ -67,12 +67,12 @@ nvidia_driver_gpu_burn_enabled: true
 nvidia_driver_gpu_burn_compute: "120"
 nvidia_driver_gpu_burn_cuda_path: /usr/local/cuda-13.2
 
-# The benchmark profile raises this GPU's power limit to the driver's 325 W
-# maximum. The default profile keeps the existing 300 W limit.
+# 300 W (default) is the standard limit for serving and benchmarks. The max
+# profile raises it to the driver's 325 W ceiling as an optional escalation.
 nvidia_driver_power_limit_profile: default
 nvidia_driver_power_limit_profiles_w:
   default: 300
-  benchmark: 325
+  max: 325
 nvidia_driver_power_limit_w: >-
   {{ nvidia_driver_power_limit_profiles_w[nvidia_driver_power_limit_profile] }}
 
