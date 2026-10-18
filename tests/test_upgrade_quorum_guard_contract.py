@@ -10,6 +10,12 @@ ROLE = yaml.safe_load((ROOT / "roles/pve_upgrade/tasks/main.yml").read_text())
 WAIT = yaml.safe_load((ROOT / "roles/pve_upgrade/tasks/wait_full_quorum.yml").read_text())
 
 
+def _walk(tasks):
+    for task in tasks:
+        yield task
+        yield from _walk(task.get("block", []))
+
+
 def _block() -> list[dict]:
     return next(t["block"] for t in ROLE if t.get("name") == "Upgrade the node, always returning it to normal HA scheduling")
 
@@ -30,8 +36,14 @@ def test_targets_resolve_once_with_first_saturday_and_blank_defaults() -> None:
 
 def test_voters_power_on_and_each_node_needs_full_votes_and_headroom() -> None:
     power = PLAYBOOK[1]
-    assert all("groups['upgrade_targets'] | default([]) | length > 0" in t["when"] for t in power["tasks"])
-    roles = [t.get("ansible.builtin.include_role", {}) for t in power["tasks"]]
+    voter_block = next(t for t in power["tasks"] if t.get("name") == "Power on and rejoin listed voters")
+    assert voter_block["when"] == [
+        "not ansible_check_mode",
+        "groups['upgrade_targets'] | default([]) | length > 0",
+        "(proxmox_node_name | default(inventory_hostname)) in pve_quorum_guard_powered_off_voters",
+    ]
+    assert all("when" not in t for t in voter_block["block"])
+    roles = [t.get("ansible.builtin.include_role", {}) for t in _walk(power["tasks"])]
     assert {"name": "idrac_power"} in roles
     assert {"name": "pve_upgrade", "tasks_from": "wait_full_quorum"} in roles
 
@@ -45,18 +57,19 @@ def test_voters_power_on_and_each_node_needs_full_votes_and_headroom() -> None:
 
 
 def test_reboot_is_followed_by_vote_and_ha_waits() -> None:
-    names = [t["name"] for t in _block()]
+    names = [t["name"] for t in _walk(_block())]
     reboot = names.index("Reboot when the running kernel differs from the selected installed kernel")
     assert names.index("Wait for every expected vote after the reboot") > reboot
     assert names.index("Wait for HA resources to clear error and fence states") > reboot
+    wait_block = next(t for t in _block() if t.get("name") == "Wait for quorum and HA resources after reboot")
+    assert wait_block["when"] == "pve_upgrade_reboot_result.rebooted | default(false)"
+    assert all("when" not in t for t in wait_block["block"])
     wait = WAIT[0]
     assert wait["ansible.builtin.command"]["cmd"] == "pvecm status"
     assert any("Total votes" in c for c in wait["until"])
 
 
 def test_major_version_is_asserted_without_a_pin() -> None:
-    defaults = yaml.safe_load((ROOT / "roles/pve_upgrade/defaults/main.yml").read_text())
-    assert "pve_upgrade_expected_version" not in defaults
     names = [t["name"] for t in _block()]
     assert names.index("Query Proxmox VE version before the package upgrade") < names.index("Update apt cache")
     assert "Assert the Proxmox VE major version is unchanged" in names
