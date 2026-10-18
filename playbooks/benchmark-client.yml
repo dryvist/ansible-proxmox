@@ -13,7 +13,8 @@
     benchmark_client_default_tools:
       uv: "0.13.1"
       node: "24.21.0"
-      vllm_client_image: "vllm/vllm-openai-cpu:v0.31.0-x86_64"
+      # renovate: datasource=docker depName=vllm/vllm-openai-cpu
+      vllm_client_image: "vllm/vllm-openai-cpu:v0.32.0-x86_64"
   tasks:
     - name: Require a valid node and client request
       ansible.builtin.assert:
