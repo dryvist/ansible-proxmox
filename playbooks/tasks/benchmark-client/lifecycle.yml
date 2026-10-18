@@ -52,13 +52,20 @@
     - inventory_hostname == node
     - state == 'present'
     - not ansible_check_mode
+- name: Derive the provisioned client tags
+  ansible.builtin.set_fact:
+    benchmark_client_config_tags: >-
+      {{ (benchmark_client_config.stdout_lines
+          | select('match', '^tags:') | list | first | default(''))
+         | regex_replace('^tags:\s*', '') }}
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
 - name: Require the client configuration to match this request
   ansible.builtin.assert:
     that:
-      - >-
-        (benchmark_client_config.stdout_lines
-         | select('match', '^tags:') | list | first | default(''))
-        is search('(^|;)benchmark-client($|;)')
+      - benchmark_client_config_tags is search('(^|;)benchmark-client($|;)')
       - >-
         (benchmark_client_config.stdout_lines
          | select('match', '^cores:') | list | first | default(''))
