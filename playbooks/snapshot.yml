@@ -9,7 +9,8 @@
 #   ./scripts/run-ansible.sh playbooks/snapshot.yml -l pve
 
 - name: Snapshot Proxmox VE root dataset
-  hosts: proxmox
+  # upgrade.yml passes its resolved target group; standalone runs use proxmox.
+  hosts: "{{ pve_snapshot_hosts | default('proxmox') }}"
   become: true
   gather_facts: true
 
