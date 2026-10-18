@@ -134,7 +134,7 @@ per-host settings (real IPs, BMC addresses, expected hardware) live in
 `inventory/host_vars/<node>.yml` (untracked). See
 `inventory/host_vars/rack-server.yml.example` for the schema.
 
-### Upgrading a node to the latest point release (PVE 9.x)
+### Upgrading Proxmox VE nodes
 
 `playbooks/upgrade.yml` brings a node to the current point release on its
 channel (`apt full-upgrade`), then reboots for the new kernel and verifies
@@ -153,12 +153,20 @@ The selection is apt's own
 `Acquire::http::Proxy` value and a pair cannot be expressed as config. Run it
 with console access available; the node reboots.
 
+The playbook defaults `upgrade_nodes` to `proxmox`. Set it to one inventory
+host for a single-node run. Runs skip UTC Saturdays after the first Saturday
+of the month; manual runs on other weekdays proceed. Before snapshots and each
+reboot, the playbook requires full voter membership and at least one vote of
+quorum headroom. It uses the existing iDRAC role for configured offline voters,
+waits for full membership, and checks quorum and HA resource status after each
+reboot.
+
 ```bash
-# Test (snapshot and reboot are skipped in check mode):
-./scripts/run-ansible.sh playbooks/upgrade.yml -l pve --check --diff
+# Test (power-on, snapshot, and reboot are skipped in check mode):
+./scripts/run-ansible.sh playbooks/upgrade.yml -e upgrade_nodes=proxmox --check --diff
 
 # Apply:
-./scripts/run-ansible.sh playbooks/upgrade.yml -l pve
+./scripts/run-ansible.sh playbooks/upgrade.yml -e upgrade_nodes=proxmox
 ```
 
 `playbooks/snapshot.yml` is also runnable on its own. If a node's root layout

@@ -9,9 +9,16 @@
 #   ./scripts/run-ansible.sh playbooks/snapshot.yml -l pve
 
 - name: Snapshot Proxmox VE root dataset
-  hosts: proxmox
+  hosts: "{{ upgrade_nodes | default('proxmox') }}"
   become: true
-  gather_facts: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: End this play for hosts outside the upgrade schedule
+      ansible.builtin.meta: end_host
+      when: hostvars.get('localhost', {}).get('upgrade_schedule_skip', false) | bool
+      tags:
+        - always
 
   roles:
     - role: pve_snapshot

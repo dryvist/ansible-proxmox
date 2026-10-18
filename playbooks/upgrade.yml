@@ -13,18 +13,214 @@
 # The upgrade itself then rolls one node at a time (see serial below), draining
 # HA guests off each node before its reboot (see the pve_upgrade role).
 #
-# Usage (test — snapshot and reboot are skipped in check mode):
-#   ./scripts/run-ansible.sh playbooks/upgrade.yml -l pve --check --diff
+# Usage (test — power-on, snapshot, and reboot are skipped in check mode):
+#   ./scripts/run-ansible.sh playbooks/upgrade.yml -e upgrade_nodes=proxmox --check --diff
 # Usage (apply — run with console access available; the node reboots):
-#   ./scripts/run-ansible.sh playbooks/upgrade.yml -l pve
+#   ./scripts/run-ansible.sh playbooks/upgrade.yml -e upgrade_nodes=proxmox
+# Set upgrade_nodes to an inventory host or group to restrict snapshot and
+# upgrade targets; it defaults to proxmox.
+
+- name: Check the first-Saturday maintenance window in UTC
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags:
+    - always
+
+  tasks:
+    - name: Read the UTC weekday and day of month
+      ansible.builtin.command:
+        argv:
+          - date
+          - -u
+          - "+%u %d"
+      register: upgrade_utc_date
+      changed_when: false
+      check_mode: false
+
+    - name: Mark upgrades outside the first-Saturday window
+      ansible.builtin.set_fact:
+        upgrade_schedule_skip: >-
+          {{ upgrade_utc_date.stdout.split()[0] | int == 6
+             and upgrade_utc_date.stdout.split()[1] | int > 7 }}
+
+    - name: Report a skipped scheduled upgrade
+      ansible.builtin.debug:
+        msg: Skipping this upgrade because it is a Saturday after the first Saturday of the month (UTC).
+      when: upgrade_schedule_skip | bool
+
+- name: Power on configured offline quorum voters
+  hosts: proxmox
+  become: true
+  gather_facts: false
+  tags:
+    - always
+
+  pre_tasks:
+    - name: End this play for hosts outside the upgrade schedule
+      ansible.builtin.meta: end_host
+      when: hostvars.get('localhost', {}).get('upgrade_schedule_skip', false) | bool
+
+  tasks:
+    - name: Require an iDRAC address for an offline quorum voter
+      ansible.builtin.assert:
+        that:
+          - idrac_power_bmc_host | default('') | length > 0
+        fail_msg: >-
+          The offline quorum voter has no configured iDRAC address; refusing to
+          continue before snapshots.
+      delegate_to: localhost
+      when:
+        - not ansible_check_mode
+        - (proxmox_node_name | default(inventory_hostname)) in pve_quorum_guard_powered_off_voters
+
+    - name: Power on an offline quorum voter with the existing iDRAC role
+      ansible.builtin.include_role:
+        name: idrac_power
+        apply:
+          tags:
+            - always
+      vars:
+        idrac_power_action: "on"
+      when:
+        - not ansible_check_mode
+        - (proxmox_node_name | default(inventory_hostname)) in pve_quorum_guard_powered_off_voters
+
+    - name: Wait for the quorum voter to rejoin with every expected vote
+      ansible.builtin.command:
+        cmd: pvecm status
+      register: upgrade_voter_cluster_status
+      until:
+        - upgrade_voter_cluster_status.stdout is search('Quorate:\s+Yes')
+        - >-
+          (upgrade_voter_cluster_status.stdout
+          | regex_findall('Total votes:\s+(\d+)') | first | default('0') | int)
+          ==
+          (upgrade_voter_cluster_status.stdout
+          | regex_findall('Highest expected:\s+(\d+)') | first | default('-1') | int)
+      retries: "{{ idrac_power_boot_timeout | int // 10 }}"
+      delay: 10
+      changed_when: false
+      check_mode: false
+      when:
+        - not ansible_check_mode
+        - (proxmox_node_name | default(inventory_hostname)) in pve_quorum_guard_powered_off_voters
+
+- name: Require full quorum before taking snapshots
+  hosts: "{{ upgrade_nodes | default('proxmox') }}"
+  become: true
+  gather_facts: false
+  tags:
+    - always
+
+  vars:
+    pve_quorum_guard_min_headroom: 1
+    pve_quorum_guard_powered_off_voters: []
+
+  pre_tasks:
+    - name: End this play for hosts outside the upgrade schedule
+      ansible.builtin.meta: end_host
+      when: hostvars.get('localhost', {}).get('upgrade_schedule_skip', false) | bool
+
+    - name: Gather facts for the quorum guard
+      ansible.builtin.setup:
+
+    - name: Read cluster vote membership before snapshots
+      ansible.builtin.command:
+        cmd: pvecm status
+      register: upgrade_preflight_cluster_status
+      changed_when: false
+      check_mode: false
+
+    - name: Derive expected cluster vote counts
+      ansible.builtin.set_fact:
+        upgrade_preflight_highest_expected: >-
+          {{ upgrade_preflight_cluster_status.stdout
+             | regex_search('Highest expected:\s+(\d+)', '\1')
+             | default([0], true) | first | int }}
+        upgrade_preflight_expected_votes: >-
+          {{ upgrade_preflight_cluster_status.stdout
+             | regex_search('Expected votes:\s+(\d+)', '\1')
+             | default([0], true) | first | int }}
+        upgrade_preflight_total_votes: >-
+          {{ upgrade_preflight_cluster_status.stdout
+             | regex_search('Total votes:\s+(\d+)', '\1')
+             | default([0], true) | first | int }}
+
+    - name: Require all configured voters before snapshots
+      ansible.builtin.assert:
+        that:
+          - upgrade_preflight_cluster_status.stdout is search('Quorate:\s+Yes')
+          - upgrade_preflight_highest_expected | int > 0
+          - upgrade_preflight_expected_votes | int == upgrade_preflight_highest_expected | int
+          - upgrade_preflight_total_votes | int == upgrade_preflight_highest_expected | int
+        fail_msg: >-
+          Refusing to snapshot or upgrade until pvecm status reports a quorate
+          cluster with every configured vote present.
+        quiet: true
+
+  roles:
+    - role: pve_quorum_guard
 
 - name: Snapshot the root dataset before upgrading
   import_playbook: snapshot.yml
+  tags:
+    - always
 
 - name: Upgrade Proxmox VE nodes
-  hosts: proxmox
+  hosts: "{{ upgrade_nodes | default('proxmox') }}"
   become: true
-  gather_facts: true
+  gather_facts: false
+
+  vars:
+    pve_quorum_guard_min_headroom: 1
+    pve_quorum_guard_powered_off_voters: []
+
+  pre_tasks:
+    - name: End this play for hosts outside the upgrade schedule
+      ansible.builtin.meta: end_host
+      when: hostvars.get('localhost', {}).get('upgrade_schedule_skip', false) | bool
+      tags:
+        - always
+
+    - name: Gather facts for the node upgrade
+      ansible.builtin.setup:
+      tags:
+        - always
+
+    - name: Recheck quorum headroom before starting this node
+      ansible.builtin.import_role:
+        name: pve_quorum_guard
+      tags:
+        - always
+
+    - name: Read cluster vote membership before starting this node
+      ansible.builtin.command:
+        cmd: pvecm status
+      register: upgrade_node_cluster_status
+      changed_when: false
+      check_mode: false
+      tags:
+        - always
+
+    - name: Require every configured vote before starting this node
+      ansible.builtin.assert:
+        that:
+          - upgrade_node_cluster_status.stdout is search('Quorate:\s+Yes')
+          - >-
+            (upgrade_node_cluster_status.stdout
+            | regex_findall('Expected votes:\s+(\d+)') | first | default('0') | int)
+            == pve_quorum_guard_highest_expected | int
+          - >-
+            (upgrade_node_cluster_status.stdout
+            | regex_findall('Total votes:\s+(\d+)') | first | default('0') | int)
+            == pve_quorum_guard_highest_expected | int
+        fail_msg: >-
+          Refusing to start this node's upgrade until pvecm status reports a
+          quorate cluster with every configured vote present.
+        quiet: true
+      tags:
+        - always
 
   # One node at a time. Without this, `-l proxmox` apt-upgrades and reboots every
   # node in the cluster simultaneously: corosync loses quorum, HA guests have
