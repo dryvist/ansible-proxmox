@@ -152,6 +152,7 @@
         archive="node-v${version}-linux-x64.tar.xz"
         temporary_directory="$(mktemp -d)"
         trap 'rm -rf "$temporary_directory"' EXIT
+        cd "$temporary_directory"
         curl -fsSLo "${temporary_directory}/${archive}" "https://nodejs.org/dist/v${version}/${archive}"
         curl -fsSL "https://nodejs.org/dist/v${version}/SHASUMS256.txt" \
           | grep -F "  ${archive}" \
