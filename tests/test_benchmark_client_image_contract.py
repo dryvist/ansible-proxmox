@@ -14,7 +14,8 @@ def test_client_pins_the_x86_64_vllm_image_by_default() -> None:
     assert playbook[0]["ansible.builtin.import_playbook"] == "load_tofu.yml"
     validation = next(play for play in playbook if play["name"] == "Validate the benchmark client request")
     tools = validation["vars"]["benchmark_client_default_tools"]
-    assert tools["vllm_client_image"] == "vllm/vllm-openai-cpu:v0.31.0-x86_64"
+    assert tools["vllm_client_image"] == "vllm/vllm-openai-cpu:v0.32.0-x86_64"
+    assert "# renovate: datasource=docker depName=vllm/vllm-openai-cpu" in PLAYBOOK.read_text()
 
 
 def test_client_pulls_and_verifies_vllm_image_only_for_present_state() -> None:
