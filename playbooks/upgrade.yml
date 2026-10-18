@@ -1,29 +1,7 @@
 ---
-# Upgrade Proxmox VE nodes to the latest point release on their channel.
-#
-# Composes the snapshot play first (ZFS root restore point) — mirroring how
-# site.yml imports load_tofu.yml — then normalizes the apt repositories to
-# the no-subscription channel (pve_repositories), runs apt full-upgrade, reboots
-# for the new kernel, and verifies the version. Deliberately does NOT import
-# load_tofu.yml (NAS-focused; irrelevant to an OS upgrade), matching
-# commission_rack_server.yml.
-#
-# Snapshots are taken for every targeted node up front, before any node is
-# changed, so a restore point exists cluster-wide before the first reboot.
-# The upgrade itself then rolls one node at a time (see serial below), draining
-# HA guests off each node before its reboot (see the pve_upgrade role).
-#
-# Targets: upgrade_nodes (an inventory host, group or pattern; blank or unset
-# means proxmox). Scheduled every Saturday; a Saturday after the 7th (UTC)
-# targets nothing, so the schedule acts on the first Saturday of the month.
-# Manual runs on any other day proceed.
-#
-# Quorum: every powered-off voter is powered on first, and each node starts
-# and finishes its upgrade only while the cluster is quorate with every
-# expected vote present and at least one vote of headroom.
-#
-# A run with no targets still lists every node as skipped in the play recap.
-#
+# Upgrade Proxmox VE nodes to the latest point release, snapshotting each
+# target before its serial HA-aware upgrade and version check.
+# Scheduled every Saturday; after the first Saturday (UTC), it targets nothing.
 # Usage (test — power-on, snapshot and reboot are skipped in check mode):
 #   ./scripts/run-ansible.sh playbooks/upgrade.yml --check --diff
 # Usage (apply one node — run with console access available; it reboots):
@@ -59,24 +37,22 @@
   tags:
     - always
   tasks:
-    - name: Power on this voter with the iDRAC role
-      ansible.builtin.include_role:
-        name: idrac_power
-      vars:
-        idrac_power_action: "on"
+    - name: Power on and rejoin listed voters
       when:
         - not ansible_check_mode
         - groups['upgrade_targets'] | default([]) | length > 0
         - (proxmox_node_name | default(inventory_hostname)) in pve_quorum_guard_powered_off_voters
+      block:
+        - name: Power on this voter with the iDRAC role
+          ansible.builtin.include_role:
+            name: idrac_power
+          vars:
+            idrac_power_action: "on"
 
-    - name: Wait for this voter to rejoin the cluster
-      ansible.builtin.include_role:
-        name: pve_upgrade
-        tasks_from: wait_full_quorum
-      when:
-        - not ansible_check_mode
-        - groups['upgrade_targets'] | default([]) | length > 0
-        - (proxmox_node_name | default(inventory_hostname)) in pve_quorum_guard_powered_off_voters
+        - name: Wait for this voter to rejoin the cluster
+          ansible.builtin.include_role:
+            name: pve_upgrade
+            tasks_from: wait_full_quorum
 
 - name: Snapshot the root dataset before upgrading
   import_playbook: snapshot.yml
