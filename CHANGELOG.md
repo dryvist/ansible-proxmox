@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.28.0](https://github.com/dryvist/ansible-proxmox/compare/v2.27.0...v2.28.0) (2026-10-18)
+
+
+### Features
+
+* **upgrade:** quorum-guarded monthly node upgrade ([#1094](https://github.com/dryvist/ansible-proxmox/issues/1094)) ([06d89ad](https://github.com/dryvist/ansible-proxmox/commit/06d89adbfe5f1c4999c177fb8b0405d134f4d592))
+
 ## [2.27.0](https://github.com/dryvist/ansible-proxmox/compare/v2.26.0...v2.27.0) (2026-10-18)
 
 
