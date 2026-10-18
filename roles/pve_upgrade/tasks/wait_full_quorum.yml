@@ -1,0 +1,21 @@
+---
+# Waits until the cluster is quorate with every expected vote present. Used by
+# playbooks/upgrade.yml before a node is touched and by main.yml after a reboot.
+- name: Wait for a quorate cluster with every expected vote
+  ansible.builtin.command:
+    cmd: pvecm status
+  register: pve_upgrade_cluster_status
+  until:
+    - pve_upgrade_cluster_status.stdout is search('Quorate:\s+Yes')
+    - >-
+      (pve_upgrade_cluster_status.stdout
+       | regex_search('Total votes:\s+(\d+)', '\1') | default(['0'], true) | first | int)
+      ==
+      (pve_upgrade_cluster_status.stdout
+       | regex_search('Highest expected:\s+(\d+)', '\1') | default(['-1'], true) | first | int)
+  retries: "{{ pve_upgrade_reboot_timeout | int // 10 }}"
+  delay: 10
+  changed_when: false
+  check_mode: false
+  tags:
+    - pve_upgrade
