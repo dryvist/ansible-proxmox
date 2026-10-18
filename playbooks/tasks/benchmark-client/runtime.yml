@@ -118,7 +118,7 @@
   when:
     - inventory_hostname == node
     - state == 'present'
-    - benchmark_client_uv_version.rc != 0 or benchmark_client_uv_version.stdout != 'uv ' ~ benchmark_client_tools.uv
+    - benchmark_client_uv_version.rc != 0 or benchmark_client_uv_version.stdout.split()[:2] | join(' ') != 'uv ' ~ benchmark_client_tools.uv
     - not ansible_check_mode
 - name: Read the installed Node version
   ansible.builtin.command:
@@ -193,7 +193,7 @@
 - name: Require the pinned tool versions
   ansible.builtin.assert:
     that:
-      - benchmark_client_tool_versions.results[0].stdout == 'uv ' ~ benchmark_client_tools.uv
+      - benchmark_client_tool_versions.results[0].stdout.split()[:2] | join(' ') == 'uv ' ~ benchmark_client_tools.uv
       - benchmark_client_tool_versions.results[1].stdout == 'v' ~ benchmark_client_tools.node
     fail_msg: "The benchmark client does not have the requested uv and Node versions."
     quiet: true
