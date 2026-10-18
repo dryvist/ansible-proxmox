@@ -14,6 +14,24 @@
     - inventory_hostname == node
     - state == 'present'
     - not ansible_check_mode
+- name: Upgrade all benchmark-client packages
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - env
+      - DEBIAN_FRONTEND=noninteractive
+      - apt-get
+      - full-upgrade
+      - --yes
+  register: benchmark_client_apt_upgrade
+  changed_when: "'0 upgraded' not in benchmark_client_apt_upgrade.stdout"
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
 - name: Install Docker and benchmark runtime prerequisites
   ansible.builtin.command:
     argv:

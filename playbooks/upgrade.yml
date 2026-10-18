@@ -41,6 +41,9 @@
     - role: pve_repositories
       tags:
         - pve_repositories
+    - role: nvidia_driver
+      tags:
+        - nvidia_driver
     - role: pve_upgrade
       tags:
         - pve_upgrade
