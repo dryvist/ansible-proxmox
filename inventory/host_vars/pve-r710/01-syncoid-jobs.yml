@@ -105,9 +105,6 @@ syncoid_jobs:
   - name: "ct-405000-disk3"  # langfuse /opt/langfuse
     source: "root@pve-r540:bulk/subvol-405000-disk-3"
     target: "bulk/replica/pve-r540/subvol-405000-disk-3"
-  - name: "ct-512010-disk1"  # 512010
-    source: "root@pve-r540:bulk/subvol-512010-disk-1"
-    target: "bulk/replica/pve-r540/subvol-512010-disk-1"
   - name: "ct-514000-disk2"  # qdrant rootfs
     source: "root@pve-r540:bulk/subvol-514000-disk-2"
     target: "bulk/replica/pve-r540/subvol-514000-disk-2"
