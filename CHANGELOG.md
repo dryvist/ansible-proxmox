@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.0](https://github.com/dryvist/ansible-proxmox/compare/v2.31.0...v2.32.0) (2026-10-20)
+
+
+### Features
+
+* **pve-syslog-forwarder:** collect Proxmox task logs ([#1129](https://github.com/dryvist/ansible-proxmox/issues/1129)) ([4d08a64](https://github.com/dryvist/ansible-proxmox/commit/4d08a640e71e7f7387378bfcea84b747ee422164))
+
 ## [2.31.0](https://github.com/dryvist/ansible-proxmox/compare/v2.30.0...v2.31.0) (2026-10-20)
 
 
