@@ -1,0 +1,29 @@
+---
+- name: Resolve suspended replication jobs sourced from this node
+  ansible.builtin.set_fact:
+    pve_ha_replication_suspended_jobs: >-
+      {{ (pve_ha_replication_status_raw.stdout | from_json)
+         | selectattr('source', 'equalto', pve_ha_this_pve_node)
+         | selectattr('target', 'in', pve_ha_replication_suspended_targets | default([]))
+         | list }}
+
+- name: Resolve suspended ids and permanently-broken jobs not suspended
+  ansible.builtin.set_fact:
+    pve_ha_replication_suspended_ids: >-
+      {{ pve_ha_replication_suspended_jobs | map(attribute='id') | list }}
+    pve_ha_replication_disable_ids: []
+    pve_ha_broken_replication_ids: >-
+      {{ (pve_ha_replication_status_raw.stdout | from_json)
+         | selectattr('source', 'equalto', pve_ha_this_pve_node)
+         | rejectattr('target', 'in', pve_ha_replication_suspended_targets | default([]))
+         | selectattr('error', 'defined')
+         | selectattr('error', 'search', 'No common base snapshot')
+         | map(attribute='id') | list }}
+
+- name: Select active replication jobs for suspended targets
+  ansible.builtin.set_fact:
+    pve_ha_replication_disable_ids: "{{ pve_ha_replication_disable_ids + [item.id] }}"
+  loop: "{{ pve_ha_replication_suspended_jobs }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: not (item.disable | default(false) | bool)

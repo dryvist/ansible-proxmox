@@ -161,6 +161,11 @@ No real service is touched.
 
   Default: `""`. `pvesr` rate limit in MB/s; empty = unlimited.
 
+- `pve_ha_replication_suspended_targets`
+
+  Default: `[]`. Target nodes whose jobs are disabled and left alone until
+  removed; clearing the list re-enables them on the next converge.
+
 - `pve_ha_replication_jobnum`
 
   Default: `0`. Job-number suffix in the `<vmid>-<jobnum>` job id.

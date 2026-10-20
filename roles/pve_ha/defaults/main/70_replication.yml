@@ -7,6 +7,10 @@
 pve_ha_replication_schedule: "*/5"
 pve_ha_replication_rate: ""
 
+# Targets whose jobs are disabled and left alone until removed from this list.
+# Clearing it re-enables those jobs on the next converge.
+pve_ha_replication_suspended_targets: []
+
 # Job-number suffix for the pvesr job id (<vmid>-<jobnum>). One job per guest.
 pve_ha_replication_jobnum: 0
 
