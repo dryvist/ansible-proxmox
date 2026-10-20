@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.33.1](https://github.com/dryvist/ansible-proxmox/compare/v2.33.0...v2.33.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **inventory:** use proxmox_node_name for SSH fallback ([#1153](https://github.com/dryvist/ansible-proxmox/issues/1153)) ([5af053c](https://github.com/dryvist/ansible-proxmox/commit/5af053cedc1012c7709678fa0d07cab494894960))
+
 ## [2.33.0](https://github.com/dryvist/ansible-proxmox/compare/v2.32.4...v2.33.0) (2026-10-20)
 
 
