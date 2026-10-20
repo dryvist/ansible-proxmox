@@ -42,6 +42,14 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook --check tests/lxc_storage_mount_sizes/verify_reconcile.yml -i localhost, -c local -e lxc_storage_mount_sizes_contract_mode=check
 
+      - name: Verify missing storage mount attachment
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/lxc_storage_mount_sizes/verify_attach.yml -i localhost, -c local
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook --check tests/lxc_storage_mount_sizes/verify_attach.yml -i localhost, -c local -e lxc_storage_mount_sizes_contract_mode=check
+
   guest-recovery:
     name: Verify guest recovery contracts and playbook syntax
     runs-on: ubuntu-latest
