@@ -35,6 +35,9 @@ jobs:
         with:
           python-version: "3.14"
 
+      - name: Install workflow policy parser
+        run: python -m pip install PyYAML
+
       # The apt caching-proxy hook exists for the UNREACHABLE case, which a
       # molecule container cannot present. The test extracts the script from the
       # role rather than copying it, so role drift fails here.
