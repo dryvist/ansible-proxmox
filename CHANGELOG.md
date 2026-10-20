@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.30.0](https://github.com/dryvist/ansible-proxmox/compare/v2.29.1...v2.30.0) (2026-10-20)
+
+
+### Features
+
+* **pve_ha:** suspend replication jobs by target node ([#1116](https://github.com/dryvist/ansible-proxmox/issues/1116)) ([5176c8c](https://github.com/dryvist/ansible-proxmox/commit/5176c8c8dc9fc9add022c071205f342f2f1def7d))
+
+
+### Bug Fixes
+
+* **deps:** require amazon.aws 11.3.0 without deprecated text imports ([#1115](https://github.com/dryvist/ansible-proxmox/issues/1115)) ([e0da0bc](https://github.com/dryvist/ansible-proxmox/commit/e0da0bc8b052d8ef342fe814da687d8a0c92add4))
+* **inventory:** set the hung-task threshold for every rack server ([#1118](https://github.com/dryvist/ansible-proxmox/issues/1118)) ([0755a56](https://github.com/dryvist/ansible-proxmox/commit/0755a569a5124d8e37754b4e8c5a5faba9acfdb7))
+
 ## [2.29.1](https://github.com/dryvist/ansible-proxmox/compare/v2.29.0...v2.29.1) (2026-10-20)
 
 
