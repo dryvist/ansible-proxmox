@@ -1,0 +1,21 @@
+---
+- name: Read the CoolerControl write token from OpenBao
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ fan_control_bao_addr }}"
+    token: "{{ fan_control_bao_token }}"
+    engine_mount_point: "{{ fan_control_bao_kv_mount }}"
+    path: "{{ fan_control_bao_path }}"
+  register: _fan_control_openbao_secret
+  delegate_to: localhost
+  become: false
+  no_log: true
+  changed_when: false
+  check_mode: false
+
+- name: Require the CoolerControl write token
+  ansible.builtin.assert:
+    that:
+      - _fan_control_openbao_secret.secret.fan_control_write_token | default('', true) | length > 0
+    fail_msg: The OpenBao fan-control write credential is missing.
+    quiet: true
+  no_log: true
