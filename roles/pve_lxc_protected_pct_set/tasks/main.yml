@@ -1,0 +1,12 @@
+---
+- name: Run pct set while preserving the container protection setting
+  ansible.builtin.command:
+    argv:
+      - sh
+      - -c
+      - "{{ pve_lxc_protected_pct_set_script }}"
+      - sh
+      - "{{ pve_lxc_protected_pct_set_vmid }}"
+      - "{{ pve_lxc_protected_pct_set_option }}"
+      - "{{ pve_lxc_protected_pct_set_value }}"
+  changed_when: true

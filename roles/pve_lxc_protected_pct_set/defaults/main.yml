@@ -1,0 +1,10 @@
+---
+# pct set refuses disk changes on protected containers. Lift protection only
+# for this invocation and always restore its original enabled state.
+pve_lxc_protected_pct_set_script: |
+  set -u
+  prot=$(pct config "$1" | sed -n 's/^protection: //p')
+  if [ "$prot" = 1 ]; then pct set "$1" --protection 0 || exit 1; fi
+  pct set "$1" "$2" "$3"; rc=$?
+  if [ "$prot" = 1 ]; then pct set "$1" --protection 1 || rc=1; fi
+  exit "$rc"

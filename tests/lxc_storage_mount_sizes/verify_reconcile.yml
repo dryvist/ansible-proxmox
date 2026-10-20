@@ -105,11 +105,26 @@
             /nodes/fixture-node/storage/tight/status)
               printf '%s\n' '{"active":1,"avail":10737418240}'
               ;;
-            /nodes/fixture-node/lxc/108/config)
-              printf '%s\n' '{"digest":"fixture-digest","lock":"snapshot"}'
+            /nodes/fixture-node/lxc/101/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-101-disk-0,mp=/srv/grow,size=1G"}'
               ;;
-            /nodes/fixture-node/lxc/*/config)
-              printf '%s\n' '{"digest":"fixture-digest"}'
+            /nodes/fixture-node/lxc/102/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-102-disk-0,mp=/srv/equal,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/103/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-103-disk-0,mp=/srv/smaller,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/104/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-104-disk-0,mp=/srv/other,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/105/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"tight:subvol-105-disk-0,mp=/srv/insufficient,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/107/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"fast:subvol-107-disk-0,mp=/srv/volume,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/108/config)
+              printf '%s\n' '{"digest":"fixture-digest","lock":"snapshot","mp0":"bulk:subvol-108-disk-0,mp=/srv/locked,size=1G"}'
               ;;
             *) exit 1 ;;
           esac
@@ -126,17 +141,7 @@
             printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/resize.log
             exit 0
           fi
-          [ "$1" = config ] || exit 1
-          case "$2" in
-            101) printf '%s\n' 'mp0: bulk:subvol-101-disk-0,mp=/srv/grow,size=1G' ;;
-            102) printf '%s\n' 'mp0: bulk:subvol-102-disk-0,mp=/srv/equal,size=1G' ;;
-            103) printf '%s\n' 'mp0: bulk:subvol-103-disk-0,mp=/srv/smaller,size=1G' ;;
-            104) printf '%s\n' 'mp0: bulk:subvol-104-disk-0,mp=/srv/other,size=1G' ;;
-            105) printf '%s\n' 'mp0: tight:subvol-105-disk-0,mp=/srv/insufficient,size=1G' ;;
-            107) printf '%s\n' 'mp0: fast:subvol-107-disk-0,mp=/srv/volume,size=1G' ;;
-            108) printf '%s\n' 'mp0: bulk:subvol-108-disk-0,mp=/srv/locked,size=1G' ;;
-            *) exit 1 ;;
-          esac
+          exit 1
         dest: "{{ lxc_storage_mount_sizes_stub_dir }}/pct"
         mode: "0755"
       check_mode: false
@@ -224,7 +229,7 @@
         that:
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'grow') | map(attribute='status') | first) == 'refused'"
           - "'check mode active' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'grow') | map(attribute='reason') | first)"
-          - "'config 101' in lxc_storage_mount_sizes_check_pct_commands"
+          - "lxc_storage_mount_sizes_check_pct_commands | length == 0"
           - "'storage/bulk/status' in lxc_storage_mount_sizes_check_pvesh_commands"
           - "lxc_storage_mount_sizes_check_resize_commands | length == 0"
         fail_msg: |

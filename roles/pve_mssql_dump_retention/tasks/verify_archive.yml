@@ -57,3 +57,4 @@
         (pve_mssql_dump_retention_archive_members.stdout_lines | length)
     fail_msg: "The archive members do not match the live dump directory one to one."
     quiet: true
+  when: pve_mssql_dump_retention_archive_members is not skipped

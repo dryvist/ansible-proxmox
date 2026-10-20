@@ -1,10 +1,12 @@
 # lxc_storage_mount_sizes
 
-Grows declared Proxmox LXC storage-volume mount points from the published
-`containers_from_tofu` inventory. The role compares live cluster placement,
-`pct config`, and the storage's available bytes before it calls `pct resize`.
-It skips binds and refuses identity mismatches, locks, migrations, shrink
-requests, missing headroom, and incomplete live state. It never shrinks a mount.
+Reconciles declared Proxmox LXC storage-volume mounts from the published
+`containers_from_tofu` inventory by growing existing mounts and attaching
+missing mounts at their declared `mp_index` only when the slot is free and the
+storage has headroom for the full allocation. It retains the placement,
+identity, lock, migration, and no-shrink guards, skips bind mounts, refuses
+occupied indices, and reads `/pending` after attach to restart only when the
+new mount did not hotplug live.
 
 The role runs after the mount-producing LXC roles in `playbooks/site.yml` and
 is selected with the `lxc_storage_mount_sizes` tag. An empty

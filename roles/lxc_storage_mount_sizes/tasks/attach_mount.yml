@@ -1,0 +1,65 @@
+---
+- name: Attach the declared storage volume at its free mp index
+  ansible.builtin.include_role:
+    name: pve_lxc_protected_pct_set
+    apply:
+      tags:
+        - lxc_storage_mount_sizes
+  tags:
+    - lxc_storage_mount_sizes
+  vars:
+    pve_lxc_protected_pct_set_vmid: "{{ lxc_storage_mount_sizes_live_guest.vmid }}"
+    pve_lxc_protected_pct_set_option: "--mp{{ lxc_storage_mount_sizes_mount.mp_index }}"
+    pve_lxc_protected_pct_set_value: >-
+      {{ lxc_storage_mount_sizes_mount.volume }}:{{ lxc_storage_mount_sizes_mount.size | regex_replace('G$', '') }},mp={{
+      lxc_storage_mount_sizes_mount.path }}
+
+- name: Read pending configuration after attaching the storage mount
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ lxc_storage_mount_sizes_live_guest.node }}/lxc/{{ lxc_storage_mount_sizes_live_guest.vmid }}/pending"
+      - --output-format
+      - json
+  register: lxc_storage_mount_sizes_pending_after_attach
+  changed_when: false
+  check_mode: false
+
+- name: Determine whether the new mount remains pending
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_mount_pending: >-
+      {{ (lxc_storage_mount_sizes_pending_after_attach.stdout | from_json
+          | selectattr('key', 'equalto', 'mp' ~ (lxc_storage_mount_sizes_mount.mp_index | string))
+          | selectattr('pending', 'defined') | list | length) > 0 }}
+
+- name: Reboot a running guest when the new mount remains pending
+  ansible.builtin.command:
+    argv:
+      - pct
+      - reboot
+      - "{{ lxc_storage_mount_sizes_live_guest.vmid }}"
+  changed_when: true
+  when:
+    - lxc_storage_mount_sizes_mount_pending
+    - lxc_storage_mount_sizes_live_guest.status == 'running'
+
+- name: Start a stopped guest when the new mount remains pending
+  ansible.builtin.command:
+    argv:
+      - pct
+      - start
+      - "{{ lxc_storage_mount_sizes_live_guest.vmid }}"
+  changed_when: true
+  when:
+    - lxc_storage_mount_sizes_mount_pending
+    - lxc_storage_mount_sizes_live_guest.status == 'stopped'
+
+- name: Record the successful storage mount attachment
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: attached
+      reason: >-
+        {{ 'new mp remained pending and the guest was restarted to apply it'
+           if lxc_storage_mount_sizes_mount_pending else
+           'new mp hotplugged live; no restart was needed' }}

@@ -15,8 +15,12 @@ import jinja2
 import yaml
 from ansible.plugins.filter.core import regex_replace
 
-ROLE = Path(__file__).resolve().parents[2] / "roles/llm_model_store_seed"
-TASK_FILE = ROLE / "tasks/attach_missing_mounts.yml"
+REPO = Path(__file__).resolve().parents[2]
+ROLE = REPO / "roles/pve_lxc_protected_pct_set"
+TASK_FILE = ROLE / "tasks/main.yml"
+LLM_ATTACH_FILE = REPO / "roles/llm_model_store_seed/tasks/attach_missing_mounts.yml"
+LLM_REMOVE_FILE = REPO / "roles/llm_model_store_seed/tasks/remove_duplicate_mounts.yml"
+MOUNT_ATTACH_FILE = REPO / "roles/lxc_storage_mount_sizes/tasks/attach_mount.yml"
 
 FAKE_PCT = """#!/bin/sh
 echo "$*" >> "$LOG"
@@ -30,12 +34,21 @@ exit 0
 """
 
 tasks = yaml.safe_load(TASK_FILE.read_text())
-ATTACH = next(t for t in tasks if t.get("name") == "Attach each missing models mount (pct set)")
-ARGV = ATTACH["ansible.builtin.command"]["argv"]
-SCRIPT_VAR = "llm_model_store_seed_pct_set_script"
+SET_TASK = next(t for t in tasks if t.get("name") == "Run pct set while preserving the container protection setting")
+ARGV = SET_TASK["ansible.builtin.command"]["argv"]
+SCRIPT_VAR = "pve_lxc_protected_pct_set_script"
 assert ARGV[2] == "{{ " + SCRIPT_VAR + " }}", ARGV[2]
 SCRIPT = yaml.safe_load((ROLE / "defaults/main.yml").read_text())[SCRIPT_VAR]
-SPEC = ARGV[-1]
+LLM_ATTACH = next(t for t in yaml.safe_load(LLM_ATTACH_FILE.read_text())
+                  if t.get("name") == "Attach each missing models mount (pct set)")
+SPEC = LLM_ATTACH["vars"]["pve_lxc_protected_pct_set_value"]
+HELPER_CALLS = [
+    task
+    for task_file in (LLM_ATTACH_FILE, LLM_REMOVE_FILE, MOUNT_ATTACH_FILE)
+    for task in yaml.safe_load(task_file.read_text())
+    if task.get("ansible.builtin.include_role", {}).get("name") == "pve_lxc_protected_pct_set"
+]
+assert len(HELPER_CALLS) == 4, len(HELPER_CALLS)
 
 
 def render_spec(size, read_only=False):

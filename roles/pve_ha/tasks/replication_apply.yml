@@ -92,6 +92,7 @@
     pvesr create-local-job {{ item.id }} {{ item.target }}
     --schedule '{{ pve_ha_replication_schedule }}'
     {% if pve_ha_replication_rate | string | length > 0 %}--rate {{ pve_ha_replication_rate }}{% endif %}
+    {% if not (item.enabled | default(true) | bool) %}--disable 1{% endif %}
     {# No colon: Proxmox percent-encodes it in replication.cfg and re-encodes
        the encoding on each rewrite, so 'pve_ha:' degrades to 'pve_ha%2525253A'
        and keeps growing. Plain words survive round-trips unchanged. #}
