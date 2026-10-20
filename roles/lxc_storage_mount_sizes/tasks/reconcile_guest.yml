@@ -1,0 +1,105 @@
+---
+- name: Refuse mounts when cluster placement is unavailable
+  ansible.builtin.include_tasks:
+    file: report_mounts.yml
+    apply:
+      tags:
+        - lxc_storage_mount_sizes
+  vars:
+    lxc_storage_mount_sizes_refusal: live cluster placement could not be read
+  when:
+    - not lxc_storage_mount_sizes_placement_valid | default(false)
+    - >-
+      lxc_storage_mount_sizes_guest_keys | length > 0
+      or inventory_hostname == (groups.get('proxmox', [inventory_hostname]) | first)
+  tags:
+    - lxc_storage_mount_sizes
+
+- name: Refuse mounts without one matching live LXC resource
+  ansible.builtin.include_tasks:
+    file: report_mounts.yml
+    apply:
+      tags:
+        - lxc_storage_mount_sizes
+  vars:
+    lxc_storage_mount_sizes_refusal: >-
+      {{ 'no matching live LXC resource exists in cluster configuration'
+         if lxc_storage_mount_sizes_live_matches | length == 0
+         else 'cluster configuration returned multiple matching LXC resources' }}
+  when:
+    - lxc_storage_mount_sizes_placement_valid | default(false)
+    - lxc_storage_mount_sizes_live_matches | length != 1
+    - >-
+      lxc_storage_mount_sizes_guest_keys | length > 0
+      or inventory_hostname == (groups.get('proxmox', [inventory_hostname]) | first)
+  tags:
+    - lxc_storage_mount_sizes
+
+- name: Report a selected guest that is owned by another node
+  ansible.builtin.include_tasks:
+    file: report_mounts.yml
+    apply:
+      tags:
+        - lxc_storage_mount_sizes
+  vars:
+    lxc_storage_mount_sizes_refusal: >-
+      live cluster configuration places this guest on another node
+  when:
+    - lxc_storage_mount_sizes_live_matches | length == 1
+    - lxc_storage_mount_sizes_guest_keys | length > 0
+    - lxc_storage_mount_sizes_live_matches[0].node !=
+      (proxmox_node_name | default(inventory_hostname))
+  tags:
+    - lxc_storage_mount_sizes
+
+- name: Refuse mounts for a locked or migrating guest
+  ansible.builtin.include_tasks:
+    file: report_mounts.yml
+    apply:
+      tags:
+        - lxc_storage_mount_sizes
+  vars:
+    lxc_storage_mount_sizes_refusal: >-
+      guest is locked or migrating (status={{ lxc_storage_mount_sizes_live_matches[0].status | default('unknown') }})
+  when:
+    - lxc_storage_mount_sizes_live_matches | length == 1
+    - lxc_storage_mount_sizes_live_matches[0].node ==
+      (proxmox_node_name | default(inventory_hostname))
+    - lxc_storage_mount_sizes_live_matches[0].status | default('unknown') == 'migrating'
+      or lxc_storage_mount_sizes_live_matches[0].lock | default('') | length > 0
+  tags:
+    - lxc_storage_mount_sizes
+
+- name: Refuse mounts when live guest status is unknown
+  ansible.builtin.include_tasks:
+    file: report_mounts.yml
+    apply:
+      tags:
+        - lxc_storage_mount_sizes
+  vars:
+    lxc_storage_mount_sizes_refusal: >-
+      live cluster status is neither running nor stopped
+  when:
+    - lxc_storage_mount_sizes_live_matches | length == 1
+    - lxc_storage_mount_sizes_live_matches[0].node ==
+      (proxmox_node_name | default(inventory_hostname))
+    - lxc_storage_mount_sizes_live_matches[0].status | default('unknown') not in ['running', 'stopped', 'migrating']
+  tags:
+    - lxc_storage_mount_sizes
+
+- name: Inspect and reconcile mounts on their current owner node
+  ansible.builtin.include_tasks:
+    file: inspect_guest.yml
+    apply:
+      tags:
+        - lxc_storage_mount_sizes
+  vars:
+    lxc_storage_mount_sizes_live_guest: "{{ lxc_storage_mount_sizes_live_matches[0] }}"
+  when:
+    - lxc_storage_mount_sizes_live_matches | length == 1
+    - lxc_storage_mount_sizes_live_matches[0].node ==
+      (proxmox_node_name | default(inventory_hostname))
+    - lxc_storage_mount_sizes_live_matches[0].status | default('unknown') in ['running', 'stopped']
+    - lxc_storage_mount_sizes_live_matches[0].lock | default('') | length == 0
+  tags:
+    - lxc_storage_mount_sizes
