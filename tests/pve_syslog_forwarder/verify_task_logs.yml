@@ -1,0 +1,31 @@
+---
+- name: Verify Proxmox task log forwarding uses the existing syslog target
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_managed: "Ansible managed"
+    role_dir: "{{ playbook_dir }}/../../roles/pve_syslog_forwarder"
+    pve_syslog_forwarder_target_host: syslog.example.test
+    pve_syslog_forwarder_target_port: 517
+    pve_syslog_forwarder_protocol: tcp
+    pve_syslog_forwarder_health_port: 524
+    pve_syslog_forwarder_health_tag: pve-health
+    pve_syslog_forwarder_queue_max_disk_space: 256m
+    pve_syslog_forwarder_firewall_log: /var/log/pve-firewall.log
+  tasks:
+    - name: Render the rsyslog forwarding config
+      ansible.builtin.set_fact:
+        rendered: "{{ lookup('ansible.builtin.template', role_dir ~ '/templates/10-forward-cribl.conf.j2') }}"
+
+    - name: Assert task logs follow the existing syslog path
+      ansible.builtin.assert:
+        that:
+          - "'file=\"/var/log/pve/tasks/*/UPID:*\"' in rendered"
+          - "'addMetadata=\"on\"' in rendered"
+          - "'template=\"pve_task_forward_format\"' in rendered"
+          - "'file=\"/var/log/pve/tasks/*/*\"' not in rendered"
+          - "'target=\"syslog.example.test\"' in rendered"
+          - "'port=\"517\"' in rendered"
+          - "'protocol=\"tcp\"' in rendered"
+          - "'queue.filename=\"cribl_fwd_pve_task\"' in rendered"
