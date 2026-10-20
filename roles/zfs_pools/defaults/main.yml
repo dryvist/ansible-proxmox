@@ -27,6 +27,7 @@ zfs_pools_root_dataset: >-
   {{
     ansible_facts.mounts | default([])
     | selectattr('mount', 'equalto', '/')
+    | selectattr('fstype', 'equalto', 'zfs')
     | map(attribute='device')
     | first
     | default('')
