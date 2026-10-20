@@ -42,6 +42,7 @@
         components: [main]
         signed_by: /usr/share/keyrings/coolercontrol-archive-keyring.gpg
         state: present
+      register: _fan_control_repository
 
     - name: Install CoolerControl and the it87 DKMS module
       ansible.builtin.apt:
@@ -50,6 +51,8 @@
           - it87-dkms
         state: present
         update_cache: true
+      when:
+        - not ansible_check_mode or not (_fan_control_repository.changed | default(false))
 
     - name: Enable and start CoolerControl daemon
       ansible.builtin.systemd_service:
@@ -67,6 +70,8 @@
       delegate_to: localhost
       become: false
       no_log: true
+      changed_when: false
+      check_mode: false
 
     - name: Require the CoolerControl write token
       ansible.builtin.assert:
@@ -103,6 +108,8 @@
       delay: 5
       until: _fan_control_devices.status | default(0) == 200
       no_log: true
+      changed_when: false
+      check_mode: false
 
     - name: Find CPU and GPU temperature devices
       ansible.builtin.set_fact:
@@ -182,6 +189,7 @@
           - ";"
       register: _fan_control_hwmon_before
       changed_when: false
+      check_mode: false
       when: fan_control_active_mode == 'benchmark-100'
 
     - name: Report every host PWM and fan RPM before max mode
@@ -208,6 +216,8 @@
         status_code: 200
       register: _fan_control_functions
       no_log: true
+      changed_when: false
+      check_mode: false
       when: fan_control_active_mode == 'raised'
 
     - name: Create or update the identity function
@@ -241,6 +251,8 @@
         status_code: 200
       register: _fan_control_profiles
       no_log: true
+      changed_when: false
+      check_mode: false
       when: fan_control_active_mode == 'raised'
 
     - name: Create or update raised profiles
@@ -300,6 +312,8 @@
         status_code: 200
       register: _fan_control_modes
       no_log: true
+      changed_when: false
+      check_mode: false
 
     - name: Refresh the raised mode snapshot
       ansible.builtin.uri:
@@ -468,6 +482,7 @@
           - ";"
       register: _fan_control_hwmon_after
       changed_when: false
+      check_mode: false
       when: fan_control_active_mode == 'benchmark-100'
 
     - name: Report every host PWM and fan RPM after max mode
