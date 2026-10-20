@@ -13,6 +13,10 @@ dependency:
 driver:
   name: docker
 
+# requirements.yml (including community.docker) is installed before molecule
+# runs; prerun would re-query Galaxy in every job.
+prerun: false
+
 provisioner:
   name: ansible
   config_options:
