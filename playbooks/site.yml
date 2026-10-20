@@ -245,6 +245,12 @@
       tags:
         - lxc_gpu_features
 
+    # Grow declared storage-volume mounts after roles that create or configure
+    # LXC mount points, using the current cluster owner and live mount state.
+    - role: lxc_storage_mount_sizes
+      tags:
+        - lxc_storage_mount_sizes
+
     - role: ntp
       tags:
         - ntp

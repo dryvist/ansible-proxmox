@@ -1,0 +1,8 @@
+---
+# Empty selects every container with declared storage-backed mount points.
+# A caller can set this list to limit an operational run to selected inventory
+# container keys.
+lxc_storage_mount_sizes_guest_keys: []
+
+# Require this much free pool space after accounting for the requested growth.
+lxc_storage_mount_sizes_margin_bytes: 10737418240

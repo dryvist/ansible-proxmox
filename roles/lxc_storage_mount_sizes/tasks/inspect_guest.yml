@@ -1,0 +1,72 @@
+---
+- name: Read the live mount configuration with pct config
+  ansible.builtin.command:
+    argv:
+      - pct
+      - config
+      - "{{ lxc_storage_mount_sizes_live_guest.vmid }}"
+  register: lxc_storage_mount_sizes_pct_config
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Read the live LXC configuration digest and lock
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ lxc_storage_mount_sizes_live_guest.node }}/lxc/{{ lxc_storage_mount_sizes_live_guest.vmid }}/config"
+      - --output-format
+      - json
+  register: lxc_storage_mount_sizes_pve_config_raw
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Validate and decode the Proxmox configuration response
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_pve_config_valid: >-
+      {{ lxc_storage_mount_sizes_pve_config_raw.rc | default(1) == 0
+         and lxc_storage_mount_sizes_pve_config_raw.stdout is defined
+         and (lxc_storage_mount_sizes_pve_config_raw.stdout | trim)
+             is match('(?s)^\{.*\}$') }}
+    lxc_storage_mount_sizes_pve_config: >-
+      {{ (lxc_storage_mount_sizes_pve_config_raw.stdout | from_json)
+         if lxc_storage_mount_sizes_pve_config_raw.rc | default(1) == 0
+            and lxc_storage_mount_sizes_pve_config_raw.stdout is defined
+            and (lxc_storage_mount_sizes_pve_config_raw.stdout | trim)
+                is match('(?s)^\{.*\}$')
+         else {} }}
+    lxc_storage_mount_sizes_pct_lock: >-
+      {{ (lxc_storage_mount_sizes_pct_config.stdout_lines | default([])
+          | select('match', '^lock:\s*\S+') | list | first | default(''))
+         | regex_replace('^lock:\s*', '') }}
+
+- name: Determine the guest-level refusal reason
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_preflight_refusal: >-
+      {{ 'pct config could not be read'
+         if lxc_storage_mount_sizes_pct_config.rc | default(1) != 0 else
+         'Proxmox configuration digest could not be read'
+         if not lxc_storage_mount_sizes_pve_config_valid else
+         'guest is locked (' ~ (lxc_storage_mount_sizes_pve_config.lock
+           | default(lxc_storage_mount_sizes_pct_lock, true) | string) ~ ')'
+         if (lxc_storage_mount_sizes_pve_config.lock
+           | default(lxc_storage_mount_sizes_pct_lock, true) | string | length) > 0 else
+         'Proxmox configuration digest is missing'
+         if lxc_storage_mount_sizes_pve_config.digest | default('') | length == 0 else '' }}
+
+- name: Reconcile each declared storage mount
+  ansible.builtin.include_tasks:
+    file: reconcile_mount.yml
+    apply:
+      tags:
+        - lxc_storage_mount_sizes
+  loop: "{{ lxc_storage_mount_sizes_guest.value.storage_mount_points }}"
+  loop_control:
+    loop_var: lxc_storage_mount_sizes_mount
+    label: "{{ lxc_storage_mount_sizes_guest.key }} mp{{ lxc_storage_mount_sizes_mount.mp_index | default('unknown') }}"
+  vars:
+    lxc_storage_mount_sizes_digest: "{{ lxc_storage_mount_sizes_pve_config.digest | default('') }}"
+  tags:
+    - lxc_storage_mount_sizes

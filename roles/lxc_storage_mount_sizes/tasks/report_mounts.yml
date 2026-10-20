@@ -1,0 +1,22 @@
+---
+- name: Record refused storage mount outcomes
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_outcomes: >-
+      {{ lxc_storage_mount_sizes_outcomes + [{
+        'guest_key': lxc_storage_mount_sizes_guest.key,
+        'mp_index': item.mp_index | default('unknown'),
+        'status': 'refused',
+        'reason': lxc_storage_mount_sizes_refusal
+      }] }}
+  loop: "{{ lxc_storage_mount_sizes_guest.value.storage_mount_points }}"
+  loop_control:
+    label: "{{ lxc_storage_mount_sizes_guest.key }} mp{{ item.mp_index | default('unknown') }}"
+
+- name: Log each refused storage mount
+  ansible.builtin.debug:
+    msg: >-
+      lxc_storage_mount_sizes: refused {{ lxc_storage_mount_sizes_guest.key }}
+      mp{{ item.mp_index | default('unknown') }}: {{ lxc_storage_mount_sizes_refusal }}
+  loop: "{{ lxc_storage_mount_sizes_guest.value.storage_mount_points }}"
+  loop_control:
+    label: "{{ lxc_storage_mount_sizes_guest.key }} mp{{ item.mp_index | default('unknown') }}"

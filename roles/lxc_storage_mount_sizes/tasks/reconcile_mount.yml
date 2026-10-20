@@ -1,0 +1,271 @@
+---
+- name: Initialize the per-mount decision
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: >-
+        {{ 'refused'
+           if lxc_storage_mount_sizes_preflight_refusal | default('', true) | string | length > 0
+           else 'pending' }}
+      reason: "{{ lxc_storage_mount_sizes_preflight_refusal | default('not evaluated', true) }}"
+    lxc_storage_mount_sizes_resize_failed: false
+
+- name: Parse the live mpN configuration and validate the declaration
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_live_line: >-
+      {{ (lxc_storage_mount_sizes_pct_config.stdout_lines | default([])
+          | select('match', '^mp' ~ (lxc_storage_mount_sizes_mount.mp_index | default(-1) | string) ~ ': ')
+          | list | first | default('')) }}
+    lxc_storage_mount_sizes_declared_index_valid: >-
+      {{ (lxc_storage_mount_sizes_mount.mp_index | default('') | string)
+         is match('^[0-9]+$') }}
+    lxc_storage_mount_sizes_declared_path_valid: >-
+      {{ (lxc_storage_mount_sizes_mount.path | default('') | string)
+         is match('^/') }}
+    lxc_storage_mount_sizes_declared_volume_valid: >-
+      {{ (lxc_storage_mount_sizes_mount.volume | default('') | string)
+         is match('^[A-Za-z0-9][A-Za-z0-9._-]*$') }}
+    lxc_storage_mount_sizes_declared_size_valid: >-
+      {{ (lxc_storage_mount_sizes_mount.size | default('') | string)
+         is match('^[0-9]+(\.[0-9]+)?[KMGT]?$') }}
+
+- name: Extract live storage identity, path, size, and lock
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_live_reference: >-
+      {{ lxc_storage_mount_sizes_live_line | regex_replace('^mp[0-9]+: ', '') }}
+    lxc_storage_mount_sizes_live_volume: >-
+      {{ (lxc_storage_mount_sizes_live_line | regex_replace('^mp[0-9]+: ', '')
+          | regex_replace(',.*$', '')) }}
+    lxc_storage_mount_sizes_live_path: >-
+      {{ (lxc_storage_mount_sizes_live_line
+          | regex_findall('(?:^|,)mp=([^,]+)') | first | default('')) }}
+    lxc_storage_mount_sizes_live_size: >-
+      {{ (lxc_storage_mount_sizes_live_line
+          | regex_findall('(?:^|,)size=([^,]+)') | first | default('')) }}
+    lxc_storage_mount_sizes_live_lock: >-
+      {{ (lxc_storage_mount_sizes_pve_config.lock
+          | default(lxc_storage_mount_sizes_pct_lock, true) | string) }}
+
+- name: Refuse a declared bind mount or malformed storage mount
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: refused
+      reason: declared entry is not a size-backed Proxmox storage mount; bind mounts are ignored
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'pending'
+    - >-
+      not lxc_storage_mount_sizes_declared_index_valid
+      or not lxc_storage_mount_sizes_declared_path_valid
+      or not lxc_storage_mount_sizes_declared_volume_valid
+      or not lxc_storage_mount_sizes_declared_size_valid
+
+- name: Refuse an absent live mount point
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: refused
+      reason: declared mp index is absent from pct config
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'pending'
+    - lxc_storage_mount_sizes_live_line | length == 0
+
+- name: Extract the live storage id and size validity
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_live_storage: >-
+      {{ lxc_storage_mount_sizes_live_volume.split(':', 1)[0]
+         if ':' in lxc_storage_mount_sizes_live_volume else '' }}
+    lxc_storage_mount_sizes_live_size_valid: >-
+      {{ (lxc_storage_mount_sizes_live_size | string)
+         is match('^[0-9]+(\.[0-9]+)?[KMGT]?$') }}
+  when: lxc_storage_mount_sizes_decision.status == 'pending'
+
+- name: Refuse a mount whose live storage differs from the declaration
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: refused
+      reason: live storage id differs from the declared storage id
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'pending'
+    - lxc_storage_mount_sizes_live_storage != lxc_storage_mount_sizes_mount.volume
+
+- name: Refuse a mount whose live path differs from the declaration
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: refused
+      reason: live mount path differs from the declared path
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'pending'
+    - lxc_storage_mount_sizes_live_path != lxc_storage_mount_sizes_mount.path
+
+- name: Refuse a live mount without a parseable size
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: refused
+      reason: live mount size is missing or invalid
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'pending'
+    - not lxc_storage_mount_sizes_live_size_valid
+
+- name: Convert declared and live sizes to bytes
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_declared_bytes: "{{ lxc_storage_mount_sizes_mount.size | human_to_bytes | int }}"
+    lxc_storage_mount_sizes_live_bytes: "{{ lxc_storage_mount_sizes_live_size | human_to_bytes | int }}"
+  when: lxc_storage_mount_sizes_decision.status == 'pending'
+
+- name: Refuse a declared size below the live allocation
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: refused
+      reason: >-
+        WARNING: declared size is below the live size; shrinking is refused
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'pending'
+    - lxc_storage_mount_sizes_declared_bytes | int < lxc_storage_mount_sizes_live_bytes | int
+
+- name: Keep an already equal mount size
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: kept
+      reason: declared size equals the live size
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'pending'
+    - lxc_storage_mount_sizes_declared_bytes | int == lxc_storage_mount_sizes_live_bytes | int
+
+- name: Mark a strictly larger declared size for capacity admission
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: grow
+      reason: declared size is greater than the live size
+    lxc_storage_mount_sizes_delta_bytes: >-
+      {{ (lxc_storage_mount_sizes_declared_bytes | int)
+         - (lxc_storage_mount_sizes_live_bytes | int) }}
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'pending'
+    - lxc_storage_mount_sizes_declared_bytes | int > lxc_storage_mount_sizes_live_bytes | int
+
+- name: Read the declared storage's available space
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - status
+      - --storage
+      - "{{ lxc_storage_mount_sizes_mount.volume }}"
+  register: lxc_storage_mount_sizes_pool_status
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: lxc_storage_mount_sizes_decision.status == 'grow'
+
+- name: Parse the active storage availability row
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_pool_row: >-
+      {{ (lxc_storage_mount_sizes_pool_status.stdout_lines | default([])
+          | select('match', '^' ~ (lxc_storage_mount_sizes_mount.volume | regex_escape)
+                   ~ '\s+\S+\s+active\s+\d+\s+\d+\s+\d+\s+\S+$')
+          | list | first | default('')) }}
+  when: lxc_storage_mount_sizes_decision.status == 'grow'
+
+- name: Parse the active storage's available bytes
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_pool_free_bytes: >-
+      {{ (lxc_storage_mount_sizes_pool_row.split()[5] | int)
+         if lxc_storage_mount_sizes_pool_row | length > 0 else 0 }}
+  when: lxc_storage_mount_sizes_decision.status == 'grow'
+
+- name: Refuse when the pool status cannot be read
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: refused
+      reason: storage availability is missing or the storage is inactive
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'grow'
+    - lxc_storage_mount_sizes_pool_status.rc | default(1) != 0
+      or lxc_storage_mount_sizes_pool_row | length == 0
+
+- name: Refuse when pool headroom does not exceed growth plus margin
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: refused
+      reason: >-
+        pool free space does not exceed the requested growth plus the configured margin
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'grow'
+    - lxc_storage_mount_sizes_pool_free_bytes | int
+      <= (lxc_storage_mount_sizes_delta_bytes | int + lxc_storage_mount_sizes_margin_bytes | int)
+
+- name: Record available pool headroom for the grow operation
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: grow
+      reason: pool free space exceeds requested growth plus margin
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'grow'
+    - lxc_storage_mount_sizes_pool_free_bytes | int
+      > (lxc_storage_mount_sizes_delta_bytes | int + lxc_storage_mount_sizes_margin_bytes | int)
+
+- name: Refuse the grow while check mode is active
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: refused
+      reason: check mode active; the validated resize was not applied
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'grow'
+    - ansible_check_mode
+
+- name: Grow the verified mount point without shrinking
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'grow'
+    - not ansible_check_mode
+  block:
+    - name: Resize the Proxmox mount point to its declared absolute size
+      ansible.builtin.command:
+        argv:
+          - pct
+          - resize
+          - "{{ lxc_storage_mount_sizes_live_guest.vmid }}"
+          - "mp{{ lxc_storage_mount_sizes_mount.mp_index }}"
+          - "{{ lxc_storage_mount_sizes_mount.size }}"
+          - --digest
+          - "{{ lxc_storage_mount_sizes_digest }}"
+      register: lxc_storage_mount_sizes_resize_result
+      changed_when: true
+  rescue:
+    - name: Record the failed native resize
+      ansible.builtin.set_fact:
+        lxc_storage_mount_sizes_resize_failed: true
+        lxc_storage_mount_sizes_decision:
+          status: refused
+          reason: >-
+            pct resize failed (rc={{ ansible_failed_result.rc | default('unreachable') }}):
+            {{ ansible_failed_result.stderr | default(ansible_failed_result.msg | default('command failed')) | regex_replace('[\r\n]+', ' ') }}
+- name: Mark a successful resize as grown
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_decision:
+      status: grown
+      reason: pool headroom passed and pct resized to the declared size
+  when:
+    - lxc_storage_mount_sizes_decision.status == 'grow'
+    - not lxc_storage_mount_sizes_resize_failed
+
+- name: Record the final mount outcome
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_outcomes: >-
+      {{ lxc_storage_mount_sizes_outcomes + [{
+        'guest_key': lxc_storage_mount_sizes_guest.key,
+        'mp_index': lxc_storage_mount_sizes_mount.mp_index | default('unknown'),
+        'status': lxc_storage_mount_sizes_decision.status,
+        'reason': lxc_storage_mount_sizes_decision.reason
+      }] }}
+
+- name: Log the final mount outcome
+  ansible.builtin.debug:
+    msg: >-
+      lxc_storage_mount_sizes: {{ lxc_storage_mount_sizes_decision.status }}
+      {{ lxc_storage_mount_sizes_guest.key }}
+      mp{{ lxc_storage_mount_sizes_mount.mp_index | default('unknown') }}:
+      {{ lxc_storage_mount_sizes_decision.reason }}
+
+- name: Fail after logging a native resize error
+  ansible.builtin.fail:
+    msg: >-
+      lxc_storage_mount_sizes refused the failed native resize for
+      {{ lxc_storage_mount_sizes_guest.key }} mp{{ lxc_storage_mount_sizes_mount.mp_index }}.
+  when: lxc_storage_mount_sizes_resize_failed

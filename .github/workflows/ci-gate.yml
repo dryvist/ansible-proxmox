@@ -64,6 +64,8 @@ jobs:
           - 'roles/container_start/**'
           - 'tests/container_start_contract.yml'
           - 'tests/container_start_parse_case.yml'
+          - 'roles/lxc_storage_mount_sizes/**'
+          - 'tests/lxc_storage_mount_sizes/**'
           - 'tests/test_inventory_proxmox_host_connection.py'
           - '.github/workflows/ci-gate.yml'
           - '.github/workflows/molecule.yml'
