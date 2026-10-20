@@ -129,6 +129,20 @@ No real service is touched.
   `ignored` keeps these resources available to affinity rules without arming
   the node-local pve-ha-lrm watchdog. Allowed values: `ignored` or `started`.
 
+- `pve_ha_ignored_resources`
+
+  Default: `[]`. Managed tier-0 SIDs (`ct:<vmid>` / `vm:<vmid>`) held in `ignored`:
+  the CRM neither recovers nor fences them. Each converge enforces `ignored` for
+  listed SIDs; an unmanaged SID fails the run. Clearing the list returns each to
+  its declared state on the next converge.
+
+### Holding a tier-0 resource ignored
+
+Use when one managed guest must stay out of HA recovery and fencing. Run the
+existing ansible-proxmox Semaphore template with `--tags pve_ha` and the extra
+var `pve_ha_ignored_resources=["ct:<vmid>"]`. To revert, run it again with
+`pve_ha_ignored_resources=[]`; the next converge restores the declared state.
+
 - `pve_ha_pinned_max_relocate`
 
   Default: `0`. Relocate bound for `application_ha` and `immovable` guests —
