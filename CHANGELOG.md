@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.28.2](https://github.com/dryvist/ansible-proxmox/compare/v2.28.1...v2.28.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **ssh-ca-trust:** compare the effective allowed users as a set ([#1103](https://github.com/dryvist/ansible-proxmox/issues/1103)) ([ab4d835](https://github.com/dryvist/ansible-proxmox/commit/ab4d835d08913e064d9ffc9b4a740f69a13752ff))
+
 ## [2.28.1](https://github.com/dryvist/ansible-proxmox/compare/v2.28.0...v2.28.1) (2026-10-18)
 
 

@@ -45,6 +45,8 @@ idrac_power_controller: >-
 # default generously; tune per host if your hardware is faster/slower.
 idrac_power_boot_timeout: 720
 idrac_power_off_retries: 60
+# Fail if graceful power-off has not completed within the poll budget.
+idrac_power_off_fail_on_timeout: true
 
 idrac_power_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
 idrac_power_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"

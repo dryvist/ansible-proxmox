@@ -36,6 +36,51 @@
   tags:
     - idrac_power
 
+- name: Report current chassis power status
+  ansible.builtin.debug:
+    msg: "{{ idrac_power_status.stdout }}"
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_host | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - idrac_power
+
+# Read-only fault evidence for status runs: chassis fault flags and last power
+# event, plus the newest system event log entries.
+- name: Query chassis faults and recent BMC events
+  ansible.builtin.command:
+    cmd: >-
+      ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
+      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      {{ item }}
+  loop:
+    - chassis status
+    - sel elist last 40
+  delegate_to: "{{ idrac_power_controller }}"
+  register: idrac_power_diagnostics
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_host | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+    - idrac_power_action == 'status'
+  tags:
+    - idrac_power
+
+- name: Report chassis faults and recent BMC events
+  ansible.builtin.debug:
+    msg: "{{ idrac_power_diagnostics.results | map(attribute='stdout_lines') | list }}"
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_host | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+    - idrac_power_action == 'status'
+  tags:
+    - idrac_power
+
 # ipmitool prints "Chassis Power is on" / "Chassis Power is off".
 - name: Power on the target (only if currently off)
   ansible.builtin.command:
@@ -104,6 +149,35 @@
     - idrac_power_bmc_host | default('') | length > 0
     - ansible_virtualization_type | default('') != 'docker'
     - idrac_power_action == 'off'
+  tags:
+    - idrac_power
+
+- name: Report final chassis power status
+  ansible.builtin.debug:
+    msg: "{{ idrac_power_off_check.stdout }}"
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_host | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+    - idrac_power_action == 'off'
+    - not ansible_check_mode
+  tags:
+    - idrac_power
+
+- name: Fail when graceful power-off does not complete
+  ansible.builtin.fail:
+    msg: >-
+      Chassis did not reach power off after {{ idrac_power_off_retries | int }}
+      status checks; last result:
+      {{ idrac_power_off_check.stdout | default('no status output') }}.
+  when:
+    - idrac_power_enabled | bool
+    - idrac_power_bmc_host | default('') | length > 0
+    - ansible_virtualization_type | default('') != 'docker'
+    - idrac_power_action == 'off'
+    - not ansible_check_mode
+    - idrac_power_off_fail_on_timeout | bool
+    - "'is off' not in (idrac_power_off_check.stdout | default(''))"
   tags:
     - idrac_power
 

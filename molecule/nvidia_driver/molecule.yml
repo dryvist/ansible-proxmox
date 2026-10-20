@@ -1,7 +1,7 @@
 ---
 platforms:
   - name: proxmox-nvidia-driver-test
-    image: "${MOLECULE_IMAGE:-debian:stable-slim}"
+    image: "${MOLECULE_IMAGE:-mirror.gcr.io/library/debian:stable-slim}"
     pre_build_image: true
     privileged: true
     tmpfs:

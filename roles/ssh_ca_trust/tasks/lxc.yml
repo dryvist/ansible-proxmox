@@ -205,7 +205,11 @@
         echo "$effective" | grep -qx 'passwordauthentication no' || fail=1
         echo "$effective" | grep -qx 'kbdinteractiveauthentication no' || fail=1
         echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}' || fail=1
-        echo "$effective" | grep -qx "allowusers {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra + ([ssh_ca_trust_host_admin_user] if item | string in ssh_ca_trust_host_admin_guest_vmids else [])) | unique | join(' ') }}" || fail=1
+        # sshd -T prints either one `allowusers a b` line or one line per user,
+        # depending on the OpenSSH version, so compare the sorted set of users.
+        expected_users=$(printf '%s\n' {{ ((ssh_ca_trust_lxc_principals.keys() | list) + ssh_ca_trust_lxc_allow_users_extra + ([ssh_ca_trust_host_admin_user] if item | string in ssh_ca_trust_host_admin_guest_vmids else [])) | unique | map('quote') | join(' ') }} | sort -u)
+        effective_users=$(echo "$effective" | awk '$1 == "allowusers" { for (i = 2; i <= NF; i++) print $i }' | sort -u)
+        [ "$effective_users" = "$expected_users" ] || fail=1
         {% if ssh_ca_trust_host_cert_enabled | bool %}
         echo "$effective" | grep -qF 'hostcertificate {{ ssh_ca_trust_host_cert_path }}' || fail=1
         {% endif %}
