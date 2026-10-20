@@ -6,9 +6,12 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = yaml.safe_load((ROOT / "roles/fan_control/tasks/main.yml").read_text())
+TOKEN_TASKS = yaml.safe_load((ROOT / "roles/fan_control/tasks/read_openbao_token.yml").read_text())
 
 
 def task(name: str) -> dict:
+    if name in {item.get("name") for item in TOKEN_TASKS}:
+        return next(item for item in TOKEN_TASKS if item.get("name") == name)
     return next(item for item in TASKS[0]["block"] if item.get("name") == name)
 
 
