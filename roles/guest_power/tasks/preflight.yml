@@ -1,13 +1,24 @@
 ---
+# Survey forms send a blank string for an optional value left empty, so an
+# optional value counts as given only when it is non-blank.
+- name: Resolve which optional target values were given
+  ansible.builtin.set_fact:
+    guest_power_has_vmid: "{{ (guest_power_vmid | default('')) | string | trim != '' }}"
+    guest_power_has_type: "{{ (guest_power_type | default('')) | string | trim != '' }}"
+    guest_power_has_node: "{{ (guest_power_node | default('')) | string | trim != '' }}"
+    guest_power_has_vms: "{{ (guest_power_vms | default('')) | string | trim != '' }}"
+
 - name: Assert the target variables are supplied
   ansible.builtin.assert:
     that:
-      - guest_power_vmid is defined
-      - guest_power_type is defined
       - guest_power_action is defined
+      - >-
+        guest_power_action in guest_power_node_actions
+        or (guest_power_has_vmid and guest_power_has_type)
     fail_msg: >-
-      Pass guest_power_vmid, guest_power_type and guest_power_action. They have
-      no defaults so an unscoped run cannot act on a guest.
+      Pass guest_power_action with guest_power_vmid and guest_power_type for one
+      guest, or with guest_power_node for startall or stopall. They have no
+      defaults so an unscoped run cannot act on a guest.
 
 - name: Assert the target values are valid
   ansible.builtin.assert:
@@ -17,10 +28,28 @@
       - guest_power_type in guest_power_allowed_types
       - guest_power_action in guest_power_allowed_actions
       - guest_power_type == 'qemu' or guest_power_action != 'reset'
+      - not guest_power_has_node
+      - not guest_power_has_vms
     fail_msg: >-
       guest_power_vmid must be a number of at least 100, guest_power_type one of
       {{ guest_power_allowed_types }}, guest_power_action one of
-      {{ guest_power_allowed_actions }}; reset exists for qemu only.
+      {{ guest_power_allowed_actions }}; reset exists for qemu only. guest_power_node
+      and guest_power_vms are for startall or stopall only.
+  when: guest_power_action not in guest_power_node_actions
+
+- name: Assert the node action values are valid
+  ansible.builtin.assert:
+    that:
+      - guest_power_has_node
+      - guest_power_node in (groups['proxmox'] | default([]))
+      - not guest_power_has_vmid
+      - not guest_power_has_type
+      - not guest_power_has_vms or guest_power_vms | string is match('^[0-9]+(,[0-9]+)*$')
+    fail_msg: >-
+      A {{ guest_power_action }} needs guest_power_node set to a proxmox inventory
+      host, and no guest_power_vmid or guest_power_type. guest_power_vms, when
+      set, is a comma list of VMIDs.
+  when: guest_power_action in guest_power_node_actions
 
 - name: Refuse an active power action in check mode
   ansible.builtin.assert:
@@ -34,3 +63,4 @@
   ansible.builtin.set_fact:
     guest_power_tool: "{{ 'qm' if guest_power_type == 'qemu' else 'pct' }}"
     guest_power_wanted_status: "{{ 'stopped' if guest_power_action in ['stop', 'shutdown'] else 'running' }}"
+  when: guest_power_action not in guest_power_node_actions

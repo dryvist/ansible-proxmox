@@ -6,6 +6,13 @@
   gather_facts: false
 
   tasks:
+    # The node gate accepts only proxmox inventory hosts; this run has none.
+    - name: Add one proxmox node to the inventory for the node-wide requests
+      ansible.builtin.add_host:
+        name: example-node
+        groups: proxmox
+      changed_when: false
+
     - name: Accept a valid qemu reset request
       ansible.builtin.include_role:
         name: guest_power
@@ -35,6 +42,145 @@
         that:
           - guest_power_tool == 'pct'
           - guest_power_wanted_status == 'stopped'
+
+    - name: Accept a valid startall request for one node with a VM filter
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: preflight
+      vars:
+        guest_power_action: startall
+        guest_power_node: example-node
+        guest_power_vms: "900001,900002"
+
+    - name: Accept a valid stopall request for one node without a VM filter
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: preflight
+      vars:
+        guest_power_action: stopall
+        guest_power_node: example-node
+
+    # Survey forms send blank strings for the optional values left empty.
+    - name: Accept a node-wide request whose blank guest values are unset
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: preflight
+      vars:
+        guest_power_action: startall
+        guest_power_node: example-node
+        guest_power_vmid: ""
+        guest_power_type: ""
+        guest_power_vms: ""
+
+    - name: Accept a guest request whose blank node and VM filter are unset
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: preflight
+      vars:
+        guest_power_vmid: "900001"
+        guest_power_type: qemu
+        guest_power_action: reset
+        guest_power_node: ""
+        guest_power_vms: ""
+
+    - name: Prove a node-wide request with a VMID is refused at the node gate
+      block:
+        - name: Run preflight with a node action and a VMID
+          ansible.builtin.include_role:
+            name: guest_power
+            tasks_from: preflight
+          vars:
+            guest_power_action: startall
+            guest_power_node: example-node
+            guest_power_vmid: "900001"
+            guest_power_type: qemu
+
+        - name: Fail when the request unexpectedly passes
+          ansible.builtin.fail:
+            msg: "A node-wide request with a VMID unexpectedly passed preflight."
+      rescue:
+        - name: Assert the rejection came from the node value gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert the node action values are valid'
+
+    - name: Prove a node-wide request for an unknown node is refused at the node gate
+      block:
+        - name: Run preflight with an uninventoried node
+          ansible.builtin.include_role:
+            name: guest_power
+            tasks_from: preflight
+          vars:
+            guest_power_action: stopall
+            guest_power_node: not-in-inventory
+
+        - name: Fail when the request unexpectedly passes
+          ansible.builtin.fail:
+            msg: "A node-wide request for an unknown node unexpectedly passed preflight."
+      rescue:
+        - name: Assert the rejection came from the node value gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert the node action values are valid'
+
+    - name: Prove a node-wide request without a node is refused at the node gate
+      block:
+        - name: Run preflight with no node
+          ansible.builtin.include_role:
+            name: guest_power
+            tasks_from: preflight
+          vars:
+            guest_power_action: startall
+
+        - name: Fail when the request unexpectedly passes
+          ansible.builtin.fail:
+            msg: "A node-wide request without a node unexpectedly passed preflight."
+      rescue:
+        - name: Assert the rejection came from the node value gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert the node action values are valid'
+
+    - name: Prove a node-wide VM filter that is not a comma list of VMIDs is refused
+      block:
+        - name: Run preflight with a malformed VM filter
+          ansible.builtin.include_role:
+            name: guest_power
+            tasks_from: preflight
+          vars:
+            guest_power_action: startall
+            guest_power_node: example-node
+            guest_power_vms: "900001,abc"
+
+        - name: Fail when the request unexpectedly passes
+          ansible.builtin.fail:
+            msg: "A malformed node-wide VM filter unexpectedly passed preflight."
+      rescue:
+        - name: Assert the rejection came from the node value gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert the node action values are valid'
+
+    - name: Prove a guest request with a node is refused at the value gate
+      block:
+        - name: Run preflight with a guest action and a node
+          ansible.builtin.include_role:
+            name: guest_power
+            tasks_from: preflight
+          vars:
+            guest_power_vmid: "900001"
+            guest_power_type: qemu
+            guest_power_action: reset
+            guest_power_node: example-node
+
+        - name: Fail when the request unexpectedly passes
+          ansible.builtin.fail:
+            msg: "A guest request carrying a node unexpectedly passed preflight."
+      rescue:
+        - name: Assert the rejection came from the guest value gate
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Assert the target values are valid'
 
     - name: Prove invalid requests fail closed at the value gate
       ansible.builtin.include_tasks: guest_power_contract_reject.yml

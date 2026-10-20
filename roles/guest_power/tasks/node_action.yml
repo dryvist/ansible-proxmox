@@ -1,0 +1,41 @@
+---
+# Node-wide start or stop. The node's own pvesh call starts or stops every
+# onboot guest on it in startup order, so nothing here loops over guests.
+
+# Printed for the record. startall refuses a node that is not quorate: a guest
+# started without quorum is the boot path that left guests stopped.
+- name: Read the node quorum state
+  ansible.builtin.command:
+    argv: [pvecm, status]
+  delegate_to: "{{ guest_power_node }}"
+  register: guest_power_quorum
+  changed_when: false
+  failed_when: false
+
+- name: Record the node quorum line
+  ansible.builtin.debug:
+    msg: "{{ guest_power_quorum.stdout_lines | select('match', 'Quorate:') | list }}"
+
+- name: Refuse startall on a node that is not quorate
+  ansible.builtin.assert:
+    that:
+      - guest_power_quorum.stdout is search('(?m)^Quorate: +Yes')
+    fail_msg: >-
+      startall refused: {{ guest_power_node }} is not quorate. Nothing was
+      started.
+  when: guest_power_action == 'startall'
+
+# pvesh returns the node task's UPID; the action runs as that task on the node
+# and is not awaited here. Its log is the node's task log.
+- name: Run the node-wide action through the node's own pvesh call
+  ansible.builtin.command:
+    argv: >-
+      {{ ['pvesh', 'create', '/nodes/' ~ guest_power_node ~ '/' ~ guest_power_action]
+         + (['--vms', guest_power_vms] if guest_power_has_vms else []) }}
+  delegate_to: "{{ guest_power_node }}"
+  register: guest_power_node_task
+  changed_when: true
+
+- name: Record the node task
+  ansible.builtin.debug:
+    msg: "guest_power {{ guest_power_action }} on node {{ guest_power_node }}: task {{ guest_power_node_task.stdout }}"
