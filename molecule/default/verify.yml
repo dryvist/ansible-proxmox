@@ -10,8 +10,16 @@
   # role vars unless explicitly imported.
   vars_files:
     - ../../roles/crash_diagnostics/defaults/main.yml
+    - ../../roles/proxmox_monitoring/defaults/main.yml
 
   tasks:
+    - name: Assert atop retention and journald cap defaults
+      ansible.builtin.assert:
+        that:
+          - proxmox_monitoring_atop_loggenerations == 7
+          - proxmox_monitoring_journald_system_max_use == '500M'
+        fail_msg: "The atop retention or journald usage defaults changed"
+
     - name: Verify sysctl configuration file exists
       ansible.builtin.stat:
         path: /etc/sysctl.d/10-proxmox-tuning.conf

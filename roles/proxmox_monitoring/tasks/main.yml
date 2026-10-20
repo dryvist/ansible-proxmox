@@ -10,6 +10,40 @@
     update_cache: true
   when: proxmox_monitoring_enable_sysstat or proxmox_monitoring_enable_atop
 
+- name: Configure atop log generations
+  ansible.builtin.lineinfile:
+    path: /etc/default/atop
+    regexp: '^#?LOGGENERATIONS='
+    line: "LOGGENERATIONS={{ proxmox_monitoring_atop_loggenerations }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - proxmox_monitoring_enable_atop
+    - ansible_facts.virtualization_type != 'docker'
+
+- name: Create journald configuration drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: ansible_facts.virtualization_type != 'docker'
+
+- name: Cap journald disk usage
+  community.general.ini_file:
+    path: /etc/systemd/journald.conf.d/60-ansible-size.conf
+    section: Journal
+    option: SystemMaxUse
+    value: "{{ proxmox_monitoring_journald_system_max_use }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: ansible_facts.virtualization_type != 'docker'
+  notify: Restart systemd-journald
+
 - name: Create systemd override directories for monitoring services
   ansible.builtin.file:
     path: "/etc/systemd/system/{{ item.name }}.service.d"

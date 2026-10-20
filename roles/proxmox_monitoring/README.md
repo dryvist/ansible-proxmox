@@ -31,6 +31,12 @@ Detailed per-process resource accounting with historical data.
 
 - **Data location**: `/var/log/atop/`
 - **View historical**: `atop -r /var/log/atop/atop_YYYYMMDD`
+- **Retention**: 7 log generations by default (`proxmox_monitoring_atop_loggenerations`)
+
+### journald
+
+Caps persistent journal storage with `SystemMaxUse=500M` by default. Override
+`proxmox_monitoring_journald_system_max_use` to change that limit.
 
 ### crash-monitor
 
@@ -115,6 +121,8 @@ exist is worse than no HA, because it reads green.
 | -------- | ------- | ----------- |
 | `proxmox_monitoring_enable_sysstat` | `true` | Enable sysstat |
 | `proxmox_monitoring_enable_atop` | `true` | Enable atop |
+| `proxmox_monitoring_atop_loggenerations` | `7` | Atop log generations to retain |
+| `proxmox_monitoring_journald_system_max_use` | `500M` | Persistent journal usage limit |
 | `proxmox_monitoring_enable_crash_monitor` | `true` | Enable script |
 | `proxmox_monitoring_enable_healthchecks` | `true` | Enable ping |
 | `proxmox_monitoring_healthchecks_ping_url` | `""` | Ping URL (secret) |
