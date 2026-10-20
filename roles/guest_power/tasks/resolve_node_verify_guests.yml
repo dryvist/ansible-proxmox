@@ -1,0 +1,69 @@
+---
+- name: Resolve node-wide wanted state
+  ansible.builtin.set_fact:
+    guest_power_is_nodewide: true
+    guest_power_wanted_status: "{{ 'stopped' if guest_power_action in guest_power_stopped_actions else 'running' }}"
+    guest_power_requested_vmids: "{{ guest_power_vms.split(',') | map('int') | list if guest_power_has_vms else [] }}"
+  changed_when: false
+
+- name: Find requested VMIDs missing from the target node
+  ansible.builtin.set_fact:
+    guest_power_missing_vmids: >-
+      {{ guest_power_requested_vmids
+         | difference(guest_power_node_guests | map(attribute='vmid') | map('int') | list) }}
+  changed_when: false
+
+- name: Require every requested VMID to be on the target node
+  ansible.builtin.assert:
+    that:
+      - guest_power_missing_vmids | length == 0
+    fail_msg: "VMIDs not found on the target node: {{ guest_power_missing_vmids }}"
+  when: guest_power_has_vms
+
+- name: Select explicit guests or every guest covered by stopall
+  ansible.builtin.set_fact:
+    guest_power_node_guests_to_verify: >-
+      {{ guest_power_node_guests
+         | selectattr('vmid', 'in', guest_power_requested_vmids if guest_power_has_vms else guest_power_node_guests | map(attribute='vmid') | list)
+         | list }}
+  changed_when: false
+  when: guest_power_has_vms or guest_power_action == 'stopall'
+
+- name: Initialize the default startall verification list
+  ansible.builtin.set_fact:
+    guest_power_node_guests_to_verify: []
+  changed_when: false
+  when: guest_power_action == 'startall' and not guest_power_has_vms
+
+- name: Add onboot guests covered by the default startall
+  ansible.builtin.set_fact:
+    guest_power_node_guests_to_verify: "{{ guest_power_node_guests_to_verify + [item.item] }}"
+  changed_when: false
+  loop: "{{ guest_power_node_guest_configs.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.vmid }}"
+  when:
+    - guest_power_action == 'startall'
+    - not guest_power_has_vms
+    - (item.stdout | from_json).onboot | default(0) | bool
+
+- name: Initialize the node-wide guest verification list
+  ansible.builtin.set_fact:
+    guest_power_verify_guests: []
+  changed_when: false
+
+- name: Resolve each guest's existing status tool
+  ansible.builtin.set_fact:
+    guest_power_verify_guests: >-
+      {{ guest_power_verify_guests
+         + [item | combine({'guest_power_tool': guest_power_tools_by_type[item.type]})] }}
+  changed_when: false
+  loop: "{{ guest_power_node_guests_to_verify }}"
+  loop_control:
+    label: "{{ item.vmid }}"
+
+- name: Hand the node to the read-back play
+  ansible.builtin.add_host:
+    name: "{{ guest_power_node }}"
+    groups: guest_power_node
+  changed_when: false

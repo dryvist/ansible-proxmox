@@ -32,6 +32,8 @@ node then starts its onboot guests in startup order. Semaphore template
 the VMID and type blank.
 
 `startall` refuses a node whose `pvecm status` is not quorate. The action runs
-as the node's own task and the play returns its UPID; it does not wait for
-completion, so check the node task log. To revert `startall`, run `stopall`
-with the same `guest_power_vms`.
+as the node's own task and returns its UPID. The play polls the selected guests
+until they reach the wanted state and reports VMIDs that do not. With no list,
+`startall` verifies onboot guests and `stopall` verifies every guest. Check the
+node task log for node-level details. To revert `startall`, run `stopall` with
+the same `guest_power_vms`.

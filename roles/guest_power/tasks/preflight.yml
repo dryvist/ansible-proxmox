@@ -61,6 +61,6 @@
 
 - name: Resolve the command and wanted end state
   ansible.builtin.set_fact:
-    guest_power_tool: "{{ 'qm' if guest_power_type == 'qemu' else 'pct' }}"
-    guest_power_wanted_status: "{{ 'stopped' if guest_power_action in ['stop', 'shutdown'] else 'running' }}"
+    guest_power_tool: "{{ guest_power_tools_by_type[guest_power_type] }}"
+    guest_power_wanted_status: "{{ 'stopped' if guest_power_action in guest_power_stopped_actions else 'running' }}"
   when: guest_power_action not in guest_power_node_actions
