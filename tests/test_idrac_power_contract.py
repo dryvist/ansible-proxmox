@@ -31,6 +31,18 @@ def test_current_status_report_prints_only_query_stdout() -> None:
     assert all(task.get("no_log") is True for task in password_commands)
 
 
+def test_status_runs_report_read_only_fault_evidence() -> None:
+    query = _task("Query chassis faults and recent BMC events")
+    report = _task("Report chassis faults and recent BMC events")
+
+    assert query["loop"] == ["chassis status", "sel elist last 40"]
+    assert query["changed_when"] is False
+    assert query["no_log"] is True
+    assert "idrac_power_action == 'status'" in query["when"]
+    assert report["when"] == query["when"]
+    assert "idrac_power_diagnostics.results" in report["ansible.builtin.debug"]["msg"]
+
+
 def test_off_timeout_reports_final_state_and_fails_by_default() -> None:
     wait = _task("Wait for the graceful power-off to complete")
     report = _task("Report final chassis power status")

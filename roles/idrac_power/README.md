@@ -32,8 +32,9 @@ ansible-galaxy install -r requirements.yml
 - `idrac_power_action: off` → graceful ACPI `chassis power soft` (if on), then
   polls and reports the final BMC state. It fails when the poll budget expires
   by default.
-- `idrac_power_action: status` (default) → report the current chassis state
-  without changing it.
+- `idrac_power_action: status` (default) → report the current chassis state,
+  its fault flags and last power event, and the newest 40 system event log
+  entries, without changing anything.
 - Reconciles the chassis **power-restore policy** on every run, whatever the
   action, so a node that this role never cycles still gets the setting.
 - Skipped under Docker (molecule) and when `idrac_power_bmc_host` is unset.
