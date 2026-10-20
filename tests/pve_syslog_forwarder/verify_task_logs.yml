@@ -13,6 +13,9 @@
     pve_syslog_forwarder_health_tag: pve-health
     pve_syslog_forwarder_queue_max_disk_space: 256m
     pve_syslog_forwarder_firewall_log: /var/log/pve-firewall.log
+    pve_syslog_forwarder_task_log_max_submit_at_once: 64
+    pve_syslog_forwarder_task_log_delay_message_microseconds: 1000
+    pve_syslog_forwarder_task_log_fresh_start_tail: "off"
   tasks:
     - name: Render the rsyslog forwarding config
       ansible.builtin.set_fact:
@@ -21,11 +24,14 @@
     - name: Assert task logs follow the existing syslog path
       ansible.builtin.assert:
         that:
-          - "'file=\"/var/log/pve/tasks/*/UPID:*\"' in rendered"
-          - "'addMetadata=\"on\"' in rendered"
-          - "'template=\"pve_task_forward_format\"' in rendered"
-          - "'file=\"/var/log/pve/tasks/*/*\"' not in rendered"
-          - "'target=\"syslog.example.test\"' in rendered"
-          - "'port=\"517\"' in rendered"
-          - "'protocol=\"tcp\"' in rendered"
-          - "'queue.filename=\"cribl_fwd_pve_task\"' in rendered"
+          - '''file="/var/log/pve/tasks/*/UPID:*"'' in rendered'
+          - '''addMetadata="on"'' in rendered'
+          - '''MaxSubmitAtOnce="64"'' in rendered'
+          - '''delay.message="1000"'' in rendered'
+          - '''freshStartTail="off"'' in rendered'
+          - '''template="pve_task_forward_format"'' in rendered'
+          - '''file="/var/log/pve/tasks/*/*"'' not in rendered'
+          - '''target="syslog.example.test"'' in rendered'
+          - '''port="517"'' in rendered'
+          - '''protocol="tcp"'' in rendered'
+          - '''queue.filename="cribl_fwd_pve_task"'' in rendered'

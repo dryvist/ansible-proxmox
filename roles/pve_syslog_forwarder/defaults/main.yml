@@ -48,6 +48,13 @@ pve_syslog_forwarder_config_path: /etc/rsyslog.d/10-forward-cribl.conf
 # dropping logs (capped so a long outage can't fill the root filesystem).
 pve_syslog_forwarder_queue_max_disk_space: 256m
 
+# Bound task-log batches and pace backfill without dropping messages.
+pve_syslog_forwarder_task_log_max_submit_at_once: 64
+pve_syslog_forwarder_task_log_delay_message_microseconds: 1000
+
+# Keep existing task logs available for the first-start migration backfill.
+pve_syslog_forwarder_task_log_fresh_start_tail: "off"
+
 # PVE firewall log written by pvefw-logger (guest-layer DROP lines with the
 # terraform firewall module's log_level_in/out=warning). File-only — never in
 # the journal — so it needs its own imfile tail (see the template).

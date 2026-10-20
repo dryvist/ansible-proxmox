@@ -96,4 +96,7 @@ input(type="imfile"
       severity="info"
       facility="local0"
       addMetadata="on"
+      MaxSubmitAtOnce="{{ pve_syslog_forwarder_task_log_max_submit_at_once }}"
+      delay.message="{{ pve_syslog_forwarder_task_log_delay_message_microseconds }}"
+      freshStartTail="{{ pve_syslog_forwarder_task_log_fresh_start_tail }}"
       ruleset="pve_task_fwd")
