@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.35.0](https://github.com/dryvist/ansible-proxmox/compare/v2.34.0...v2.35.0) (2026-10-20)
+
+
+### Features
+
+* **lxc_storage_mount_sizes:** attach declared storage mounts missing from the guest ([#1160](https://github.com/dryvist/ansible-proxmox/issues/1160)) ([5bb279a](https://github.com/dryvist/ansible-proxmox/commit/5bb279aefcd8973244dd5aa4df9f0c7ae6ab75ef))
+
+
+### Bug Fixes
+
+* guard check-mode archive and NVIDIA unit checks ([#1163](https://github.com/dryvist/ansible-proxmox/issues/1163)) ([e2a7099](https://github.com/dryvist/ansible-proxmox/commit/e2a7099c559e7368fd1c634f0a93b2b5c4341929))
+
 ## [2.34.0](https://github.com/dryvist/ansible-proxmox/compare/v2.33.2...v2.34.0) (2026-10-20)
 
 
