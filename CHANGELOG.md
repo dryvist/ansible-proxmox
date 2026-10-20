@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.4](https://github.com/dryvist/ansible-proxmox/compare/v2.32.3...v2.32.4) (2026-10-20)
+
+
+### Bug Fixes
+
+* **fan_control:** keep read tasks active in check mode ([#1145](https://github.com/dryvist/ansible-proxmox/issues/1145)) ([e884947](https://github.com/dryvist/ansible-proxmox/commit/e884947432cac57c1ac8bf0c5127928afa3de7fd))
+* **zfs_pools:** resolve root filesystem before reserving headroom ([#1144](https://github.com/dryvist/ansible-proxmox/issues/1144)) ([ca8f372](https://github.com/dryvist/ansible-proxmox/commit/ca8f3722cc66bf6d6a085ca04be1e5bd2a2e7a35))
+
 ## [2.32.3](https://github.com/dryvist/ansible-proxmox/compare/v2.32.2...v2.32.3) (2026-10-20)
 
 
