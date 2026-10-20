@@ -153,7 +153,7 @@ for a in "$@"; do
   [[ $a == --limit=* ]] && LIMIT_VAL="${a#--limit=}"
   prev="$a"
 done
-[[ -n $LIMIT_VAL && ",${LIMIT_VAL//:/,}," != *,localhost,* ]] && set -- "$@" --limit "${LIMIT_VAL},localhost"
+[[ -n $LIMIT_VAL && ",${LIMIT_VAL//:/,}," != *,localhost,* ]] && set -- "$@" --limit "${LIMIT_VAL//:/,},localhost"
 
 # Run ansible-playbook - prefer NIX_SHELL if set, otherwise use PATH
 if [[ -n ${NIX_SHELL:-} ]]; then
