@@ -59,3 +59,12 @@
 
     - name: Clear permanently-broken jobs and create any that are absent
       ansible.builtin.include_tasks: replication_apply.yml
+
+- name: Remove guarded orphaned cloud-init volumes on each node
+  when:
+    - pve_ha_enabled | bool
+    - pve_ha_cloudinit_orphan_cleanup_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_ha
+  ansible.builtin.include_tasks: cloudinit_orphan_cleanup.yml

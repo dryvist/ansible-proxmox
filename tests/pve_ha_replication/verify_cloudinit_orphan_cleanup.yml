@@ -1,0 +1,185 @@
+---
+- name: Verify pve_ha cloud-init cleanup guards
+  hosts: localhost
+  gather_facts: false
+  vars:
+    pve_ha_cloudinit_cleanup_decisions: []
+    pve_ha_cloudinit_cleanup_test_cases:
+      - name: owner-node-volume
+        volid: local-zfs:vm-101-cloudinit
+        storage_id: local-zfs
+        storage_shared: false
+        storage_nodes: "node-a,node-b"
+        local_node: node-a
+        vmid: "101"
+        vm_config_paths:
+          - /etc/pve/nodes/node-a/qemu-server/101.conf
+        owner_node: node-a
+        owner_config_text: "ide2: local-zfs:vm-101-cloudinit,media=cdrom\n"
+        local_config_texts:
+          - "ide2: local-zfs:vm-101-cloudinit,media=cdrom\n"
+        online_nodes: [node-a, node-b]
+        active_tasks: []
+        current_volids: ["local-zfs:vm-101-cloudinit"]
+        allowed_storages: []
+        expected: keep
+      - name: orphan-volume
+        volid: local-zfs:vm-102-cloudinit
+        storage_id: local-zfs
+        storage_shared: false
+        storage_nodes: "node-a,node-b"
+        local_node: node-a
+        vmid: "102"
+        vm_config_paths:
+          - /etc/pve/nodes/node-b/qemu-server/102.conf
+        owner_node: node-b
+        owner_config_text: "name: vm-102\n"
+        local_config_texts: []
+        online_nodes: [node-a, node-b]
+        active_tasks: []
+        current_volids: ["local-zfs:vm-102-cloudinit"]
+        allowed_storages: []
+        expected: free
+      - name: unknown-vmid-volume
+        volid: local-zfs:vm-103-cloudinit
+        storage_id: local-zfs
+        storage_shared: false
+        storage_nodes: "node-a,node-b"
+        local_node: node-a
+        vmid: "103"
+        vm_config_paths: []
+        owner_node: ""
+        owner_config_text: ""
+        local_config_texts: []
+        online_nodes: [node-a, node-b]
+        active_tasks: []
+        current_volids: ["local-zfs:vm-103-cloudinit"]
+        allowed_storages: []
+        expected: keep
+      - name: locked-vm-volume
+        volid: local-zfs:vm-104-cloudinit
+        storage_id: local-zfs
+        storage_shared: false
+        storage_nodes: "node-a,node-b"
+        local_node: node-a
+        vmid: "104"
+        vm_config_paths:
+          - /etc/pve/nodes/node-b/qemu-server/104.conf
+        owner_node: node-b
+        owner_config_text: "lock: migrate\n"
+        local_config_texts: []
+        online_nodes: [node-a, node-b]
+        active_tasks: []
+        current_volids: ["local-zfs:vm-104-cloudinit"]
+        allowed_storages: []
+        expected: keep
+      - name: migration-task-volume
+        volid: local-zfs:vm-105-cloudinit
+        storage_id: local-zfs
+        storage_shared: false
+        storage_nodes: "node-a,node-b"
+        local_node: node-a
+        vmid: "105"
+        vm_config_paths:
+          - /etc/pve/nodes/node-b/qemu-server/105.conf
+        owner_node: node-b
+        owner_config_text: "name: vm-105\n"
+        local_config_texts: []
+        online_nodes: [node-a, node-b]
+        active_tasks:
+          - { type: qmigrate, id: "105" }
+        current_volids: ["local-zfs:vm-105-cloudinit"]
+        allowed_storages: []
+        expected: keep
+      - name: replication-task-volume
+        volid: local-zfs:vm-106-cloudinit
+        storage_id: local-zfs
+        storage_shared: false
+        storage_nodes: "node-a,node-b"
+        local_node: node-a
+        vmid: "106"
+        vm_config_paths:
+          - /etc/pve/nodes/node-b/qemu-server/106.conf
+        owner_node: node-b
+        owner_config_text: "name: vm-106\n"
+        local_config_texts: []
+        online_nodes: [node-a, node-b]
+        active_tasks:
+          - { type: replicate, id: "106-0" }
+        current_volids: ["local-zfs:vm-106-cloudinit"]
+        allowed_storages: []
+        expected: keep
+      - name: locally-attached-volume
+        volid: local-zfs:vm-107-cloudinit
+        storage_id: local-zfs
+        storage_shared: false
+        storage_nodes: "node-a,node-b"
+        local_node: node-a
+        vmid: "107"
+        vm_config_paths:
+          - /etc/pve/nodes/node-b/qemu-server/107.conf
+        owner_node: node-b
+        owner_config_text: "name: vm-107\n"
+        local_config_texts:
+          - "scsi1: local-zfs:vm-107-cloudinit,media=cdrom\n"
+        online_nodes: [node-a, node-b]
+        active_tasks: []
+        current_volids: ["local-zfs:vm-107-cloudinit"]
+        allowed_storages: []
+        expected: keep
+      - name: shared-storage-volume
+        volid: shared-zfs:vm-108-cloudinit
+        storage_id: shared-zfs
+        storage_shared: true
+        storage_nodes: "node-a,node-b"
+        local_node: node-a
+        vmid: "108"
+        vm_config_paths:
+          - /etc/pve/nodes/node-b/qemu-server/108.conf
+        owner_node: node-b
+        owner_config_text: "name: vm-108\n"
+        local_config_texts: []
+        online_nodes: [node-a, node-b]
+        active_tasks: []
+        current_volids: ["shared-zfs:vm-108-cloudinit"]
+        allowed_storages: []
+        expected: keep
+      - name: offline-owner-volume
+        volid: local-zfs:vm-109-cloudinit
+        storage_id: local-zfs
+        storage_shared: false
+        storage_nodes: "node-a,node-b"
+        local_node: node-a
+        vmid: "109"
+        vm_config_paths:
+          - /etc/pve/nodes/node-b/qemu-server/109.conf
+        owner_node: node-b
+        owner_config_text: "name: vm-109\n"
+        local_config_texts: []
+        online_nodes: [node-a]
+        active_tasks: []
+        current_volids: ["local-zfs:vm-109-cloudinit"]
+        allowed_storages: []
+        expected: keep
+
+  tasks:
+    - name: Include the production cloud-init cleanup decision task
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/cloudinit_orphan_cleanup_decision.yml
+      loop: "{{ pve_ha_cloudinit_cleanup_test_cases }}"
+      loop_control:
+        loop_var: pve_ha_cloudinit_cleanup_candidate
+        label: "{{ pve_ha_cloudinit_cleanup_candidate.name }}"
+
+    - name: Assert every cloud-init cleanup fixture result
+      ansible.builtin.assert:
+        that:
+          - >-
+            (pve_ha_cloudinit_cleanup_decisions
+             | selectattr('name', 'equalto', item.name) | first).decision == item.expected
+        fail_msg: >-
+          {{ item.name }} expected {{ item.expected }} but got
+          {{ pve_ha_cloudinit_cleanup_decisions
+             | selectattr('name', 'equalto', item.name) | first }}.
+      loop: "{{ pve_ha_cloudinit_cleanup_test_cases }}"
+      loop_control:
+        label: "{{ item.name }}"
