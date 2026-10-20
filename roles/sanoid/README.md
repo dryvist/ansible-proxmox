@@ -30,15 +30,15 @@ ansible-galaxy install -r requirements.yml
 
 ## Variables
 
-| Variable                           | Default                    | Description                                        |
-| ---------------------------------- | -------------------------- | -------------------------------------------------- |
-| `sanoid_enabled`                   | `true`                     | Master enable for the role                         |
-| `sanoid_timer_enabled`             | `true`                     | Enable/start `sanoid.timer`                        |
-| `sanoid_templates`                 | critical / media / scratch | Retention templates by criticality tier            |
+| Variable                             | Default                                        | Description                                        |
+| ------------------------------------ | ---------------------------------------------- | -------------------------------------------------- |
+| `sanoid_enabled`                     | `true`                                         | Master enable for the role                         |
+| `sanoid_timer_enabled`               | `true`                                         | Enable/start `sanoid.timer`                        |
+| `sanoid_templates`                   | critical / media / scratch                     | Retention templates by criticality tier            |
 | `sanoid_rpool_guest_dataset_pattern` | `^rpool/data/(vm\|subvol)-[0-9]+-disk-[0-9]+$` | Guest dataset names receiving the shorter template |
-| `sanoid_rpool_guest_template_name` | `rpool_guest`              | Template assigned to matching guest datasets       |
-| `sanoid_datasets`                  | `{}`                       | Map of `dataset => { use_template, recursive, … }` |
-| `sanoid_replica_retention_enabled` | `false`                    | Add retention stanzas for live syncoid targets     |
+| `sanoid_rpool_guest_template_name`   | `rpool_guest`                                  | Template assigned to matching guest datasets       |
+| `sanoid_datasets`                    | `{}`                                           | Map of `dataset => { use_template, recursive, … }` |
+| `sanoid_replica_retention_enabled`   | `false`                                        | Add retention stanzas for live syncoid targets     |
 
 Quote `yes`/`no` values — sanoid wants literal `yes`/`no`, and unquoted YAML
 coerces them to booleans.
