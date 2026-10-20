@@ -1,0 +1,40 @@
+---
+# ---------------------------------------------------------------------------
+# Live placement for the replicated container config read. HA may relocate a
+# guest off its declared node, where its config no longer exists, so the read
+# goes to the node it runs on now; a guest absent from the listing falls back
+# to its declared node. The real role needs live `pvesh` output, so this
+# mirrors the `placement` var in roles/pve_ha/tasks/replication_jobs.yml.
+# Run: ansible-playbook tests/pve_ha_replication/verify_live_placement.yml -i localhost,
+# ---------------------------------------------------------------------------
+- name: Verify pve_ha reads replicated container configs on their live node
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Assert the config read targets each container's live node
+      vars:
+        pve_ha_replication_placement_raw:
+          stdout: >-
+            [{"type": "lxc", "vmid": 605000, "node": "node-a"},
+             {"type": "qemu", "vmid": 605010, "node": "node-c"}]
+        relocated:
+          vmid: 605000
+          node: node-b
+        unlisted:
+          vmid: 605010
+          node: node-a
+      ansible.builtin.assert:
+        that:
+          - >-
+            (pve_ha_replication_placement_raw.stdout | from_json
+             | selectattr('type', 'equalto', 'lxc')
+             | selectattr('vmid', 'equalto', relocated.vmid | int)
+             | list | first | default({})).node | default(relocated.node) == 'node-a'
+          - >-
+            (pve_ha_replication_placement_raw.stdout | from_json
+             | selectattr('type', 'equalto', 'lxc')
+             | selectattr('vmid', 'equalto', unlisted.vmid | int)
+             | list | first | default({})).node | default(unlisted.node) == 'node-a'
+        fail_msg: the container config read does not follow live placement
