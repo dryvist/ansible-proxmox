@@ -87,17 +87,24 @@
       loop:
         - pct.log
         - resize.log
-        - pvesm.log
+        - pvesh.log
 
     - name: Install pvesh fixture command
       ansible.builtin.copy:
         content: |
           #!/bin/sh
+          printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/pvesh.log
           if [ "$1" = get ] && [ "$2" = /cluster/resources ]; then
             cat {{ lxc_storage_mount_sizes_stub_dir }}/placement.json
             exit 0
           fi
           case "$2" in
+            /nodes/fixture-node/storage/bulk/status)
+              printf '%s\n' '{"active":1,"avail":106300440576}'
+              ;;
+            /nodes/fixture-node/storage/tight/status)
+              printf '%s\n' '{"active":1,"avail":10737418240}'
+              ;;
             /nodes/fixture-node/lxc/108/config)
               printf '%s\n' '{"digest":"fixture-digest","lock":"snapshot"}'
               ;;
@@ -134,21 +141,6 @@
         mode: "0755"
       check_mode: false
 
-    - name: Install pvesm fixture command
-      ansible.builtin.copy:
-        content: |
-          #!/bin/sh
-          printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/pvesm.log
-          printf '%s\n' 'Name Type Status Total Used Available %'
-          case "$3" in
-            bulk) printf '%s\n' 'bulk zfspool active 107374182400 1073741824 106300440576 1%' ;;
-            tight) printf '%s\n' 'tight zfspool active 10737418240 0 10737418240 0%' ;;
-            *) exit 1 ;;
-          esac
-        dest: "{{ lxc_storage_mount_sizes_stub_dir }}/pvesm"
-        mode: "0755"
-      check_mode: false
-
     - name: Run the role against local command fixtures
       ansible.builtin.include_role:
         name: lxc_storage_mount_sizes
@@ -160,7 +152,7 @@
       loop:
         - pct.log
         - resize.log
-        - pvesm.log
+        - pvesh.log
       register: lxc_storage_mount_sizes_logs
       when: lxc_storage_mount_sizes_contract_mode == 'normal'
 
@@ -168,7 +160,7 @@
       ansible.builtin.set_fact:
         lxc_storage_mount_sizes_pct_commands: "{{ lxc_storage_mount_sizes_logs.results[0].content | b64decode }}"
         lxc_storage_mount_sizes_resize_commands: "{{ lxc_storage_mount_sizes_logs.results[1].content | b64decode }}"
-        lxc_storage_mount_sizes_pvesm_commands: "{{ lxc_storage_mount_sizes_logs.results[2].content | b64decode }}"
+        lxc_storage_mount_sizes_pvesh_commands: "{{ lxc_storage_mount_sizes_logs.results[2].content | b64decode }}"
       when: lxc_storage_mount_sizes_contract_mode == 'normal'
 
     - name: Assert grow-only outcomes and side effects
@@ -179,13 +171,21 @@
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'smaller') | map(attribute='status') | first) == 'refused'"
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'path-mismatch') | map(attribute='status') | first) == 'refused'"
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'insufficient') | map(attribute='status') | first) == 'refused'"
+          - "'free=10737418240 B' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'insufficient') | map(attribute='reason') | first)"
+          - "'growth=1073741824 B' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'insufficient') | map(attribute='reason') | first)"
+          - "'margin=10737418240 B' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'insufficient') | map(attribute='reason') | first)"
+          - "'declared=2147483648 B' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'insufficient') | map(attribute='reason') | first)"
+          - "'live=1073741824 B' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'insufficient') | map(attribute='reason') | first)"
+          - "'declared=536870912 B' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'smaller') | map(attribute='reason') | first)"
+          - "'live=1073741824 B' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'smaller') | map(attribute='reason') | first)"
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'volume-mismatch') | map(attribute='status') | first) == 'refused'"
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'locked') | map(attribute='status') | first) == 'refused'"
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'migrating') | map(attribute='status') | first) == 'refused'"
           - "'resize 101 mp0 2G --digest fixture-digest' in lxc_storage_mount_sizes_resize_commands"
           - "lxc_storage_mount_sizes_resize_commands.splitlines() | length == 1"
           - "'config 106' not in lxc_storage_mount_sizes_pct_commands"
-          - "'tight' in lxc_storage_mount_sizes_pvesm_commands"
+          - "'storage/bulk/status' in lxc_storage_mount_sizes_pvesh_commands"
+          - "'storage/tight/status' in lxc_storage_mount_sizes_pvesh_commands"
         fail_msg: |
           The storage mount reconcile did not match the fixtures.
           Outcomes: {{ lxc_storage_mount_sizes_outcomes }}
@@ -208,7 +208,7 @@
       loop:
         - pct.log
         - resize.log
-        - pvesm.log
+        - pvesh.log
       register: lxc_storage_mount_sizes_check_logs
       when: lxc_storage_mount_sizes_contract_mode == 'check'
 
@@ -216,7 +216,7 @@
       ansible.builtin.set_fact:
         lxc_storage_mount_sizes_check_pct_commands: "{{ lxc_storage_mount_sizes_check_logs.results[0].content | b64decode }}"
         lxc_storage_mount_sizes_check_resize_commands: "{{ lxc_storage_mount_sizes_check_logs.results[1].content | b64decode }}"
-        lxc_storage_mount_sizes_check_pvesm_commands: "{{ lxc_storage_mount_sizes_check_logs.results[2].content | b64decode }}"
+        lxc_storage_mount_sizes_check_pvesh_commands: "{{ lxc_storage_mount_sizes_check_logs.results[2].content | b64decode }}"
       when: lxc_storage_mount_sizes_contract_mode == 'check'
 
     - name: Assert read-only preflight and check-mode resize behavior
@@ -225,7 +225,7 @@
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'grow') | map(attribute='status') | first) == 'refused'"
           - "'check mode active' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'grow') | map(attribute='reason') | first)"
           - "'config 101' in lxc_storage_mount_sizes_check_pct_commands"
-          - "'bulk' in lxc_storage_mount_sizes_check_pvesm_commands"
+          - "'storage/bulk/status' in lxc_storage_mount_sizes_check_pvesh_commands"
           - "lxc_storage_mount_sizes_check_resize_commands | length == 0"
         fail_msg: |
           Check mode did not perform a read-only preflight and withhold the resize.
