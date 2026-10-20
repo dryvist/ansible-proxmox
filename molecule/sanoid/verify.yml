@@ -4,6 +4,9 @@
   become: false
   gather_facts: false
 
+  vars_files:
+    - ../../roles/sanoid/defaults/main.yml
+
   tasks:
     - name: Read the rendered sanoid.conf
       ansible.builtin.slurp:
@@ -29,7 +32,30 @@
       ansible.builtin.assert:
         that:
           - "'[template_critical]' in sanoid_conf_text"
+          - "'[template_rpool_guest]' in sanoid_conf_text"
           - "'[template_scratch]' in sanoid_conf_text"
+          - sanoid_templates.critical.hourly == 36
+          - sanoid_templates.critical.daily == 30
+          - sanoid_templates.critical.weekly == 8
+          - sanoid_templates.critical.monthly == 6
+          - sanoid_rpool_guest_dataset_pattern == '^rpool/data/(vm|subvol)-[0-9]+-disk-[0-9]+$'
+          - sanoid_rpool_guest_template_name == 'rpool_guest'
+          - sanoid_templates.rpool_guest.hourly == 6
+          - sanoid_templates.rpool_guest.daily == 7
+          - sanoid_templates.rpool_guest.weekly == 4
+          - sanoid_templates.rpool_guest.monthly == 0
+          - >-
+            sanoid_conf_block['[template_critical]'] == [
+              'autoprune = yes', 'autosnap = yes', 'daily = 30',
+              'frequently = 0', 'hourly = 36', 'monthly = 6',
+              'weekly = 8', 'yearly = 0'
+            ]
+          - >-
+            sanoid_conf_block['[template_rpool_guest]'] == [
+              'autoprune = yes', 'autosnap = yes', 'daily = 7',
+              'frequently = 0', 'hourly = 6', 'monthly = 0',
+              'weekly = 4', 'yearly = 0'
+            ]
           - >-
             sanoid_conf_block['[template_replica]'] == [
               'autoprune = yes',
@@ -43,6 +69,9 @@
             ]
           - "'[rpool/data/nas]' in sanoid_conf_text"
           - "'use_template = critical' in sanoid_conf_text"
+          - sanoid_conf_block['[rpool/data/subvol-100-disk-0]'] == ['use_template = rpool_guest']
+          - sanoid_conf_block['[rpool/data/vm-101-disk-1]'] == ['use_template = rpool_guest']
+          - sanoid_conf_block['[bulk/appdata]'] == ['use_template = critical']
           # scratch dataset opts out of snapshots
           - "'[nvme1/siem/cribl-pq]' in sanoid_conf_text"
           - "'[bulk/replica/source/recursive]' in sanoid_conf_text"

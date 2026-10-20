@@ -23,6 +23,9 @@ ansible-galaxy install -r requirements.yml
   `sanoid.timer`.
 - Configures only datasets assigned in `sanoid_datasets` or live `syncoid_jobs`
   targets when replica retention is enabled; templates alone take no snapshots.
+- Guest disk datasets named `vm-<vmid>-disk-<index>` or
+  `subvol-<vmid>-disk-<index>` under `rpool/data` use `rpool_guest`; other
+  datasets retain their configured template.
 - Package install + timer are skipped under Docker so molecule can converge.
 
 ## Variables
@@ -32,11 +35,18 @@ ansible-galaxy install -r requirements.yml
 | `sanoid_enabled`                   | `true`                     | Master enable for the role                         |
 | `sanoid_timer_enabled`             | `true`                     | Enable/start `sanoid.timer`                        |
 | `sanoid_templates`                 | critical / media / scratch | Retention templates by criticality tier            |
+| `sanoid_rpool_guest_dataset_pattern` | `^rpool/data/(vm\|subvol)-[0-9]+-disk-[0-9]+$` | Guest dataset names receiving the shorter template |
+| `sanoid_rpool_guest_template_name` | `rpool_guest`              | Template assigned to matching guest datasets       |
 | `sanoid_datasets`                  | `{}`                       | Map of `dataset => { use_template, recursive, … }` |
 | `sanoid_replica_retention_enabled` | `false`                    | Add retention stanzas for live syncoid targets     |
 
 Quote `yes`/`no` values — sanoid wants literal `yes`/`no`, and unquoted YAML
 coerces them to booleans.
+
+The `rpool_guest` template keeps 6 hourly, 7 daily, and 4 weekly snapshots,
+with monthly and yearly retention disabled. The existing `critical` template
+remains at 36 hourly, 30 daily, 8 weekly, and 6 monthly snapshots, so bulk
+datasets assigned to `critical` are unchanged.
 
 With `sanoid_replica_retention_enabled`, the role derives stanzas only for
 `syncoid_jobs` targets (all datasets under a recursive target included) and
