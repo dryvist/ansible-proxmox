@@ -23,17 +23,27 @@ permissions:
 
 jobs:
   verify-inventory:
-    name: Verify Inventory Load
+    name: Verify Inventory Load (${{ matrix.shard }})
     runs-on: ubuntu-latest
+    strategy:
+      # Run independent fixture checks concurrently and report every shard on failure.
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        shard: [core, model_store, preflight]
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
 
       - name: Install dependencies
         run: |
@@ -75,6 +85,7 @@ jobs:
       # shared inventory_resolve role by FQCN, so this run is what proves the
       # collection actually resolves it.
       - name: Verify OpenTofu inventory loading
+        if: ${{ matrix.shard == 'core' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
@@ -83,6 +94,7 @@ jobs:
           ansible-playbook tests/inventory_load/verify_inventory.yml -i inventory/hosts.yml -c local
 
       - name: Verify capability-tag inventory selection
+        if: ${{ matrix.shard == 'core' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
@@ -92,6 +104,7 @@ jobs:
       # pve_ha's replication logic cannot be exercised by molecule (it needs a
       # real cluster), so it is pinned by fixture-driven assertions instead.
       - name: Verify pve_ha replication derivation and self-heal selection
+        if: ${{ matrix.shard == 'core' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
@@ -113,6 +126,7 @@ jobs:
       # the role merges one key instead of templating the file. This runs that
       # task file against a temp copy and proves the unmanaged keys survive.
       - name: Verify pve_ha shutdown-policy merge preserves unmanaged keys
+        if: ${{ matrix.shard == 'core' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
@@ -123,12 +137,14 @@ jobs:
       # must refuse, the reconcile against a stubbed pvesh — so neither can pass
       # against a stale copy, and neither reaches a cluster.
       - name: Verify pve_backup_jobs declaration guard
+        if: ${{ matrix.shard == 'core' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_backup_jobs/verify_declaration.yml -i localhost, -c local
 
       - name: Verify pve_backup_jobs reconcile command construction
+        if: ${{ matrix.shard == 'core' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
@@ -138,6 +154,7 @@ jobs:
       # the task errors instead of evaluating. ansible-lint's production
       # profile passes it, so only this catches the class.
       - name: Verify every assert conditional is a string
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/test_assert_conditionals.py
 
       # The quorum guard is only worth having if it parses the output a blocked
@@ -145,6 +162,7 @@ jobs:
       # checkable without a cluster, so the patterns are exercised offline —
       # pulled from the role itself, so they cannot drift from what it runs.
       - name: Verify pve_quorum_guard parsing and arithmetic
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/test_pve_quorum_guard_arithmetic.py
 
       # pve_proxman_operator provisions a cluster identity and cannot be
@@ -152,24 +170,29 @@ jobs:
       # resume conditions are pinned by fixture-driven assertions pulled from
       # the role's own task files instead.
       - name: Verify pve_proxman_operator gates and resume conditions
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/test_proxman_operator.py
 
       - name: Verify crash diagnostics memtest check-mode guards
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/test_crash_diagnostics_memtest_check_mode.py
 
       # pve_api_tokens mints cluster tokens and needs a real cluster, so its
       # mint decision and OpenBao read gate are pinned the same way.
       - name: Verify pve_api_tokens mint decision and read gate
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/test_pve_api_tokens.py
 
       # Interface pinning and bridge ports are one inventory contract. Keep
       # kernel-slot names from returning in the rendered bridge configuration.
       - name: Verify pve_host_network MAC pinning contract
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/test_pve_host_network_contract.py
 
       # An unset PVE<N>_VE_HOSTNAME must resolve to the node's own name, never
       # to an empty ansible_host that ssh and delegate_to read as localhost.
       - name: Verify Proxmox host connection fallback
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/test_inventory_proxmox_host_connection.py
 
       # The drive artifact feeds a Nautobot sync that DELETES what it stops
@@ -178,12 +201,14 @@ jobs:
       # a transform that drops the node stamp orphans every drive from its
       # machine. Exercised offline against the role's own expression.
       - name: Verify pve_disk_inventory shapes drives for Nautobot
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/test_pve_disk_inventory_transform.py
 
       # A controller that is the node being powered would run ipmitool against
       # itself. The node list holds Proxmox node names, so the exclusion is
       # driven against a host whose inventory key and node name differ.
       - name: Verify idrac_power controller self-exclusion
+        if: ${{ matrix.shard == 'core' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
@@ -196,6 +221,7 @@ jobs:
       # container scenario cannot present. The test extracts the template from
       # the role rather than copying it, so role drift fails here.
       - name: Verify the ZFS capacity monitor band-state contract
+        if: ${{ matrix.shard == 'core' }}
         run: |
           python3 tests/zfs_capacity_monitor/test_dropped_alert.py
           python3 tests/zfs_capacity_monitor/test_transport_contract.py
@@ -203,12 +229,14 @@ jobs:
       # The ntfy hub fan-out is the only alert path left for this fault
       # signature; molecule never executes the script, only deploys it.
       - name: Verify the zfs_fault_alert ntfy transport contract
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/zfs_fault_alert/test_transport_contract.py
 
       # pve_notifications' whole task block (including the ntfy URL) is
       # skipped under molecule's Docker scenario, so the apex-vs-ingress
       # distinction is pinned here instead.
       - name: Verify pve_notifications builds its ntfy URL from the ingress subdomain
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/pve_notifications/test_contract.py
 
       # Backup identity: every other signal a backup job produces asserts only
@@ -218,36 +246,43 @@ jobs:
       # driven over fixture dump directories. Includes the false-green guard:
       # with no identity map, the field must report UNKNOWN rather than 0.
       - name: Verify backup identity assertion contract
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/pve_backup_identity/test_identity_assert.py
 
       # Placement drift is silent: the guest is fine, the node is fine, and
       # only the pairing is wrong. Two guests failed every converge because of
       # it with nothing reporting the cause.
       - name: Verify the guest-placement comparison
+        if: ${{ matrix.shard == 'core' }}
         run: >-
           ansible-playbook tests/guest_placement/verify.yml
           -i localhost, -c local
 
       - name: Verify configured guest memory budgets
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/guest_placement/test_memory_budget.py
 
       # One unreachable cluster peer must not abort the by-IP reachability
       # proof -- and therefore the whole site converge -- for every other
       # node. Loads the role's real defaults/main.yml against fixture hosts.
       - name: Verify cluster_ssh_trust excludes an unreachable peer without aborting the play
+        if: ${{ matrix.shard == 'core' }}
         run: >-
           ansible-playbook tests/cluster_ssh_trust/verify_unreachable_peer_exclusion.yml
           -i localhost, -c local
 
       - name: Verify snapshot-free guest archive safety contract
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/pve_guest_evacuation/test_archive_contract.py
 
       - name: Verify pve guest evacuation restore safety contract
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/pve_guest_evacuation_restore/test_restore_contract.py
 
       # Extracted tasks execute against literal TAB-delimited ZFS records and
       # malformed/ambiguous fixtures, so parser drift fails the PR gate.
       - name: Verify managed-volume ZFS identity parser regression
+        if: ${{ matrix.shard == 'core' }}
         # The whole directory, not one named file: the contract now spans
         # several behaviour-named modules, and naming them individually is how
         # a newly added one silently never runs.
@@ -256,12 +291,14 @@ jobs:
       # ECC detection and EDAC enforcement execute from the role's own tasks
       # and guard library against SMBIOS and counter fixtures.
       - name: Verify full-system stress ECC and EDAC paths
+        if: ${{ matrix.shard == 'core' }}
         run: python3 tests/pve_full_system_stress/test_memory_ecc.py
 
       # A new mpN can hotplug live on a running LXC; restarting unconditionally
       # to apply it takes the serving guest down for nothing when it already
       # did. Drives the role's own decision task against both outcomes.
       - name: Verify llm_model_store_seed mount hotplug-vs-restart decision
+        if: ${{ matrix.shard == 'model_store' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
@@ -270,6 +307,7 @@ jobs:
       # The shared catalog now includes provider and non-GGUF serving models;
       # only entries with a pinned GGUF artifact can be seeded onto the store.
       - name: Verify llm_model_store_seed selects only catalogued GGUF artifacts
+        if: ${{ matrix.shard == 'model_store' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
@@ -278,6 +316,7 @@ jobs:
       # Whether a changed container gets `pct reboot` or `pct start`. Drives
       # the handler's own decision task against both outcomes.
       - name: Verify llm_model_store_seed restart-target classification
+        if: ${{ matrix.shard == 'model_store' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
@@ -285,38 +324,45 @@ jobs:
 
       # A hostname in llm_model_store_seed_exclude_hostnames gets no target.
       - name: Verify llm_model_store_seed hostname exclusion
+        if: ${{ matrix.shard == 'model_store' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/llm_model_store_seed/verify_exclude_hostnames.yml -i localhost, -c local
 
       - name: Verify llm_model_store_seed attach on a protected container
+        if: ${{ matrix.shard == 'model_store' }}
         run: python3 tests/llm_model_store_seed/test_protected_attach.py
 
       # The mount lookup must find a live `<storage>:<vol>,mp=<path>,...` value,
       # and a surplus duplicate is removed only when it is role-named and empty.
       - name: Verify llm_model_store_seed mount lookup and surplus removal
+        if: ${{ matrix.shard == 'model_store' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/llm_model_store_seed/verify_duplicate_removal.yml -i localhost, -c local
 
       - name: Verify HA relocation admission against sanitized API fixtures
+        if: ${{ matrix.shard == 'preflight' }}
         run: python3 tests/pve_ha_relocation/test_preflight.py
 
       - name: Verify guest_power request validation fails closed
+        if: ${{ matrix.shard == 'preflight' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/guest_power_contract.yml -i localhost, -c local
 
       - name: Verify container_start resolution fails closed
+        if: ${{ matrix.shard == 'preflight' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/container_start_contract.yml -i localhost, -c local
 
       - name: Verify the Nautobot pre-flight gate against offline fixtures
+        if: ${{ matrix.shard == 'preflight' }}
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
