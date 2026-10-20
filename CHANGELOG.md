@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.3](https://github.com/dryvist/ansible-proxmox/compare/v2.32.2...v2.32.3) (2026-10-20)
+
+
+### Bug Fixes
+
+* **guest_power:** verify node-wide guest states ([#1141](https://github.com/dryvist/ansible-proxmox/issues/1141)) ([619c981](https://github.com/dryvist/ansible-proxmox/commit/619c981e38c8bb5b8a265c9ad6797d6570151d2e))
+* **pve_ha:** list cloud-init cleanup candidates through the storage content API ([#1140](https://github.com/dryvist/ansible-proxmox/issues/1140)) ([b6a57a9](https://github.com/dryvist/ansible-proxmox/commit/b6a57a98e025c237d1a25cf011beaa95d30a0845))
+
 ## [2.32.2](https://github.com/dryvist/ansible-proxmox/compare/v2.32.1...v2.32.2) (2026-10-20)
 
 
