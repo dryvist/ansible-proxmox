@@ -72,3 +72,28 @@ input(type="imfile"
       severity="warning"
       facility="local0"
       ruleset="pve_firewall_fwd")
+
+# Proxmox task logs are stored one file per UPID below /var/log/pve/tasks.
+# Match only UPID-named files so the index and active bookkeeping files are
+# never read. imfile metadata preserves the file name for the Cribl pipeline.
+template(name="pve_task_forward_format" type="string"
+         string="<%pri%>%timereported:::date-rfc3164% %hostname% pve-task: %$!metadata!filename% %msg%\n")
+ruleset(name="pve_task_fwd") {
+  action(type="omfwd"
+         target="{{ pve_syslog_forwarder_target_host }}"
+         port="{{ pve_syslog_forwarder_target_port }}"
+         protocol="{{ pve_syslog_forwarder_protocol }}"
+         template="pve_task_forward_format"
+         queue.type="LinkedList"
+         queue.filename="cribl_fwd_pve_task"
+         queue.maxDiskSpace="{{ pve_syslog_forwarder_queue_max_disk_space }}"
+         queue.saveOnShutdown="on"
+         action.resumeRetryCount="-1")
+}
+input(type="imfile"
+      file="/var/log/pve/tasks/*/UPID:*"
+      tag="pve-task:"
+      severity="info"
+      facility="local0"
+      addMetadata="on"
+      ruleset="pve_task_fwd")
