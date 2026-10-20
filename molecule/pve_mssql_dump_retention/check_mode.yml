@@ -1,0 +1,83 @@
+---
+- name: Preview dump retention in Ansible check mode
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  vars:
+    pve_mssql_dump_retention_check_root: /tmp/pve-mssql-dump-retention-check-mode
+    pve_mssql_dump_retention_check_source: "{{ pve_mssql_dump_retention_check_root }}/source"
+    pve_mssql_dump_retention_check_archive: >-
+      {{ pve_mssql_dump_retention_check_root }}/bulk/mssql-crash-dumps
+    pve_mssql_dump_retention_check_name: core.sqlservr.01_01_2020_00_00_00.1.d
+
+  tasks:
+    - name: Prepare a disposable source directory
+      check_mode: false
+      block:
+        - name: Create the source and archive parent directories
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: "0755"
+          loop:
+            - "{{ pve_mssql_dump_retention_check_source }}/{{ pve_mssql_dump_retention_check_name }}"
+            - "{{ pve_mssql_dump_retention_check_root }}/bulk"
+
+        - name: Create a dump file
+          ansible.builtin.copy:
+            content: check-mode fixture
+            dest: >-
+              {{ pve_mssql_dump_retention_check_source }}/{{ pve_mssql_dump_retention_check_name }}/dump.txt
+            mode: "0644"
+
+        - name: Mark the dump directory as old
+          ansible.builtin.file:
+            path: "{{ pve_mssql_dump_retention_check_source }}/{{ pve_mssql_dump_retention_check_name }}"
+            state: directory
+            modification_time: "202001010000.00"
+            modification_time_format: "%Y%m%d%H%M.%S"
+            mode: "0755"
+    - name: Preview retention and remove its fixture
+      block:
+        - name: Run retention against the disposable source directory
+          ansible.builtin.include_role:
+            name: pve_mssql_dump_retention
+          vars:
+            pve_mssql_dump_retention_enabled: true
+            pve_mssql_dump_retention_dry_run: false
+            pve_mssql_dump_retention_source_dir: "{{ pve_mssql_dump_retention_check_source }}"
+            pve_mssql_dump_retention_archive_dir: "{{ pve_mssql_dump_retention_check_archive }}"
+            pve_mssql_dump_retention_age_days: 30
+            pve_mssql_dump_retention_keep_newest: 0
+            pve_mssql_dump_retention_max_dirs_per_run: 1
+            pve_mssql_dump_retention_mount_table:
+              - "{{ pve_mssql_dump_retention_check_root }}/bulk bulk/backups zfs"
+
+        - name: Inspect source and archive paths after the preview
+          ansible.builtin.stat:
+            path: "{{ item }}"
+            follow: false
+          loop:
+            - "{{ pve_mssql_dump_retention_check_source }}/{{ pve_mssql_dump_retention_check_name }}"
+            - "{{ pve_mssql_dump_retention_check_archive }}/{{ pve_mssql_dump_retention_check_name }}.tar.zst"
+            - "{{ pve_mssql_dump_retention_check_archive }}/{{ pve_mssql_dump_retention_check_name }}.tar.zst.partial"
+            - "{{ pve_mssql_dump_retention_check_archive }}"
+          register: pve_mssql_dump_retention_check_stats
+
+        - name: Assert the preview kept the source and created no archive
+          ansible.builtin.assert:
+            that:
+              - pve_mssql_dump_retention_check_stats.results[0].stat.isdir | default(false)
+              - not (pve_mssql_dump_retention_check_stats.results[1].stat.exists | default(false))
+              - not (pve_mssql_dump_retention_check_stats.results[2].stat.exists | default(false))
+              - not (pve_mssql_dump_retention_check_stats.results[3].stat.exists | default(false))
+            fail_msg: "The check-mode preview changed the source or created archive paths."
+            quiet: true
+      always:
+        - name: Remove the disposable check-mode fixture
+          ansible.builtin.file:
+            path: "{{ pve_mssql_dump_retention_check_root }}"
+            state: absent
+          check_mode: false

@@ -100,3 +100,37 @@
         that:
           - pve_mssql_dump_retention_corrupt_archive.content | b64decode == 'corrupt archive\n'
         quiet: true
+
+- name: Verify dump retention in real check mode
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Run the archive preview under Ansible check mode
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - --check
+          - --inventory
+          - localhost,
+          - --connection
+          - local
+          - molecule/pve_mssql_dump_retention/check_mode.yml
+      args:
+        chdir: "{{ playbook_dir }}/../.."
+      environment:
+        ANSIBLE_ROLES_PATH: "{{ playbook_dir }}/../../roles"
+      register: pve_mssql_dump_retention_check_mode
+      changed_when: false
+
+    - name: Assert check mode skips verification for an archive it does not create
+      ansible.builtin.assert:
+        that:
+          - pve_mssql_dump_retention_check_mode.rc == 0
+          - >-
+            'Skipping verification: check mode did not create the partial archive.'
+            in pve_mssql_dump_retention_check_mode.stdout
+        fail_msg: "The dump retention check-mode preview failed or did not skip verification."
+        quiet: true

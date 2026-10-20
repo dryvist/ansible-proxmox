@@ -65,13 +65,30 @@
   failed_when: pve_mssql_dump_retention_tar_create.rc != 0
   when: not pve_mssql_dump_retention_final_stat.stat.exists
 
+- name: Explain archive verification is skipped when check mode did not create the archive
+  ansible.builtin.debug:
+    msg: "Skipping verification: check mode did not create the partial archive."
+  when:
+    - not pve_mssql_dump_retention_final_stat.stat.exists
+    - ansible_check_mode
+    - >-
+      (pve_mssql_dump_retention_tar_create.skipped | default(false))
+      or (pve_mssql_dump_retention_tar_create.changed | default(false))
+
 - name: Verify the partial archive before finalizing it
   ansible.builtin.include_tasks: verify_archive.yml
   vars:
     pve_mssql_dump_retention_verify_archive: "{{ pve_mssql_dump_retention_current_partial }}"
     pve_mssql_dump_retention_verify_source: "{{ item.path }}"
     pve_mssql_dump_retention_verify_member: "{{ pve_mssql_dump_retention_current_name }}"
-  when: not pve_mssql_dump_retention_final_stat.stat.exists
+  when:
+    - not pve_mssql_dump_retention_final_stat.stat.exists
+    - >-
+      (not ansible_check_mode)
+      or not (
+        (pve_mssql_dump_retention_tar_create.skipped | default(false))
+        or (pve_mssql_dump_retention_tar_create.changed | default(false))
+      )
 
 - name: Atomically move the verified partial archive into place
   ansible.builtin.command:
