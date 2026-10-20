@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.0](https://github.com/dryvist/ansible-proxmox/compare/v2.30.0...v2.31.0) (2026-10-20)
+
+
+### Features
+
+* declare storage headroom and log retention ([#1122](https://github.com/dryvist/ansible-proxmox/issues/1122)) ([911bf25](https://github.com/dryvist/ansible-proxmox/commit/911bf25725bd2580bf4aa2c940467aec52d025cb))
+* node-wide guest start and stop, and pve_ha ignored resources ([#1119](https://github.com/dryvist/ansible-proxmox/issues/1119)) ([b8e944c](https://github.com/dryvist/ansible-proxmox/commit/b8e944c754bbcc8d4935c585f5c8ab14d8140f91))
+
+
+### Bug Fixes
+
+* **pve_ha:** read replicated container configs on their live node ([#1121](https://github.com/dryvist/ansible-proxmox/issues/1121)) ([3835fdf](https://github.com/dryvist/ansible-proxmox/commit/3835fdff95d11a3945b077cbfac238eb7c9c76b0))
+
 ## [2.30.0](https://github.com/dryvist/ansible-proxmox/compare/v2.29.1...v2.30.0) (2026-10-20)
 
 
