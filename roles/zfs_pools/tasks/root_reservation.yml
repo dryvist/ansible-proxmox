@@ -17,7 +17,7 @@
     - zfs_pools
     - zfs_root_reservation
 
-- name: Require a root dataset from mount facts or host_vars
+- name: Require a root dataset from findmnt or host_vars
   ansible.builtin.assert:
     that:
       - zfs_pools_root_dataset_resolved | string | length > 0
