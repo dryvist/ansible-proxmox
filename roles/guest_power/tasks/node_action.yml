@@ -19,7 +19,8 @@
 - name: Refuse startall on a node that is not quorate
   ansible.builtin.assert:
     that:
-      - guest_power_quorum.stdout is search('(?m)^Quorate: +Yes')
+      - >-
+        guest_power_quorum.stdout is search('(?m)^Quorate: +Yes')
     fail_msg: >-
       startall refused: {{ guest_power_node }} is not quorate. Nothing was
       started.
