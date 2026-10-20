@@ -1,21 +1,29 @@
 ---
-- name: Resolve suspended replication jobs sourced from this node
+- name: Resolve suspended and per-job-disabled replication ids
+  ansible.builtin.set_fact:
+    pve_ha_replication_suspended_ids: >-
+      {{ (((pve_ha_replication_status_raw.stdout | from_json)
+         | selectattr('source', 'equalto', pve_ha_this_pve_node)
+         | selectattr('target', 'in', pve_ha_replication_suspended_targets | default([]))
+         | map(attribute='id') | list)
+         + (pve_ha_replication_jobs | default([])
+            | selectattr('enabled', 'defined')
+            | rejectattr('enabled', 'equalto', true)
+            | map(attribute='id') | list))
+         | unique | list }}
+    pve_ha_replication_disable_ids: []
+
+- name: Resolve suspended jobs and permanently-broken jobs not suspended
   ansible.builtin.set_fact:
     pve_ha_replication_suspended_jobs: >-
       {{ (pve_ha_replication_status_raw.stdout | from_json)
          | selectattr('source', 'equalto', pve_ha_this_pve_node)
-         | selectattr('target', 'in', pve_ha_replication_suspended_targets | default([]))
+         | selectattr('id', 'in', pve_ha_replication_suspended_ids)
          | list }}
-
-- name: Resolve suspended ids and permanently-broken jobs not suspended
-  ansible.builtin.set_fact:
-    pve_ha_replication_suspended_ids: >-
-      {{ pve_ha_replication_suspended_jobs | map(attribute='id') | list }}
-    pve_ha_replication_disable_ids: []
     pve_ha_broken_replication_ids: >-
       {{ (pve_ha_replication_status_raw.stdout | from_json)
          | selectattr('source', 'equalto', pve_ha_this_pve_node)
-         | rejectattr('target', 'in', pve_ha_replication_suspended_targets | default([]))
+         | rejectattr('id', 'in', pve_ha_replication_suspended_ids)
          | selectattr('error', 'defined')
          | selectattr('error', 'search', 'No common base snapshot')
          | map(attribute='id') | list }}

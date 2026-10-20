@@ -34,6 +34,17 @@
   ansible.builtin.set_fact:
     pve_ha_replication_jobs: "{{ pve_ha_replication_guests | default([]) | selectattr('viable') | list }}"
 
+- name: Refuse per-job enable overrides for unknown replication guests
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pve_ha_replication_enabled_by_guest.keys() | list
+        | difference(pve_ha_replication_jobs | map(attribute='hostname') | list)
+        | length) == 0
+    fail_msg: >-
+      pve_ha_replication_enabled_by_guest contains guest keys without a
+      declared replication job.
+
 # pvesr replicates a volume to the SAME storage id on the target node. If the
 # target lacks that storage, the job fails asynchronously on first sync and
 # the converge still reports success — no replica ever exists, silently.

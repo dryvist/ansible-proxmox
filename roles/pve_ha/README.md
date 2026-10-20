@@ -172,6 +172,13 @@ No real service is touched.
 
   Default: `""`. `pvesr` rate limit in MB/s; empty = unlimited.
 
+- `pve_ha_replication_enabled_by_guest`
+
+  Default: `{}`. Per-job enable overrides keyed by the guest key in the
+  published inventory. Unlisted jobs default to enabled. Set a guest key to
+  `false` to create or keep its `pvesr` job disabled; remove the key or set it
+  to `true` to resume the existing job when its target is not suspended.
+
 - `pve_ha_replication_suspended_targets`
 
   Default: `[]`. Target nodes whose jobs are disabled and left alone until

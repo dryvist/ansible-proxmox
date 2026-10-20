@@ -65,6 +65,7 @@
            'node': pve_ha_replication_ct_by_host[item].node,
            'id': (pve_ha_replication_ct_by_host[item].ansible_pct_vmid | string)
                  ~ '-' ~ (pve_ha_replication_jobnum | string),
+           'enabled': (pve_ha_replication_enabled_by_guest | default({})).get(item, true) | bool,
            'target': pve_ha_replication_ct_by_host[item].get('ha_replication_target') | default('', true),
            'pair': [pve_ha_replication_ct_by_host[item].node,
                     pve_ha_replication_ct_by_host[item].get('ha_replication_target') | default('', true)],
@@ -89,6 +90,7 @@
            'node': pve_ha_replication_vm_by_host[item].node,
            'id': (pve_ha_replication_vm_by_host[item].vmid | string)
                  ~ '-' ~ (pve_ha_replication_jobnum | string),
+           'enabled': (pve_ha_replication_enabled_by_guest | default({})).get(item, true) | bool,
            'disks': pve_ha_replication_vm_by_host[item].disks | default([]),
            'target': pve_ha_replication_vm_by_host[item].get('ha_replication_target') | default('', true),
            'pair': [pve_ha_replication_vm_by_host[item].node,
