@@ -53,15 +53,24 @@
         update_cache: true
       when:
         - not ansible_check_mode or not (_fan_control_repository.changed | default(false))
+      register: _fan_control_install
 
     - name: Enable and start CoolerControl daemon
       ansible.builtin.systemd_service:
         name: coolercontrold.service
         enabled: true
         state: started
+      when:
+        - not ansible_check_mode or (_fan_control_install is not skipped and _fan_control_install is not changed)
 
     - name: Read and require the CoolerControl write token
       ansible.builtin.include_tasks: read_openbao_token.yml
+
+    - name: Skip pending daemon configuration in check mode
+      ansible.builtin.meta: end_role
+      when:
+        - ansible_check_mode
+        - _fan_control_install is skipped or _fan_control_install is changed
 
     - name: Retain the CoolerControl bearer header for this converge
       ansible.builtin.set_fact:

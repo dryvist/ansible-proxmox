@@ -39,8 +39,30 @@ def test_read_only_lookups_run_in_check_mode_without_reporting_changes() -> None
 def test_package_install_waits_for_new_repository_outside_check_mode() -> None:
     repository = task("Configure the official CoolerControl stable repository")
     install = task("Install CoolerControl and the it87 DKMS module")
+    daemon = task("Enable and start CoolerControl daemon")
 
     assert repository["register"] == "_fan_control_repository"
     assert install["when"] == [
         "not ansible_check_mode or not (_fan_control_repository.changed | default(false))"
     ]
+    assert install["register"] == "_fan_control_install"
+    daemon_guard = " ".join(daemon["when"])
+    assert daemon_guard.startswith("not ansible_check_mode or (")
+    assert "_fan_control_install is not skipped" in daemon_guard
+    assert "_fan_control_install is not changed" in daemon_guard
+
+
+def test_pending_install_ends_daemon_work_after_the_openbao_gate() -> None:
+    block = TASKS[0]["block"]
+    token_read = task("Read and require the CoolerControl write token")
+    stop_daemon_work = task(
+        "Skip pending daemon configuration in check mode"
+    )
+
+    assert stop_daemon_work["ansible.builtin.meta"] == "end_role"
+    assert stop_daemon_work["when"][0] == "ansible_check_mode"
+    stop_guard = " ".join(stop_daemon_work["when"][1:])
+    assert "_fan_control_install is skipped" in stop_guard
+    assert "_fan_control_install is changed" in stop_guard
+    assert block.index(stop_daemon_work) == block.index(token_read) + 1
+    assert block.index(stop_daemon_work) < block.index(task("Wait for the local CoolerControl API"))
