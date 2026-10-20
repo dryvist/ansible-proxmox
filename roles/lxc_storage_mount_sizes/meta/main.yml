@@ -1,0 +1,21 @@
+---
+# LXC storage mount size reconciliation role metadata.
+
+galaxy_info:
+  role_name: lxc_storage_mount_sizes
+  author: ansible-proxmox
+  description: Grow declared Proxmox LXC storage mount points after live-state checks
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - storage
+
+dependencies: []

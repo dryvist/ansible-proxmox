@@ -1,0 +1,91 @@
+---
+- name: Reset the storage mount outcome list
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_outcomes: []
+
+- name: Validate the optional container selector
+  ansible.builtin.assert:
+    that:
+      - lxc_storage_mount_sizes_guest_keys is sequence
+      - lxc_storage_mount_sizes_guest_keys is not string
+    fail_msg: lxc_storage_mount_sizes_guest_keys must be a list of inventory container keys.
+    quiet: true
+
+- name: Validate the storage headroom margin
+  ansible.builtin.assert:
+    that:
+      - lxc_storage_mount_sizes_margin_bytes is number
+      - lxc_storage_mount_sizes_margin_bytes | int >= 0
+    fail_msg: lxc_storage_mount_sizes_margin_bytes must be a non-negative byte count.
+    quiet: true
+
+- name: Select containers with declared storage mounts
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_selected_guests: >-
+      {{ (containers_from_tofu | default({}, true) | dict2items)
+         | selectattr('value.storage_mount_points', 'defined')
+         | selectattr('value.storage_mount_points', 'truthy')
+         | selectattr('key', 'in', lxc_storage_mount_sizes_guest_keys
+                     if lxc_storage_mount_sizes_guest_keys | length > 0
+                     else (containers_from_tofu | default({}, true)).keys() | list)
+         | list }}
+
+- name: Require explicitly selected keys to declare storage mounts
+  ansible.builtin.assert:
+    that:
+      - >-
+        (lxc_storage_mount_sizes_guest_keys
+         | difference(lxc_storage_mount_sizes_selected_guests | map(attribute='key') | list)
+         | length) == 0
+    fail_msg: >-
+      One or more lxc_storage_mount_sizes_guest_keys are absent from the
+      published inventory or have no declared storage mount.
+    quiet: true
+  when: lxc_storage_mount_sizes_guest_keys | length > 0
+
+- name: Read live guest placement from cluster configuration
+  ansible.builtin.command:
+    argv: [pvesh, get, /cluster/resources, --type, vm, --output-format, json]
+  register: lxc_storage_mount_sizes_placement_raw
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: lxc_storage_mount_sizes_selected_guests | length > 0
+
+- name: Validate the cluster placement response
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_placement_valid: >-
+      {{ lxc_storage_mount_sizes_placement_raw is defined
+         and lxc_storage_mount_sizes_placement_raw.rc | default(1) == 0
+         and lxc_storage_mount_sizes_placement_raw.stdout is defined
+         and (lxc_storage_mount_sizes_placement_raw.stdout | trim)
+             is match('(?s)^\[.*\]$') }}
+  when: lxc_storage_mount_sizes_selected_guests | length > 0
+
+- name: Decode live guest placement
+  ansible.builtin.set_fact:
+    lxc_storage_mount_sizes_live_resources: >-
+      {{ (lxc_storage_mount_sizes_placement_raw.stdout | from_json)
+         if lxc_storage_mount_sizes_placement_valid else [] }}
+  when: lxc_storage_mount_sizes_selected_guests | length > 0
+
+- name: Reconcile each declared container's storage mounts
+  ansible.builtin.include_tasks:
+    file: reconcile_guest.yml
+    apply:
+      tags:
+        - lxc_storage_mount_sizes
+  loop: "{{ lxc_storage_mount_sizes_selected_guests | default([]) }}"
+  loop_control:
+    loop_var: lxc_storage_mount_sizes_guest
+    label: "{{ lxc_storage_mount_sizes_guest.key }}"
+  vars:
+    lxc_storage_mount_sizes_live_matches: >-
+      {{ (lxc_storage_mount_sizes_live_resources | default([]))
+         | selectattr('type', 'equalto', 'lxc')
+         | selectattr('vmid', 'equalto',
+                     lxc_storage_mount_sizes_guest.value.ansible_pct_vmid | default(-1) | int)
+         | list }}
+  when: lxc_storage_mount_sizes_selected_guests | length > 0
+  tags:
+    - lxc_storage_mount_sizes
