@@ -27,19 +27,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - &setup_checkout
+        name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - name: Set up Python
+      - &setup_python
+        name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.14"
           cache: pip
           cache-dependency-path: requirements-ci.txt
 
-      - name: Install dependencies
+      - &setup_python_deps
+        name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
@@ -51,7 +54,8 @@ jobs:
       # `install` drop collections — so no install path here, deliberately.
       # Cache Galaxy content keyed on requirements.yml; a hit refreshes only the
       # floating homelab-contracts tag. Same key/paths as the central _ansible-ci.yml.
-      - name: Cache Ansible Galaxy content
+      - &setup_galaxy_cache
+        name: Cache Ansible Galaxy content
         id: galaxy-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
@@ -64,11 +68,13 @@ jobs:
           restore-keys: |
             ansible-galaxy-v2-${{ runner.os }}-
 
-      - name: Install Ansible dependencies
+      - &setup_galaxy_install
+        name: Install Ansible dependencies
         if: steps.galaxy-cache.outputs.cache-hit != 'true'
         run: ansible-galaxy install -r requirements.yml --force
 
-      - name: Refresh homelab-contracts major tag
+      - &setup_contracts_refresh
+        name: Refresh homelab-contracts major tag
         if: steps.galaxy-cache.outputs.cache-hit == 'true'
         run: >-
           ansible-galaxy collection install
@@ -288,17 +294,6 @@ jobs:
       - name: Verify llm_model_store_seed attach on a protected container
         run: python3 tests/llm_model_store_seed/test_protected_attach.py
 
-      # The mount lookup must find a live `<storage>:<vol>,mp=<path>,...` value,
-      # and a surplus duplicate is removed only when it is role-named and empty.
-      - name: Verify llm_model_store_seed mount lookup and surplus removal
-        run: |
-          mkdir -p /tmp/ansible-tmp
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/llm_model_store_seed/verify_duplicate_removal.yml -i localhost, -c local
-
-      - name: Verify HA relocation admission against sanitized API fixtures
-        run: python3 tests/pve_ha_relocation/test_preflight.py
-
       - name: Verify guest_power request validation fails closed
         run: |
           mkdir -p /tmp/ansible-tmp
@@ -310,6 +305,29 @@ jobs:
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/container_start_contract.yml -i localhost, -c local
+
+  verify-slow-contracts:
+    name: Verify Slow Data Contracts
+    runs-on: ubuntu-latest
+
+    steps:
+      - *setup_checkout
+      - *setup_python
+      - *setup_python_deps
+      - *setup_galaxy_cache
+      - *setup_galaxy_install
+      - *setup_contracts_refresh
+
+      # The mount lookup must find a live `<storage>:<vol>,mp=<path>,...` value,
+      # and a surplus duplicate is removed only when it is role-named and empty.
+      - name: Verify llm_model_store_seed mount lookup and surplus removal
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_duplicate_removal.yml -i localhost, -c local
+
+      - name: Verify HA relocation admission against sanitized API fixtures
+        run: python3 tests/pve_ha_relocation/test_preflight.py
 
       - name: Verify the Nautobot pre-flight gate against offline fixtures
         run: |
