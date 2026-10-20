@@ -1,0 +1,91 @@
+---
+- name: Resolve exact volume reference pattern for the local attachment guard
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_cleanup_attached_regex: >-
+      {{ '(?m)^(?:ide|sata|scsi|virtio)[0-9]+:[ ]*'
+         ~ (pve_ha_cloudinit_cleanup_candidate.volid | regex_escape)
+         ~ '(?:,|$)' }}
+
+- name: Collect the first failed cloud-init cleanup guard
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_cleanup_failures: >-
+      {{ [
+           ('volume name is not exactly vm-<vmid>-cloudinit'
+            if not (pve_ha_cloudinit_cleanup_candidate.volid
+                    is match('^[^:]+:vm-[0-9]+-cloudinit$')) else ''),
+           ('storage id does not match the volume id'
+            if pve_ha_cloudinit_cleanup_candidate.storage_id
+               != pve_ha_cloudinit_cleanup_candidate.volid.split(':')[0] else ''),
+           ('storage is shared'
+            if pve_ha_cloudinit_cleanup_candidate.storage_shared | default(false) | bool
+            else ''),
+           ('storage is not available on this node'
+            if (pve_ha_cloudinit_cleanup_candidate.storage_nodes | default('') | split(',')
+                | reject('equalto', '') | list | length > 0)
+               and pve_ha_cloudinit_cleanup_candidate.local_node not in
+                   (pve_ha_cloudinit_cleanup_candidate.storage_nodes | default('')
+                    | split(',') | reject('equalto', '') | list)
+            else ''),
+           ('storage is outside the configured cleanup list'
+            if pve_ha_cloudinit_cleanup_candidate.allowed_storages | default([]) | length > 0
+               and pve_ha_cloudinit_cleanup_candidate.storage_id not in
+                   pve_ha_cloudinit_cleanup_candidate.allowed_storages
+            else ''),
+           ('exact volume id is no longer present in pvesm list'
+            if (pve_ha_cloudinit_cleanup_candidate.current_volids | default([])
+                | select('equalto', pve_ha_cloudinit_cleanup_candidate.volid) | list
+                | length) != 1
+            else ''),
+           ('VMID does not exist in cluster configuration; volume is out of scope'
+            if pve_ha_cloudinit_cleanup_candidate.vm_config_paths | default([]) | length == 0
+            else ''),
+           ('VMID has multiple cluster configurations'
+            if pve_ha_cloudinit_cleanup_candidate.vm_config_paths | default([]) | length > 1
+            else ''),
+           ('VM configuration is on this node'
+            if pve_ha_cloudinit_cleanup_candidate.owner_node
+               == pve_ha_cloudinit_cleanup_candidate.local_node
+            else ''),
+           ('VM owner node is not online'
+            if pve_ha_cloudinit_cleanup_candidate.owner_node not in
+               (pve_ha_cloudinit_cleanup_candidate.online_nodes | default([]))
+            else ''),
+           ('exact volid is attached in a VM config on this node'
+            if (pve_ha_cloudinit_cleanup_candidate.local_config_texts | default([])
+                | join('\n')
+                | regex_search(pve_ha_cloudinit_cleanup_attached_regex)) is not none
+            else ''),
+           ('VM configuration has a lock'
+            if (pve_ha_cloudinit_cleanup_candidate.owner_config_text | default('')
+                | regex_search('(?m)^lock:')) is not none
+            else ''),
+           ('VM has a running migration or replication task'
+            if (pve_ha_cloudinit_cleanup_candidate.active_tasks | default([])
+                | selectattr('type', 'in', ['qmigrate', 'replicate', 'qmreplicate'])
+                | selectattr('id', 'defined')
+                | selectattr('id', 'match', '^'
+                            ~ pve_ha_cloudinit_cleanup_candidate.vmid ~ '(-|$)')
+                | list | length) > 0
+            else '')
+         ] | reject('equalto', '') | list }}
+
+- name: Resolve the guarded cloud-init cleanup decision
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_cleanup_decision: >-
+      {{ 'keep' if pve_ha_cloudinit_cleanup_failures | length > 0 else 'free' }}
+    pve_ha_cloudinit_cleanup_reason: >-
+      {{ pve_ha_cloudinit_cleanup_failures | first
+         if pve_ha_cloudinit_cleanup_failures | length > 0
+         else 'all deletion guards passed' }}
+
+- name: Record the candidate decision for verification
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_cleanup_decisions: >-
+      {{ (pve_ha_cloudinit_cleanup_decisions | default([]))
+         + [{
+              'name': pve_ha_cloudinit_cleanup_candidate.name
+                       | default(pve_ha_cloudinit_cleanup_candidate.volid),
+              'volid': pve_ha_cloudinit_cleanup_candidate.volid,
+              'decision': pve_ha_cloudinit_cleanup_decision,
+              'reason': pve_ha_cloudinit_cleanup_reason
+            }] }}

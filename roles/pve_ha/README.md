@@ -17,8 +17,9 @@ Ships with this repo. Reference it from a play (see `playbooks/ha.yml`):
 
 ## Usage
 
-Runs on a **single** node (`pve_ha_config_host`) because HA state is
-cluster-wide (`/etc/pve/ha/*`, replicated by pmxcfs).
+HA resource configuration runs on a **single** node (`pve_ha_config_host`)
+because HA state is cluster-wide (`/etc/pve/ha/*`, replicated by pmxcfs).
+Storage replication and guarded cloud-init cleanup run on each Proxmox node.
 
 ```bash
 # Preview (asserts-out, no change — inert by default):
@@ -184,6 +185,21 @@ No real service is touched.
 
   Default: `apps-replication-nodes`. Name kept for the strict node-affinity rule
   over the pair currently carrying it live.
+
+- `pve_ha_cloudinit_orphan_cleanup_enabled`
+
+  Default: `true`. When `pve_ha_enabled` is true, inspect local non-shared
+  storage for exact `vm-<vmid>-cloudinit` volumes. A volume is freed only when
+  its VM config exists on a different online node, has no lock, has no running
+  migration or replication task, and does not reference the exact volume as
+  attached on the local node. Unknown VMIDs and ambiguous state are kept.
+  Check mode reports volumes that would be freed.
+
+- `pve_ha_cloudinit_orphan_cleanup_storages`
+
+  Default: `[]`. Inspect every configured non-shared storage that supports VM
+  images and is available on this node. An explicit list must contain only
+  those storage IDs; shared storage is always excluded.
 
 - `pve_ha_home_rule_prefix`
 
