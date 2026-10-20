@@ -34,6 +34,28 @@
   tags:
     - sanoid
 
+- name: Apply shorter retention to guest disk datasets on rpool
+  ansible.builtin.set_fact:
+    sanoid_effective_datasets: >-
+      {{
+        sanoid_effective_datasets | default(sanoid_datasets) | combine({
+          item.key: item.value | combine({
+            'use_template': sanoid_rpool_guest_template_name
+          })
+        })
+      }}
+  loop: >-
+    {{
+      sanoid_datasets | dict2items
+      | selectattr('key', 'match', sanoid_rpool_guest_dataset_pattern)
+      | list
+    }}
+  loop_control:
+    label: "{{ item.key }}"
+  changed_when: false
+  tags:
+    - sanoid
+
 - name: Install sanoid
   ansible.builtin.apt:
     name: "{{ sanoid_package }}"

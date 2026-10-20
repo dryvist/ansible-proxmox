@@ -190,12 +190,10 @@ jobs:
   # can break inventory resolution.
   data-contract:
     name: Data Contract
-    needs: ci
     uses: ./.github/workflows/_data-contract.yml
 
   role-contracts:
     name: Role Contracts
-    needs: ci
     uses: ./.github/workflows/_role-contracts.yml
 
   molecule:

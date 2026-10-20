@@ -13,6 +13,7 @@
   register: zfs_pools_ds_prop
   changed_when: false
   check_mode: false
+  failed_when: zfs_pools_ds_prop.rc != 0
   loop: "{{ zfs_dataset.value.properties | dict2items }}"
   loop_control:
     label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }} {{ item.key }}"
@@ -27,6 +28,8 @@
     label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }} {{ item.key }}={{ item.value }}"
     index_var: zfs_pools_ds_prop_idx
   when: zfs_pools_ds_prop.results[zfs_pools_ds_prop_idx].stdout != (item.value | string)
+  register: zfs_pools_ds_prop_set
   changed_when: true
+  failed_when: zfs_pools_ds_prop_set.rc != 0
   tags:
     - zfs_pools

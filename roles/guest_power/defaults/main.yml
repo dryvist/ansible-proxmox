@@ -3,6 +3,9 @@
 # guest_power_vmid:   numeric VMID of exactly one guest
 # guest_power_type:   qemu | lxc
 # guest_power_action: start | stop | shutdown | reboot | reset (reset: qemu only)
+# or, node-wide: startall | stopall with guest_power_node (a proxmox inventory
+# host) and optionally guest_power_vms (comma list of VMIDs). Node-wide actions
+# take no guest_power_vmid or guest_power_type.
 
 # Nodes asked for live placement (/cluster/resources); the first to answer is
 # used. The action itself runs on the node the guest is live on.
@@ -10,6 +13,7 @@ guest_power_nodes: "{{ groups['proxmox'] | default([]) }}"
 
 guest_power_allowed_types: [qemu, lxc]
 guest_power_allowed_actions: [start, stop, shutdown, reboot, reset]
+guest_power_node_actions: [startall, stopall]
 
 # Graceful-shutdown budget (seconds) before the shutdown call gives up.
 guest_power_shutdown_timeout_seconds: 120

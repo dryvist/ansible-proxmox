@@ -12,6 +12,12 @@
       "rpool/data/nas":
         use_template: critical
         recursive: "yes"
+      "rpool/data/subvol-100-disk-0":
+        use_template: critical
+      "rpool/data/vm-101-disk-1":
+        use_template: critical
+      "bulk/appdata":
+        use_template: critical
       "nvme1/siem/cribl-pq":
         use_template: scratch
     sanoid_replica_retention_enabled: true

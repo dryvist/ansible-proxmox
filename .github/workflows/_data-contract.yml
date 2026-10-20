@@ -29,11 +29,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
 
       - name: Install dependencies
         run: |
@@ -92,22 +96,13 @@ jobs:
       # pve_ha's replication logic cannot be exercised by molecule (it needs a
       # real cluster), so it is pinned by fixture-driven assertions instead.
       - name: Verify pve_ha replication derivation and self-heal selection
+        env:
+          ANSIBLE_LOCAL_TEMP: /tmp/ansible-tmp
         run: |
           mkdir -p /tmp/ansible-tmp
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_ha_replication/verify_replication_targets.yml -i localhost, -c local
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_ha_replication/verify_broken_job_selection.yml -i localhost, -c local
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_ha_replication/verify_home_pin_scope.yml -i localhost, -c local
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_ha_replication/verify_ha_classification.yml -i localhost, -c local
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_ha_replication/verify_storage_eligibility.yml -i localhost, -c local
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_ha_replication/verify_consensus_membership.yml -i localhost, -c local
-          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
-          ansible-playbook tests/pve_backup_mount_flags/verify_unflagged_scope.yml -i localhost, -c local
+          for playbook in tests/pve_ha_replication/verify_*.yml tests/pve_backup_mount_flags/verify_*.yml; do
+            ansible-playbook "$playbook" -i localhost, -c local
+          done
 
       # datacenter.cfg is cluster-wide and holds keys pve_ha does not own, so
       # the role merges one key instead of templating the file. This runs that

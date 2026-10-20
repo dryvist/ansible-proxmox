@@ -2,6 +2,16 @@
 - name: Validate the power action request
   ansible.builtin.include_tasks: preflight.yml
 
+# A node-wide action has no single guest: it takes its own path and the
+# per-guest placement lookup below never runs for it.
+- name: Run a node-wide start or stop
+  ansible.builtin.include_tasks: node_action.yml
+  when: guest_power_action in guest_power_node_actions
+
+- name: End the role after a node-wide action
+  ansible.builtin.meta: end_role
+  when: guest_power_action in guest_power_node_actions
+
 # Any node answers /cluster/resources for the whole cluster. command, not raw:
 # raw allocates a pty (ssh -tt, no stdin payload), and pvesh prints nothing to
 # a pty with rc 0, so the read came back empty. command runs through the

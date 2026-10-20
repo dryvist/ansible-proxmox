@@ -9,7 +9,7 @@
         {{ k }} = {{ v }}
 {% endfor %}
 {% endfor %}
-{% set rendered_datasets = sanoid_datasets | combine(
+{% set rendered_datasets = (sanoid_effective_datasets | default(sanoid_datasets)) | combine(
   sanoid_replica_datasets if sanoid_replica_retention_enabled else {}
 ) %}{% for ds, opts in rendered_datasets | dictsort %}
 

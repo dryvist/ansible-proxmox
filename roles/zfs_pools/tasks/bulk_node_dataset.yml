@@ -1,0 +1,123 @@
+---
+- name: Check whether the node-local bulk dataset exists
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -o
+      - name
+      - "{{ zfs_pools_bulk_node_dataset_full_name }}"
+  register: zfs_pools_bulk_dataset_check
+  changed_when: false
+  check_mode: false
+  failed_when: zfs_pools_bulk_dataset_check.rc not in [0, 1]
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
+- name: Inspect the node-local bulk dataset mountpoint
+  ansible.builtin.stat:
+    path: "{{ zfs_pools_bulk_node_dataset.mountpoint }}"
+    follow: false
+  register: zfs_pools_bulk_dataset_target
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
+- name: Check whether an existing target directory is empty
+  ansible.builtin.find:
+    paths: "{{ zfs_pools_bulk_node_dataset.mountpoint }}"
+    file_type: any
+    hidden: true
+    recurse: false
+  register: zfs_pools_bulk_dataset_target_contents
+  when:
+    - zfs_pools_bulk_dataset_target.stat.isdir | default(false)
+    - not zfs_pools_bulk_dataset_target.stat.islnk | default(false)
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
+- name: Determine whether a missing dataset can be created safely
+  ansible.builtin.set_fact:
+    zfs_pools_bulk_dataset_target_safe: >-
+      {{
+        zfs_pools_bulk_dataset_check.rc == 0
+        or not zfs_pools_bulk_dataset_target.stat.exists
+        or (
+          zfs_pools_bulk_dataset_target.stat.isdir | default(false)
+          and not zfs_pools_bulk_dataset_target.stat.islnk | default(false)
+          and zfs_pools_bulk_dataset_target_contents.matched | default(-1) | int == 0
+        )
+      }}
+  changed_when: false
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
+- name: Reconcile an existing or safely creatable node-local bulk dataset
+  ansible.builtin.include_tasks: datasets.yml
+  vars:
+    zfs_pool:
+      key: "{{ zfs_pools_bulk_pool_name }}"
+      value:
+        datasets: >-
+          {{
+            dict([
+              (
+                inventory_hostname ~ '/' ~ zfs_pools_bulk_node_dataset.name,
+                {
+                  'quota': zfs_pools_bulk_node_dataset.quota,
+                  'properties': {
+                    'compression': zfs_pools_bulk_node_dataset_compression,
+                    'mountpoint': zfs_pools_bulk_node_dataset.mountpoint
+                  }
+                }
+              )
+            ])
+          }}
+  when: >-
+    zfs_pools_bulk_dataset_check.rc == 0
+    or (
+      zfs_pools_bulk_dataset_target_safe | bool
+      and not ansible_check_mode
+    )
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
+- name: Report when an empty target is ready but check mode prevents creation
+  ansible.builtin.debug:
+    msg: >-
+      Would create {{ zfs_pools_bulk_node_dataset_full_name }} at
+      {{ zfs_pools_bulk_node_dataset.mountpoint }} because the target is absent
+      or empty. No dataset was created in check mode.
+  changed_when: false
+  when:
+    - zfs_pools_bulk_dataset_check.rc != 0
+    - zfs_pools_bulk_dataset_target_safe | bool
+    - ansible_check_mode
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
+- name: Report why a node-local bulk dataset was left untouched
+  ansible.builtin.debug:
+    msg: >-
+      Skipped {{ zfs_pools_bulk_node_dataset_full_name }} because
+      {{ zfs_pools_bulk_node_dataset.mountpoint }}
+      {% if zfs_pools_bulk_dataset_target.stat.isdir | default(false)
+            and not zfs_pools_bulk_dataset_target.stat.islnk | default(false) %}
+      contains {{ zfs_pools_bulk_dataset_target_contents.matched | default(0) }}
+      entries
+      {% else %}
+      is not a plain directory
+      {% endif %}; the existing path was not changed.
+  changed_when: false
+  when:
+    - zfs_pools_bulk_dataset_check.rc != 0
+    - not zfs_pools_bulk_dataset_target_safe | bool
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets

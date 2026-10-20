@@ -19,6 +19,9 @@ kernel_tuning_dirty_background_ratio: 5
 kernel_tuning_overcommit_memory: 0
 kernel_tuning_boot_params_enabled: false
 
+# Hung-task threshold; hung_task_panic stays enabled.
+crash_diagnostics_hung_task_timeout_secs: 600
+
 # Ulimits
 ulimits_nofile: 65536
 ulimits_nproc: 65536

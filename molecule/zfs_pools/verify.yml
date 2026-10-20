@@ -4,6 +4,9 @@
   become: false
   gather_facts: true
 
+  vars_files:
+    - ../../roles/zfs_pools/defaults/main.yml
+
   vars:
     zfs_pools_from_tofu:
       pools:
@@ -34,6 +37,37 @@
           - zfs_pools_check.tank.datasets.backups.properties.recordsize == '1M'
           - zfs_pools_check.tank.datasets.backups.properties.compression == 'zstd'
         fail_msg: "node_storage contract did not resolve as expected"
+
+    - name: Assert the role default reserves root dataset headroom
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_root_refreservation == '6G'
+          - zfs_pools_root_refreservation | human_to_bytes == 6442450944
+          - >-
+            zfs_pools_root_dataset == (
+              ansible_facts.mounts
+              | selectattr('mount', 'equalto', '/')
+              | map(attribute='device')
+              | first
+              | default('')
+            )
+        fail_msg: "The root reservation default or mount-fact derivation changed"
+
+    - name: Assert the node-local bulk dataset defaults
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_bulk_pool_name == 'bulk'
+          - zfs_pools_bulk_node_parent_dataset == 'bulk/' ~ inventory_hostname
+          - >-
+            zfs_pools_bulk_node_parent_properties ==
+            {'canmount': 'off', 'mountpoint': 'none'}
+          - zfs_pools_bulk_node_dataset_compression == 'lz4'
+          - zfs_pools_bulk_node_dataset_specs | map(attribute='name') | list == ['apt-cache', 'atop']
+          - zfs_pools_bulk_node_dataset_specs[0].mountpoint == '/var/cache/apt'
+          - zfs_pools_bulk_node_dataset_specs[0].quota == '5G'
+          - zfs_pools_bulk_node_dataset_specs[1].mountpoint == '/var/log/atop'
+          - zfs_pools_bulk_node_dataset_specs[1].quota == '3G'
+        fail_msg: "The node-local bulk dataset defaults changed"
 
     - name: Assert the per-dataset pvesm_id registration field resolves
       ansible.builtin.assert:

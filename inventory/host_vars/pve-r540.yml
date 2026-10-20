@@ -126,6 +126,3 @@ zfs_scrub_window_pools: [bulk]
 # Only the address: pve_power_managed is deliberately NOT set here. This node
 # is always-on, and that flag drives site.yml's power-on/power-off bookends.
 idrac_power_bmc_host: "{{ lookup('env', 'PVE5_BMC_HOSTNAME') | default('', true) }}"
-
-# Hung-task threshold for this node; hung_task_panic stays enabled.
-crash_diagnostics_hung_task_timeout_secs: 600

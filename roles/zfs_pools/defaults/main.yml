@@ -20,6 +20,36 @@ zfs_pools_config: >-
 # "ro=@10.0.0.0/8 ro=@192.168.0.0/16"; children inherit a parent's sharenfs.
 zfs_pools_map: "{{ zfs_pools_config.pools | default({}) }}"
 
+# Reserve root-pool headroom on every Proxmox node. The root dataset is the ZFS
+# source mounted at /; set either variable in host_vars when the discovered
+# mount source or reservation differs on a host.
+zfs_pools_root_dataset: >-
+  {{
+    ansible_facts.mounts | default([])
+    | selectattr('mount', 'equalto', '/')
+    | selectattr('fstype', 'equalto', 'zfs')
+    | map(attribute='device')
+    | first
+    | default('')
+  }}
+zfs_pools_root_refreservation: 6G
+
+# Node-local package-cache and atop data use the bulk pool when present. The
+# dataset parent is scoped by inventory_hostname in bulk_node_datasets.yml.
+zfs_pools_bulk_pool_name: bulk
+zfs_pools_bulk_node_parent_dataset: "{{ zfs_pools_bulk_pool_name }}/{{ inventory_hostname }}"
+zfs_pools_bulk_node_parent_properties:
+  canmount: "off"
+  mountpoint: "none"
+zfs_pools_bulk_node_dataset_compression: lz4
+zfs_pools_bulk_node_dataset_specs:
+  - name: apt-cache
+    mountpoint: /var/cache/apt
+    quota: 5G
+  - name: atop
+    mountpoint: /var/log/atop
+    quota: 3G
+
 # Ad-hoc property overrides for datasets this role did not create and does not
 # otherwise manage — specifically Proxmox-owned VM/LXC disks (zvols named
 # vm-<vmid>-disk-N), which are provisioned by the tofu VM resource, not by

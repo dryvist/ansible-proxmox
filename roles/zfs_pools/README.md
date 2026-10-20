@@ -66,6 +66,22 @@ zfs_pools_map:
           "com.sun:auto-snapshot": "false"
 ```
 
+### Root dataset headroom
+
+The role derives `zfs_pools_root_dataset` from the ZFS source mounted at `/` and
+sets `refreservation` to `6G` by default. Override either value in `host_vars`
+when a node's root dataset or reservation differs. The role reads the current
+reservation first and sets it only when the byte count differs.
+
+### Node-local bulk datasets
+
+When the declared `bulk` pool exists, the role manages a
+`bulk/<inventory-host>` parent with `canmount=off` and `mountpoint=none`, plus
+quota-limited apt-cache and atop datasets. Existing datasets are reconciled in
+place. A missing dataset is created only when its target path is absent or an
+empty directory; nonempty or non-directory paths are left untouched with a
+reported skip reason.
+
 ### Per-dataset properties
 
 `datasets.<name>.properties` is an optional map of arbitrary ZFS properties
