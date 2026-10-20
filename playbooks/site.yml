@@ -306,7 +306,7 @@
         - pve_full_system_stress
 
 # Backup, disaster-recovery, and notification roles (syncoid, sqlite_standby,
-# postgres_standby, pve_config_backup, pve_notifications, git_mirror). Split
+# postgres_standby, pve_config_backup, pve_notifications). Split
 # out of this file rather than left inline so site.yml stays inside its token
 # budget; imported in the position the block held, so role order is unchanged.
 - name: Configure backup, disaster-recovery, and notification roles
