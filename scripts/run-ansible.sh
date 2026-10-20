@@ -145,6 +145,16 @@ if [[ -n ${SSH_KNOWN_HOSTS:-} ]]; then
   export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$CERT_DIR/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes${ANSIBLE_SSH_COMMON_ARGS:+ $ANSIBLE_SSH_COMMON_ARGS}"
 fi
 
+# Semaphore appends task args, so Ansible's final limit must include localhost.
+LIMIT_VAL=""
+prev=""
+for a in "$@"; do
+  [[ $prev == "--limit" || $prev == "-l" ]] && LIMIT_VAL="$a"
+  [[ $a == --limit=* ]] && LIMIT_VAL="${a#--limit=}"
+  prev="$a"
+done
+[[ -n $LIMIT_VAL && ",${LIMIT_VAL//:/,}," != *,localhost,* ]] && set -- "$@" --limit "${LIMIT_VAL},localhost"
+
 # Run ansible-playbook - prefer NIX_SHELL if set, otherwise use PATH
 if [[ -n ${NIX_SHELL:-} ]]; then
   nix develop "$NIX_SHELL" --command ansible-playbook "$PLAYBOOK" "$@"
