@@ -35,7 +35,8 @@ jobs:
     uses: JacobPEvans/.github/.github/workflows/_ansible-ci.yml@v1
     with:
       molecule: false
-      molecule_contract_filters: |
+      # Keep the repo-specific selector maps single-sourced for both reusable calls.
+      molecule_contract_filters: &molecule_contract_filters |
         contract_only:
           - 'roles/pve_full_system_stress/**'
           - 'tests/pve_full_system_stress/**'
@@ -65,7 +66,7 @@ jobs:
           - '.github/workflows/ci-gate.yml'
           - '.github/workflows/molecule.yml'
           - 'tests/workflow_policy/**'
-      molecule_scenario_filters: |
+      molecule_scenario_filters: &molecule_scenario_filters |
         cluster_ssh_trust:
           - 'roles/cluster_ssh_trust/**'
           - 'molecule/cluster_ssh_trust/**'
@@ -180,6 +181,14 @@ jobs:
       # this check alike, and stays that way silently.
       renovate_annotations: true
 
+  changes:
+    name: Detect Changes
+    uses: JacobPEvans/.github/.github/workflows/_ansible-changes.yml@v1
+    with:
+      molecule: false
+      molecule_contract_filters: *molecule_contract_filters
+      molecule_scenario_filters: *molecule_scenario_filters
+
   # Deliberately unconditional. Gating this on the shared change filter, and
   # then telling the gate a skip is acceptable, means a green required check
   # whenever the filter fails to classify a PR as ansible-relevant — the check
@@ -198,19 +207,19 @@ jobs:
 
   molecule:
     name: Molecule Test
-    needs: ci
+    needs: changes
     if: >-
-      needs.ci.outputs.molecule == 'true' ||
+      needs.changes.outputs.molecule == 'true' ||
       github.event_name == 'push'
     uses: ./.github/workflows/molecule.yml
     with:
       scenarios: >-
         ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-        'FULL' || needs.ci.outputs.molecule_scenarios }}
+        'FULL' || needs.changes.outputs.molecule_scenarios }}
 
   gate:
     name: Merge Gate
-    needs: [ci, data-contract, role-contracts, molecule]
+    needs: [ci, changes, data-contract, role-contracts, molecule]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
