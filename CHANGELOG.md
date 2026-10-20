@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.33.2](https://github.com/dryvist/ansible-proxmox/compare/v2.33.1...v2.33.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **lxc_storage_mount_sizes:** read storage availability in bytes ([#1156](https://github.com/dryvist/ansible-proxmox/issues/1156)) ([c55b302](https://github.com/dryvist/ansible-proxmox/commit/c55b302b0065f9adefe88d844107640b100aa62c))
+
 ## [2.33.1](https://github.com/dryvist/ansible-proxmox/compare/v2.33.0...v2.33.1) (2026-10-20)
 
 
