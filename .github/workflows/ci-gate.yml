@@ -40,6 +40,8 @@ jobs:
         contract_only:
           - 'roles/pve_full_system_stress/**'
           - 'tests/pve_full_system_stress/**'
+          - 'roles/pve_syslog_forwarder/**'
+          - 'tests/pve_syslog_forwarder/**'
           - 'tests/capability_tags/**'
           - 'tests/guest_placement/**'
           - 'tests/inventory_load/**'
@@ -65,6 +67,7 @@ jobs:
           - 'tests/test_inventory_proxmox_host_connection.py'
           - '.github/workflows/ci-gate.yml'
           - '.github/workflows/molecule.yml'
+          - '.github/workflows/_role-contracts.yml'
           - 'tests/workflow_policy/**'
       molecule_scenario_filters: &molecule_scenario_filters |
         cluster_ssh_trust:
