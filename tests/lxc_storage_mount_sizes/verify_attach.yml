@@ -1,0 +1,239 @@
+---
+- name: Verify attaching missing LXC storage mounts
+  hosts: localhost
+  become: false
+  gather_facts: false
+  environment:
+    PATH: "/tmp/lxc-storage-mount-attach-fixture:{{ ansible_env.PATH | default('/usr/bin:/bin') }}"
+  vars:
+    lxc_storage_mount_sizes_stub_dir: /tmp/lxc-storage-mount-attach-fixture
+    lxc_storage_mount_sizes_contract_mode: normal
+    lxc_storage_mount_sizes_margin_bytes: 10737418240
+    proxmox_node_name: fixture-node
+    containers_from_tofu:
+      attach-hotplug:
+        ansible_pct_vmid: 110
+        storage_mount_points:
+          - {mp_index: 2, path: /srv/attach-hotplug, size: 2G, volume: bulk}
+      occupied:
+        ansible_pct_vmid: 111
+        storage_mount_points:
+          - {mp_index: 1, path: /srv/occupied, size: 2G, volume: bulk}
+      path-at-other-index:
+        ansible_pct_vmid: 112
+        storage_mount_points:
+          - {mp_index: 0, path: /srv/other-index, size: 2G, volume: bulk}
+      attach-insufficient:
+        ansible_pct_vmid: 113
+        storage_mount_points:
+          - {mp_index: 0, path: /srv/attach-insufficient, size: 2G, volume: tight}
+      attach-pending:
+        ansible_pct_vmid: 114
+        storage_mount_points:
+          - {mp_index: 3, path: /srv/attach-pending, size: 2G, volume: bulk}
+    lxc_storage_mount_sizes_fixture_placement:
+      - {type: lxc, vmid: 110, node: fixture-node, status: running}
+      - {type: lxc, vmid: 111, node: fixture-node, status: running}
+      - {type: lxc, vmid: 112, node: fixture-node, status: running}
+      - {type: lxc, vmid: 113, node: fixture-node, status: running}
+      - {type: lxc, vmid: 114, node: fixture-node, status: running}
+
+  tasks:
+    - name: Create the fixture command directory
+      ansible.builtin.file:
+        path: "{{ lxc_storage_mount_sizes_stub_dir }}"
+        state: directory
+        mode: "0755"
+      check_mode: false
+
+    - name: Install cluster placement fixture
+      ansible.builtin.copy:
+        content: "{{ lxc_storage_mount_sizes_fixture_placement | to_json }}"
+        dest: "{{ lxc_storage_mount_sizes_stub_dir }}/placement.json"
+        mode: "0644"
+      check_mode: false
+
+    - name: Reset fixture command logs
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ lxc_storage_mount_sizes_stub_dir }}/{{ item }}"
+        mode: "0644"
+      check_mode: false
+      loop:
+        - pct.log
+        - attach.log
+        - restart.log
+        - pvesh.log
+
+    - name: Install pvesh fixture command
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/pvesh.log
+          if [ "$1" = get ] && [ "$2" = /cluster/resources ]; then
+            cat {{ lxc_storage_mount_sizes_stub_dir }}/placement.json
+            exit 0
+          fi
+          case "$2" in
+            /nodes/fixture-node/storage/bulk/status)
+              printf '%s\n' '{"active":1,"avail":106300440576}' ;;
+            /nodes/fixture-node/storage/tight/status)
+              printf '%s\n' '{"active":1,"avail":10737418240}' ;;
+            /nodes/fixture-node/lxc/110/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-110-disk-0,mp=/srv/existing,size=1G"}' ;;
+            /nodes/fixture-node/lxc/111/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp1":"bulk:subvol-111-disk-1,mp=/srv/other,size=1G"}' ;;
+            /nodes/fixture-node/lxc/112/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp3":"bulk:subvol-112-disk-3,mp=/srv/other-index,size=1G"}' ;;
+            /nodes/fixture-node/lxc/113/config | /nodes/fixture-node/lxc/114/config)
+              printf '%s\n' '{"digest":"fixture-digest"}' ;;
+            /nodes/fixture-node/lxc/110/pending)
+              printf '%s\n' '[]' ;;
+            /nodes/fixture-node/lxc/114/pending)
+              printf '%s\n' '[{"key":"mp3","pending":"bulk:subvol-114-disk-3,mp=/srv/attach-pending,size=2G"}]' ;;
+            *) exit 1 ;;
+          esac
+        dest: "{{ lxc_storage_mount_sizes_stub_dir }}/pvesh"
+        mode: "0755"
+      check_mode: false
+
+    - name: Install pct fixture command
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/pct.log
+          if [ "$1" = config ]; then
+            state={{ lxc_storage_mount_sizes_stub_dir }}/protection-$2
+            [ -f "$state" ] || printf '%s\n' 1 > "$state"
+            printf 'protection: %s\n' "$(cat "$state")"
+            exit 0
+          fi
+          if [ "$1" = set ]; then
+            if [ "$3" = --protection ]; then
+              printf '%s\n' "$4" > {{ lxc_storage_mount_sizes_stub_dir }}/protection-$2
+              exit 0
+            fi
+            [ "$(cat {{ lxc_storage_mount_sizes_stub_dir }}/protection-$2)" = 1 ] && exit 25
+            case "$3" in --mp*) printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/attach.log ;; esac
+            exit 0
+          fi
+          if [ "$1" = reboot ] || [ "$1" = start ]; then
+            printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/restart.log
+            exit 0
+          fi
+          exit 1
+        dest: "{{ lxc_storage_mount_sizes_stub_dir }}/pct"
+        mode: "0755"
+      check_mode: false
+
+    - name: Run the role against attachment fixtures
+      ansible.builtin.include_role:
+        name: lxc_storage_mount_sizes
+      when: lxc_storage_mount_sizes_contract_mode == 'normal'
+
+    - name: Read normal-mode command logs
+      ansible.builtin.slurp:
+        src: "{{ lxc_storage_mount_sizes_stub_dir }}/{{ item }}"
+      loop:
+        - pct.log
+        - attach.log
+        - restart.log
+        - pvesh.log
+      register: lxc_storage_mount_sizes_logs
+      when: lxc_storage_mount_sizes_contract_mode == 'normal'
+
+    - name: Decode normal-mode command logs
+      ansible.builtin.set_fact:
+        lxc_storage_mount_sizes_pct_commands: "{{ lxc_storage_mount_sizes_logs.results[0].content | b64decode }}"
+        lxc_storage_mount_sizes_attach_commands: "{{ lxc_storage_mount_sizes_logs.results[1].content | b64decode }}"
+        lxc_storage_mount_sizes_restart_commands: "{{ lxc_storage_mount_sizes_logs.results[2].content | b64decode }}"
+        lxc_storage_mount_sizes_pvesh_commands: "{{ lxc_storage_mount_sizes_logs.results[3].content | b64decode }}"
+      when: lxc_storage_mount_sizes_contract_mode == 'normal'
+
+    - name: Assert attachment admission and pending restart outcomes
+      ansible.builtin.assert:
+        that:
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-hotplug') | map(attribute='status') | first) == 'attached'"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'occupied') | map(attribute='status') | first) == 'refused'"
+          - "'occupied by a different live mount' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'occupied') | map(attribute='reason') | first)"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'path-at-other-index') | map(attribute='status') | first) == 'refused'"
+          - "'different mp index' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'path-at-other-index') | map(attribute='reason') | first)"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-insufficient') | map(attribute='status') | first) == 'refused'"
+          - "'allocation=2147483648 B' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-insufficient') | map(attribute='reason') | first)"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-pending') | map(attribute='status') | first) == 'attached'"
+          - "'set 110 --mp2 bulk:2,mp=/srv/attach-hotplug' in lxc_storage_mount_sizes_attach_commands"
+          - "'set 114 --mp3 bulk:2,mp=/srv/attach-pending' in lxc_storage_mount_sizes_attach_commands"
+          - "lxc_storage_mount_sizes_attach_commands.splitlines() | length == 2"
+          - "'reboot 114' in lxc_storage_mount_sizes_restart_commands"
+          - "lxc_storage_mount_sizes_restart_commands.splitlines() | length == 1"
+          - "'storage/bulk/status' in lxc_storage_mount_sizes_pvesh_commands"
+          - "'storage/tight/status' in lxc_storage_mount_sizes_pvesh_commands"
+        fail_msg: |
+          Missing-mount reconciliation did not match the fixtures.
+          Outcomes: {{ lxc_storage_mount_sizes_outcomes }}
+          Attach commands: {{ lxc_storage_mount_sizes_attach_commands }}
+        success_msg: "PASS: missing mounts used the declared free index, capacity guard, and pending-only restart"
+        quiet: false
+      when: lxc_storage_mount_sizes_contract_mode == 'normal'
+
+    - name: Reset logs before check mode
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ lxc_storage_mount_sizes_stub_dir }}/{{ item }}"
+        mode: "0644"
+      check_mode: false
+      loop:
+        - pct.log
+        - attach.log
+        - restart.log
+        - pvesh.log
+      when: lxc_storage_mount_sizes_contract_mode == 'check'
+
+    - name: Preview one missing mount in check mode
+      ansible.builtin.include_role:
+        name: lxc_storage_mount_sizes
+      vars:
+        lxc_storage_mount_sizes_guest_keys:
+          - attach-hotplug
+      when: lxc_storage_mount_sizes_contract_mode == 'check'
+
+    - name: Read check-mode command logs
+      ansible.builtin.slurp:
+        src: "{{ lxc_storage_mount_sizes_stub_dir }}/{{ item }}"
+      loop:
+        - pct.log
+        - attach.log
+        - restart.log
+        - pvesh.log
+      register: lxc_storage_mount_sizes_check_logs
+      when: lxc_storage_mount_sizes_contract_mode == 'check'
+
+    - name: Decode check-mode command logs
+      ansible.builtin.set_fact:
+        lxc_storage_mount_sizes_check_pct_commands: "{{ lxc_storage_mount_sizes_check_logs.results[0].content | b64decode }}"
+        lxc_storage_mount_sizes_check_attach_commands: "{{ lxc_storage_mount_sizes_check_logs.results[1].content | b64decode }}"
+        lxc_storage_mount_sizes_check_restart_commands: "{{ lxc_storage_mount_sizes_check_logs.results[2].content | b64decode }}"
+        lxc_storage_mount_sizes_check_pvesh_commands: "{{ lxc_storage_mount_sizes_check_logs.results[3].content | b64decode }}"
+      when: lxc_storage_mount_sizes_contract_mode == 'check'
+
+    - name: Assert check mode issues no pct command
+      ansible.builtin.assert:
+        that:
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-hotplug') | map(attribute='status') | first) == 'would attach'"
+          - "lxc_storage_mount_sizes_check_pct_commands | length == 0"
+          - "lxc_storage_mount_sizes_check_attach_commands | length == 0"
+          - "lxc_storage_mount_sizes_check_restart_commands | length == 0"
+          - "'storage/bulk/status' in lxc_storage_mount_sizes_check_pvesh_commands"
+        fail_msg: |
+          Check mode did not preview the attachment without invoking pct.
+          Outcomes: {{ lxc_storage_mount_sizes_outcomes }}
+          pct commands: {{ lxc_storage_mount_sizes_check_pct_commands }}
+        success_msg: "PASS: check mode previewed the attach and issued no pct command"
+        quiet: false
+      when: lxc_storage_mount_sizes_contract_mode == 'check'
+
+    - name: Remove the fixture command directory
+      ansible.builtin.file:
+        path: "{{ lxc_storage_mount_sizes_stub_dir }}"
+        state: absent
+      check_mode: false
