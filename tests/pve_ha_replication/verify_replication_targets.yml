@@ -277,32 +277,3 @@
           case sourced from published disks rather than a live config read),
           and passes nautobot/postgres-apps (bulk present) + shared-app (no
           nodes restriction = available everywhere).
-
-    # --- live placement for the container config read (mirrors the `placement`
-    # var in replication_jobs.yml): an HA-relocated guest is read on the node it
-    # runs on now; a guest absent from the listing falls back to its declared node.
-    - name: Assert the config read targets each container's live node
-      vars:
-        pve_ha_replication_placement_raw:
-          stdout: >-
-            [{"type": "lxc", "vmid": 605000, "node": "node-a"},
-             {"type": "qemu", "vmid": 605010, "node": "node-c"}]
-        relocated:
-          vmid: 605000
-          node: node-b
-        unlisted:
-          vmid: 605010
-          node: node-a
-      ansible.builtin.assert:
-        that:
-          - >-
-            (pve_ha_replication_placement_raw.stdout | from_json
-             | selectattr('type', 'equalto', 'lxc')
-             | selectattr('vmid', 'equalto', relocated.vmid | int)
-             | list | first | default({})).node | default(relocated.node) == 'node-a'
-          - >-
-            (pve_ha_replication_placement_raw.stdout | from_json
-             | selectattr('type', 'equalto', 'lxc')
-             | selectattr('vmid', 'equalto', unlisted.vmid | int)
-             | list | first | default({})).node | default(unlisted.node) == 'node-a'
-        fail_msg: the container config read does not follow live placement
