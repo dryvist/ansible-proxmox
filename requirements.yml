@@ -14,6 +14,9 @@ collections:
   # deliberately rather than inherit the change silently.
   - name: community.proxmox
     version: ">=2.1.0,<2.2.0"
+  # Molecule's docker driver; listed here so the Galaxy cache carries it.
+  - name: community.docker
+    version: ">=3.0.2"
 
   # Shared homelab roles (cribl_edge, cribl_packs, inventory_resolve). A
   # collection, not `roles:`
