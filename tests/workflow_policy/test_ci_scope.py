@@ -18,7 +18,7 @@ PROMOTION_PATHS = json.loads(
 
 class CiScopeContract(unittest.TestCase):
     def test_develop_push_uses_shared_scenario_selection(self):
-        self.assertIn("needs.ci.outputs.molecule == 'true'", GATE)
+        self.assertIn("needs.changes.outputs.molecule == 'true'", GATE)
         self.assertIn("github.event_name == 'push'", GATE)
         self.assertNotRegex(GATE, r"github\.event_name == 'push'\s*\|\|")
 
@@ -31,19 +31,26 @@ class CiScopeContract(unittest.TestCase):
         self.assertIn("inputs.scenarios != 'FULL'", MOLECULE)
 
     def test_workflow_changes_have_a_caller_contract(self):
-        self.assertIn("molecule_contract_filters: |", GATE)
+        self.assertRegex(
+            GATE, r"molecule_contract_filters:\s*&molecule_contract_filters\s*\|"
+        )
         self.assertIn("- '.github/workflows/ci-gate.yml'", GATE)
         self.assertIn("- '.github/workflows/molecule.yml'", GATE)
+        self.assertIn("- '.github/workflows/_role-contracts.yml'", GATE)
         self.assertIn("tests/workflow_policy/**", GATE)
 
     def test_guest_recovery_and_shared_test_paths_have_contract_checks(self):
-        contract_section = GATE.split("molecule_contract_filters: |", 1)[1].split(
-            "molecule_scenario_filters: |", 1
+        contract_section = GATE.split(
+            "molecule_contract_filters: &molecule_contract_filters |", 1
+        )[1].split(
+            "molecule_scenario_filters: &molecule_scenario_filters |", 1
         )[0]
         contract_patterns = re.findall(
             r"^\s+- '([^']+)'$", contract_section, re.MULTILINE
         )
-        scenario_section = GATE.split("molecule_scenario_filters: |", 1)[1].split(
+        scenario_section = GATE.split(
+            "molecule_scenario_filters: &molecule_scenario_filters |", 1
+        )[1].split(
             "# Opt in to the shared Renovate-annotation gate", 1
         )[0]
         scenario_patterns = re.findall(
@@ -58,6 +65,8 @@ class CiScopeContract(unittest.TestCase):
             "tests/pve_notifications/__init__.py",
             "tests/zfs_capacity_monitor/__init__.py",
             "tests/zfs_fault_alert/__init__.py",
+            "roles/pve_syslog_forwarder/templates/10-forward-cribl.conf.j2",
+            "tests/pve_syslog_forwarder/verify_task_logs.yml",
         ]
 
         for changed_path in covered_paths:
@@ -78,10 +87,14 @@ class CiScopeContract(unittest.TestCase):
         )
 
     def test_paths_from_promotion_failure_are_covered_by_scenarios_or_contracts(self):
-        contract_section = GATE.split("molecule_contract_filters: |", 1)[1].split(
-            "molecule_scenario_filters: |", 1
+        contract_section = GATE.split(
+            "molecule_contract_filters: &molecule_contract_filters |", 1
+        )[1].split(
+            "molecule_scenario_filters: &molecule_scenario_filters |", 1
         )[0]
-        scenario_section = GATE.split("molecule_scenario_filters: |", 1)[1].split(
+        scenario_section = GATE.split(
+            "molecule_scenario_filters: &molecule_scenario_filters |", 1
+        )[1].split(
             "# Opt in to the shared Renovate-annotation gate", 1
         )[0]
         contract_patterns = re.findall(r"^\s+- '([^']+)'$", contract_section, re.MULTILINE)
