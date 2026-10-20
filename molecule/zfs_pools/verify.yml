@@ -4,6 +4,9 @@
   become: false
   gather_facts: true
 
+  vars_files:
+    - ../../roles/zfs_pools/defaults/main.yml
+
   vars:
     zfs_pools_from_tofu:
       pools:
@@ -34,6 +37,21 @@
           - zfs_pools_check.tank.datasets.backups.properties.recordsize == '1M'
           - zfs_pools_check.tank.datasets.backups.properties.compression == 'zstd'
         fail_msg: "node_storage contract did not resolve as expected"
+
+    - name: Assert the role default reserves root dataset headroom
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_root_refreservation == '6G'
+          - zfs_pools_root_refreservation | human_to_bytes == 6442450944
+          - >-
+            zfs_pools_root_dataset == (
+              ansible_facts.mounts
+              | selectattr('mount', 'equalto', '/')
+              | map(attribute='device')
+              | first
+              | default('')
+            )
+        fail_msg: "The root reservation default or mount-fact derivation changed"
 
     - name: Assert the per-dataset pvesm_id registration field resolves
       ansible.builtin.assert:

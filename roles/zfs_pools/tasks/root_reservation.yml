@@ -1,0 +1,47 @@
+---
+- name: Require a root dataset from mount facts or host_vars
+  ansible.builtin.assert:
+    that:
+      - zfs_pools_root_dataset | string | length > 0
+    fail_msg: >-
+      Could not resolve the ZFS dataset mounted at /. Set
+      zfs_pools_root_dataset in host_vars for this node.
+    quiet: true
+  tags:
+    - zfs_pools
+    - zfs_root_reservation
+
+- name: Read the current root dataset reservation
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - get
+      - -Hp
+      - -o
+      - value
+      - refreservation
+      - "{{ zfs_pools_root_dataset }}"
+  register: zfs_pools_root_reservation_current
+  changed_when: false
+  check_mode: false
+  failed_when: zfs_pools_root_reservation_current.rc != 0
+  tags:
+    - zfs_pools
+    - zfs_root_reservation
+
+- name: Set the root dataset reservation when it differs
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - set
+      - "refreservation={{ zfs_pools_root_refreservation }}"
+      - "{{ zfs_pools_root_dataset }}"
+  when: >-
+    (zfs_pools_root_reservation_current.stdout | int)
+    != (zfs_pools_root_refreservation | human_to_bytes | int)
+  changed_when: true
+  failed_when: zfs_pools_root_reservation_set.rc != 0
+  register: zfs_pools_root_reservation_set
+  tags:
+    - zfs_pools
+    - zfs_root_reservation

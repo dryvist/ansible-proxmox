@@ -66,6 +66,13 @@ zfs_pools_map:
           "com.sun:auto-snapshot": "false"
 ```
 
+### Root dataset headroom
+
+The role derives `zfs_pools_root_dataset` from the ZFS source mounted at `/` and
+sets `refreservation` to `6G` by default. Override either value in `host_vars`
+when a node's root dataset or reservation differs. The role reads the current
+reservation first and sets it only when the byte count differs.
+
 ### Per-dataset properties
 
 `datasets.<name>.properties` is an optional map of arbitrary ZFS properties

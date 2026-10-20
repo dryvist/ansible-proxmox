@@ -17,6 +17,13 @@
     - zfs_pools
     - zfs_module_params
 
+- name: Manage ZFS root dataset headroom
+  ansible.builtin.import_tasks: root_reservation.yml
+  when: ansible_facts.virtualization_type != 'docker'
+  tags:
+    - zfs_pools
+    - zfs_root_reservation
+
 - name: Check which declared ZFS pools exist
   ansible.builtin.command:
     cmd: "zpool list -H -o name {{ item.key }}"
