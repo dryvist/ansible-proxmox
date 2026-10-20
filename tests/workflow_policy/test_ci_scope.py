@@ -7,55 +7,107 @@ import re
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[2]
-GATE = (ROOT / ".github/workflows/ci-gate.yml").read_text()
-MOLECULE = (ROOT / ".github/workflows/molecule.yml").read_text()
+GATE_SOURCE = (ROOT / ".github/workflows/ci-gate.yml").read_text()
+MOLECULE = yaml.safe_load((ROOT / ".github/workflows/molecule.yml").read_text())
+GATE_NODE = yaml.compose(GATE_SOURCE)
+GATE = yaml.safe_load(GATE_SOURCE)
 PROMOTION_PATHS = json.loads(
     (ROOT / "tests/workflow_policy/fixtures/promotion-unmapped-paths.json").read_text()
 )
 
+CONTRACT_FILTERS = yaml.safe_load(
+    GATE["jobs"]["ci"]["with"]["molecule_contract_filters"]
+)["contract_only"]
+SCENARIO_FILTERS = yaml.safe_load(
+    GATE["jobs"]["ci"]["with"]["molecule_scenario_filters"]
+)
+SCENARIO_PATTERNS = [
+    pattern for filters in SCENARIO_FILTERS.values() for pattern in filters
+]
+
+
+def mapping_value(node, key):
+    return next(value for key_node, value in node.value if key_node.value == key)
+
 
 class CiScopeContract(unittest.TestCase):
     def test_develop_push_uses_shared_scenario_selection(self):
-        self.assertIn("needs.changes.outputs.molecule == 'true'", GATE)
-        self.assertIn("github.event_name == 'push'", GATE)
-        self.assertNotRegex(GATE, r"github\.event_name == 'push'\s*\|\|")
+        molecule = GATE["jobs"]["molecule"]
+        self.assertEqual(molecule["needs"], "changes")
+        self.assertEqual(
+            {clause.strip() for clause in molecule["if"].split("||")},
+            {"needs.changes.outputs.molecule == 'true'", "github.event_name == 'push'"},
+        )
+        self.assertIn(
+            "needs.changes.outputs.molecule_scenarios", molecule["with"]["scenarios"]
+        )
+
+        jobs = GATE["jobs"]
+        self.assertEqual(set(jobs["gate"]["needs"]), set(jobs) - {"gate"})
+        allowed_skips = next(
+            step["with"]["allowed-skips"]
+            for step in jobs["gate"]["steps"]
+            if step["name"] == "Check all results"
+        )
+        match = re.fullmatch(
+            r"\$\{\{\s*github\.event_name\s*==\s*'pull_request'\s*"
+            r"&&\s*'([^']+)'\s*\|\|\s*''\s*\}\}",
+            allowed_skips,
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match[1], "molecule")
 
     def test_only_main_push_requests_full_matrix(self):
         self.assertRegex(
-            GATE,
-            r"github\.event_name == 'push' && github\.ref == 'refs/heads/main'\s*&&\s*'FULL'",
+            GATE["jobs"]["molecule"]["with"]["scenarios"],
+            r"github\.event_name == 'push' && github\.ref == 'refs/heads/main'\s*"
+            r"&&\s*'FULL'",
         )
-        self.assertIn("inputs.scenarios == 'FULL'", MOLECULE)
-        self.assertIn("inputs.scenarios != 'FULL'", MOLECULE)
+        discover = MOLECULE["jobs"]["discover"]
+        self.assertRegex(
+            discover["outputs"]["scenarios"],
+            r"\(inputs\.scenarios != '' && inputs\.scenarios != 'FULL' && "
+            r"inputs\.scenarios\) \|\| steps\.list\.outputs\.scenarios",
+        )
+        list_all = next(step for step in discover["steps"] if step.get("id") == "list")
+        list_selector = list_all["if"].removeprefix("${{").removesuffix("}}")
+        self.assertEqual(
+            {clause.strip() for clause in list_selector.split("||")},
+            {"inputs.scenarios == ''", "inputs.scenarios == 'FULL'"},
+        )
 
     def test_workflow_changes_have_a_caller_contract(self):
-        self.assertRegex(
-            GATE, r"molecule_contract_filters:\s*&molecule_contract_filters\s*\|"
-        )
-        self.assertIn("- '.github/workflows/ci-gate.yml'", GATE)
-        self.assertIn("- '.github/workflows/molecule.yml'", GATE)
-        self.assertIn("- '.github/workflows/_role-contracts.yml'", GATE)
-        self.assertIn("tests/workflow_policy/**", GATE)
+        jobs = GATE["jobs"]
+        ci_inputs = jobs["ci"]["with"]
+        changes_inputs = jobs["changes"]["with"]
+        self.assertIn("_ansible-ci.yml", jobs["ci"]["uses"])
+        self.assertIn("_ansible-changes.yml", jobs["changes"]["uses"])
+        for filter_name in ("molecule_contract_filters", "molecule_scenario_filters"):
+            self.assertEqual(ci_inputs[filter_name], changes_inputs[filter_name])
+
+        jobs_node = mapping_value(mapping_value(GATE_NODE, "jobs"), "ci")
+        ci_with_node = mapping_value(jobs_node, "with")
+        changes_node = mapping_value(mapping_value(GATE_NODE, "jobs"), "changes")
+        changes_with_node = mapping_value(changes_node, "with")
+        for filter_name in ("molecule_contract_filters", "molecule_scenario_filters"):
+            self.assertIs(
+                mapping_value(ci_with_node, filter_name),
+                mapping_value(changes_with_node, filter_name),
+            )
+
+        for pattern in (
+            ".github/workflows/ci-gate.yml",
+            ".github/workflows/molecule.yml",
+            ".github/workflows/_role-contracts.yml",
+            "tests/workflow_policy/**",
+        ):
+            self.assertIn(pattern, CONTRACT_FILTERS)
 
     def test_guest_recovery_and_shared_test_paths_have_contract_checks(self):
-        contract_section = GATE.split(
-            "molecule_contract_filters: &molecule_contract_filters |", 1
-        )[1].split(
-            "molecule_scenario_filters: &molecule_scenario_filters |", 1
-        )[0]
-        contract_patterns = re.findall(
-            r"^\s+- '([^']+)'$", contract_section, re.MULTILINE
-        )
-        scenario_section = GATE.split(
-            "molecule_scenario_filters: &molecule_scenario_filters |", 1
-        )[1].split(
-            "# Opt in to the shared Renovate-annotation gate", 1
-        )[0]
-        scenario_patterns = re.findall(
-            r"^\s+- '([^']+)'$", scenario_section, re.MULTILINE
-        )
         covered_paths = [
             "playbooks/guest-recovery.yml",
             "tests/guest_recovery/hosts.yml",
@@ -73,7 +125,7 @@ class CiScopeContract(unittest.TestCase):
             self.assertTrue(
                 any(
                     fnmatch.fnmatchcase(changed_path, pattern)
-                    for pattern in contract_patterns
+                    for pattern in CONTRACT_FILTERS
                 ),
                 f"contract-tested path is not mapped: {changed_path}",
             )
@@ -81,27 +133,15 @@ class CiScopeContract(unittest.TestCase):
         self.assertFalse(
             any(
                 fnmatch.fnmatchcase("tests/unclassified/test_new.py", pattern)
-                for pattern in contract_patterns + scenario_patterns
+                for pattern in CONTRACT_FILTERS
+                + SCENARIO_PATTERNS
             ),
             "unmapped test paths must keep the shared full-matrix fallback",
         )
 
     def test_paths_from_promotion_failure_are_covered_by_scenarios_or_contracts(self):
-        contract_section = GATE.split(
-            "molecule_contract_filters: &molecule_contract_filters |", 1
-        )[1].split(
-            "molecule_scenario_filters: &molecule_scenario_filters |", 1
-        )[0]
-        scenario_section = GATE.split(
-            "molecule_scenario_filters: &molecule_scenario_filters |", 1
-        )[1].split(
-            "# Opt in to the shared Renovate-annotation gate", 1
-        )[0]
-        contract_patterns = re.findall(r"^\s+- '([^']+)'$", contract_section, re.MULTILINE)
-        scenario_patterns = re.findall(r"^\s+- '([^']+)'$", scenario_section, re.MULTILINE)
-
         for changed_path in PROMOTION_PATHS["unmapped_paths"]:
-            patterns = contract_patterns + scenario_patterns
+            patterns = CONTRACT_FILTERS + SCENARIO_PATTERNS
             covered = any(
                 fnmatch.fnmatchcase(changed_path, pattern) for pattern in patterns
             )
@@ -112,7 +152,7 @@ class CiScopeContract(unittest.TestCase):
         self.assertTrue(
             any(
                 fnmatch.fnmatchcase("roles/lxc_features/tasks/main.yml", pattern)
-                for pattern in scenario_patterns
+                for pattern in SCENARIO_FILTERS["lxc_features"]
             )
         )
 

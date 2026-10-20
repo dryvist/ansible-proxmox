@@ -1,0 +1,171 @@
+---
+- name: Read cluster storage configuration for cloud-init cleanup
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - /storage
+      - --output-format
+      - json
+  register: pve_ha_cloudinit_storage_raw
+  changed_when: false
+  check_mode: false
+
+- name: Start the local non-shared storage selection
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_cleanup_local_storages: []
+
+- name: Select local non-shared storage ids available on this node
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_cleanup_local_storages: >-
+      {{ pve_ha_cloudinit_cleanup_local_storages + [item] }}
+  loop: "{{ pve_ha_cloudinit_storage_raw.stdout | from_json }}"
+  loop_control:
+    label: "{{ item.storage }}"
+  when:
+    - not (item.shared | default(false) | bool)
+    - "'images' in (item.content | default('') | split(','))"
+    - >-
+      (item.nodes | default('') | length == 0)
+      or pve_ha_this_pve_node in
+         (item.nodes | default('') | split(',') | reject('equalto', '') | list)
+    - >-
+      (pve_ha_cloudinit_orphan_cleanup_storages | length == 0)
+      or item.storage in pve_ha_cloudinit_orphan_cleanup_storages
+
+- name: Refuse a cleanup storage list that is not local and non-shared
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pve_ha_cloudinit_orphan_cleanup_storages
+         | difference(pve_ha_cloudinit_cleanup_local_storages | map(attribute='storage') | list)
+         | length) == 0
+    fail_msg: >-
+      pve_ha cloud-init cleanup storage ids must be configured, non-shared,
+      and available on {{ pve_ha_this_pve_node }}.
+    quiet: true
+  when: pve_ha_cloudinit_orphan_cleanup_storages | length > 0
+
+- name: List VM images on each selected local storage
+  ansible.builtin.command:
+    argv:
+      - pvesm
+      - list
+      - "{{ item.storage }}"
+      - --content
+      - images
+      - --output-format
+      - json
+  loop: "{{ pve_ha_cloudinit_cleanup_local_storages }}"
+  loop_control:
+    label: "{{ item.storage }}"
+  register: pve_ha_cloudinit_storage_lists
+  changed_when: false
+  check_mode: false
+
+- name: Start the exact cloud-init volume candidate list
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_cleanup_candidates: []
+    pve_ha_cloudinit_cleanup_decisions: []
+
+- name: Select only exact cloud-init image names from storage listings
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_cleanup_candidates: >-
+      {{ pve_ha_cloudinit_cleanup_candidates
+         + (item.stdout | from_json
+            | selectattr('volid', 'match', '^[^:]+:vm-[0-9]+-cloudinit$')
+            | map('combine', {
+                'storage_id': item.item.storage,
+                'storage_shared': item.item.shared | default(false),
+                'storage_nodes': item.item.nodes | default('')
+              }) | list) }}
+  loop: "{{ pve_ha_cloudinit_storage_lists.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.storage }}"
+
+- name: Read cluster node status for guarded cloud-init cleanup
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - /cluster/resources
+      - --type
+      - node
+      - --output-format
+      - json
+  register: pve_ha_cloudinit_nodes_raw
+  changed_when: false
+  check_mode: false
+  when: pve_ha_cloudinit_cleanup_candidates | length > 0
+
+- name: Resolve online Proxmox nodes
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_online_nodes: >-
+      {{ pve_ha_cloudinit_nodes_raw.stdout | from_json
+         | selectattr('status', 'equalto', 'online')
+         | map(attribute='node') | list }}
+  when: pve_ha_cloudinit_cleanup_candidates | length > 0
+
+- name: Require this node to be online before cleaning cloud-init volumes
+  ansible.builtin.assert:
+    that:
+      - pve_ha_this_pve_node in pve_ha_cloudinit_online_nodes
+    fail_msg: >-
+      pve_ha cloud-init cleanup cannot establish this node's cluster status;
+      no candidate volumes were changed.
+    quiet: true
+  when: pve_ha_cloudinit_cleanup_candidates | length > 0
+
+- name: Find cluster VM configuration paths
+  ansible.builtin.find:
+    paths: /etc/pve/nodes
+    patterns: "*.conf"
+    file_type: file
+    recurse: true
+  register: pve_ha_cloudinit_vm_configs_found
+  changed_when: false
+  check_mode: false
+  when: pve_ha_cloudinit_cleanup_candidates | length > 0
+
+- name: Resolve cluster VM configuration paths
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_qemu_config_paths: >-
+      {{ pve_ha_cloudinit_vm_configs_found.files | default([])
+         | map(attribute='path')
+         | select('match', '^/etc/pve/nodes/[^/]+/qemu-server/[0-9]+[.]conf$')
+         | list }}
+  when: pve_ha_cloudinit_cleanup_candidates | length > 0
+
+- name: Resolve this node's VM configuration paths
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_local_qemu_config_paths: >-
+      {{ pve_ha_cloudinit_qemu_config_paths
+         | select('match', '^/etc/pve/nodes/' ~ (pve_ha_this_pve_node | regex_escape)
+                  ~ '/qemu-server/[0-9]+[.]conf$')
+         | list }}
+  when: pve_ha_cloudinit_cleanup_candidates | length > 0
+
+- name: Read this node's VM configurations for exact attached-volume checks
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ pve_ha_cloudinit_local_qemu_config_paths | default([]) }}"
+  loop_control:
+    label: "{{ item | basename }}"
+  register: pve_ha_cloudinit_local_qemu_configs_raw
+  changed_when: false
+  check_mode: false
+
+- name: Decode this node's VM configurations
+  ansible.builtin.set_fact:
+    pve_ha_cloudinit_local_qemu_config_texts: >-
+      {{ pve_ha_cloudinit_local_qemu_configs_raw.results | default([])
+         | selectattr('content', 'defined')
+         | map(attribute='content') | map('b64decode') | list }}
+  when: pve_ha_cloudinit_cleanup_candidates | length > 0
+
+- name: Inspect and clean each exact cloud-init volume candidate
+  ansible.builtin.include_tasks: cloudinit_orphan_cleanup_candidate.yml
+  loop: "{{ pve_ha_cloudinit_cleanup_candidates }}"
+  loop_control:
+    loop_var: pve_ha_cloudinit_cleanup_volume
+    label: "{{ pve_ha_cloudinit_cleanup_volume.volid }}"

@@ -1,0 +1,6 @@
+---
+# Inspect local, non-shared storage for unreferenced cloud-init volumes.
+pve_ha_cloudinit_orphan_cleanup_enabled: true
+
+# Empty means all configured, non-shared image storage available on this node.
+pve_ha_cloudinit_orphan_cleanup_storages: []

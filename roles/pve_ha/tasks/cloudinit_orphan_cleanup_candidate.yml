@@ -1,0 +1,163 @@
+---
+- name: Inspect candidate and resolve every deletion guard
+  block:
+    - name: Resolve candidate VMID from the exact cloud-init volume name
+      ansible.builtin.set_fact:
+        pve_ha_cloudinit_candidate_name_is_exact: >-
+          {{ pve_ha_cloudinit_cleanup_volume.volid
+             is match('^[^:]+:vm-[0-9]+-cloudinit$') }}
+        pve_ha_cloudinit_candidate_vmid: >-
+          {{ pve_ha_cloudinit_cleanup_volume.volid.split(':')[-1].split('-')[1]
+             if pve_ha_cloudinit_cleanup_volume.volid
+                is match('^[^:]+:vm-[0-9]+-cloudinit$') else '' }}
+
+    - name: Resolve the cluster config paths for this VMID
+      ansible.builtin.set_fact:
+        pve_ha_cloudinit_candidate_config_paths: >-
+          {{ pve_ha_cloudinit_qemu_config_paths
+             | select('match', '^/etc/pve/nodes/[^/]+/qemu-server/'
+                      ~ pve_ha_cloudinit_candidate_vmid ~ '[.]conf$')
+             | list if pve_ha_cloudinit_candidate_vmid else [] }}
+
+    - name: Resolve the owner node from the unique VM config path
+      ansible.builtin.set_fact:
+        pve_ha_cloudinit_candidate_owner_node: >-
+          {{ pve_ha_cloudinit_candidate_config_paths[0].split('/')[4]
+             if pve_ha_cloudinit_candidate_config_paths | length == 1
+             else '' }}
+
+    - name: Read the unique cluster VM configuration
+      ansible.builtin.slurp:
+        src: "{{ pve_ha_cloudinit_candidate_config_paths | first }}"
+      register: pve_ha_cloudinit_candidate_config_raw
+      changed_when: false
+      check_mode: false
+      when: pve_ha_cloudinit_candidate_config_paths | length == 1
+
+    - name: Re-read the candidate VM images immediately before selection
+      ansible.builtin.command:
+        argv:
+          - pvesm
+          - list
+          - "{{ pve_ha_cloudinit_cleanup_volume.storage_id }}"
+          - --vmid
+          - "{{ pve_ha_cloudinit_candidate_vmid }}"
+          - --content
+          - images
+          - --output-format
+          - json
+      register: pve_ha_cloudinit_candidate_volumes_raw
+      changed_when: false
+      check_mode: false
+      when: pve_ha_cloudinit_candidate_name_is_exact | bool
+
+    - name: Resolve fresh candidate VM volume ids
+      ansible.builtin.set_fact:
+        pve_ha_cloudinit_candidate_current_volids: >-
+          {{ pve_ha_cloudinit_candidate_volumes_raw.stdout | default('[]')
+             | from_json | map(attribute='volid') | list }}
+
+    - name: Read active tasks on every online node immediately before selection
+      ansible.builtin.command:
+        argv:
+          - pvesh
+          - get
+          - "/nodes/{{ item }}/tasks"
+          - --source
+          - active
+          - --limit
+          - "10000"
+          - --output-format
+          - json
+      loop: "{{ pve_ha_cloudinit_online_nodes }}"
+      loop_control:
+        label: "{{ item }}"
+      register: pve_ha_cloudinit_candidate_tasks_raw
+      changed_when: false
+      check_mode: false
+      when:
+        - pve_ha_cloudinit_candidate_config_paths | length == 1
+        - pve_ha_cloudinit_candidate_owner_node in pve_ha_cloudinit_online_nodes
+
+    - name: Apply the shared cloud-init orphan decision rules
+      ansible.builtin.include_tasks: cloudinit_orphan_cleanup_decision.yml
+      vars:
+        pve_ha_cloudinit_cleanup_candidate:
+          name: "{{ pve_ha_cloudinit_cleanup_volume.volid }}"
+          volid: "{{ pve_ha_cloudinit_cleanup_volume.volid }}"
+          storage_id: "{{ pve_ha_cloudinit_cleanup_volume.storage_id }}"
+          storage_shared: "{{ pve_ha_cloudinit_cleanup_volume.storage_shared | default(false) }}"
+          storage_nodes: "{{ pve_ha_cloudinit_cleanup_volume.storage_nodes | default('') }}"
+          local_node: "{{ pve_ha_this_pve_node }}"
+          vmid: "{{ pve_ha_cloudinit_candidate_vmid }}"
+          vm_config_paths: "{{ pve_ha_cloudinit_candidate_config_paths }}"
+          owner_node: "{{ pve_ha_cloudinit_candidate_owner_node }}"
+          owner_config_text: >-
+            {{ pve_ha_cloudinit_candidate_config_raw.content | default('') | b64decode }}
+          local_config_texts: "{{ pve_ha_cloudinit_local_qemu_config_texts | default([]) }}"
+          online_nodes: "{{ pve_ha_cloudinit_online_nodes }}"
+          active_tasks: >-
+            {{ pve_ha_cloudinit_candidate_tasks_raw.results | default([])
+               | selectattr('stdout', 'defined') | map(attribute='stdout')
+               | map('from_json') | flatten }}
+          current_volids: "{{ pve_ha_cloudinit_candidate_current_volids }}"
+          allowed_storages: "{{ pve_ha_cloudinit_orphan_cleanup_storages }}"
+  rescue:
+    - name: Log candidate kept because a guard could not be verified
+      ansible.builtin.debug:
+        msg: >-
+          kept {{ pve_ha_cloudinit_cleanup_volume.volid }}:
+          guard inspection failed; no volume free was issued.
+
+    - name: Stop when a cloud-init cleanup guard could not be verified
+      ansible.builtin.fail:
+        msg: >-
+          pve_ha cloud-init cleanup could not verify every guard for
+          {{ pve_ha_cloudinit_cleanup_volume.volid }}:
+          {{ ansible_failed_result.msg | default('unknown read error') }}
+
+- name: Free a candidate that passed every guard
+  when:
+    - pve_ha_cloudinit_cleanup_decision == 'free'
+    - not ansible_check_mode
+  block:
+    - name: Free guarded cloud-init volume with Proxmox storage tooling
+      ansible.builtin.command:
+        argv:
+          - pvesm
+          - free
+          - "{{ pve_ha_cloudinit_cleanup_volume.volid }}"
+      changed_when: true
+
+    - name: Log freed cloud-init candidate
+      ansible.builtin.debug:
+        msg: >-
+          freed {{ pve_ha_cloudinit_cleanup_volume.volid }}:
+          {{ pve_ha_cloudinit_cleanup_reason }}.
+  rescue:
+    - name: Log cloud-init free failure
+      ansible.builtin.debug:
+        msg: >-
+          free failed for {{ pve_ha_cloudinit_cleanup_volume.volid }} after all
+          guards passed: {{ ansible_failed_result.msg | default('unknown error') }}
+
+    - name: Stop after cloud-init free failure
+      ansible.builtin.fail:
+        msg: >-
+          pvesm free failed for {{ pve_ha_cloudinit_cleanup_volume.volid }}:
+          {{ ansible_failed_result.msg | default('unknown error') }}
+- name: Log cloud-init candidate that would be freed in check mode
+  ansible.builtin.debug:
+    msg: >-
+      would free {{ pve_ha_cloudinit_cleanup_volume.volid }}:
+      {{ pve_ha_cloudinit_cleanup_reason }}.
+  when:
+    - pve_ha_cloudinit_cleanup_decision == 'free'
+    - ansible_check_mode
+
+- name: Log cloud-init candidate kept by a guard
+  ansible.builtin.debug:
+    msg: >-
+      kept {{ pve_ha_cloudinit_cleanup_volume.volid }}:
+      {{ pve_ha_cloudinit_cleanup_reason }}.
+  when: pve_ha_cloudinit_cleanup_decision == 'keep'
