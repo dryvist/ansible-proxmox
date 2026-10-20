@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.33.0](https://github.com/dryvist/ansible-proxmox/compare/v2.32.4...v2.33.0) (2026-10-20)
+
+
+### Features
+
+* **lxc:** reconcile storage mount sizes ([#1143](https://github.com/dryvist/ansible-proxmox/issues/1143)) ([9fceb36](https://github.com/dryvist/ansible-proxmox/commit/9fceb365e2fce537cd4cb539a1862056482a5fc4))
+
 ## [2.32.4](https://github.com/dryvist/ansible-proxmox/compare/v2.32.3...v2.32.4) (2026-10-20)
 
 
