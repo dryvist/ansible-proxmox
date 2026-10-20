@@ -1,12 +1,41 @@
 ---
+- name: Resolve the mounted root filesystem and dataset
+  ansible.builtin.import_tasks: root_dataset_resolution.yml
+  tags:
+    - zfs_pools
+    - zfs_root_reservation
+
+- name: Require root mount filesystem information
+  ansible.builtin.assert:
+    that:
+      - zfs_pools_root_mount_fstype | string | length > 0
+    fail_msg: >-
+      Could not determine the filesystem mounted at /. Ensure mount facts are
+      available or findmnt can read the root mount.
+    quiet: true
+  tags:
+    - zfs_pools
+    - zfs_root_reservation
+
 - name: Require a root dataset from mount facts or host_vars
   ansible.builtin.assert:
     that:
-      - zfs_pools_root_dataset | string | length > 0
+      - zfs_pools_root_dataset_resolved | string | length > 0
     fail_msg: >-
       Could not resolve the ZFS dataset mounted at /. Set
       zfs_pools_root_dataset in host_vars for this node.
     quiet: true
+  when: zfs_pools_root_mount_fstype == 'zfs'
+  tags:
+    - zfs_pools
+    - zfs_root_reservation
+
+- name: Report that root dataset headroom does not apply
+  ansible.builtin.debug:
+    msg: >-
+      Skipping root dataset headroom because the root filesystem is
+      {{ zfs_pools_root_mount_fstype }}, not ZFS.
+  when: zfs_pools_root_mount_fstype != 'zfs'
   tags:
     - zfs_pools
     - zfs_root_reservation
@@ -20,11 +49,12 @@
       - -o
       - value
       - refreservation
-      - "{{ zfs_pools_root_dataset }}"
+      - "{{ zfs_pools_root_dataset_resolved }}"
   register: zfs_pools_root_reservation_current
   changed_when: false
   check_mode: false
   failed_when: zfs_pools_root_reservation_current.rc != 0
+  when: zfs_pools_root_mount_fstype == 'zfs'
   tags:
     - zfs_pools
     - zfs_root_reservation
@@ -35,10 +65,12 @@
       - zfs
       - set
       - "refreservation={{ zfs_pools_root_refreservation }}"
-      - "{{ zfs_pools_root_dataset }}"
-  when: >-
-    (zfs_pools_root_reservation_current.stdout | int)
-    != (zfs_pools_root_refreservation | human_to_bytes | int)
+      - "{{ zfs_pools_root_dataset_resolved }}"
+  when:
+    - zfs_pools_root_mount_fstype == 'zfs'
+    - >-
+      (zfs_pools_root_reservation_current.stdout | int)
+      != (zfs_pools_root_refreservation | human_to_bytes | int)
   changed_when: true
   failed_when: zfs_pools_root_reservation_set.rc != 0
   register: zfs_pools_root_reservation_set

@@ -47,11 +47,98 @@
             zfs_pools_root_dataset == (
               ansible_facts.mounts
               | selectattr('mount', 'equalto', '/')
+              | selectattr('fstype', 'equalto', 'zfs')
               | map(attribute='device')
               | first
               | default('')
             )
         fail_msg: "The root reservation default or mount-fact derivation changed"
+
+    - name: Resolve the root dataset from mount facts
+      ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_dataset_resolution.yml
+      vars:
+        zfs_pools_root_mount_facts:
+          mount: /
+          fstype: zfs
+          device: tank/ROOT/molecule
+
+    - name: Assert the root dataset from facts is preserved
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_root_mount_fstype == 'zfs'
+          - zfs_pools_root_dataset_resolved == 'tank/ROOT/molecule'
+          - zfs_pools_root_mount_findmnt_result.skipped | default(false)
+
+    - name: Resolve a ZFS root when mount facts omit it
+      ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_dataset_resolution.yml
+      vars:
+        zfs_pools_root_mount_facts: {}
+        zfs_pools_root_findmnt_argv:
+          - printf
+          - "%s"
+          - "zfs tank/ROOT/findmnt"
+
+    - name: Assert findmnt supplies the missing root dataset
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_root_mount_fstype == 'zfs'
+          - zfs_pools_root_dataset_resolved == 'tank/ROOT/findmnt'
+          - not (zfs_pools_root_mount_findmnt_result.skipped | default(false))
+
+    - name: Preserve a host_vars root dataset override
+      ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_dataset_resolution.yml
+      vars:
+        zfs_pools_root_mount_facts:
+          mount: /
+          fstype: ext4
+          device: /dev/vda1
+        zfs_pools_root_dataset: tank/ROOT/host-override
+
+    - name: Assert the host_vars root dataset override takes precedence
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_root_mount_fstype == 'zfs'
+          - zfs_pools_root_dataset_resolved == 'tank/ROOT/host-override'
+          - zfs_pools_root_mount_findmnt_result.skipped | default(false)
+
+    - name: Run root reservation handling for a non-ZFS root
+      ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_reservation.yml
+      vars:
+        zfs_pools_root_mount_facts:
+          mount: /
+          fstype: ext4
+          device: /dev/vda1
+        zfs_pools_root_findmnt_argv:
+          - printf
+          - "%s"
+          - "ext4 /dev/vda1"
+
+    - name: Assert a non-ZFS root has no reservation dataset or ZFS read
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_root_mount_fstype == 'ext4'
+          - zfs_pools_root_dataset_resolved | length == 0
+          - zfs_pools_root_reservation_current.skipped | default(false)
+
+    - name: Keep the unresolved ZFS root assertion effective
+      block:
+        - name: Run root reservation handling without a ZFS source
+          ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_reservation.yml
+          vars:
+            zfs_pools_root_mount_facts: {}
+            zfs_pools_root_findmnt_argv:
+              - printf
+              - "%s"
+              - zfs
+      rescue:
+        - name: Record the expected ZFS-root assertion failure
+          ansible.builtin.set_fact:
+            zfs_pools_root_unresolved_assert_failed: true
+
+    - name: Assert an unresolved ZFS root still fails the reservation guard
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_root_unresolved_assert_failed | default(false)
 
     - name: Assert the node-local bulk dataset defaults
       ansible.builtin.assert:

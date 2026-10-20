@@ -1,0 +1,50 @@
+---
+- name: Read the root mount with findmnt when facts cannot resolve it
+  ansible.builtin.command:
+    argv: "{{ zfs_pools_root_findmnt_argv }}"
+  register: zfs_pools_root_mount_findmnt_result
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - zfs_pools_root_dataset | string | length == 0
+  tags:
+    - zfs_pools
+    - zfs_root_reservation
+
+- name: Parse the root mount reported by findmnt
+  ansible.builtin.set_fact:
+    zfs_pools_root_mount_findmnt_fields: >-
+      {{ (zfs_pools_root_mount_findmnt_result.stdout | default('') | trim).split() }}
+  tags:
+    - zfs_pools
+    - zfs_root_reservation
+
+- name: Resolve the root filesystem type and ZFS dataset
+  ansible.builtin.set_fact:
+    zfs_pools_root_mount_fstype: >-
+      {{
+        'zfs'
+        if zfs_pools_root_dataset | string | length > 0
+        else (
+          zfs_pools_root_mount_findmnt_fields[0]
+          if zfs_pools_root_mount_findmnt_fields | length > 0
+             and zfs_pools_root_mount_findmnt_result.rc | default(1) | int == 0
+          else zfs_pools_root_mount_facts.fstype | default('', true)
+        )
+      }}
+    zfs_pools_root_dataset_resolved: >-
+      {{
+        zfs_pools_root_dataset
+        if zfs_pools_root_dataset | string | length > 0
+        else (
+          zfs_pools_root_mount_findmnt_fields[1]
+          if zfs_pools_root_mount_findmnt_fields | length > 1
+             and zfs_pools_root_mount_findmnt_fields[0] == 'zfs'
+             and zfs_pools_root_mount_findmnt_result.rc | default(1) | int == 0
+          else ''
+        )
+      }}
+  tags:
+    - zfs_pools
+    - zfs_root_reservation

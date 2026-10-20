@@ -21,17 +21,29 @@ zfs_pools_config: >-
 zfs_pools_map: "{{ zfs_pools_config.pools | default({}) }}"
 
 # Reserve root-pool headroom on every Proxmox node. The root dataset is the ZFS
-# source mounted at /; set either variable in host_vars when the discovered
+# source mounted at /. If mount facts omit that source, root_reservation.yml
+# reads it with findmnt. Set either variable in host_vars when the discovered
 # mount source or reservation differs on a host.
-zfs_pools_root_dataset: >-
+zfs_pools_root_mount_facts: >-
   {{
     ansible_facts.mounts | default([])
     | selectattr('mount', 'equalto', '/')
-    | selectattr('fstype', 'equalto', 'zfs')
-    | map(attribute='device')
-    | first
-    | default('')
+    | list | first | default({})
   }}
+zfs_pools_root_dataset: >-
+  {{
+    zfs_pools_root_mount_facts.device
+    if zfs_pools_root_mount_facts.fstype | default('') == 'zfs'
+    else ''
+  }}
+zfs_pools_root_findmnt_argv:
+  - findmnt
+  - --raw
+  - --noheadings
+  - --output
+  - FSTYPE,SOURCE
+  - --target
+  - /
 zfs_pools_root_refreservation: 6G
 
 # Node-local package-cache and atop data use the bulk pool when present. The

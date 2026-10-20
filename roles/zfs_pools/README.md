@@ -68,10 +68,12 @@ zfs_pools_map:
 
 ### Root dataset headroom
 
-The role derives `zfs_pools_root_dataset` from the ZFS source mounted at `/` and
-sets `refreservation` to `6G` by default. Override either value in `host_vars`
-when a node's root dataset or reservation differs. The role reads the current
-reservation first and sets it only when the byte count differs.
+The role derives `zfs_pools_root_dataset` from mount facts and uses `findmnt` if
+those facts omit the root mount. It sets `refreservation` to `6G` by default,
+reads the current value first, and changes it only when the byte count differs.
+Set the dataset or reservation in `host_vars` for a host-specific value. A
+non-ZFS root is logged and skipped; a ZFS root whose dataset remains unresolved
+fails with a request for a `host_vars` override.
 
 ### Node-local bulk datasets
 
