@@ -5,7 +5,7 @@
 #   ansible-playbook tests/lxc_storage_mount_sizes/verify_reconcile.yml -i localhost, -c local
 # Run the check-mode contract:
 #   ansible-playbook --check tests/lxc_storage_mount_sizes/verify_reconcile.yml -i localhost, -c local -e lxc_storage_mount_sizes_contract_mode=check
-- name: Verify grow-only LXC storage mount reconciliation
+- name: Verify LXC storage mount reconciliation
   hosts: localhost
   become: false
   gather_facts: false
@@ -52,6 +52,26 @@
         ansible_pct_vmid: 109
         storage_mount_points:
           - {mp_index: 0, path: /srv/migrating, size: 2G, volume: bulk}
+      attach-hotplug:
+        ansible_pct_vmid: 110
+        storage_mount_points:
+          - {mp_index: 2, path: /srv/attach-hotplug, size: 2G, volume: bulk}
+      occupied:
+        ansible_pct_vmid: 111
+        storage_mount_points:
+          - {mp_index: 1, path: /srv/occupied, size: 2G, volume: bulk}
+      path-at-other-index:
+        ansible_pct_vmid: 112
+        storage_mount_points:
+          - {mp_index: 0, path: /srv/other-index, size: 2G, volume: bulk}
+      attach-insufficient:
+        ansible_pct_vmid: 113
+        storage_mount_points:
+          - {mp_index: 0, path: /srv/attach-insufficient, size: 2G, volume: tight}
+      attach-pending:
+        ansible_pct_vmid: 114
+        storage_mount_points:
+          - {mp_index: 3, path: /srv/attach-pending, size: 2G, volume: bulk}
     lxc_storage_mount_sizes_fixture_placement:
       - {type: lxc, vmid: 101, node: fixture-node, status: running}
       - {type: lxc, vmid: 102, node: fixture-node, status: running}
@@ -62,6 +82,11 @@
       - {type: lxc, vmid: 107, node: fixture-node, status: running}
       - {type: lxc, vmid: 108, node: fixture-node, status: running}
       - {type: lxc, vmid: 109, node: fixture-node, status: migrating}
+      - {type: lxc, vmid: 110, node: fixture-node, status: running}
+      - {type: lxc, vmid: 111, node: fixture-node, status: running}
+      - {type: lxc, vmid: 112, node: fixture-node, status: running}
+      - {type: lxc, vmid: 113, node: fixture-node, status: running}
+      - {type: lxc, vmid: 114, node: fixture-node, status: running}
 
   tasks:
     - name: Create the fixture command directory
@@ -88,6 +113,8 @@
         - pct.log
         - resize.log
         - pvesh.log
+        - attach.log
+        - restart.log
 
     - name: Install pvesh fixture command
       ansible.builtin.copy:
@@ -105,11 +132,44 @@
             /nodes/fixture-node/storage/tight/status)
               printf '%s\n' '{"active":1,"avail":10737418240}'
               ;;
-            /nodes/fixture-node/lxc/108/config)
-              printf '%s\n' '{"digest":"fixture-digest","lock":"snapshot"}'
+            /nodes/fixture-node/lxc/101/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-101-disk-0,mp=/srv/grow,size=1G"}'
               ;;
-            /nodes/fixture-node/lxc/*/config)
+            /nodes/fixture-node/lxc/102/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-102-disk-0,mp=/srv/equal,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/103/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-103-disk-0,mp=/srv/smaller,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/104/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-104-disk-0,mp=/srv/other,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/105/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"tight:subvol-105-disk-0,mp=/srv/insufficient,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/107/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"fast:subvol-107-disk-0,mp=/srv/volume,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/108/config)
+              printf '%s\n' '{"digest":"fixture-digest","lock":"snapshot","mp0":"bulk:subvol-108-disk-0,mp=/srv/locked,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/110/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp0":"bulk:subvol-110-disk-0,mp=/srv/existing,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/111/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp1":"bulk:subvol-111-disk-1,mp=/srv/other,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/112/config)
+              printf '%s\n' '{"digest":"fixture-digest","mp3":"bulk:subvol-112-disk-3,mp=/srv/other-index,size=1G"}'
+              ;;
+            /nodes/fixture-node/lxc/113/config | /nodes/fixture-node/lxc/114/config)
               printf '%s\n' '{"digest":"fixture-digest"}'
+              ;;
+            /nodes/fixture-node/lxc/110/pending)
+              printf '%s\n' '[]'
+              ;;
+            /nodes/fixture-node/lxc/114/pending)
+              printf '%s\n' '[{"key":"mp3","pending":"bulk:subvol-114-disk-3,mp=/srv/attach-pending,size=2G"}]'
               ;;
             *) exit 1 ;;
           esac
@@ -122,21 +182,30 @@
         content: |
           #!/bin/sh
           printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/pct.log
+          if [ "$1" = config ]; then
+            state={{ lxc_storage_mount_sizes_stub_dir }}/protection-$2
+            [ -f "$state" ] || printf '%s\n' 1 > "$state"
+            printf 'protection: %s\n' "$(cat "$state")"
+            exit 0
+          fi
           if [ "$1" = resize ]; then
             printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/resize.log
             exit 0
           fi
-          [ "$1" = config ] || exit 1
-          case "$2" in
-            101) printf '%s\n' 'mp0: bulk:subvol-101-disk-0,mp=/srv/grow,size=1G' ;;
-            102) printf '%s\n' 'mp0: bulk:subvol-102-disk-0,mp=/srv/equal,size=1G' ;;
-            103) printf '%s\n' 'mp0: bulk:subvol-103-disk-0,mp=/srv/smaller,size=1G' ;;
-            104) printf '%s\n' 'mp0: bulk:subvol-104-disk-0,mp=/srv/other,size=1G' ;;
-            105) printf '%s\n' 'mp0: tight:subvol-105-disk-0,mp=/srv/insufficient,size=1G' ;;
-            107) printf '%s\n' 'mp0: fast:subvol-107-disk-0,mp=/srv/volume,size=1G' ;;
-            108) printf '%s\n' 'mp0: bulk:subvol-108-disk-0,mp=/srv/locked,size=1G' ;;
-            *) exit 1 ;;
-          esac
+          if [ "$1" = set ]; then
+            if [ "$3" = --protection ]; then
+              printf '%s\n' "$4" > {{ lxc_storage_mount_sizes_stub_dir }}/protection-$2
+              exit 0
+            fi
+            [ "$(cat {{ lxc_storage_mount_sizes_stub_dir }}/protection-$2)" = 1 ] && exit 25
+            case "$3" in --mp*) printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/attach.log ;; esac
+            exit 0
+          fi
+          if [ "$1" = reboot ] || [ "$1" = start ]; then
+            printf '%s\n' "$*" >> {{ lxc_storage_mount_sizes_stub_dir }}/restart.log
+            exit 0
+          fi
+          exit 1
         dest: "{{ lxc_storage_mount_sizes_stub_dir }}/pct"
         mode: "0755"
       check_mode: false
@@ -153,6 +222,8 @@
         - pct.log
         - resize.log
         - pvesh.log
+        - attach.log
+        - restart.log
       register: lxc_storage_mount_sizes_logs
       when: lxc_storage_mount_sizes_contract_mode == 'normal'
 
@@ -161,9 +232,11 @@
         lxc_storage_mount_sizes_pct_commands: "{{ lxc_storage_mount_sizes_logs.results[0].content | b64decode }}"
         lxc_storage_mount_sizes_resize_commands: "{{ lxc_storage_mount_sizes_logs.results[1].content | b64decode }}"
         lxc_storage_mount_sizes_pvesh_commands: "{{ lxc_storage_mount_sizes_logs.results[2].content | b64decode }}"
+        lxc_storage_mount_sizes_attach_commands: "{{ lxc_storage_mount_sizes_logs.results[3].content | b64decode }}"
+        lxc_storage_mount_sizes_restart_commands: "{{ lxc_storage_mount_sizes_logs.results[4].content | b64decode }}"
       when: lxc_storage_mount_sizes_contract_mode == 'normal'
 
-    - name: Assert grow-only outcomes and side effects
+    - name: Assert growth and missing-mount outcomes
       ansible.builtin.assert:
         that:
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'grow') | map(attribute='status') | first) == 'grown'"
@@ -181,25 +254,53 @@
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'volume-mismatch') | map(attribute='status') | first) == 'refused'"
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'locked') | map(attribute='status') | first) == 'refused'"
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'migrating') | map(attribute='status') | first) == 'refused'"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-hotplug') | map(attribute='status') | first) == 'attached'"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'occupied') | map(attribute='status') | first) == 'refused'"
+          - "'occupied by a different live mount' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'occupied') | map(attribute='reason') | first)"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'path-at-other-index') | map(attribute='status') | first) == 'refused'"
+          - "'different mp index' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'path-at-other-index') | map(attribute='reason') | first)"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-insufficient') | map(attribute='status') | first) == 'refused'"
+          - "'allocation=2147483648 B' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-insufficient') | map(attribute='reason') | first)"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-pending') | map(attribute='status') | first) == 'attached'"
           - "'resize 101 mp0 2G --digest fixture-digest' in lxc_storage_mount_sizes_resize_commands"
           - "lxc_storage_mount_sizes_resize_commands.splitlines() | length == 1"
-          - "'config 106' not in lxc_storage_mount_sizes_pct_commands"
+          - "'set 110 --mp2 bulk:2,mp=/srv/attach-hotplug' in lxc_storage_mount_sizes_attach_commands"
+          - "'set 114 --mp3 bulk:2,mp=/srv/attach-pending' in lxc_storage_mount_sizes_attach_commands"
+          - "lxc_storage_mount_sizes_attach_commands.splitlines() | length == 2"
+          - "'reboot 114' in lxc_storage_mount_sizes_restart_commands"
+          - "lxc_storage_mount_sizes_restart_commands.splitlines() | length == 1"
+          - "'reboot 110' not in lxc_storage_mount_sizes_restart_commands"
           - "'storage/bulk/status' in lxc_storage_mount_sizes_pvesh_commands"
           - "'storage/tight/status' in lxc_storage_mount_sizes_pvesh_commands"
         fail_msg: |
           The storage mount reconcile did not match the fixtures.
           Outcomes: {{ lxc_storage_mount_sizes_outcomes }}
           Resize commands: {{ lxc_storage_mount_sizes_resize_commands }}
-        success_msg: "PASS: only a matching, strictly larger mount with sufficient capacity was resized"
+        success_msg: "PASS: growth and missing-mount reconciliation matched the live configuration and capacity fixtures"
         quiet: false
       when: lxc_storage_mount_sizes_contract_mode == 'normal'
 
-    - name: Validate growth in check mode without applying it
+    - name: Reset command logs before check mode
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ lxc_storage_mount_sizes_stub_dir }}/{{ item }}"
+        mode: "0644"
+      check_mode: false
+      loop:
+        - pct.log
+        - resize.log
+        - pvesh.log
+        - attach.log
+        - restart.log
+      when: lxc_storage_mount_sizes_contract_mode == 'check'
+
+    - name: Validate growth and attachment in check mode without applying either
       ansible.builtin.include_role:
         name: lxc_storage_mount_sizes
       vars:
         lxc_storage_mount_sizes_guest_keys:
           - grow
+          - attach-hotplug
       when: lxc_storage_mount_sizes_contract_mode == 'check'
 
     - name: Read check-mode command logs
@@ -209,6 +310,8 @@
         - pct.log
         - resize.log
         - pvesh.log
+        - attach.log
+        - restart.log
       register: lxc_storage_mount_sizes_check_logs
       when: lxc_storage_mount_sizes_contract_mode == 'check'
 
@@ -217,21 +320,26 @@
         lxc_storage_mount_sizes_check_pct_commands: "{{ lxc_storage_mount_sizes_check_logs.results[0].content | b64decode }}"
         lxc_storage_mount_sizes_check_resize_commands: "{{ lxc_storage_mount_sizes_check_logs.results[1].content | b64decode }}"
         lxc_storage_mount_sizes_check_pvesh_commands: "{{ lxc_storage_mount_sizes_check_logs.results[2].content | b64decode }}"
+        lxc_storage_mount_sizes_check_attach_commands: "{{ lxc_storage_mount_sizes_check_logs.results[3].content | b64decode }}"
+        lxc_storage_mount_sizes_check_restart_commands: "{{ lxc_storage_mount_sizes_check_logs.results[4].content | b64decode }}"
       when: lxc_storage_mount_sizes_contract_mode == 'check'
 
-    - name: Assert read-only preflight and check-mode resize behavior
+    - name: Assert read-only preflight and check-mode behavior
       ansible.builtin.assert:
         that:
           - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'grow') | map(attribute='status') | first) == 'refused'"
           - "'check mode active' in (lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'grow') | map(attribute='reason') | first)"
-          - "'config 101' in lxc_storage_mount_sizes_check_pct_commands"
+          - "(lxc_storage_mount_sizes_outcomes | selectattr('guest_key', 'equalto', 'attach-hotplug') | map(attribute='status') | first) == 'would attach'"
+          - "lxc_storage_mount_sizes_check_pct_commands | length == 0"
           - "'storage/bulk/status' in lxc_storage_mount_sizes_check_pvesh_commands"
+          - "lxc_storage_mount_sizes_check_attach_commands | length == 0"
+          - "lxc_storage_mount_sizes_check_restart_commands | length == 0"
           - "lxc_storage_mount_sizes_check_resize_commands | length == 0"
         fail_msg: |
-          Check mode did not perform a read-only preflight and withhold the resize.
+          Check mode did not show the missing mount preview without invoking pct.
           Outcomes: {{ lxc_storage_mount_sizes_outcomes }}
-          Resize commands: {{ lxc_storage_mount_sizes_check_resize_commands }}
-        success_msg: "PASS: check mode inspected growth eligibility and withheld pct resize"
+          pct commands: {{ lxc_storage_mount_sizes_check_pct_commands }}
+        success_msg: "PASS: check mode previewed the attach and issued no pct command"
         quiet: false
       when: lxc_storage_mount_sizes_contract_mode == 'check'
 
