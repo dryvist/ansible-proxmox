@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -u
+exec 2>/dev/null
+
+SCRIPT_NAME=guest_disk_io
+OUTPUT_DIR=${OUTPUT_DIR:-{{ pve_textfile_collectors_textfile_dir | quote }}}
+CGROUP_ROOT=${CGROUP_ROOT:-{{ pve_textfile_collectors_cgroup_root | quote }}}
+ZVOL_ROOT=${ZVOL_ROOT:-{{ pve_textfile_collectors_zvol_root | quote }}}
+STARTED=$SECONDS
+TMP_FILE=${OUTPUT_DIR}/.${SCRIPT_NAME}.$$
+
+trap 'rm -f -- "$TMP_FILE"' EXIT
+
+: > "$TMP_FILE" || exit 0
+exec > "$TMP_FILE" || exit 0
+printf '# HELP pve_textfile_success Whether every command succeeded for a collector.\n'
+printf '# TYPE pve_textfile_success gauge\n'
+printf '# HELP pve_textfile_duration_seconds Collector execution duration in seconds.\n'
+printf '# TYPE pve_textfile_duration_seconds gauge\n'
+printf '# HELP pve_guest_disk_read_bytes_total Bytes read by an LXC guest.\n'
+printf '# TYPE pve_guest_disk_read_bytes_total counter\n'
+printf '# HELP pve_guest_disk_written_bytes_total Bytes written by an LXC guest.\n'
+printf '# TYPE pve_guest_disk_written_bytes_total counter\n'
+printf '# HELP pve_guest_disk_reads_completed_total Read operations completed by an LXC guest.\n'
+printf '# TYPE pve_guest_disk_reads_completed_total counter\n'
+printf '# HELP pve_guest_disk_writes_completed_total Write operations completed by an LXC guest.\n'
+printf '# TYPE pve_guest_disk_writes_completed_total counter\n'
+printf '# HELP pve_zvol_info ZFS volume device, dataset, and QEMU guest mapping.\n'
+printf '# TYPE pve_zvol_info gauge\n'
+
+shopt -s nullglob
+for io_stat in "$CGROUP_ROOT"/*/io.stat; do
+  [[ -f "$io_stat" ]] || continue
+  vmid=${io_stat#"$CGROUP_ROOT"/}
+  vmid=${vmid%/io.stat}
+  [[ $vmid =~ ^[0-9]+$ ]] || continue
+
+  read_bytes=0
+  written_bytes=0
+  reads_completed=0
+  writes_completed=0
+  while IFS=' ' read -r _ stats; do
+    for field in $stats; do
+      value=${field#*=}
+      [[ $value =~ ^[0-9]+$ ]] || continue
+      case "$field" in
+        rbytes=*) read_bytes=$((read_bytes + 10#$value)) ;;
+        wbytes=*) written_bytes=$((written_bytes + 10#$value)) ;;
+        rios=*) reads_completed=$((reads_completed + 10#$value)) ;;
+        wios=*) writes_completed=$((writes_completed + 10#$value)) ;;
+      esac
+    done
+  done < "$io_stat"
+
+  printf 'pve_guest_disk_read_bytes_total{id="lxc/%s"} %s\n' "$vmid" "$read_bytes"
+  printf 'pve_guest_disk_written_bytes_total{id="lxc/%s"} %s\n' "$vmid" "$written_bytes"
+  printf 'pve_guest_disk_reads_completed_total{id="lxc/%s"} %s\n' "$vmid" "$reads_completed"
+  printf 'pve_guest_disk_writes_completed_total{id="lxc/%s"} %s\n' "$vmid" "$writes_completed"
+done
+
+if [[ -d "$ZVOL_ROOT" ]]; then
+  while IFS= read -r -d '' zvol_link; do
+    target=$(readlink -f -- "$zvol_link") || continue
+    device=${target##*/}
+    [[ $device =~ ^zd[0-9]+$ ]] || continue
+
+    dataset=${zvol_link#"$ZVOL_ROOT"/}
+    guest_id=
+    if [[ $dataset =~ (^|/)vm-([0-9]+)-[^/]+$ ]]; then
+      guest_id="qemu/${BASH_REMATCH[2]}"
+    fi
+    dataset=${dataset//\\/\\\\}
+    dataset=${dataset//\"/\\\"}
+    dataset=${dataset//$'\n'/\\n}
+    printf 'pve_zvol_info{device="%s",dataset="%s",id="%s"} 1\n' \
+      "$device" "$dataset" "$guest_id"
+  done < <(find "$ZVOL_ROOT" -type l -print0)
+fi
+
+printf 'pve_textfile_success{script="%s"} 1\n' "$SCRIPT_NAME"
+printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"
+exec 1>&-
+mv -f -- "$TMP_FILE" "${OUTPUT_DIR}/${SCRIPT_NAME}.prom" >/dev/null 2>&1 || true
+exit 0
+{{ ansible_managed | comment }}

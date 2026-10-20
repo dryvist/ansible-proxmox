@@ -1,10 +1,11 @@
 # pve_textfile_collectors
 
-The role installs six scheduled collectors that write Prometheus textfiles to
+The role installs seven scheduled collectors that write Prometheus textfiles to
 the node_exporter textfile directory. Collectors report ZFS pool status and
 latency, transaction group sync time, pool fill, and Corosync link and quorum
-state, plus HA quorum, manager, fencing, and service state. Each collector
-writes a success and duration metric.
+state, plus HA quorum, manager, fencing, and service state. The guest disk
+collector reads LXC cgroup v2 I/O counters and maps ZFS volume devices to their
+dataset and QEMU guest ID. Each collector writes a success and duration metric.
 
 ## Variables
 
@@ -55,6 +56,11 @@ writes a success and duration metric.
 | `pve_ha_fencing_armed` | none | Whether HA fencing is armed. |
 | `pve_ha_lrm_state` | `node`, `state` | State reported by a local resource manager. |
 | `pve_ha_service_state` | `sid`, `node`, `state` | State reported by an HA service. |
+| `pve_guest_disk_read_bytes_total` | `id` (`lxc/<vmid>`) | Cumulative bytes read by an LXC guest. |
+| `pve_guest_disk_written_bytes_total` | `id` (`lxc/<vmid>`) | Cumulative bytes written by an LXC guest. |
+| `pve_guest_disk_reads_completed_total` | `id` (`lxc/<vmid>`) | Cumulative LXC read operations. |
+| `pve_guest_disk_writes_completed_total` | `id` (`lxc/<vmid>`) | Cumulative LXC write operations. |
+| `pve_zvol_info` | `device`, `dataset`, `id` (`qemu/<vmid>` or empty for non-guest volumes) | Maps each `zdN` device to its ZFS dataset and QEMU guest. |
 
 The Corosync collector emits no Corosync samples and reports success when the
 Corosync command tools are absent.

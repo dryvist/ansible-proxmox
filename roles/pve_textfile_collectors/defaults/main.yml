@@ -9,6 +9,8 @@ pve_textfile_collectors_date_command: date
 pve_textfile_collectors_corosync_cmapctl_command: corosync-cmapctl
 pve_textfile_collectors_corosync_quorumtool_command: corosync-quorumtool
 pve_textfile_collectors_ha_manager_command: ha-manager
+pve_textfile_collectors_cgroup_root: /sys/fs/cgroup/lxc
+pve_textfile_collectors_zvol_root: /dev/zvol
 pve_textfile_collectors_collectors:
   zpool_status:
     interval_seconds: 60
@@ -27,4 +29,7 @@ pve_textfile_collectors_collectors:
     enabled: true
   ha:
     interval_seconds: 30
+    enabled: true
+  guest_disk_io:
+    interval_seconds: 60
     enabled: true
