@@ -30,8 +30,10 @@ ansible-galaxy install -r requirements.yml
 - `idrac_power_action: on` → powers the target on (if off), then waits for its
   SSH to come up (`wait_for_connection`).
 - `idrac_power_action: off` → graceful ACPI `chassis power soft` (if on), then
-  polls until the BMC reports power off.
-- `idrac_power_action: status` (default) → query only, no change.
+  polls and reports the final BMC state. It fails when the poll budget expires
+  by default.
+- `idrac_power_action: status` (default) → report the current chassis state
+  without changing it.
 - Reconciles the chassis **power-restore policy** on every run, whatever the
   action, so a node that this role never cycles still gets the setting.
 - Skipped under Docker (molecule) and when `idrac_power_bmc_host` is unset.
@@ -58,17 +60,19 @@ during commissioning. See `docs/DR_RUNBOOK.md`.
 
 ## Variables
 
-| Variable                             | Default                                       | Description                                                        |
-| ------------------------------------ | --------------------------------------------- | ------------------------------------------------------------------ |
-| `idrac_power_enabled`                | `true`                                        | Master enable                                                      |
-| `idrac_power_autocycle`              | `true`                                        | site.yml auto power on/off around the run                          |
-| `idrac_power_action`                 | `status`                                      | `status` / `on` / `off` (set per caller)                           |
-| `idrac_power_controller`             | first non-target node from `PROXMOX_VE_NODES` | Always-on node that runs ipmitool; derived, never hard-coded       |
-| `idrac_power_boot_timeout`           | `720`                                         | Seconds to wait for SSH after power-on (old hardware boots slowly) |
-| `idrac_power_off_retries`            | `60`                                          | Poll budget (×10s ⇒ 10 min) for graceful off                       |
-| `idrac_power_username` / `_password` | `IDRAC_USERNAME` / `IDRAC_PASSWORD` env       | BMC creds (no_log)                                                 |
-| `idrac_power_bmc_host`               | _(unset)_                                     | Per-host BMC address — FQDN preferred over IP (host_vars / env)    |
-| `idrac_power_restore_policy`         | `always-on`                                   | Chassis state when AC returns; `""` leaves it alone                |
+| Variable | Default and description |
+| --- | --- |
+| `idrac_power_enabled` | `true` — Master enable |
+| `idrac_power_autocycle` | `true` — site.yml auto power on/off around the run |
+| `idrac_power_action` | `status` — `status`, `on`, or `off`; set per caller |
+| `idrac_power_controller` | First non-target `PROXMOX_VE_NODES` entry |
+| `idrac_power_boot_timeout` | `720` seconds; wait for SSH after power-on |
+| `idrac_power_off_retries` | `60` checks at 10 s each; 10 min |
+| `idrac_power_off_fail_on_timeout` | `true`; fail if graceful off times out |
+| `idrac_power_username` | `IDRAC_USERNAME` env; BMC user, no_log |
+| `idrac_power_password` | `IDRAC_PASSWORD` env; no_log |
+| `idrac_power_bmc_host` | Unset; per-host BMC FQDN preferred |
+| `idrac_power_restore_policy` | `always-on`; `""` leaves it unchanged |
 
 ## Usage
 
@@ -76,7 +80,9 @@ Auto-cycle is wired into `site.yml` and gated on `pve_power_managed: true` per
 host. To disable for a quick run:
 
 ```bash
-./scripts/run-ansible.sh playbooks/site.yml -e idrac_power_autocycle=false --limit <always-on-hosts>
+./scripts/run-ansible.sh playbooks/site.yml \
+  -e idrac_power_autocycle=false \
+  --limit <always-on-hosts>
 ```
 
 To power a node on/off directly (e.g. during commissioning):
