@@ -72,6 +72,97 @@
         guest_power_type: ""
         guest_power_vms: ""
 
+    - name: Resolve the default startall read-back targets
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: resolve_node_verify_guests
+      vars:
+        guest_power_action: startall
+        guest_power_node: example-node
+        guest_power_has_vms: false
+        guest_power_vms: ""
+        guest_power_node_guests:
+          - {vmid: 900001, type: qemu, node: example-node}
+          - {vmid: 900002, type: lxc, node: example-node}
+        guest_power_node_guest_configs:
+          results:
+            - item: {vmid: 900001, type: qemu, node: example-node}
+              stdout: '{"onboot": 1}'
+            - item: {vmid: 900002, type: lxc, node: example-node}
+              stdout: '{"onboot": 0}'
+
+    - name: Assert default startall verifies only onboot guests with qm
+      ansible.builtin.assert:
+        that:
+          - guest_power_is_nodewide
+          - guest_power_wanted_status == 'running'
+          - guest_power_verify_guests | map(attribute='vmid') | list == [900001]
+          - guest_power_verify_guests[0].guest_power_tool == 'qm'
+          - "'example-node' in groups['guest_power_node']"
+
+    - name: Resolve the default stopall read-back targets
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: resolve_node_verify_guests
+      vars:
+        guest_power_action: stopall
+        guest_power_node: example-node
+        guest_power_has_vms: false
+        guest_power_vms: ""
+        guest_power_node_guests:
+          - {vmid: 900001, type: qemu, node: example-node}
+          - {vmid: 900002, type: lxc, node: example-node}
+
+    - name: Assert default stopall verifies every guest with its status tool
+      ansible.builtin.assert:
+        that:
+          - guest_power_wanted_status == 'stopped'
+          - guest_power_verify_guests | map(attribute='vmid') | list == [900001, 900002]
+          - guest_power_verify_guests | map(attribute='guest_power_tool') | list == ['qm', 'pct']
+
+    - name: Resolve explicit node-wide read-back targets
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: resolve_node_verify_guests
+      vars:
+        guest_power_action: startall
+        guest_power_node: example-node
+        guest_power_has_vms: true
+        guest_power_vms: "900002"
+        guest_power_node_guests:
+          - {vmid: 900001, type: qemu, node: example-node}
+          - {vmid: 900002, type: lxc, node: example-node}
+
+    - name: Assert explicit node-wide read-back verifies the requested VMID
+      ansible.builtin.assert:
+        that:
+          - guest_power_verify_guests | map(attribute='vmid') | list == [900002]
+          - guest_power_verify_guests[0].guest_power_tool == 'pct'
+
+    - name: Prove node-wide read-back reports every VMID missing its wanted state
+      block:
+        - name: Verify synthetic node-wide guest results
+          ansible.builtin.include_role:
+            name: guest_power
+            tasks_from: verify_node_guests
+          vars:
+            guest_power_verify_retries: 1
+            guest_power_verify_delay_seconds: 0
+            guest_power_wanted_status: running
+            guest_power_verify_guests:
+              - {vmid: "900001 status: running", guest_power_tool: /bin/echo}
+              - {vmid: "900002 status: stopped", guest_power_tool: /bin/echo}
+
+        - name: Fail when the node-wide read-back accepts a wrong guest state
+          ansible.builtin.fail:
+            msg: "A guest outside the wanted state unexpectedly passed read-back."
+      rescue:
+        - name: Assert the failure names only VMIDs outside the wanted state
+          ansible.builtin.assert:
+            that:
+              - "'900002 status: stopped' in ansible_failed_result.msg"
+              - "'900001 status: running' not in ansible_failed_result.msg"
+
     - name: Accept a guest request whose blank node and VM filter are unset
       ansible.builtin.include_role:
         name: guest_power

@@ -1,6 +1,6 @@
 ---
-# Node-wide start or stop. The node's own pvesh call starts or stops every
-# onboot guest on it in startup order, so nothing here loops over guests.
+# Node-wide start or stop. With no VM filter, startall covers onboot guests
+# and stopall covers every guest; guest_power_vms scopes either action.
 
 # Printed for the record. startall refuses a node that is not quorate: a guest
 # started without quorum is the boot path that left guests stopped.
@@ -25,6 +25,40 @@
       startall refused: {{ guest_power_node }} is not quorate. Nothing was
       started.
   when: guest_power_action == 'startall'
+
+- name: Read live guest placement on the requested node
+  ansible.builtin.command:
+    argv: [pvesh, get, /cluster/resources, --type, vm, --output-format, json]
+  delegate_to: "{{ guest_power_node }}"
+  register: guest_power_node_resources
+  changed_when: false
+
+- name: Keep only guests placed on the requested node
+  ansible.builtin.set_fact:
+    guest_power_node_guests: >-
+      {{ guest_power_node_resources.stdout | from_json
+         | selectattr('node', 'equalto', guest_power_node)
+         | list }}
+  changed_when: false
+
+- name: Read auto-start settings for an unfiltered startall
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ guest_power_node }}/{{ item.type }}/{{ item.vmid }}/config"
+      - --output-format
+      - json
+  delegate_to: "{{ guest_power_node }}"
+  register: guest_power_node_guest_configs
+  changed_when: false
+  loop: "{{ guest_power_node_guests }}"
+  loop_control:
+    label: "{{ item.vmid }}"
+  when: guest_power_action == 'startall' and not guest_power_has_vms
+
+- name: Resolve the guests to verify after the node-wide action
+  ansible.builtin.include_tasks: resolve_node_verify_guests.yml
 
 # pvesh returns the node task's UPID; the action runs as that task on the node
 # and is not awaited here. Its log is the node's task log.
