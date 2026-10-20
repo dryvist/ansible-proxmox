@@ -31,7 +31,7 @@
                and pve_ha_cloudinit_cleanup_candidate.storage_id not in
                    pve_ha_cloudinit_cleanup_candidate.allowed_storages
             else ''),
-           ('exact volume id is no longer present in pvesm list'
+           ('exact volume id is no longer present in the storage content list'
             if (pve_ha_cloudinit_cleanup_candidate.current_volids | default([])
                 | select('equalto', pve_ha_cloudinit_cleanup_candidate.volid) | list
                 | length) != 1

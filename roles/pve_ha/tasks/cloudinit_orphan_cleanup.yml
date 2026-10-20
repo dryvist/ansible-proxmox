@@ -49,9 +49,9 @@
 - name: List VM images on each selected local storage
   ansible.builtin.command:
     argv:
-      - pvesm
-      - list
-      - "{{ item.storage }}"
+      - pvesh
+      - get
+      - "/nodes/{{ pve_ha_this_pve_node }}/storage/{{ item.storage }}/content"
       - --content
       - images
       - --output-format
