@@ -65,16 +65,32 @@
     label: "{{ item.storage }}"
   run_once: true
 
+# HA may have relocated a guest off its declared node, where its config no
+# longer exists, so the config read below goes to the node it runs on now.
+- name: Read live guest placement for the replicated container config reads
+  ansible.builtin.command: pvesh get /cluster/resources --type vm --output-format json
+  register: pve_ha_replication_placement_raw
+  changed_when: false
+  # Read-only; a check run needs live placement to preview storage eligibility.
+  check_mode: false
+  run_once: true
+
 # Container volumes: query the live LXC config, which covers every mount
 # point (rootfs + mpN) — a container's tofu entry does not publish that full
 # list, only its primary datastore.
 - name: Read each replicated CONTAINER's LXC config (to find its volumes' storage ids)
   ansible.builtin.command: >-
-    pvesh get /nodes/{{ item.node }}/lxc/{{ item.vmid }}/config
+    pvesh get /nodes/{{ placement.node | default(item.node) }}/lxc/{{ item.vmid }}/config
     --output-format json
   loop: "{{ pve_ha_replication_jobs | selectattr('kind', 'equalto', 'ct') | list }}"
   loop_control:
     label: "{{ item.hostname }}"
+  vars:
+    placement: >-
+      {{ pve_ha_replication_placement_raw.stdout | from_json
+         | selectattr('type', 'equalto', 'lxc')
+         | selectattr('vmid', 'equalto', item.vmid | int)
+         | list | first | default({}) }}
   register: pve_ha_guest_configs_raw
   changed_when: false
   # Read-only; a check run needs live guest configs to preview storage eligibility.
