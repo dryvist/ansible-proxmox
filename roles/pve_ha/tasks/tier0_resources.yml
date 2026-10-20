@@ -131,6 +131,9 @@
             | map('regex_replace', '^(.+)$', 'vm:\1') | list)
          + (pve_ha_extra_sids | default([])) }}
 
+- name: Resolve the ignored tier-0 SIDs and refuse unmanaged ones
+  ansible.builtin.include_tasks: ignored_resources.yml
+
 - name: Refuse tier-0 hostnames/VM names missing from the inventory
   ansible.builtin.fail:
     msg: >-
@@ -172,7 +175,8 @@
 - name: Add tier-0 guests to HA (only those not yet managed)
   ansible.builtin.command: >-
     ha-manager add {{ item }}
-    --state {{ pve_ha_state if item in pve_ha_relocatable_sids
+    --state {{ 'ignored' if item in pve_ha_ignored_sids
+               else pve_ha_state if item in pve_ha_relocatable_sids
                else pve_ha_unrecoverable_state }}
     --max_restart {{ pve_ha_max_restart }}
     --max_relocate {{ pve_ha_max_relocate if item in pve_ha_relocatable_sids else pve_ha_pinned_max_relocate }}
@@ -183,7 +187,8 @@
 - name: Enforce HA params on already-managed guests
   ansible.builtin.command: >-
     ha-manager set {{ item }}
-    --state {{ pve_ha_state if item in pve_ha_relocatable_sids
+    --state {{ 'ignored' if item in pve_ha_ignored_sids
+               else pve_ha_state if item in pve_ha_relocatable_sids
                else pve_ha_unrecoverable_state }}
     --max_restart {{ pve_ha_max_restart }}
     --max_relocate {{ pve_ha_max_relocate if item in pve_ha_relocatable_sids else pve_ha_pinned_max_relocate }}

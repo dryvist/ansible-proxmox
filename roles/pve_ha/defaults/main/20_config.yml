@@ -40,3 +40,9 @@ pve_ha_state: started
 # as HA resources for their affinity rules, but leave them ignored by default.
 # Valid values: ignored or started.
 pve_ha_unrecoverable_state: ignored
+
+# Tier-0 HA resources (managed sids such as ct:100030) held in `ignored`: the CRM
+# neither recovers nor fences them. Every listed sid is enforced to `ignored` on
+# each converge; clearing the list returns each to its declared state on the
+# next converge. Entries must be managed tier-0 sids.
+pve_ha_ignored_resources: []

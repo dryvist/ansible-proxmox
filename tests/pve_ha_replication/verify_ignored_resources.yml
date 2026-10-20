@@ -1,0 +1,59 @@
+---
+# ---------------------------------------------------------------------------
+# pve_ha_ignored_resources selection. The tier-0 add/set loops enforce the
+# `ignored` state for exactly the managed SIDs the operator lists. A listed SID
+# that is not managed would be dropped by those loops without a word, so it
+# must stop the converge instead. Clearing the list selects nothing.
+# ---------------------------------------------------------------------------
+- name: Verify pve_ha ignored-resource selection
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    pve_ha_managed_sids: ["ct:100030", "ct:100031", "vm:200"]
+    pve_ha_ignored_resources: ["ct:100030", "vm:200"]
+
+  tasks:
+    - name: Include the real ignored-resource selection logic
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/ignored_resources.yml
+
+    - name: Assert only the listed managed SIDs are selected
+      ansible.builtin.assert:
+        that:
+          - pve_ha_ignored_sids == ['ct:100030', 'vm:200']
+        fail_msg: "ignored selection was wrong: {{ pve_ha_ignored_sids }}"
+        success_msg: "selects only the listed managed SIDs and leaves ct:100031 at its declared state."
+
+    - name: Clear the ignored list
+      ansible.builtin.set_fact:
+        pve_ha_ignored_resources: []
+
+    - name: Include the real ignored-resource selection logic after clearing
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/ignored_resources.yml
+
+    - name: Assert a cleared list selects no SID
+      ansible.builtin.assert:
+        that:
+          - pve_ha_ignored_sids == []
+        fail_msg: "a cleared ignored list still selected {{ pve_ha_ignored_sids }}"
+        success_msg: "a cleared list selects nothing, so every SID returns to its declared state."
+
+    - name: Prepare an ignored SID that is not managed
+      ansible.builtin.set_fact:
+        pve_ha_ignored_resources: ["ct:999999"]
+
+    - name: Refuse an ignored SID that is not managed
+      block:
+        - name: Include the real ignored-resource selection logic for an unmanaged SID
+          ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/ignored_resources.yml
+
+        - name: Require the unmanaged SID to stop the converge
+          ansible.builtin.fail:
+            msg: "the unmanaged ignored SID was accepted"
+      rescue:
+        - name: Assert the guard stopped the converge
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Refuse an ignored resource that is not a managed tier-0 SID'
+            fail_msg: "the unmanaged-SID guard did not fail as expected: {{ ansible_failed_task.name }}"
+            success_msg: "an unmanaged ignored SID stops the converge before any ha-manager call."

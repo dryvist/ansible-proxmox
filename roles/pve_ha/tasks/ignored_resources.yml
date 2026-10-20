@@ -1,0 +1,16 @@
+---
+# Included from tier0_resources.yml after pve_ha_managed_sids is resolved.
+# Selects the managed tier-0 SIDs the operator holds ignored. A listed SID that
+# is not managed would be silently dropped by the add/set loops, so it stops the
+# converge instead.
+- name: Refuse an ignored resource that is not a managed tier-0 SID
+  ansible.builtin.assert:
+    that:
+      - pve_ha_ignored_resources | difference(pve_ha_managed_sids) | length == 0
+    fail_msg: >-
+      pve_ha_ignored_resources names {{ pve_ha_ignored_resources | difference(pve_ha_managed_sids) }},
+      which are not managed tier-0 SIDs; nothing was changed for them.
+
+- name: Select the managed SIDs held in the ignored state
+  ansible.builtin.set_fact:
+    pve_ha_ignored_sids: "{{ pve_ha_managed_sids | select('in', pve_ha_ignored_resources) | list }}"
