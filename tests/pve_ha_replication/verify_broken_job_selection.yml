@@ -166,3 +166,66 @@
               {{ ansible_failed_task.name }} / {{ pve_ha_replication_unsafe_retargets }}
             success_msg: >-
               enabled target drift stops before any replacement command runs.
+
+    - name: Prepare suspended-target replication fixtures
+      ansible.builtin.set_fact:
+        pve_ha_this_pve_node: source
+        pve_ha_replication_suspended_targets: [suspended-target]
+        pve_ha_replication_jobs:
+          - {id: enabled, node: source, target: suspended-target}
+          - {id: disabled, node: source, target: suspended-target}
+          - {id: drift, node: source, target: active-target}
+          - {id: broken-suspended, node: source, target: suspended-target}
+          - {id: other-source, node: other-source, target: suspended-target}
+          - {id: missing-suspended, node: source, target: suspended-target}
+          - {id: missing-active, node: source, target: active-target}
+        pve_ha_existing_replication_ids:
+          - enabled
+          - disabled
+          - drift
+          - broken-suspended
+          - other-source
+          - healthy
+        pve_ha_replication_status_raw:
+          stdout: >-
+            [
+              {"id":"enabled","source":"source","target":"suspended-target","disable":0},
+              {"id":"disabled","source":"source","target":"suspended-target","disable":1},
+              {"id":"drift","source":"source","target":"suspended-target","disable":1},
+              {"id":"broken-suspended","source":"source","target":"suspended-target","disable":0,"error":"No common base snapshot"},
+              {"id":"other-source","source":"other-source","target":"suspended-target","disable":0},
+              {"id":"broken-other","source":"source","target":"active-target","disable":0,"error":"No common base snapshot"},
+              {"id":"healthy","source":"source","target":"active-target","disable":0}
+            ]
+
+    - name: Include the real replication job status selection logic
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_status_selection.yml
+
+    - name: Include the real replication-pair reconciliation logic for suspended targets
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_reconciliation.yml
+
+    - name: Remove retargeted jobs from the fixture existing-id set
+      ansible.builtin.set_fact:
+        pve_ha_existing_replication_ids: >-
+          {{ pve_ha_existing_replication_ids
+             | difference(pve_ha_replication_retarget_ids | default([])) }}
+
+    - name: Include the real replication creation selection logic
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_creation_selection.yml
+
+    - name: Assert suspended jobs are selected for disable and excluded from other mutations
+      ansible.builtin.assert:
+        that:
+          - pve_ha_replication_suspended_ids == ['enabled', 'disabled', 'drift', 'broken-suspended']
+          - pve_ha_replication_disable_ids == ['enabled', 'broken-suspended']
+          - pve_ha_broken_replication_ids == ['broken-other']
+          - pve_ha_replication_retarget_ids | length == 0
+          - pve_ha_replication_enable_ids | length == 0
+          - pve_ha_replication_create_jobs | map(attribute='id') | list == ['missing-active']
+        fail_msg: >-
+          suspended-target handling is wrong: disable={{ pve_ha_replication_disable_ids }},
+          broken={{ pve_ha_broken_replication_ids }},
+          retarget={{ pve_ha_replication_retarget_ids }}, enable={{ pve_ha_replication_enable_ids }}
+        success_msg: >-
+          enabled suspended jobs are selected once for disable and are excluded
+          from broken-job deletion, retargeting, and re-enabling.

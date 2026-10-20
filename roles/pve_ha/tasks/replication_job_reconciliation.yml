@@ -33,6 +33,7 @@
   when:
     - item.id in pve_ha_existing_replication_ids
     - item.id not in pve_ha_broken_replication_ids
+    - item.id not in (pve_ha_replication_suspended_ids | default([]))
     - item.source == pve_ha_this_pve_node
     - desired_job.id is defined
     - live_pair != desired_pair
@@ -75,6 +76,7 @@
   when:
     - item.id in pve_ha_existing_replication_ids
     - item.id not in pve_ha_broken_replication_ids
+    - item.id not in (pve_ha_replication_suspended_ids | default([]))
     - item.source == pve_ha_this_pve_node
     - desired_job.id is defined
     - live_pair == desired_pair

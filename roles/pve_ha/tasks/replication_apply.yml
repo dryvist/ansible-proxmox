@@ -30,14 +30,15 @@
   # Read-only; a check run needs current job status to preview replication changes.
   check_mode: false
 
-- name: Resolve permanently-broken jobs sourced from this node
-  ansible.builtin.set_fact:
-    pve_ha_broken_replication_ids: >-
-      {{ (pve_ha_replication_status_raw.stdout | from_json)
-         | selectattr('source', 'equalto', pve_ha_this_pve_node)
-         | selectattr('error', 'defined')
-         | selectattr('error', 'search', 'No common base snapshot')
-         | map(attribute='id') | list }}
+- name: Resolve suspended and permanently-broken replication job selections
+  ansible.builtin.include_tasks: replication_job_status_selection.yml
+
+- name: Disable active replication jobs for suspended targets
+  ansible.builtin.command: "pvesr disable {{ item }}"
+  loop: "{{ pve_ha_replication_disable_ids }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: true
 
 - name: Delete permanently-broken replication jobs so they are re-created
   ansible.builtin.command: pvesr delete {{ item }}
@@ -83,6 +84,9 @@
       {{ pve_ha_existing_replication_ids
          | difference(pve_ha_replication_retarget_ids | default([])) }}
 
+- name: Resolve declared replication jobs eligible for creation
+  ansible.builtin.include_tasks: replication_job_creation_selection.yml
+
 - name: Create a pvesr job on each guest's source node (only if absent)
   ansible.builtin.command: >-
     pvesr create-local-job {{ item.id }} {{ item.target }}
@@ -92,10 +96,7 @@
        the encoding on each rewrite, so 'pve_ha:' degrades to 'pve_ha%2525253A'
        and keeps growing. Plain words survive round-trips unchanged. #}
     --comment 'pve_ha relocation replica for {{ item.hostname }} -> {{ item.target }}'
-  loop: "{{ pve_ha_replication_jobs | default([]) }}"
+  loop: "{{ pve_ha_replication_create_jobs }}"
   loop_control:
     label: "{{ item.id }} ({{ item.node }} -> {{ item.target }})"
-  when:
-    - pve_ha_this_pve_node == item.node
-    - item.id not in pve_ha_existing_replication_ids
   changed_when: true
