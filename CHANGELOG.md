@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.2](https://github.com/dryvist/ansible-proxmox/compare/v2.32.1...v2.32.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **pve_ha:** clean orphaned cloud-init volumes ([#1135](https://github.com/dryvist/ansible-proxmox/issues/1135)) ([2e479cb](https://github.com/dryvist/ansible-proxmox/commit/2e479cba9bd4b63631683edef4d13d24e956048a))
+
 ## [2.32.1](https://github.com/dryvist/ansible-proxmox/compare/v2.32.0...v2.32.1) (2026-10-20)
 
 
