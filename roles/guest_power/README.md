@@ -22,3 +22,16 @@ ansible-playbook -i inventory/hosts.yml playbooks/guest-power.yml \
 
 Target variables have no defaults, so an unscoped run fails before any node is
 contacted.
+
+## Node-wide start and stop
+
+Use after a node boots without quorum and its boot-time startall aborted; the
+node then starts its onboot guests in startup order. Semaphore template
+`proxmox-guest-power`: survey action `startall` or `stopall`, `guest_power_node`
+(a `proxmox` inventory host), optional `guest_power_vms` (comma VMIDs). Leave
+the VMID and type blank.
+
+`startall` refuses a node whose `pvecm status` is not quorate. The action runs
+as the node's own task and the play returns its UPID; it does not wait for
+completion, so check the node task log. To revert `startall`, run `stopall`
+with the same `guest_power_vms`.

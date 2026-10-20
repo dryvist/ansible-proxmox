@@ -6,6 +6,10 @@
 # the cluster's live placement, never supplied. Transport is the same root SSH
 # access the proxmox inventory hosts already use; no API token is involved.
 #
+# Node-wide: guest_power_action=startall|stopall with guest_power_node (a proxmox
+# inventory host) and optional guest_power_vms (comma VMIDs). No VMID or type.
+# The node's own pvesh call runs the action; the read-back play then has no host.
+#
 # load_tofu.yml runs first so the proxmox hosts carry proxmox_user_from_tofu,
 # the login user that ansible_user resolves from.
 
