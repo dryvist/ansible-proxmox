@@ -115,7 +115,8 @@
     lxc_storage_mount_sizes_decision:
       status: refused
       reason: >-
-        WARNING: declared size is below the live size; shrinking is refused
+        shrink refused: declared={{ lxc_storage_mount_sizes_declared_bytes | int }} B
+        < live={{ lxc_storage_mount_sizes_live_bytes | int }} B
   when:
     - lxc_storage_mount_sizes_decision.status == 'pending'
     - lxc_storage_mount_sizes_declared_bytes | int < lxc_storage_mount_sizes_live_bytes | int
@@ -144,30 +145,35 @@
 - name: Read the declared storage's available space
   ansible.builtin.command:
     argv:
-      - pvesm
-      - status
-      - --storage
-      - "{{ lxc_storage_mount_sizes_mount.volume }}"
+      - pvesh
+      - get
+      - "/nodes/{{ proxmox_node_name | default(inventory_hostname) }}/storage/{{ lxc_storage_mount_sizes_mount.volume }}/status"
+      - --output-format
+      - json
   register: lxc_storage_mount_sizes_pool_status
   changed_when: false
   check_mode: false
   failed_when: false
   when: lxc_storage_mount_sizes_decision.status == 'grow'
 
-- name: Parse the active storage availability row
+- name: Parse the storage status response
   ansible.builtin.set_fact:
-    lxc_storage_mount_sizes_pool_row: >-
-      {{ (lxc_storage_mount_sizes_pool_status.stdout_lines | default([])
-          | select('match', '^' ~ (lxc_storage_mount_sizes_mount.volume | regex_escape)
-                   ~ '\s+\S+\s+active\s+\d+\s+\d+\s+\d+\s+\S+$')
-          | list | first | default('')) }}
+    lxc_storage_mount_sizes_pool_data: >-
+      {{ (lxc_storage_mount_sizes_pool_status.stdout | from_json)
+         if (lxc_storage_mount_sizes_pool_status.rc | default(1) == 0
+             and lxc_storage_mount_sizes_pool_status.stdout | default('') | trim
+                 is match('(?s)^\{.*\}$'))
+         else {} }}
   when: lxc_storage_mount_sizes_decision.status == 'grow'
 
 - name: Parse the active storage's available bytes
   ansible.builtin.set_fact:
-    lxc_storage_mount_sizes_pool_free_bytes: >-
-      {{ (lxc_storage_mount_sizes_pool_row.split()[5] | int)
-         if lxc_storage_mount_sizes_pool_row | length > 0 else 0 }}
+    lxc_storage_mount_sizes_pool_free_bytes: "{{ lxc_storage_mount_sizes_pool_data.avail | default(0) | int }}"
+    lxc_storage_mount_sizes_pool_status_valid: >-
+      {{ lxc_storage_mount_sizes_pool_status.rc | default(1) == 0
+         and lxc_storage_mount_sizes_pool_data.active is defined
+         and lxc_storage_mount_sizes_pool_data.avail is defined
+         and lxc_storage_mount_sizes_pool_data.active | bool }}
   when: lxc_storage_mount_sizes_decision.status == 'grow'
 
 - name: Refuse when the pool status cannot be read
@@ -177,15 +183,18 @@
       reason: storage availability is missing or the storage is inactive
   when:
     - lxc_storage_mount_sizes_decision.status == 'grow'
-    - lxc_storage_mount_sizes_pool_status.rc | default(1) != 0
-      or lxc_storage_mount_sizes_pool_row | length == 0
+    - not lxc_storage_mount_sizes_pool_status_valid
 
 - name: Refuse when pool headroom does not exceed growth plus margin
   ansible.builtin.set_fact:
     lxc_storage_mount_sizes_decision:
       status: refused
       reason: >-
-        pool free space does not exceed the requested growth plus the configured margin
+        insufficient headroom: free={{ lxc_storage_mount_sizes_pool_free_bytes | int }} B
+        <= growth={{ lxc_storage_mount_sizes_delta_bytes | int }} B +
+        margin={{ lxc_storage_mount_sizes_margin_bytes | int }} B
+        (declared={{ lxc_storage_mount_sizes_declared_bytes | int }} B,
+        live={{ lxc_storage_mount_sizes_live_bytes | int }} B)
   when:
     - lxc_storage_mount_sizes_decision.status == 'grow'
     - lxc_storage_mount_sizes_pool_free_bytes | int
