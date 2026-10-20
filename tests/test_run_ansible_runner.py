@@ -26,6 +26,7 @@ class RunAnsibleTokenContract(unittest.TestCase):
         self.bin_path.mkdir()
         self.event_log = self.temp_path / "events.log"
         self.jq_argv_log = self.temp_path / "jq-argv.log"
+        self.ansible_argv_log = self.temp_path / "ansible-argv.log"
         self.tmp_path = self.temp_path / "tmp"
         self.tmp_path.mkdir()
         self._write_executable(
@@ -120,6 +121,7 @@ class RunAnsibleTokenContract(unittest.TestCase):
         ansible_rc=0,
         semaphore=False,
         login_failure=False,
+        ansible_args=("--limit", "localhost"),
     ):
         self.child_role_id_file = self.temp_path / "child-role-id"
         self._write_executable(
@@ -129,6 +131,7 @@ class RunAnsibleTokenContract(unittest.TestCase):
             set -euo pipefail
             printf 'ansible\n' >> "$FAKE_EVENT_LOG"
             [[ ${{BAO_TOKEN:-}} == "$EXPECTED_CHILD_BAO_TOKEN" ]]
+            printf '%s\n' "$@" > "$FAKE_ANSIBLE_ARGV_LOG"
             printf '%s\n' "${{CONVERGE_ROLE_ID:-}}" > "$FAKE_CHILD_ROLE_ID_FILE"
             printf 'child received expected token\n'
             exit {ansible_rc}
@@ -149,6 +152,7 @@ class RunAnsibleTokenContract(unittest.TestCase):
                 "FAKE_EVENT_LOG": str(self.event_log),
                 "FAKE_JQ_ARGV_LOG": str(self.jq_argv_log),
                 "FAKE_CHILD_ROLE_ID_FILE": str(self.child_role_id_file),
+                "FAKE_ANSIBLE_ARGV_LOG": str(self.ansible_argv_log),
                 "FAKE_SIGN_FAILURE": "1" if sign_failure else "0",
                 "FAKE_REVOKE_FIRST_FAILURE": "1" if revoke_first_failure else "0",
                 "FAKE_LOGIN_FAILURE": "1" if login_failure else "0",
@@ -168,7 +172,7 @@ class RunAnsibleTokenContract(unittest.TestCase):
             env.pop("OPENBAO_APPROLE_SEMAPHORE_SECRET_ID", None)
 
         return subprocess.run(
-            [str(RUNNER), "playbooks/site.yml", "--limit", "localhost"],
+            [str(RUNNER), "playbooks/site.yml", *ansible_args],
             cwd=ROOT,
             env=env,
             check=False,
@@ -341,6 +345,40 @@ class RunAnsibleTokenContract(unittest.TestCase):
             self.child_role_id_file.read_text(encoding="utf-8").strip(),
             APPROLE_ROLE_ID,
         )
+
+    def test_task_limits_include_localhost(self):
+        cases = (
+            ((), ()),
+            (
+                ("--limit", "group"),
+                ("--limit", "group", "--limit", "group,localhost"),
+            ),
+            (("--limit=group",), ("--limit=group", "--limit", "group,localhost")),
+            (
+                ("--limit", "template_group", "--limit", "task_group"),
+                (
+                    "--limit",
+                    "template_group",
+                    "--limit",
+                    "task_group",
+                    "--limit",
+                    "task_group,localhost",
+                ),
+            ),
+            (("--limit", "group,localhost"), ("--limit", "group,localhost")),
+            (
+                ("--limit", "all:!down"),
+                ("--limit", "all:!down", "--limit", "all,!down,localhost"),
+            ),
+        )
+        for supplied, expected in cases:
+            with self.subTest(supplied=supplied):
+                result = self._run(ansible_args=supplied)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    self.ansible_argv_log.read_text(encoding="utf-8").splitlines(),
+                    ["playbooks/site.yml", *expected],
+                )
 
 
 if __name__ == "__main__":

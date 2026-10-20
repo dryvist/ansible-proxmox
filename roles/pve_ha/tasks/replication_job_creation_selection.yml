@@ -1,0 +1,10 @@
+---
+- name: Select declared replication jobs eligible for creation
+  ansible.builtin.set_fact:
+    pve_ha_replication_create_jobs: >-
+      {{ pve_ha_replication_jobs | default([])
+         | selectattr('node', 'equalto', pve_ha_this_pve_node)
+         | rejectattr('id', 'in', pve_ha_existing_replication_ids)
+         | rejectattr('id', 'in', pve_ha_replication_suspended_ids | default([]))
+         | rejectattr('target', 'in', pve_ha_replication_suspended_targets | default([]))
+         | list }}
