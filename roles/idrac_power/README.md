@@ -30,7 +30,8 @@ ansible-galaxy install -r requirements.yml
 - `idrac_power_action: on` → powers the target on (if off), then waits for its
   SSH to come up (`wait_for_connection`).
 - `idrac_power_action: off` → graceful ACPI `chassis power soft` (if on), then
-  polls until the BMC reports power off.
+  polls until the BMC reports power off; it fails when the poll budget expires
+  by default.
 - `idrac_power_action: status` (default) → query only, no change.
 - Reconciles the chassis **power-restore policy** on every run, whatever the
   action, so a node that this role never cycles still gets the setting.
@@ -66,6 +67,7 @@ during commissioning. See `docs/DR_RUNBOOK.md`.
 | `idrac_power_controller`             | first non-target node from `PROXMOX_VE_NODES` | Always-on node that runs ipmitool; derived, never hard-coded       |
 | `idrac_power_boot_timeout`           | `720`                                         | Seconds to wait for SSH after power-on (old hardware boots slowly) |
 | `idrac_power_off_retries`            | `60`                                          | Poll budget (×10s ⇒ 10 min) for graceful off                       |
+| `idrac_power_off_fail_on_timeout`     | `true`                                        | Fail when graceful off misses the poll budget                       |
 | `idrac_power_username` / `_password` | `IDRAC_USERNAME` / `IDRAC_PASSWORD` env       | BMC creds (no_log)                                                 |
 | `idrac_power_bmc_host`               | _(unset)_                                     | Per-host BMC address — FQDN preferred over IP (host_vars / env)    |
 | `idrac_power_restore_policy`         | `always-on`                                   | Chassis state when AC returns; `""` leaves it alone                |
