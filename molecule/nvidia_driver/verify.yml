@@ -82,3 +82,42 @@
       register: nvidia_driver_dpkg
       changed_when: false
       failed_when: nvidia_driver_dpkg.rc == 0
+
+- name: Verify power-limit unit creation in Ansible check mode
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Run the NVIDIA power-limit preview under Ansible check mode
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - --check
+          - --inventory
+          - localhost,
+          - --connection
+          - local
+          - molecule/nvidia_driver/check_mode.yml
+      args:
+        chdir: "{{ playbook_dir }}/../.."
+      environment:
+        ANSIBLE_ROLES_PATH: "{{ playbook_dir }}/../../roles"
+      register: nvidia_driver_check_mode
+      changed_when: false
+
+    - name: Assert check mode predicted the unit and skipped service enablement
+      ansible.builtin.assert:
+        that:
+          - nvidia_driver_check_mode.rc == 0
+          - >-
+            nvidia_driver_check_mode.stdout is search(
+            '(?s)TASK \\[nvidia_driver : Install the boot-time NVIDIA power-limit unit\\].*?changed: \\[localhost\\]')
+          - >-
+            nvidia_driver_check_mode.stdout is search(
+            '(?s)TASK \\[nvidia_driver : Enable the boot-time NVIDIA power-limit unit\\].*?skipping: \\[localhost\\]')
+        fail_msg: >-
+          The check-mode preview failed to predict the unit while skipping
+          service enablement.
+        quiet: true

@@ -125,12 +125,17 @@
       register: pve_mssql_dump_retention_check_mode
       changed_when: false
 
-    - name: Assert check mode skips verification for an archive it does not create
+    - name: Assert check mode skips archive verification when it does not create an archive
       ansible.builtin.assert:
         that:
           - pve_mssql_dump_retention_check_mode.rc == 0
           - >-
+            'Require the archive and source member counts to match' in
+            pve_mssql_dump_retention_check_mode.stdout
+          - >-
             'Skipping verification: check mode did not create the partial archive.'
             in pve_mssql_dump_retention_check_mode.stdout
-        fail_msg: "The dump retention check-mode preview failed or did not skip verification."
+        fail_msg: >-
+          The dump retention check-mode preview failed or did not skip archive
+          member-count verification.
         quiet: true

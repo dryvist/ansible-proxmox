@@ -1,0 +1,50 @@
+---
+- name: Preview NVIDIA power-limit unit creation in check mode
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  vars:
+    ansible_virtualization_type: kvm
+    nvidia_driver_enabled: true
+    nvidia_driver_lsmod:
+      stdout: nouveau
+    nvidia_driver_power_limit_w: 300
+
+  tasks:
+    - name: Check that the power-limit unit is absent before the preview
+      ansible.builtin.stat:
+        path: /etc/systemd/system/nvidia-power-limit.service
+      register: nvidia_driver_power_limit_unit_before_preview
+
+    - name: Assert the preview will create the power-limit unit
+      ansible.builtin.assert:
+        that:
+          - not nvidia_driver_power_limit_unit_before_preview.stat.exists
+        fail_msg: "The check-mode fixture already contains a power-limit unit."
+        quiet: true
+
+    - name: Preview the power-limit unit and enablement
+      ansible.builtin.include_role:
+        name: nvidia_driver
+        tasks_from: power_limit.yml
+
+    - name: Assert the check-mode template predicted creation
+      ansible.builtin.assert:
+        that:
+          - nvidia_driver_power_limit_unit_file.changed
+        fail_msg: "The check-mode template did not predict unit creation."
+        quiet: true
+
+    - name: Confirm check mode did not create the power-limit unit
+      ansible.builtin.stat:
+        path: /etc/systemd/system/nvidia-power-limit.service
+      register: nvidia_driver_power_limit_unit_after_preview
+
+    - name: Assert the power-limit unit remains absent after the preview
+      ansible.builtin.assert:
+        that:
+          - not nvidia_driver_power_limit_unit_after_preview.stat.exists
+        fail_msg: "The check-mode preview created the power-limit unit."
+        quiet: true

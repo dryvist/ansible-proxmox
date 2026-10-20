@@ -150,6 +150,9 @@ jobs:
           - 'roles/pve_ha/**'
           - 'roles/pve_notifications/**'
           - 'molecule/pve_notifications/**'
+        pve_mssql_dump_retention:
+          - 'roles/pve_mssql_dump_retention/**'
+          - 'molecule/pve_mssql_dump_retention/**'
         root_authorized_keys:
           - 'roles/root_authorized_keys/**'
           - 'molecule/root_authorized_keys/**'

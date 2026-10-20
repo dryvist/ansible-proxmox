@@ -85,6 +85,7 @@
     - nvidia_driver_enabled | bool
     - nvidia_driver_power_limit_w is not none
     - ansible_virtualization_type | default('') != 'docker'
+    - not ansible_check_mode or not nvidia_driver_power_limit_unit_file.changed
   tags:
     - nvidia_driver
     - nvidia_driver_power_limit
