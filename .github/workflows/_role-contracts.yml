@@ -70,6 +70,7 @@ jobs:
   pve-syslog-forwarder:
     name: Verify pve_syslog_forwarder task log input
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 10 }}
 
     steps:
       - name: Checkout
