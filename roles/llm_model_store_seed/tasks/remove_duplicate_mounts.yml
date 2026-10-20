@@ -193,7 +193,6 @@
   loop: "{{ llm_model_store_seed_detached }}"
   loop_control:
     label: "{{ item.hostname }} {{ item.key }} ({{ item.value }})"
-  changed_when: true
 
 - name: Re-read the live models-mount config after the removal
   ansible.builtin.include_tasks: read_mount_config.yml
