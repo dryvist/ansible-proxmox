@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INVENTORY_DIR = ROOT / "inventory"
 HOSTS_FILE = INVENTORY_DIR / "hosts.yml"
 ANSIBLE_HOST = re.compile(
-    r"^\{\{ lookup\('env', '(PVE\d_VE_HOSTNAME)'\) \| default\(inventory_hostname, true\) \}\}$"
+    r"^\{\{ lookup\('env', '(PVE\d_VE_HOSTNAME)'\) \| default\(proxmox_node_name, true\) \}\}$"
 )
 
 
@@ -30,6 +30,7 @@ class ProxmoxHostConnectionTest(unittest.TestCase):
                 ansible_host = values.get("ansible_host")
                 self.assertIsInstance(ansible_host, str)
                 self.assertRegex(ansible_host, ANSIBLE_HOST)
+                self.assertEqual(values.get("proxmox_node_name"), name)
 
     def test_no_inventory_file_falls_back_to_omit_for_ansible_host(self):
         # `omit` does not remove an empty string that an unset env lookup
