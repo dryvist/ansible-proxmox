@@ -14,6 +14,10 @@ guest_power_nodes: "{{ groups['proxmox'] | default([]) }}"
 guest_power_allowed_types: [qemu, lxc]
 guest_power_allowed_actions: [start, stop, shutdown, reboot, reset]
 guest_power_node_actions: [startall, stopall]
+guest_power_tools_by_type:
+  qemu: qm
+  lxc: pct
+guest_power_stopped_actions: [stop, shutdown, stopall]
 
 # Graceful-shutdown budget (seconds) before the shutdown call gives up.
 guest_power_shutdown_timeout_seconds: 120

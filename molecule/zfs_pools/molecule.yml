@@ -1,4 +1,12 @@
 ---
+driver:
+  name: docker
+
+provisioner:
+  config_options:
+    defaults:
+      roles_path: ${MOLECULE_SCENARIO_DIRECTORY}/../../roles
+
 platforms:
   - name: proxmox-zfs-pools-test
     image: "${MOLECULE_IMAGE:-mirror.gcr.io/library/debian:stable-slim}"

@@ -37,9 +37,9 @@
     - name: Re-read the candidate VM images immediately before selection
       ansible.builtin.command:
         argv:
-          - pvesm
-          - list
-          - "{{ pve_ha_cloudinit_cleanup_volume.storage_id }}"
+          - pvesh
+          - get
+          - "/nodes/{{ pve_ha_this_pve_node }}/storage/{{ pve_ha_cloudinit_cleanup_volume.storage_id }}/content"
           - --vmid
           - "{{ pve_ha_cloudinit_candidate_vmid }}"
           - --content

@@ -1,0 +1,35 @@
+---
+- name: Confirm every node-wide guest reaches the wanted state
+  ansible.builtin.command:
+    argv: ["{{ item.guest_power_tool }}", status, "{{ item.vmid }}"]
+  register: guest_power_node_readback
+  changed_when: false
+  failed_when: >-
+    ('status: ' ~ guest_power_wanted_status)
+    not in guest_power_node_readback.stdout
+  until: >-
+    ('status: ' ~ guest_power_wanted_status)
+    in guest_power_node_readback.stdout
+  retries: "{{ guest_power_verify_retries }}"
+  delay: "{{ guest_power_verify_delay_seconds }}"
+  loop: "{{ guest_power_verify_guests }}"
+  loop_control:
+    label: "{{ item.vmid }}"
+  ignore_errors: true
+
+- name: Fail with VMIDs that missed the node-wide wanted state
+  ansible.builtin.assert:
+    that:
+      - >-
+        (guest_power_node_readback.results | default([])
+         | selectattr('failed', 'defined')
+         | selectattr('failed')
+         | list
+         | length) == 0
+    fail_msg: >-
+      VMIDs did not reach {{ guest_power_wanted_status }}:
+      {{ guest_power_node_readback.results | default([])
+         | selectattr('failed', 'defined')
+         | selectattr('failed')
+         | map(attribute='item.vmid')
+         | list }}

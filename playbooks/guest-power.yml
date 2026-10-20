@@ -8,7 +8,9 @@
 #
 # Node-wide: guest_power_action=startall|stopall with guest_power_node (a proxmox
 # inventory host) and optional guest_power_vms (comma VMIDs). No VMID or type.
-# The node's own pvesh call runs the action; the read-back play then has no host.
+# The node's own pvesh call runs the node-wide action, then reads guest states
+# back on that node. An explicit guest_power_vms list is verified as supplied;
+# without it, startall verifies onboot guests and stopall verifies every guest.
 #
 # load_tofu.yml runs first so the proxmox hosts carry proxmox_user_from_tofu,
 # the login user that ansible_user resolves from.
@@ -40,5 +42,20 @@
       failed_when: >-
         ('status: ' ~ hostvars['localhost'].guest_power_wanted_status)
         not in guest_power_readback.stdout
+      tags:
+        - guest_power
+      when: not (hostvars['localhost'].guest_power_is_nodewide | default(false) | bool)
+
+    - name: Confirm node-wide guests reach the wanted state
+      ansible.builtin.include_role:
+        name: guest_power
+        tasks_from: verify_node_guests
+        apply:
+          tags:
+            - guest_power
+      vars:
+        guest_power_verify_guests: "{{ hostvars['localhost'].guest_power_verify_guests }}"
+        guest_power_wanted_status: "{{ hostvars['localhost'].guest_power_wanted_status }}"
+      when: hostvars['localhost'].guest_power_is_nodewide | default(false) | bool
       tags:
         - guest_power
