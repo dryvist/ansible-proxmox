@@ -143,4 +143,6 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_textfile_collectors/verify_collectors.yml -i localhost, -c local
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_textfile_collectors/verify_guest_disk_io.yml -i localhost, -c local
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_textfile_collectors/verify_ha_collector.yml -i localhost, -c local

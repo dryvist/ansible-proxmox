@@ -26,10 +26,8 @@
         - output
         - txgs/tank
         - txgs/mirror
-        - cgroups/lxc/605020
-        - cgroups/lxc/605000
-        - zvol/tank/data
-        - dev
+        - cgroups/lxc
+        - zvol
 
     - name: Load collector defaults
       ansible.builtin.include_vars:
@@ -122,43 +120,6 @@
       loop:
         - tank
         - mirror
-
-    - name: Create LXC io.stat fixture data
-      ansible.builtin.copy:
-        dest: "{{ pve_textfile_collectors_test_work }}/cgroups/lxc/{{ item.vmid }}/io.stat"
-        mode: "0644"
-        content: "{{ item.content }}"
-      loop:
-        - vmid: "605020"
-          content: |
-            259:0 rbytes=100 wbytes=200 rios=3 wios=4 dbytes=0 dios=0
-            253:0 rbytes=50 wbytes=70 rios=2 wios=3 dbytes=0 dios=0
-        - vmid: "605000"
-          content: |
-            259:0 rbytes=40 wbytes=60 rios=1 wios=2 dbytes=0 dios=0
-
-    - name: Create zvol device fixture targets
-      ansible.builtin.file:
-        path: "{{ pve_textfile_collectors_test_work }}/dev/{{ item }}"
-        state: touch
-        mode: "0644"
-      loop:
-        - zd20
-        - zd21
-        - sda
-
-    - name: Create zvol symlink fixture data
-      ansible.builtin.file:
-        src: "{{ pve_textfile_collectors_test_work }}/dev/{{ item.device }}"
-        dest: "{{ pve_textfile_collectors_test_work }}/zvol/{{ item.dataset }}"
-        state: link
-      loop:
-        - device: zd20
-          dataset: tank/data/vm-605020-disk-0
-        - device: zd21
-          dataset: tank/swap
-        - device: sda
-          dataset: tank/data/not-a-zvol
 
     - name: Render all collector scripts into the fixture workspace
       ansible.builtin.template:
@@ -315,39 +276,6 @@
           - >-
             'pve_corosync_votes{kind="quorum"} 2'
             in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/corosync.prom')
-        quiet: true
-
-    - name: Assert guest I/O counters and zvol mappings
-      ansible.builtin.assert:
-        that:
-          - >-
-            'pve_guest_disk_read_bytes_total{id="lxc/605020"} 150'
-            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/guest_disk_io.prom')
-          - >-
-            'pve_guest_disk_written_bytes_total{id="lxc/605020"} 270'
-            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/guest_disk_io.prom')
-          - >-
-            'pve_guest_disk_reads_completed_total{id="lxc/605020"} 5'
-            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/guest_disk_io.prom')
-          - >-
-            'pve_guest_disk_writes_completed_total{id="lxc/605020"} 7'
-            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/guest_disk_io.prom')
-          - >-
-            'pve_guest_disk_read_bytes_total{id="lxc/605000"} 40'
-            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/guest_disk_io.prom')
-          - >-
-            'pve_zvol_info{device="zd20",dataset="tank/data/vm-605020-disk-0",id="qemu/605020"} 1'
-            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/guest_disk_io.prom')
-          - >-
-            'pve_zvol_info{device="zd21",dataset="tank/swap",id=""} 1'
-            in lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/guest_disk_io.prom')
-          - >-
-            'pve_zvol_info{device="sda"' not in
-            lookup('ansible.builtin.file', pve_textfile_collectors_test_work ~ '/output/guest_disk_io.prom')
-        fail_msg: >-
-          LXC io.stat counters must aggregate by container, and every zd device
-          must resolve to its dataset with a QEMU ID when the dataset name carries one.
-        success_msg: LXC counters aggregate and ZFS volume links map to their dataset and guest ID.
         quiet: true
 
     - name: Run the status collector with a slow command and a short timeout

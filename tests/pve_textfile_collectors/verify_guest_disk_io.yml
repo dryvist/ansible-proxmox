@@ -1,0 +1,110 @@
+---
+- name: Verify LXC disk counters and zvol mappings
+  hosts: localhost
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Create an isolated fixture workspace
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: pve-guest-disk-io-
+      register: guest_disk_io_temp
+      changed_when: false
+
+    - name: Set fixture root
+      ansible.builtin.set_fact:
+        guest_disk_io_root: "{{ guest_disk_io_temp.path }}"
+
+    - name: Create fixture directories
+      ansible.builtin.file:
+        path: "{{ guest_disk_io_root }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - output
+        - cgroups/lxc/605020
+        - cgroups/lxc/605000
+        - zvol/tank/data
+        - dev
+
+    - name: Create LXC io.stat fixtures
+      ansible.builtin.copy:
+        dest: "{{ guest_disk_io_root }}/cgroups/lxc/{{ item.vmid }}/io.stat"
+        mode: "0644"
+        content: "{{ item.stats }}"
+      loop:
+        - vmid: "605020"
+          stats: |
+            259:0 rbytes=100 wbytes=200 rios=3 wios=4 dbytes=0 dios=0
+            253:0 rbytes=50 wbytes=70 rios=2 wios=3 dbytes=0 dios=0
+        - vmid: "605000"
+          stats: "259:0 rbytes=40 wbytes=60 rios=1 wios=2 dbytes=0 dios=0\n"
+
+    - name: Create zvol device fixtures
+      ansible.builtin.file:
+        path: "{{ guest_disk_io_root }}/dev/{{ item }}"
+        state: touch
+        mode: "0644"
+      loop:
+        - zd20
+        - zd21
+        - sda
+
+    - name: Link dataset fixtures to device fixtures
+      ansible.builtin.file:
+        src: "{{ guest_disk_io_root }}/dev/{{ item.device }}"
+        dest: "{{ guest_disk_io_root }}/zvol/{{ item.dataset }}"
+        state: link
+      loop:
+        - device: zd20
+          dataset: tank/data/vm-605020-disk-0
+        - device: zd21
+          dataset: tank/swap
+        - device: sda
+          dataset: tank/data/not-a-zvol
+
+    - name: Load collector defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/pve_textfile_collectors/defaults/main.yml"
+
+    - name: Render guest disk I/O collector
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/pve_textfile_collectors/templates/guest_disk_io.sh.j2"
+        dest: "{{ guest_disk_io_root }}/guest_disk_io"
+        mode: "0755"
+      vars:
+        pve_textfile_collectors_textfile_dir: "{{ guest_disk_io_root }}/output"
+
+    - name: Check rendered collector syntax
+      ansible.builtin.command:
+        cmd: "bash -n {{ guest_disk_io_root }}/guest_disk_io"
+      changed_when: false
+
+    - name: Run guest disk I/O collector against fixtures
+      ansible.builtin.command:
+        cmd: "{{ guest_disk_io_root }}/guest_disk_io"
+      environment:
+        CGROUP_ROOT: "{{ guest_disk_io_root }}/cgroups/lxc"
+        ZVOL_ROOT: "{{ guest_disk_io_root }}/zvol"
+        OUTPUT_DIR: "{{ guest_disk_io_root }}/output"
+      changed_when: false
+
+    - name: Assert per-guest counters and zvol mappings
+      ansible.builtin.assert:
+        that:
+          - "'pve_guest_disk_read_bytes_total{id=\"lxc/605020\"} 150' in metrics"
+          - "'pve_guest_disk_written_bytes_total{id=\"lxc/605020\"} 270' in metrics"
+          - "'pve_guest_disk_reads_completed_total{id=\"lxc/605020\"} 5' in metrics"
+          - "'pve_guest_disk_writes_completed_total{id=\"lxc/605020\"} 7' in metrics"
+          - "'pve_guest_disk_read_bytes_total{id=\"lxc/605000\"} 40' in metrics"
+          - "'pve_zvol_info{device=\"zd20\",dataset=\"tank/data/vm-605020-disk-0\",id=\"qemu/605020\"} 1' in metrics"
+          - "'pve_zvol_info{device=\"zd21\",dataset=\"tank/swap\",id=\"\"} 1' in metrics"
+          - "'pve_zvol_info{device=\"sda\"' not in metrics"
+        quiet: true
+      vars:
+        metrics: "{{ lookup('ansible.builtin.file', guest_disk_io_root ~ '/output/guest_disk_io.prom') }}"
+
+    - name: Remove fixture workspace
+      ansible.builtin.file:
+        path: "{{ guest_disk_io_root }}"
+        state: absent
