@@ -22,6 +22,15 @@ sanoid_templates:
     yearly: 0
     autosnap: "yes"
     autoprune: "yes"
+  rpool_guest:
+    frequently: 0
+    hourly: 6
+    daily: 7
+    weekly: 4
+    monthly: 0
+    yearly: 0
+    autosnap: "yes"
+    autoprune: "yes"
   media:
     frequently: 0
     hourly: 0
@@ -60,6 +69,11 @@ sanoid_templates:
 #     "rpool/data/nas": { use_template: critical, recursive: "yes" }
 #     "nvme1/siem/cribl-pq": { use_template: scratch }
 sanoid_datasets: {}
+
+# Guest disk datasets on the root pool use a shorter retention template. Other
+# datasets, including non-guest datasets on that pool, retain their assignment.
+sanoid_rpool_guest_dataset_pattern: '^rpool/data/(vm|subvol)-[0-9]+-disk-[0-9]+$'
+sanoid_rpool_guest_template_name: rpool_guest
 
 # Optional retention policy for live syncoid replica targets.
 sanoid_replica_retention_enabled: false

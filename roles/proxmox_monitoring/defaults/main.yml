@@ -14,6 +14,8 @@ proxmox_monitoring_healthchecks_ping_url: ""
 # Enable/disable individual monitoring components
 proxmox_monitoring_enable_sysstat: true
 proxmox_monitoring_enable_atop: true
+proxmox_monitoring_atop_loggenerations: 7
+proxmox_monitoring_journald_system_max_use: 500M
 proxmox_monitoring_enable_healthchecks: true
 proxmox_monitoring_enable_zfs_capacity: true
 

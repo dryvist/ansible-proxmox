@@ -11,7 +11,7 @@
   register: zfs_pools_ds_check
   changed_when: false
   check_mode: false
-  failed_when: false
+  failed_when: zfs_pools_ds_check.rc not in [0, 1]
   loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
   loop_control:
     label: "{{ zfs_pool.key }}/{{ item.key }}"
@@ -26,7 +26,9 @@
     label: "{{ zfs_pool.key }}/{{ item.key }}"
     index_var: zfs_pools_ds_idx
   when: zfs_pools_ds_check.results[zfs_pools_ds_idx].rc != 0
+  register: zfs_pools_ds_create
   changed_when: true
+  failed_when: zfs_pools_ds_create.rc != 0
   tags:
     - zfs_pools
 
@@ -36,6 +38,7 @@
   register: zfs_pools_ds_quota
   changed_when: false
   check_mode: false
+  failed_when: zfs_pools_ds_quota.rc != 0
   loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
   loop_control:
     label: "{{ zfs_pool.key }}/{{ item.key }}"
@@ -55,7 +58,9 @@
     # only reached for datasets that actually declare a quota.
     - item.value.quota | default('', true) | length > 0
     - zfs_pools_ds_quota.results[zfs_pools_ds_idx].stdout | int != item.value.quota | human_to_bytes
+  register: zfs_pools_ds_quota_set
   changed_when: true
+  failed_when: zfs_pools_ds_quota_set.rc != 0
   tags:
     - zfs_pools
 
