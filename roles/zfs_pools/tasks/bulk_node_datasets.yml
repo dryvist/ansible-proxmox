@@ -1,0 +1,60 @@
+---
+- name: Check whether the node-local bulk parent dataset exists
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -o
+      - name
+      - "{{ zfs_pools_bulk_node_parent_dataset }}"
+  register: zfs_pools_bulk_parent_check
+  changed_when: false
+  check_mode: false
+  failed_when: zfs_pools_bulk_parent_check.rc not in [0, 1]
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
+- name: Create the node-local bulk parent without mounting it
+  ansible.builtin.command:
+    cmd: >-
+      zfs create
+      {% for property, value in zfs_pools_bulk_node_parent_properties | dictsort %}
+      -o {{ property }}={{ value }}
+      {% endfor %}
+      {{ zfs_pools_bulk_node_parent_dataset }}
+  when: zfs_pools_bulk_parent_check.rc != 0
+  changed_when: true
+  failed_when: zfs_pools_bulk_parent_create.rc != 0
+  register: zfs_pools_bulk_parent_create
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
+- name: Reconcile node-local bulk parent properties
+  ansible.builtin.include_tasks: dataset_properties.yml
+  vars:
+    zfs_pool:
+      key: "{{ zfs_pools_bulk_pool_name }}"
+    zfs_dataset:
+      key: "{{ inventory_hostname }}"
+      value:
+        properties: "{{ zfs_pools_bulk_node_parent_properties }}"
+  when: zfs_pools_bulk_parent_check.rc == 0 or not ansible_check_mode
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
+- name: Manage the node-local bulk child datasets
+  ansible.builtin.include_tasks: bulk_node_dataset.yml
+  loop: "{{ zfs_pools_bulk_node_dataset_specs }}"
+  loop_control:
+    loop_var: zfs_pools_bulk_node_dataset
+    label: "{{ zfs_pools_bulk_node_parent_dataset }}/{{ zfs_pools_bulk_node_dataset.name }}"
+  vars:
+    zfs_pools_bulk_node_dataset_full_name: >-
+      {{ zfs_pools_bulk_node_parent_dataset }}/{{ zfs_pools_bulk_node_dataset.name }}
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets

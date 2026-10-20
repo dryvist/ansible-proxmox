@@ -133,6 +133,15 @@
     - zfs_pools
     - zfs_pool_properties
 
+- name: Manage node-local datasets on the declared bulk pool
+  ansible.builtin.import_tasks: bulk_node_datasets.yml
+  when:
+    - ansible_facts.virtualization_type != 'docker'
+    - zfs_pools_bulk_pool_name in (zfs_pools_present | default([]))
+  tags:
+    - zfs_pools
+    - zfs_bulk_node_datasets
+
 - name: Manage datasets for each present pool
   ansible.builtin.include_tasks: datasets.yml
   loop: "{{ zfs_pools_map | dict2items }}"

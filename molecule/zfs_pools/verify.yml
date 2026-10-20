@@ -53,6 +53,22 @@
             )
         fail_msg: "The root reservation default or mount-fact derivation changed"
 
+    - name: Assert the node-local bulk dataset defaults
+      ansible.builtin.assert:
+        that:
+          - zfs_pools_bulk_pool_name == 'bulk'
+          - zfs_pools_bulk_node_parent_dataset == 'bulk/' ~ inventory_hostname
+          - >-
+            zfs_pools_bulk_node_parent_properties ==
+            {'canmount': 'off', 'mountpoint': 'none'}
+          - zfs_pools_bulk_node_dataset_compression == 'lz4'
+          - zfs_pools_bulk_node_dataset_specs | map(attribute='name') | list == ['apt-cache', 'atop']
+          - zfs_pools_bulk_node_dataset_specs[0].mountpoint == '/var/cache/apt'
+          - zfs_pools_bulk_node_dataset_specs[0].quota == '5G'
+          - zfs_pools_bulk_node_dataset_specs[1].mountpoint == '/var/log/atop'
+          - zfs_pools_bulk_node_dataset_specs[1].quota == '3G'
+        fail_msg: "The node-local bulk dataset defaults changed"
+
     - name: Assert the per-dataset pvesm_id registration field resolves
       ansible.builtin.assert:
         that:
