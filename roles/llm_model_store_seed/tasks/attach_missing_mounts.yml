@@ -99,28 +99,29 @@
   loop_control:
     label: "{{ item.hostname }}"
 
-# llm_model_store_seed_pct_set_script lifts protection=1 for the call and always restores it.
+# pve_lxc_protected_pct_set runs pct set with the container's protection
+# setting temporarily lifted and restored.
 - name: Attach each missing models mount (pct set)
-  ansible.builtin.command:
-    argv:
-      - sh
-      - -c
-      - "{{ llm_model_store_seed_pct_set_script }}"
-      - sh
-      - "{{ item.vmid }}"
-      - "--mp{{ llm_model_store_seed_next_mp_idx[item.hostname] }}"
-      # pct allocates a new volume as <storage>:<GiB>; the inventory size is "120G".
-      - >-
-        {{ item.models_mount_storage }}:{{ item.models_mount_size | regex_replace('G$', '') }},mp={{
-        item.models_mount_path }}{{ ',ro=1' if item.models_mount_read_only else '' }}
+  ansible.builtin.include_role:
+    name: pve_lxc_protected_pct_set
+    apply:
+      tags:
+        - llm_model_store_seed
+      notify: Restart changed llm model-store containers
+  tags:
+    - llm_model_store_seed
+  vars:
+    pve_lxc_protected_pct_set_vmid: "{{ item.vmid }}"
+    pve_lxc_protected_pct_set_option: "--mp{{ llm_model_store_seed_next_mp_idx[item.hostname] }}"
+    # pct allocates a new volume as <storage>:<GiB>; inventory uses "120G".
+    pve_lxc_protected_pct_set_value: >-
+      {{ item.models_mount_storage }}:{{ item.models_mount_size | regex_replace('G$', '') }},mp={{
+      item.models_mount_path }}{{ ',ro=1' if item.models_mount_read_only else '' }}
   loop: "{{ llm_model_store_seed_missing }}"
   loop_control:
     label: >-
       {{ item.hostname }} mp{{ llm_model_store_seed_next_mp_idx[item.hostname] }}:
       {{ item.models_mount_storage }}:{{ item.models_mount_size }} -> {{ item.models_mount_path }}
-  changed_when: true
-  notify: Restart changed llm model-store containers
-  register: llm_model_store_seed_attach
 
 - name: Read each attached target's pending-vs-applied config
   ansible.builtin.command:

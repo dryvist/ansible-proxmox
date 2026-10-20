@@ -67,20 +67,21 @@
     label: "{{ item.hostname }} {{ item.key }}"
 
 - name: Detach each surplus entry (pct set --delete)
-  ansible.builtin.command:
-    argv:
-      - sh
-      - -c
-      - "{{ llm_model_store_seed_pct_set_script }}"
-      - sh
-      - "{{ item.vmid }}"
-      - --delete
-      - "{{ item.key }}"
+  ansible.builtin.include_role:
+    name: pve_lxc_protected_pct_set
+    apply:
+      tags:
+        - llm_model_store_seed
+      notify: Restart changed llm model-store containers
+  tags:
+    - llm_model_store_seed
+  vars:
+    pve_lxc_protected_pct_set_vmid: "{{ item.vmid }}"
+    pve_lxc_protected_pct_set_option: --delete
+    pve_lxc_protected_pct_set_value: "{{ item.key }}"
   loop: "{{ llm_model_store_seed_surplus }}"
   loop_control:
     label: "{{ item.hostname }} {{ item.key }}"
-  changed_when: true
-  notify: Restart changed llm model-store containers
 
 - name: Read each affected container's pending-vs-applied config
   ansible.builtin.command:
@@ -178,15 +179,17 @@
     llm_model_store_seed_empty_check: "{{ llm_model_store_seed_detached }}"
 
 - name: Destroy each detached volume (pct set --delete unusedN)
-  ansible.builtin.command:
-    argv:
-      - sh
-      - -c
-      - "{{ llm_model_store_seed_pct_set_script }}"
-      - sh
-      - "{{ item.vmid }}"
-      - --delete
-      - "{{ item.key }}"
+  ansible.builtin.include_role:
+    name: pve_lxc_protected_pct_set
+    apply:
+      tags:
+        - llm_model_store_seed
+  tags:
+    - llm_model_store_seed
+  vars:
+    pve_lxc_protected_pct_set_vmid: "{{ item.vmid }}"
+    pve_lxc_protected_pct_set_option: --delete
+    pve_lxc_protected_pct_set_value: "{{ item.key }}"
   loop: "{{ llm_model_store_seed_detached }}"
   loop_control:
     label: "{{ item.hostname }} {{ item.key }} ({{ item.value }})"
