@@ -43,36 +43,12 @@
         that:
           - zfs_pools_root_refreservation == '6G'
           - zfs_pools_root_refreservation | human_to_bytes == 6442450944
-          - >-
-            zfs_pools_root_dataset == (
-              ansible_facts.mounts
-              | selectattr('mount', 'equalto', '/')
-              | selectattr('fstype', 'equalto', 'zfs')
-              | map(attribute='device')
-              | first
-              | default('')
-            )
-        fail_msg: "The root reservation default or mount-fact derivation changed"
+          - zfs_pools_root_dataset == ''
+        fail_msg: "The root reservation defaults changed"
 
-    - name: Resolve the root dataset from mount facts
+    - name: Resolve a ZFS root with findmnt when no host override is set
       ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_dataset_resolution.yml
       vars:
-        zfs_pools_root_mount_facts:
-          mount: /
-          fstype: zfs
-          device: tank/ROOT/molecule
-
-    - name: Assert the root dataset from facts is preserved
-      ansible.builtin.assert:
-        that:
-          - zfs_pools_root_mount_fstype == 'zfs'
-          - zfs_pools_root_dataset_resolved == 'tank/ROOT/molecule'
-          - zfs_pools_root_mount_findmnt_result.skipped | default(false)
-
-    - name: Resolve a ZFS root when mount facts omit it
-      ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_dataset_resolution.yml
-      vars:
-        zfs_pools_root_mount_facts: {}
         zfs_pools_root_findmnt_argv:
           - printf
           - "%s"
@@ -88,10 +64,6 @@
     - name: Preserve a host_vars root dataset override
       ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_dataset_resolution.yml
       vars:
-        zfs_pools_root_mount_facts:
-          mount: /
-          fstype: ext4
-          device: /dev/vda1
         zfs_pools_root_dataset: tank/ROOT/host-override
 
     - name: Assert the host_vars root dataset override takes precedence
@@ -104,10 +76,6 @@
     - name: Run root reservation handling for a non-ZFS root
       ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_reservation.yml
       vars:
-        zfs_pools_root_mount_facts:
-          mount: /
-          fstype: ext4
-          device: /dev/vda1
         zfs_pools_root_findmnt_argv:
           - printf
           - "%s"
@@ -125,7 +93,6 @@
         - name: Run root reservation handling without a ZFS source
           ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/root_reservation.yml
           vars:
-            zfs_pools_root_mount_facts: {}
             zfs_pools_root_findmnt_argv:
               - printf
               - "%s"

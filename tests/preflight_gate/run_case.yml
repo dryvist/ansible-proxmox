@@ -18,12 +18,14 @@
         - {key: rules, file: rules.json}
         - {key: resources, file: resources.json}
         - {key: guest_config, file: guest-config.json}
+      when: gate_case.run_ha | default(false) | bool
 
     - name: Reset recorded Proxmox API calls
       ansible.builtin.copy:
         content: ""
         dest: "{{ preflight_gate_work_dir }}/commands.log"
         mode: "0644"
+      when: gate_case.run_ha | default(false) | bool
 
     - name: Run published-inventory Nautobot preflight tasks
       ansible.builtin.include_tasks: ../../playbooks/tasks/preflight_gate.yml

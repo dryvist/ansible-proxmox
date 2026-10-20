@@ -1,5 +1,6 @@
 ---
-- name: Read the root mount with findmnt when facts cannot resolve it
+- name: Read the root mount with findmnt when no host_vars override is set
+  # Root mount discovery must still run during check mode.
   ansible.builtin.command:
     argv: "{{ zfs_pools_root_findmnt_argv }}"
   register: zfs_pools_root_mount_findmnt_result
@@ -30,7 +31,7 @@
           zfs_pools_root_mount_findmnt_fields[0]
           if zfs_pools_root_mount_findmnt_fields | length > 0
              and zfs_pools_root_mount_findmnt_result.rc | default(1) | int == 0
-          else zfs_pools_root_mount_facts.fstype | default('', true)
+          else ''
         )
       }}
     zfs_pools_root_dataset_resolved: >-

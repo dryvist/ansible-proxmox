@@ -20,22 +20,9 @@ zfs_pools_config: >-
 # "ro=@10.0.0.0/8 ro=@192.168.0.0/16"; children inherit a parent's sharenfs.
 zfs_pools_map: "{{ zfs_pools_config.pools | default({}) }}"
 
-# Reserve root-pool headroom on every Proxmox node. The root dataset is the ZFS
-# source mounted at /. If mount facts omit that source, root_reservation.yml
-# reads it with findmnt. Set either variable in host_vars when the discovered
-# mount source or reservation differs on a host.
-zfs_pools_root_mount_facts: >-
-  {{
-    ansible_facts.mounts | default([])
-    | selectattr('mount', 'equalto', '/')
-    | list | first | default({})
-  }}
-zfs_pools_root_dataset: >-
-  {{
-    zfs_pools_root_mount_facts.device
-    if zfs_pools_root_mount_facts.fstype | default('') == 'zfs'
-    else ''
-  }}
+# Reserve root-pool headroom on every Proxmox node. Set the root dataset in
+# host_vars to override findmnt discovery for a node.
+zfs_pools_root_dataset: ""
 zfs_pools_root_findmnt_argv:
   - findmnt
   - --raw
