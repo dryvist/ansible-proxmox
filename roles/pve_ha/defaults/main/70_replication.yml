@@ -7,6 +7,10 @@
 pve_ha_replication_schedule: "*/5"
 pve_ha_replication_rate: ""
 
+# Per-job override keyed by the guest key in the published inventory.
+# Unlisted guests are enabled; false keeps the pvesr job present but inactive.
+pve_ha_replication_enabled_by_guest: {}
+
 # Targets whose jobs are disabled and left alone until removed from this list.
 # Clearing it re-enables those jobs on the next converge.
 pve_ha_replication_suspended_targets: []

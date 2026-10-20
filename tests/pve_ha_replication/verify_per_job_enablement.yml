@@ -1,0 +1,100 @@
+---
+- name: Verify per-job pvesr enablement
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    pve_ha_replication_ct_hostnames:
+      - default-guest
+      - disabled-active-guest
+      - disabled-broken-guest
+      - disabled-missing-guest
+    pve_ha_replication_vm_names: []
+    pve_ha_replication_jobnum: 0
+    pve_ha_replication_enabled_by_guest:
+      disabled-active-guest: false
+      disabled-broken-guest: false
+      disabled-missing-guest: false
+    containers_from_tofu:
+      default-guest:
+        ansible_pct_vmid: 701001
+        node: node-a
+        ha_replication_target: node-b
+      disabled-active-guest:
+        ansible_pct_vmid: 701002
+        node: node-a
+        ha_replication_target: node-b
+      disabled-broken-guest:
+        ansible_pct_vmid: 701003
+        node: node-a
+        ha_replication_target: node-b
+      disabled-missing-guest:
+        ansible_pct_vmid: 701004
+        node: node-a
+        ha_replication_target: node-b
+    vms_from_tofu: {}
+
+  tasks:
+    - name: Include the production replication guest spec builder
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_scope.yml
+
+    - name: Resolve production replication job specs
+      ansible.builtin.set_fact:
+        pve_ha_replication_jobs: >-
+          {{ pve_ha_replication_guests | selectattr('viable') | list }}
+
+    - name: Assert omitted enable overrides default to true and false is preserved
+      ansible.builtin.assert:
+        that:
+          - >-
+            (pve_ha_replication_jobs | selectattr('hostname', 'equalto', 'default-guest')
+            | map(attribute='enabled') | list) == [true]
+          - >-
+            (pve_ha_replication_jobs | selectattr('hostname', 'equalto', 'disabled-active-guest')
+            | map(attribute='enabled') | list) == [false]
+        fail_msg: >-
+          per-job enable resolution was wrong:
+          {{ pve_ha_replication_jobs | map(attribute='enabled') | list }}
+
+    - name: Prepare current job state for the production selectors
+      ansible.builtin.set_fact:
+        pve_ha_this_pve_node: node-a
+        pve_ha_replication_suspended_targets: []
+        pve_ha_existing_replication_ids:
+          - 701001-0
+          - 701002-0
+          - 701003-0
+        pve_ha_replication_status_raw:
+          stdout: >-
+            [
+              {"id":"701001-0","source":"node-a","target":"node-b","disable":1},
+              {"id":"701002-0","source":"node-a","target":"node-b","disable":0},
+              {"id":"701003-0","source":"node-a","target":"node-b","disable":1,
+               "error":"No common base snapshot"}
+            ]
+
+    - name: Include production suspended and broken job selection
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_status_selection.yml
+
+    - name: Include production pair reconciliation
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_reconciliation.yml
+
+    - name: Include production missing job selection
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/replication_job_creation_selection.yml
+
+    - name: Assert per-job disable retains jobs and creates absent disabled jobs
+      ansible.builtin.assert:
+        that:
+          - pve_ha_replication_suspended_ids == ['701002-0', '701003-0', '701004-0']
+          - pve_ha_replication_disable_ids == ['701002-0']
+          - pve_ha_broken_replication_ids == []
+          - pve_ha_replication_enable_ids == ['701001-0']
+          - pve_ha_replication_create_jobs | map(attribute='id') | list == ['701004-0']
+          - not (pve_ha_replication_create_jobs | first).enabled
+        fail_msg: >-
+          per-job pvesr state reconciliation was wrong:
+          suspended={{ pve_ha_replication_suspended_ids }},
+          disable={{ pve_ha_replication_disable_ids }},
+          broken={{ pve_ha_broken_replication_ids }},
+          enable={{ pve_ha_replication_enable_ids }},
+          create={{ pve_ha_replication_create_jobs | map(attribute='id') | list }}

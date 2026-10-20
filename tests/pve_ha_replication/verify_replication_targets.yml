@@ -23,27 +23,27 @@
     pve_ha_replication_jobnum: 0
     pve_ha_replication_affinity_rule: apps-replication-nodes
     pve_ha_replication_ct_hostnames:
-      - postgres-apps         # present, node-c, target node-d
-      - nautobot              # present, node-b, target node-a
-      - vikunja               # present, node-a, target node-b
-      - missing-target-ct     # present, node-c, NO ha_replication_target -> unsafe
-      - shared-app            # present, node-a, target node-b, storage on ALL nodes
+      - postgres-apps # present, node-c, target node-d
+      - nautobot # present, node-b, target node-a
+      - vikunja # present, node-a, target node-b
+      - missing-target-ct # present, node-c, NO ha_replication_target -> unsafe
+      - shared-app # present, node-a, target node-b, storage on ALL nodes
     pve_ha_replication_vm_names:
-      - iac-platform          # present, node-b, target node-e
-      - missing-vm            # absent from vms_from_tofu -> unsafe
+      - iac-platform # present, node-b, target node-e
+      - missing-vm # absent from vms_from_tofu -> unsafe
     containers_from_tofu:
-      postgres-apps: {ansible_pct_vmid: 602000, node: node-c, ha_replication_target: node-d}
-      nautobot: {ansible_pct_vmid: 605000, node: node-b, ha_replication_target: node-a}
-      vikunja: {ansible_pct_vmid: 605010, node: node-a, ha_replication_target: node-b}
-      missing-target-ct: {ansible_pct_vmid: 699000, node: node-c}
-      shared-app: {ansible_pct_vmid: 606000, node: node-a, ha_replication_target: node-b}
+      postgres-apps: { ansible_pct_vmid: 602000, node: node-c, ha_replication_target: node-d }
+      nautobot: { ansible_pct_vmid: 605000, node: node-b, ha_replication_target: node-a }
+      vikunja: { ansible_pct_vmid: 605010, node: node-a, ha_replication_target: node-b }
+      missing-target-ct: { ansible_pct_vmid: 699000, node: node-c }
+      shared-app: { ansible_pct_vmid: 606000, node: node-a, ha_replication_target: node-b }
     vms_from_tofu:
       iac-platform:
         vmid: 110130
         node: node-b
         ha_replication_target: node-e
         disks:
-          - {datastore: local-zfs, path: vm-110130-disk-0}
+          - { datastore: local-zfs, path: vm-110130-disk-0 }
       # missing-vm deliberately absent.
 
     # Synthetic `pvesh get /storage` output. Mirrors the real incident: local-zfs
@@ -126,7 +126,8 @@
     - name: Group viable replication guests by their [node, target] pair
       ansible.builtin.set_fact:
         pve_ha_replication_pair_groups: >-
-          {{ pve_ha_replication_guests | default([]) | selectattr('viable') | groupby('pair_key') }}
+          {{ pve_ha_replication_guests | default([]) | selectattr('viable')
+             | groupby('pair_key') | map('list') | list }}
 
     - name: Fixture a live rule named apps-replication-nodes over node-a,node-b (nautobot/vikunja's pair)
       ansible.builtin.set_fact:
@@ -165,7 +166,7 @@
           # postgres-apps' pair (node-c,node-d) does NOT match the live rule
           # -> gets its own derived name, never renaming the live rule
           - (pve_ha_replication_rules | rejectattr('name', 'eq', pve_ha_replication_affinity_rule)
-             | selectattr('sids', 'contains', 'ct:602000') | list | length) == 1
+            | selectattr('sids', 'contains', 'ct:602000') | list | length) == 1
           - (pve_ha_replication_rules | length) == 3
         fail_msg: >-
           rule naming is wrong: {{ pve_ha_replication_rules }}
@@ -251,24 +252,24 @@
         that:
           # vikunja's target (node-b) lacks local-zfs -> DETECTED
           - (pve_ha_replication_job_violations
-             | selectattr('hostname', 'eq', 'vikunja') | list | length) == 1
+            | selectattr('hostname', 'eq', 'vikunja') | list | length) == 1
           - (pve_ha_replication_job_violations
-             | selectattr('hostname', 'eq', 'vikunja') | first).storage == 'local-zfs'
+            | selectattr('hostname', 'eq', 'vikunja') | first).storage == 'local-zfs'
           # iac-platform's target (node-e) lacks local-zfs -> DETECTED (VM disk path)
           - (pve_ha_replication_job_violations
-             | selectattr('hostname', 'eq', 'iac-platform') | list | length) == 1
+            | selectattr('hostname', 'eq', 'iac-platform') | list | length) == 1
           - (pve_ha_replication_job_violations
-             | selectattr('hostname', 'eq', 'iac-platform') | first).storage == 'local-zfs'
+            | selectattr('hostname', 'eq', 'iac-platform') | first).storage == 'local-zfs'
           # nautobot's target (node-a) HAS bulk -> passes, no violation
           - (pve_ha_replication_job_violations
-             | selectattr('hostname', 'eq', 'nautobot') | list | length) == 0
+            | selectattr('hostname', 'eq', 'nautobot') | list | length) == 0
           # postgres-apps' target (node-d) HAS bulk -> passes, no violation
           - (pve_ha_replication_job_violations
-             | selectattr('hostname', 'eq', 'postgres-apps') | list | length) == 0
+            | selectattr('hostname', 'eq', 'postgres-apps') | list | length) == 0
           # shared-app's storage has no nodes restriction -> available
           # everywhere, including its target (node-b) -> passes, no violation
           - (pve_ha_replication_job_violations
-             | selectattr('hostname', 'eq', 'shared-app') | list | length) == 0
+            | selectattr('hostname', 'eq', 'shared-app') | list | length) == 0
         fail_msg: >-
           pvesr target-storage validation is wrong: {{ pve_ha_replication_job_violations }}
         success_msg: >-
