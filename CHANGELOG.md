@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.29.0](https://github.com/dryvist/ansible-proxmox/compare/v2.28.2...v2.29.0) (2026-10-20)
+
+
+### Features
+
+* **idrac_power:** report chassis faults and recent BMC events on status runs ([#1107](https://github.com/dryvist/ansible-proxmox/issues/1107)) ([48c892d](https://github.com/dryvist/ansible-proxmox/commit/48c892d77b2245d489c12f284556b1b25c5b58ad))
+* **idrac_power:** report chassis state and fail on soft-off timeout ([#1106](https://github.com/dryvist/ansible-proxmox/issues/1106)) ([a2fd4ac](https://github.com/dryvist/ansible-proxmox/commit/a2fd4aca55664f7d85c9691a2a9dde2e19442649))
+
+
+### Bug Fixes
+
+* **syncoid:** remove the replica job for a retired guest ([#1104](https://github.com/dryvist/ansible-proxmox/issues/1104)) ([1689d13](https://github.com/dryvist/ansible-proxmox/commit/1689d13fe48e0fdd3dec3174cc41f47179905cc6))
+
 ## [2.28.2](https://github.com/dryvist/ansible-proxmox/compare/v2.28.1...v2.28.2) (2026-10-19)
 
 
