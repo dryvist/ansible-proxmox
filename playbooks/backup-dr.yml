@@ -1,7 +1,7 @@
 ---
 # Backup, disaster-recovery, and operator-notification roles: cross-node ZFS
 # replication, the SQLite/Postgres standby archives, the pmxcfs config
-# backup, vzdump/HA/replication ntfy alerts, and the public-repo git mirror.
+# backup, vzdump/HA/replication ntfy alerts.
 #
 # Split out of site.yml, which imports it in the position this block held, so
 # role order is unchanged. The split is not cosmetic: site.yml is token-budgeted
@@ -81,14 +81,3 @@
     - role: pve_notifications
       tags:
         - pve_notifications
-
-    # Daily bare-mirror of every configured owner's PUBLIC repositories.
-    # Public repos only (v1) -- no credential of any kind, cloned/fetched
-    # anonymously. Inert unless a host sets git_mirror_enabled: true and a
-    # non-empty git_mirror_owners (the node that already owns the
-    # <pool>/git-mirror dataset). See roles/git_mirror/README.md.
-    - role: git_mirror
-      tags:
-        - git_mirror
-      vars:
-        git_mirror_healthcheck_url: "https://hc-ping.com/{{ lookup('env', 'HEALTHCHECK_PING_KEY') }}/git-mirror"
