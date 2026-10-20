@@ -7,6 +7,10 @@ platforms:
     tmpfs:
       - /run
       - /tmp
+
+driver:
+  name: docker
+
 provisioner:
   config_options:
     defaults:

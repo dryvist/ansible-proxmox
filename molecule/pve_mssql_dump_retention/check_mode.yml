@@ -81,3 +81,49 @@
             path: "{{ pve_mssql_dump_retention_check_root }}"
             state: absent
           check_mode: false
+
+- name: Preview archive-member verification without an archive listing
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  vars:
+    pve_mssql_dump_retention_verify_root: /tmp/pve-mssql-dump-retention-verify-check-mode
+    pve_mssql_dump_retention_verify_source: "{{ pve_mssql_dump_retention_verify_root }}/source"
+    pve_mssql_dump_retention_verify_archive: "{{ pve_mssql_dump_retention_verify_root }}/missing.tar.zst"
+    pve_mssql_dump_retention_verify_member: dump.txt
+
+  tasks:
+    - name: Exercise archive verification with a missing archive
+      block:
+        - name: Create a disposable source directory
+          ansible.builtin.file:
+            path: "{{ pve_mssql_dump_retention_verify_source }}"
+            state: directory
+            mode: "0755"
+          check_mode: false
+
+        - name: Create one disposable source member
+          ansible.builtin.copy:
+            content: check-mode fixture
+            dest: "{{ pve_mssql_dump_retention_verify_source }}/{{ pve_mssql_dump_retention_verify_member }}"
+            mode: "0644"
+          check_mode: false
+
+        - name: Verify the archive under check mode
+          ansible.builtin.import_tasks: ../../roles/pve_mssql_dump_retention/tasks/verify_archive.yml
+
+        - name: Assert member counting ran while the archive listing was skipped
+          ansible.builtin.assert:
+            that:
+              - pve_mssql_dump_retention_archive_members is skipped
+              - pve_mssql_dump_retention_source_members.files | length == 1
+            fail_msg: "The check-mode verification fixture did not exercise skipped archive listing."
+            quiet: true
+      always:
+        - name: Remove the disposable archive-verification fixture
+          ansible.builtin.file:
+            path: "{{ pve_mssql_dump_retention_verify_root }}"
+            state: absent
+          check_mode: false
