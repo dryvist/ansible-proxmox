@@ -4,11 +4,22 @@ pve_textfile_collectors_textfile_dir: "{{ pve_node_exporter_textfile_collector_d
 pve_textfile_collectors_timeout_seconds: 20
 pve_textfile_collectors_txg_root: /proc/spl/kstat/zfs
 pve_textfile_collectors_zpool_command: zpool
+pve_textfile_collectors_zfs_command: zfs
 pve_textfile_collectors_awk_command: awk
 pve_textfile_collectors_date_command: date
 pve_textfile_collectors_corosync_cmapctl_command: corosync-cmapctl
 pve_textfile_collectors_corosync_quorumtool_command: corosync-quorumtool
 pve_textfile_collectors_ha_manager_command: ha-manager
+# Collect all rpool datasets, each pool root and first-level dataset, and guest
+# disks at any depth. The filesystem,volume filter excludes snapshots.
+pve_textfile_collectors_zfs_dataset_include_regexes:
+  - '^rpool(/.*)?$'
+  - '^[^/]+$'
+  - '^[^/]+/[^/]+$'
+  - '^[^/]+/(.*/)?(vm|subvol)-[0-9]+-disk-[0-9]+$'
+# Alert when one rpool dataset's usedbydataset plus usedbyrefreservation grows
+# beyond this threshold in 24 hours. Export it for threshold-driven SPL.
+pve_textfile_collectors_zfs_growth_threshold_gib: 10
 pve_textfile_collectors_collectors:
   zpool_status:
     interval_seconds: 60

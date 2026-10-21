@@ -1,10 +1,10 @@
 # pve_textfile_collectors
 
 The role installs six scheduled collectors that write Prometheus textfiles to
-the node_exporter textfile directory. Collectors report ZFS pool status and
-latency, transaction group sync time, pool fill, and Corosync link and quorum
-state, plus HA quorum, manager, fencing, and service state. Each collector
-writes a success and duration metric.
+the node_exporter textfile directory. Collectors report ZFS pool and bounded
+dataset accounting, pool latency and fill, transaction group sync time,
+Corosync link and quorum state, plus HA quorum, manager, fencing, and service
+state. Each collector writes a success and duration metric.
 
 ## Variables
 
@@ -15,6 +15,9 @@ writes a success and duration metric.
 | `pve_textfile_collectors_timeout_seconds` | `20` | Timeout for each external command. |
 | `pve_textfile_collectors_txg_root` | `/proc/spl/kstat/zfs` | Root directory for ZFS transaction group statistics. |
 | `pve_textfile_collectors_zpool_command` | `zpool` | ZFS pool command. |
+| `pve_textfile_collectors_zfs_command` | `zfs` | ZFS dataset command. |
+| `pve_textfile_collectors_zfs_dataset_include_regexes` | rpool descendants, pool roots, first-level datasets, and guest disks | Bounds dataset series; snapshots are excluded by the ZFS type filter. |
+| `pve_textfile_collectors_zfs_growth_threshold_gib` | `10` | Per-dataset rpool growth alert threshold over 24 hours. |
 | `pve_textfile_collectors_awk_command` | `awk` | Text processing command. |
 | `pve_textfile_collectors_date_command` | `date` | Timestamp conversion command. |
 | `pve_textfile_collectors_corosync_cmapctl_command` | `corosync-cmapctl` | Corosync statistics command. |
@@ -45,6 +48,12 @@ writes a success and duration metric.
 | `pve_zpool_free_bytes` | `pool` | Free bytes in a ZFS pool. |
 | `pve_zpool_frag_percent` | `pool` | Fragmentation percentage of a ZFS pool. |
 | `pve_zpool_cap_percent` | `pool` | Capacity percentage of a ZFS pool. |
+| `pve_zfs_dataset_used_bytes` | `pool`, `dataset` | Bytes used by a ZFS dataset or volume. |
+| `pve_zfs_dataset_used_by_dataset_bytes` | `pool`, `dataset` | Bytes used by the dataset itself. |
+| `pve_zfs_dataset_used_by_snapshots_bytes` | `pool`, `dataset` | Bytes used by snapshots of the dataset. |
+| `pve_zfs_dataset_used_by_refreservation_bytes` | `pool`, `dataset` | Bytes used to satisfy the dataset refreservation. |
+| `pve_zfs_dataset_available_bytes` | `pool`, `dataset` | Bytes available to the dataset and its children. |
+| `pve_zfs_dataset_growth_threshold_bytes` | `pool` | Configured per-dataset growth alert threshold in bytes. |
 | `pve_corosync_link_connected` | `peer`, `link` | Whether a Corosync link is connected. |
 | `pve_corosync_link_latency_avg_microseconds` | `peer`, `link` | Average Corosync link latency in microseconds. |
 | `pve_corosync_link_latency_max_microseconds` | `peer`, `link` | Maximum Corosync link latency in microseconds. |
