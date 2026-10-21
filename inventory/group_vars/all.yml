@@ -3,3 +3,8 @@
 # service name in the published tofu inventory.
 container_start_services:
   - llamaindex
+
+# Shared source for operator-only iDRAC administration. These credentials are
+# read on the controller and are never sent to application guests.
+idrac_admin_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
+idrac_admin_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"

@@ -48,8 +48,8 @@ idrac_power_off_retries: 60
 # Fail if graceful power-off has not completed within the poll budget.
 idrac_power_off_fail_on_timeout: true
 
-idrac_power_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
-idrac_power_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"
+idrac_power_username: "{{ idrac_admin_username }}"
+idrac_power_password: "{{ idrac_admin_password }}"
 
 # Per-host BMC address (ipmitool -H). FQDN preferred over an IP — a hostname
 # insulates this from BMC re-addressing (the golden rule). Set in host_vars/<node>

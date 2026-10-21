@@ -191,6 +191,9 @@ jobs:
           PROXMOX_VE_NODES='localhost,node-under-test,controller-node' \
           ansible-playbook tests/idrac_power/verify_controller_exclusion.yml -i localhost, -c local
 
+      - name: Verify BMC console user privilege and password contract
+        run: python3 -m pytest -q tests/test_bmc_console_user_contract.py
+
       # The capacity monitor alerts on a band CHANGE, so the band state write is
       # what decides whether a filling pool keeps reporting. Molecule cannot
       # cover it: the case under test is a DOWN notification endpoint, which a

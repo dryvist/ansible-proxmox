@@ -1,0 +1,35 @@
+---
+bmc_console_user_targets:
+  - name: r410
+    enabled: true
+    path: apps/idrac-kvm-r410
+    user_index: 16
+    fields:
+      host: idrac_kvm_r410_host
+      user: idrac_kvm_r410_user
+      password: idrac_kvm_r410_password
+  - name: r710
+    enabled: false
+    path: apps/idrac-kvm-r710
+    user_index: 16
+    fields:
+      host: idrac_kvm_r710_host
+      user: idrac_kvm_r710_user
+      password: idrac_kvm_r710_password
+
+bmc_console_user_admin_username: "{{ idrac_admin_username }}"
+bmc_console_user_admin_password: "{{ idrac_admin_password }}"
+bmc_console_user_racadm_auth_responses:
+  '(?i)(user\s*name|username)\s*:\s*$': "{{ bmc_console_user_admin_username }}"
+  '(?i)password\s*:\s*$': "{{ bmc_console_user_admin_password }}"
+bmc_console_user_bao_addr: >-
+  {{ lookup('env', 'BAO_ADDR')
+     | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
+bmc_console_user_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
+bmc_console_user_kv_mount: secret
+# RACADM cannot read an existing iDRAC6 password back. Leave it unchanged on
+# normal runs; set true for an attended credential rotation from OpenBao.
+bmc_console_user_reset_password: false
+bmc_console_user_privilege_mask: "0x00000021"
+bmc_console_user_ipmi_privilege: 15
+bmc_console_user_sol_enabled: 0
