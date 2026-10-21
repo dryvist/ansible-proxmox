@@ -38,6 +38,8 @@ jobs:
       # Keep the repo-specific selector maps single-sourced for both reusable calls.
       molecule_contract_filters: &molecule_contract_filters |
         contract_only:
+          - 'roles/bmc_console_user/**'
+          - 'tests/test_bmc_console_user_contract.py'
           - 'roles/pve_full_system_stress/**'
           - 'tests/pve_full_system_stress/**'
           - 'roles/pve_syslog_forwarder/**'

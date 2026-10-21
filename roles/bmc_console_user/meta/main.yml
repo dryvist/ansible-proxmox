@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: bmc_console_user
+  author: ansible-proxmox
+  description: Reconcile least-privilege iDRAC6 console users from OpenBao
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - dell
+    - idrac
+    - openbao
+
+dependencies: []

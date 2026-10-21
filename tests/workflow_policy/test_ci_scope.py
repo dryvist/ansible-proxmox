@@ -100,6 +100,8 @@ class CiScopeContract(unittest.TestCase):
             )
 
         for pattern in (
+            "roles/bmc_console_user/**",
+            "tests/test_bmc_console_user_contract.py",
             ".github/workflows/ci-gate.yml",
             ".github/workflows/molecule.yml",
             ".github/workflows/_role-contracts.yml",

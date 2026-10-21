@@ -1,0 +1,182 @@
+---
+- name: Read the console account credential for {{ bmc_console_user_target.name }}
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ bmc_console_user_bao_addr }}"
+    token: "{{ bmc_console_user_bao_token }}"
+    engine_mount_point: "{{ bmc_console_user_kv_mount }}"
+    path: "{{ bmc_console_user_target.path }}"
+  register: bmc_console_user_secret
+  delegate_to: localhost
+  become: false
+  no_log: true
+  changed_when: false
+  check_mode: false
+
+- name: Require the console account fields for {{ bmc_console_user_target.name }}
+  ansible.builtin.assert:
+    that:
+      - bmc_console_user_secret.secret[bmc_console_user_target.fields.host] | default('', true) | length > 0
+      - bmc_console_user_secret.secret[bmc_console_user_target.fields.user] | default('', true) | length > 0
+      - bmc_console_user_secret.secret[bmc_console_user_target.fields.password] | default('', true) | length > 0
+      - bmc_console_user_secret.secret[bmc_console_user_target.fields.user] | length <= 16
+      - bmc_console_user_secret.secret[bmc_console_user_target.fields.password] | length <= 20
+      - bmc_console_user_secret.secret[bmc_console_user_target.fields.user] | regex_search('[\r\n]') is none
+      - bmc_console_user_secret.secret[bmc_console_user_target.fields.password] | regex_search('[\r\n]') is none
+    fail_msg: The OpenBao console credential is incomplete or exceeds iDRAC6 limits.
+    quiet: true
+  no_log: true
+
+- name: Read all iDRAC6 user slots for {{ bmc_console_user_target.name }}
+  ansible.builtin.expect:
+    command: >-
+      racadm -i -r {{ bmc_console_user_secret.secret[bmc_console_user_target.fields.host] | quote }}
+      getconfig -g cfgUserAdmin -i {{ item }}
+    responses: "{{ bmc_console_user_racadm_auth_responses }}"
+  loop: "{{ range(1, 17) | list }}"
+  loop_control:
+    label: "{{ item }}"
+  register: bmc_console_user_slot_reads
+  delegate_to: localhost
+  become: false
+  no_log: true
+  changed_when: false
+  check_mode: false
+
+- name: Find the existing account and free user slots for {{ bmc_console_user_target.name }}
+  vars:
+    bmc_console_user_name: "{{ bmc_console_user_secret.secret[bmc_console_user_target.fields.user] }}"
+  ansible.builtin.set_fact:
+    bmc_console_user_slot_state: >-
+      {%- set ns = namespace(matches=[], free=[]) -%}
+      {%- for slot in bmc_console_user_slot_reads.results -%}
+      {%- set names = slot.stdout | regex_findall('(?m)^cfgUserAdminUserName[ ]*=[ ]*(.*)$') -%}
+      {%- set current = names | first | default('', true) | trim | regex_replace('^"|"$', '') -%}
+      {%- if current == bmc_console_user_name -%}
+      {%- set _ = ns.matches.append({'index': slot.item, 'stdout': slot.stdout}) -%}
+      {%- elif current | length == 0 -%}
+      {%- set _ = ns.free.append(slot.item) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ {'matches': ns.matches, 'free': ns.free} }}
+  no_log: true
+
+- name: Require a unique account slot for {{ bmc_console_user_target.name }}
+  ansible.builtin.assert:
+    that:
+      - bmc_console_user_slot_state.matches | length <= 1
+      - bmc_console_user_slot_state.matches | length > 0 or bmc_console_user_slot_state.free | length > 0
+    fail_msg: The requested console account cannot be assigned safely to an iDRAC6 user slot.
+    quiet: true
+  no_log: true
+
+- name: Select the existing or preferred free slot for {{ bmc_console_user_target.name }}
+  ansible.builtin.set_fact:
+    bmc_console_user_selected_index: >-
+      {{ bmc_console_user_slot_state.matches[0].index
+         if bmc_console_user_slot_state.matches | length > 0
+         else (bmc_console_user_target.user_index
+               if bmc_console_user_target.user_index in bmc_console_user_slot_state.free
+               else bmc_console_user_slot_state.free | last) }}
+    bmc_console_user_existing: "{{ bmc_console_user_slot_state.matches | length > 0 }}"
+    bmc_console_user_current_config: >-
+      {{ bmc_console_user_slot_state.matches[0].stdout
+         if bmc_console_user_slot_state.matches | length > 0 else '' }}
+  no_log: true
+
+- name: Set the console account name for {{ bmc_console_user_target.name }}
+  ansible.builtin.expect:
+    command: >-
+      racadm -i -r {{ bmc_console_user_secret.secret[bmc_console_user_target.fields.host] | quote }}
+      config -g cfgUserAdmin -i {{ bmc_console_user_selected_index }}
+      -o cfgUserAdminUserName
+      {{ bmc_console_user_secret.secret[bmc_console_user_target.fields.user] | quote }}
+    responses: "{{ bmc_console_user_racadm_auth_responses }}"
+  when: not (bmc_console_user_existing | bool)
+  delegate_to: localhost
+  become: false
+  no_log: true
+  changed_when: true
+
+- name: Set the console account password for {{ bmc_console_user_target.name }}
+  when: not (bmc_console_user_existing | bool) or bmc_console_user_reset_password | bool
+  block:
+    - name: Create a private RACADM configuration file for {{ bmc_console_user_target.name }}
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .cfg
+      register: bmc_console_user_cfg
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Write the console account password to its RACADM configuration file
+      ansible.builtin.copy:
+        content: |
+          [cfgUserAdmin]
+          # cfgUserAdminIndex={{ bmc_console_user_selected_index }}
+          cfgUserAdminUserName={{ bmc_console_user_secret.secret[bmc_console_user_target.fields.user] }}
+          cfgUserAdminPassword={{ bmc_console_user_secret.secret[bmc_console_user_target.fields.password] }}
+        dest: "{{ bmc_console_user_cfg.path }}"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Apply the console account password from the RACADM configuration file
+      ansible.builtin.expect:
+        command: >-
+          racadm -i -r {{ bmc_console_user_secret.secret[bmc_console_user_target.fields.host] | quote }}
+          config -p -f {{ bmc_console_user_cfg.path | quote }}
+        responses: "{{ bmc_console_user_racadm_auth_responses }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+      changed_when: true
+  always:
+    - name: Remove the temporary RACADM configuration file
+      ansible.builtin.file:
+        path: "{{ bmc_console_user_cfg.path }}"
+        state: absent
+      when: bmc_console_user_cfg is defined and bmc_console_user_cfg.path is defined
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+- name: Configure console account access for {{ bmc_console_user_target.name }}
+  ansible.builtin.expect:
+    command: >-
+      racadm -i -r {{ bmc_console_user_secret.secret[bmc_console_user_target.fields.host] | quote }}
+      config -g cfgUserAdmin -i {{ bmc_console_user_selected_index }}
+      -o {{ item.attribute }} {{ item.value }}
+    responses: "{{ bmc_console_user_racadm_auth_responses }}"
+  loop:
+    - attribute: cfgUserAdminPrivilege
+      value: "{{ bmc_console_user_privilege_mask }}"
+      base: 16
+    - attribute: cfgUserAdminIpmiLanPrivilege
+      value: "{{ bmc_console_user_ipmi_privilege }}"
+      base: 10
+    - attribute: cfgUserAdminIpmiSerialPrivilege
+      value: "{{ bmc_console_user_ipmi_privilege }}"
+      base: 10
+    - attribute: cfgUserAdminSolEnable
+      value: "{{ bmc_console_user_sol_enabled }}"
+      base: 10
+    - attribute: cfgUserAdminEnable
+      value: "1"
+      base: 10
+  loop_control:
+    label: "{{ item.attribute }}"
+  when: >-
+    not (bmc_console_user_existing | bool) or
+    (
+      (bmc_console_user_current_config
+       | regex_findall('(?m)^' ~ item.attribute ~ '[ ]*=[ ]*(.*)$')
+       | first | default('') | trim | regex_replace('^"|"$', '')
+       | int(base=item.base))
+      != (item.value | int(base=item.base))
+    )
+  delegate_to: localhost
+  become: false
+  no_log: true
+  changed_when: true
