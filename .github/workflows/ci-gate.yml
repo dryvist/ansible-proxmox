@@ -43,6 +43,7 @@ jobs:
           - 'roles/idrac_power/**'
           - 'tests/test_idrac_power_contract.py'
           - 'roles/pve_textfile_collectors/**'
+          - 'tests/pve_textfile_collectors/**'
           - 'tests/test_zfs_dataset_metrics_contract.py'
           - 'roles/pve_full_system_stress/**'
           - 'tests/pve_full_system_stress/**'
