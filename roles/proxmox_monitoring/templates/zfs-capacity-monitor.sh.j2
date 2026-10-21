@@ -17,6 +17,7 @@ DEADMAN_URL="{{ proxmox_monitoring_zfs_capacity_deadman_url }}"
 STATE_DIR="/var/lib/zfs-capacity-monitor"
 POOL_THRESHOLDS=({{ proxmox_monitoring_zfs_capacity_thresholds | join(' ') }})
 DATASET_THRESHOLDS=({{ proxmox_monitoring_zfs_dataset_capacity_thresholds | join(' ') }})
+HYSTERESIS_POINTS={{ proxmox_monitoring_zfs_capacity_hysteresis_points }}
 
 mkdir -p "$STATE_DIR"
 
@@ -62,6 +63,9 @@ check_capacity() {
   local state_file="$STATE_DIR/${kind,,}_${name//\//_}.band"
   local last=0
   if [ -f "$state_file" ]; then last="$(cat "$state_file")"; fi
+  if [ "$band" -lt "$last" ] && [ "$cap" -gt "$((last - HYSTERESIS_POINTS))" ]; then
+    band="$last"
+  fi
   if [ "$band" = "$last" ]; then return 0; fi
 
   local sent=0

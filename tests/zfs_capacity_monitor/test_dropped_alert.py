@@ -67,6 +67,35 @@ def check_dropped_alert():
                             "call(s); a repeat alert is noise and an OK "
                             "heartbeat would clear a live breach"
                             % (curl_calls(tmp) - before))
+
+    # A downward crossing needs the configured two-point clearance before the
+    # state is written, so small oscillations do not trigger repeated recovery
+    # and breach notifications.
+    with tempfile.TemporaryDirectory() as tmp:
+        write_monitor(tmp, thresholds=(50, 75, 85, 90, 94))
+
+        run(tmp, 94, curl_exit=0)
+        if band_state(tmp) != "94":
+            failures.append("the 94% entry band was not recorded")
+
+        before = curl_calls(tmp)
+        run(tmp, 93, curl_exit=0)
+        if band_state(tmp) != "94" or curl_calls(tmp) != before:
+            failures.append("capacity at 93% exited the 94% band too early")
+
+        before = curl_calls(tmp)
+        run(tmp, 92, curl_exit=0)
+        if band_state(tmp) != "90" or curl_calls(tmp) <= before:
+            failures.append("capacity at 92% did not record and report recovery to 90%")
+
+        before = curl_calls(tmp)
+        run(tmp, 93, curl_exit=0)
+        if band_state(tmp) != "90" or curl_calls(tmp) != before:
+            failures.append("capacity at 93% crossed back into the 94% band")
+
+        run(tmp, 94, curl_exit=0)
+        if band_state(tmp) != "94" or curl_calls(tmp) <= before:
+            failures.append("capacity at 94% did not report the new 94% entry band")
     return failures
 
 
@@ -78,8 +107,8 @@ def main():
             print("  - %s" % f)
         return 1
     print("PASS: band state survives a dropped alert, retries once the "
-          "endpoint recovers, and an unchanged band above threshold sends "
-          "nothing more")
+          "endpoint recovers, unchanged bands stay quiet, and recovery uses "
+          "the configured hysteresis")
     return 0
 
 

@@ -45,6 +45,7 @@ proxmox_monitoring_pvesr_telemetry_interval: 5
 # to leave enough room for a converge, a rollover, or a restore to finish.
 proxmox_monitoring_zfs_capacity_interval: 15
 proxmox_monitoring_zfs_capacity_thresholds: [50, 75, 85, 90, 94]
+proxmox_monitoring_zfs_capacity_hysteresis_points: 2
 
 # ZFS DATASET capacity alerts (same script, same band mechanics): every
 # filesystem dataset with a quota is checked as used/quota. Quota-less
