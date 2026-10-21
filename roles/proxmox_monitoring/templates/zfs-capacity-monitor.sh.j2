@@ -53,19 +53,17 @@ check_capacity() {
     if [ "$cap" -ge "$t" ]; then band="$t"; fi
   done
 
-  # Anything at or above the lowest threshold holds the deadman red for this
-  # run, whether or not the band changed. Tracking only CROSSINGS meant a pool
-  # that crossed once and then sat there got an OK heartbeat on every later run
-  # — the monitor would clear its own alert while the pool stayed full. Set the
-  # lowest threshold at the level you would actually want to be told about.
-  if [ "$band" -gt 0 ]; then breach=1; fi
-
   local state_file="$STATE_DIR/${kind,,}_${name//\//_}.band"
   local last=0
   if [ -f "$state_file" ]; then last="$(cat "$state_file")"; fi
   if [ "$band" -lt "$last" ] && [ "$cap" -gt "$((last - HYSTERESIS_POINTS))" ]; then
     band="$last"
   fi
+
+  # Keep the deadman red for an active band, including a band retained by
+  # hysteresis below its threshold. Otherwise an OK heartbeat would clear the
+  # alert before the configured recovery clearance is reached.
+  if [ "$band" -gt 0 ]; then breach=1; fi
   if [ "$band" = "$last" ]; then return 0; fi
 
   local sent=0

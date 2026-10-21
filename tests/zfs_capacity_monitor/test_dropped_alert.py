@@ -96,6 +96,25 @@ def check_dropped_alert():
         run(tmp, 94, curl_exit=0)
         if band_state(tmp) != "94" or curl_calls(tmp) <= before:
             failures.append("capacity at 94% did not report the new 94% entry band")
+
+    # The lowest active band must keep the deadman red while hysteresis holds
+    # state below its threshold, then recover at the clearance boundary.
+    with tempfile.TemporaryDirectory() as tmp:
+        write_monitor(tmp, thresholds=(50, 75, 85, 90, 94))
+
+        run(tmp, 50, curl_exit=0)
+        if band_state(tmp) != "50":
+            failures.append("the 50% lowest band was not recorded")
+
+        before = curl_calls(tmp)
+        run(tmp, 49, curl_exit=0)
+        if band_state(tmp) != "50" or curl_calls(tmp) != before:
+            failures.append("capacity at 49% cleared the lowest band before hysteresis")
+
+        before = curl_calls(tmp)
+        run(tmp, 48, curl_exit=0)
+        if band_state(tmp) != "0" or curl_calls(tmp) <= before:
+            failures.append("capacity at 48% did not recover below the lowest band")
     return failures
 
 
