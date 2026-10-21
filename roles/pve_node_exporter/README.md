@@ -44,7 +44,7 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 | ---------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
 | `pve_node_exporter_version`                    | `1.12.1`                                        | Pinned upstream release.                             |
 | `pve_node_exporter_download_url`               | GitHub releases URL                             | Override to a local mirror for offline converges.    |
-| `pve_node_exporter_checksum`                   | Per-architecture SHA256 for the pinned release  | Tarball integrity pin; update with the version.       |
+| `pve_node_exporter_checksum`                   | SHA256 per architecture                         | Verify the pinned release checksum.                  |
 | `pve_node_exporter_listen_address`             | node's mgmt IP (`ansible_default_ipv4.address`) | Bind address.                                        |
 | `pve_node_exporter_port`                       | `9100`                                          | Listen port.                                         |
 | `pve_node_exporter_user`                       | `node-exporter`                                 | Service account.                                     |

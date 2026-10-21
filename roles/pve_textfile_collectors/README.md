@@ -16,7 +16,7 @@ state. Each collector writes a success and duration metric.
 | `pve_textfile_collectors_txg_root` | `/proc/spl/kstat/zfs` | Root directory for ZFS transaction group statistics. |
 | `pve_textfile_collectors_zpool_command` | `zpool` | ZFS pool command. |
 | `pve_textfile_collectors_zfs_command` | `zfs` | ZFS dataset command. |
-| `pve_textfile_collectors_zfs_dataset_include_regexes` | rpool descendants, pool roots, first-level datasets, and guest disks | Bounds dataset series; snapshots are excluded by the ZFS type filter. |
+| `pve_textfile_collectors_zfs_dataset_include_regexes` | rpool descendants, pool roots/children, guest disks | Bounds series; excludes snapshots by type. |
 | `pve_textfile_collectors_zfs_growth_threshold_gib` | `10` | Per-dataset rpool growth alert threshold over 24 hours. |
 | `pve_textfile_collectors_awk_command` | `awk` | Text processing command. |
 | `pve_textfile_collectors_date_command` | `date` | Timestamp conversion command. |
