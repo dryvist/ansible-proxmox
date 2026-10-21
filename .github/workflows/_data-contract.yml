@@ -191,6 +191,9 @@ jobs:
           PROXMOX_VE_NODES='localhost,node-under-test,controller-node' \
           ansible-playbook tests/idrac_power/verify_controller_exclusion.yml -i localhost, -c local
 
+      - name: Verify idrac_power password environment contract
+        run: python3 -m pytest -q tests/test_idrac_power_contract.py
+
       - name: Verify BMC console user privilege and password contract
         run: python3 -m pytest -q tests/test_bmc_console_user_contract.py
 

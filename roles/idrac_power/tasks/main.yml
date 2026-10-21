@@ -21,8 +21,10 @@
   ansible.builtin.command:
     cmd: >-
       ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
-      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      -U {{ idrac_power_username }} -E
       chassis power status
+  environment:
+    IPMI_PASSWORD: "{{ idrac_power_password }}"
   delegate_to: "{{ idrac_power_controller }}"
   register: idrac_power_status
   changed_when: false
@@ -52,8 +54,10 @@
   ansible.builtin.command:
     cmd: >-
       ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
-      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      -U {{ idrac_power_username }} -E
       {{ item }}
+  environment:
+    IPMI_PASSWORD: "{{ idrac_power_password }}"
   loop:
     - chassis status
     - sel elist last 40
@@ -86,8 +90,10 @@
   ansible.builtin.command:
     cmd: >-
       ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
-      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      -U {{ idrac_power_username }} -E
       chassis power on
+  environment:
+    IPMI_PASSWORD: "{{ idrac_power_password }}"
   delegate_to: "{{ idrac_power_controller }}"
   changed_when: true
   no_log: true
@@ -115,8 +121,10 @@
   ansible.builtin.command:
     cmd: >-
       ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
-      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      -U {{ idrac_power_username }} -E
       chassis power soft
+  environment:
+    IPMI_PASSWORD: "{{ idrac_power_password }}"
   delegate_to: "{{ idrac_power_controller }}"
   changed_when: true
   no_log: true
@@ -134,8 +142,10 @@
   ansible.builtin.command:
     cmd: >-
       ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
-      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      -U {{ idrac_power_username }} -E
       chassis power status
+  environment:
+    IPMI_PASSWORD: "{{ idrac_power_password }}"
   delegate_to: "{{ idrac_power_controller }}"
   register: idrac_power_off_check
   until: "'is off' in (idrac_power_off_check.stdout | default(''))"
@@ -189,8 +199,10 @@
   ansible.builtin.command:
     cmd: >-
       ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
-      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      -U {{ idrac_power_username }} -E
       chassis status
+  environment:
+    IPMI_PASSWORD: "{{ idrac_power_password }}"
   delegate_to: "{{ idrac_power_controller }}"
   register: idrac_power_chassis_status
   changed_when: false
@@ -214,8 +226,10 @@
   ansible.builtin.command:
     cmd: >-
       ipmitool -I lanplus -H {{ idrac_power_bmc_host }}
-      -U {{ idrac_power_username }} -P {{ idrac_power_password }}
+      -U {{ idrac_power_username }} -E
       chassis policy {{ idrac_power_restore_policy }}
+  environment:
+    IPMI_PASSWORD: "{{ idrac_power_password }}"
   delegate_to: "{{ idrac_power_controller }}"
   changed_when: true
   no_log: true
