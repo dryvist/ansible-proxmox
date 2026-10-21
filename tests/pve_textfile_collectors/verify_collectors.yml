@@ -72,6 +72,15 @@
             *) exit 1 ;;
           esac
 
+    - name: Install the fixture zfs command
+      ansible.builtin.copy:
+        dest: "{{ pve_textfile_collectors_test_work }}/bin/zfs"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          [[ "${1:-}" == list ]] || exit 2
+          exit 0
+
     - name: Install the fixture Corosync statistics command
       ansible.builtin.copy:
         dest: "{{ pve_textfile_collectors_test_work }}/bin/corosync-cmapctl"
@@ -162,6 +171,7 @@
         OUTPUT_DIR: "{{ pve_textfile_collectors_test_work }}/output"
         TIMEOUT: "2"
         ZPOOL: "{{ pve_textfile_collectors_test_work }}/bin/zpool"
+        ZFS: "{{ pve_textfile_collectors_test_work }}/bin/zfs"
         COROSYNC_CMAPCTL: "{{ pve_textfile_collectors_test_work }}/bin/corosync-cmapctl"
         COROSYNC_QUORUMTOOL: "{{ pve_textfile_collectors_test_work }}/bin/corosync-quorumtool"
         TXG_ROOT: "{{ pve_textfile_collectors_test_work }}/txgs"

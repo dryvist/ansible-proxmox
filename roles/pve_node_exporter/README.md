@@ -8,7 +8,7 @@ host metrics (CPU, memory, disk, ZFS, network) on port `9100`.
 
 1. Creates a dedicated no-login system user (`node-exporter`).
 2. Downloads the **pinned** upstream release tarball to a versioned path under
-   `/opt/node_exporter/` (skipped when already present; optional sha256 pin).
+   `/opt/node_exporter/` and verifies its SHA256 checksum.
 3. Unpacks it (versioned, `creates:`-guarded) and installs the binary to
    `/usr/local/bin/node_exporter` — only rewritten on a version bump.
 4. Optionally creates the textfile-collector directory so scripts can publish
@@ -42,9 +42,9 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 | Variable                                       | Default                                         | Purpose                                              |
 | ---------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
-| `pve_node_exporter_version`                    | `1.9.1`                                         | Pinned upstream release.                             |
+| `pve_node_exporter_version`                    | `1.12.1`                                        | Pinned upstream release.                             |
 | `pve_node_exporter_download_url`               | GitHub releases URL                             | Override to a local mirror for offline converges.    |
-| `pve_node_exporter_checksum`                   | `""`                                            | Optional `sha256:<hex>` tarball pin; empty skips it. |
+| `pve_node_exporter_checksum`                   | SHA256 per architecture                         | Verify the pinned release checksum.                  |
 | `pve_node_exporter_listen_address`             | node's mgmt IP (`ansible_default_ipv4.address`) | Bind address.                                        |
 | `pve_node_exporter_port`                       | `9100`                                          | Listen port.                                         |
 | `pve_node_exporter_user`                       | `node-exporter`                                 | Service account.                                     |
