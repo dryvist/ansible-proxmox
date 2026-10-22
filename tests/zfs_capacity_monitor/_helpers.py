@@ -37,7 +37,7 @@ def extract_script():
     return body
 
 
-def render(thresholds, deadman_url=DEADMAN_DEFAULT):
+def render(thresholds, deadman_url=DEADMAN_DEFAULT, hysteresis_points=2):
     """Substitute the template's Jinja expressions with literal test values."""
     body = extract_script()
     body = body.replace("{{ proxmox_monitoring_zfs_capacity_deadman_url }}",
@@ -48,6 +48,9 @@ def render(thresholds, deadman_url=DEADMAN_DEFAULT):
     body = re.sub(
         r"\{\{\s*proxmox_monitoring_zfs_dataset_capacity_thresholds[^}]*\}\}",
         joined, body)
+    body = re.sub(
+        r"\{\{\s*proxmox_monitoring_zfs_capacity_hysteresis_points\s*\}\}",
+        str(hysteresis_points), body)
     if "{{" in body:
         sys.exit("FAIL: unsubstituted Jinja remains after render — the template "
                  "grew a variable this test does not know about:\n%s" %
@@ -150,10 +153,12 @@ def ok_heartbeats(calls, deadman=DEADMAN_DEFAULT):
     return [c for c in calls if deadman in c and "/fail" not in c]
 
 
-def write_monitor(tmp, thresholds=(50, 75, 85, 90), deadman_url=DEADMAN_DEFAULT):
+def write_monitor(tmp, thresholds=(50, 75, 85, 90), deadman_url=DEADMAN_DEFAULT,
+                  hysteresis_points=2):
     """Render the monitor into `tmp/monitor.sh` with state redirected out of
     /var/lib so the test needs no root."""
-    body = render(list(thresholds), deadman_url=deadman_url)
+    body = render(list(thresholds), deadman_url=deadman_url,
+                  hysteresis_points=hysteresis_points)
     body = body.replace('STATE_DIR="/var/lib/zfs-capacity-monitor"',
                         'STATE_DIR="%s/state"' % tmp)
     write_exec(os.path.join(tmp, "monitor.sh"), body)

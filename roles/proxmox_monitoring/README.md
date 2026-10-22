@@ -59,7 +59,8 @@ Trips a deadman endpoint when a ZFS **pool** crosses a usage band (default
 space, so the pool bands already cover them — per-dataset bands would only
 duplicate the pool alert. State is tracked per pool/dataset under
 `/var/lib/zfs-capacity-monitor/`, so an alert fires only on a band **change**
-(rising or recovering), not every run. Disabled until
+(rising or recovering), not every run. Recovery waits until capacity is 2
+percentage points below the active band edge. Disabled until
 `proxmox_monitoring_zfs_capacity_deadman_url` is set.
 
 Delivery is a deadman rather than a push endpoint on purpose: this runs on the
