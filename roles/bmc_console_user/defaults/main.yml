@@ -1,7 +1,7 @@
 ---
 bmc_console_user_targets:
   - name: r410
-    enabled: true
+    enabled: false
     path: apps/idrac-kvm-r410
     user_index: 16
     fields:

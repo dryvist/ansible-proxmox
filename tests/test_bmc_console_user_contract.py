@@ -10,6 +10,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = yaml.safe_load((ROOT / "roles/bmc_console_user/defaults/main.yml").read_text())
 TASKS = yaml.safe_load((ROOT / "roles/bmc_console_user/tasks/target.yml").read_text())
+ROLE_TASKS = yaml.safe_load((ROOT / "roles/bmc_console_user/tasks/main.yml").read_text())
 PLAYBOOK = yaml.safe_load((ROOT / "playbooks/bmc-console-user.yml").read_text())
 
 
@@ -29,12 +30,21 @@ def nested_tasks(tasks):
             yield from nested_tasks(task.get(section, []))
 
 
-def test_target_defaults_enable_only_r410():
+def test_all_targets_are_disabled_by_default():
     targets = {target["name"]: target for target in DEFAULTS["bmc_console_user_targets"]}
-    assert targets["r410"]["enabled"] is True
+    assert targets["r410"]["enabled"] is False
     assert targets["r710"]["enabled"] is False
     assert targets["r410"]["path"] == "apps/idrac-kvm-r410"
     assert targets["r710"]["path"] == "apps/idrac-kvm-r710"
+    assert not [target for target in targets.values() if target["enabled"]]
+
+
+def test_operator_input_guard_runs_only_when_a_target_is_enabled():
+    guard = ROLE_TASKS[0]
+    assert guard["name"] == "Assert BMC console user inputs"
+    assert guard["when"] == (
+        "bmc_console_user_targets | selectattr('enabled', 'equalto', true) | list | length > 0"
+    )
 
 
 def test_play_runs_on_controller_and_role_reads_openbao():
