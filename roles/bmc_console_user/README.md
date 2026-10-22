@@ -1,11 +1,10 @@
 # bmc_console_user
 
 Ensures a dedicated iDRAC6 account can open the virtual console using only
-login and console-redirection privileges. The default target is the R410; the
-R710 entry stays disabled. Credentials are read from the per-target OpenBao
-KV path, whose fields are target-prefixed to avoid collisions in the apps
-domain's flat merge. RACADM sets IPMI LAN and serial access to no access and
-disables SOL.
+login and console-redirection privileges. All targets are disabled by default.
+Credentials are read from the per-target OpenBao KV path, whose fields are
+target-prefixed to avoid collisions in the apps domain's flat merge. RACADM
+sets IPMI LAN and serial access to no access and disables SOL.
 
 This role uses Remote RACADM from the controller because the maintained Ansible
 account interfaces checked do not document iDRAC6 support. RACADM prompts for
