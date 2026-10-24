@@ -221,7 +221,7 @@ jobs:
     uses: ./.github/workflows/_role-contracts.yml
 
   static-contracts:
-    name: Molecule Test
+    name: Molecule Static Contracts
     needs: changes
     if: >-
       needs.changes.outputs.molecule == 'true' ||
