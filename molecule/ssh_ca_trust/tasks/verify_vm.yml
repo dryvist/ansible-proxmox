@@ -1,0 +1,95 @@
+---
+- name: Read the production VM trust sources
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_main_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/main.yml') }}"
+    ssh_ca_trust_vm_selection_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/vm.yml') }}"
+    ssh_ca_trust_vm_guest_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/vm_guest.yml') }}"
+    ssh_ca_trust_vm_push_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/vm_push.yml') }}"
+    ssh_ca_trust_vm_file_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/vm_file.yml') }}"
+    ssh_ca_trust_vm_rollback_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/vm_rollback.yml') }}"
+    ssh_ca_trust_vm_default_data: "{{ lookup('file', '../../../roles/ssh_ca_trust/defaults/main.yml') | from_yaml }}"
+    ssh_ca_trust_vm_host_cert_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/vm_host_cert.yml') }}"
+
+- name: Render the VM CA drop-in with the apps-role file paths
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_dropin_template: >-
+      {{ lookup('template', '../../../roles/ssh_ca_trust/templates/vm_sshd_ca.conf.j2', template_vars={
+           'ssh_ca_trust_ca_file': ssh_ca_trust_vm_default_data.ssh_ca_trust_ca_file,
+           'ssh_ca_trust_principals_dir': ssh_ca_trust_vm_default_data.ssh_ca_trust_principals_dir
+         }) }}
+    ssh_ca_trust_vm_debian_principals_path: >-
+      {{ ssh_ca_trust_vm_default_data.ssh_ca_trust_principals_dir ~ '/debian' }}
+    ssh_ca_trust_vm_debian_principals_content: >-
+      {{ ssh_ca_trust_vm_default_data.ssh_ca_trust_vm_principals.debian | join('\n') ~ '\n' }}
+
+- name: Assert VM selection stays within the published SSH-reached inventory and local running guests
+  ansible.builtin.assert:
+    that:
+      - "'ssh_ca_trust_manage_vms | bool' in ssh_ca_trust_vm_main_text"
+      - ssh_ca_trust_vm_default_data.ssh_ca_trust_manage_vms | bool
+      - "'vms_from_tofu' in ssh_ca_trust_vm_selection_text"
+      - "'ansible_connection' in ssh_ca_trust_vm_selection_text"
+      - "'intersect(ssh_ca_trust_vm_inventory_ids)' in ssh_ca_trust_vm_selection_text"
+      - "'running' in ssh_ca_trust_vm_selection_text"
+    fail_msg: >-
+      VM trust must remain behind the host-class rollout and VM-management
+      gates, selecting only running SSH-reached VMs from the published inventory.
+
+- name: Assert only responsive Debian guests with guest exec are managed
+  ansible.builtin.assert:
+    that:
+      - "'argv: [qm, agent' in ssh_ca_trust_vm_guest_text"
+      - "'ping' in ssh_ca_trust_vm_guest_text"
+      - "'get-osinfo' in ssh_ca_trust_vm_guest_text"
+      - "'ssh_ca_trust_vm_os_name' in ssh_ca_trust_vm_guest_text"
+      - "'QEMU guest exec' in ssh_ca_trust_vm_guest_text"
+      - "'exec' in ssh_ca_trust_vm_guest_text"
+      - "'QEMU guest exec is unavailable' in ssh_ca_trust_vm_guest_text"
+      - "'Skipping VM' in ssh_ca_trust_vm_guest_text"
+      - "'failed_when: false' in ssh_ca_trust_vm_guest_text"
+    fail_msg: >-
+      VM trust must skip guests unless the running guest agent confirms
+      Debian and supports guest exec.
+
+- name: Assert VM files and default principals match the apps role contract
+  ansible.builtin.assert:
+    that:
+      - "ssh_ca_trust_vm_default_data.ssh_ca_trust_vm_principals == {'debian': ['ansible', 'semaphore']}"
+      - ssh_ca_trust_vm_debian_principals_path == '/etc/ssh/principals/debian'
+      - ssh_ca_trust_vm_debian_principals_content == "ansible\nsemaphore\n"
+      - ssh_ca_trust_vm_default_data.ssh_ca_trust_ca_file == '/etc/ssh/trusted-user-ca-keys.pem'
+      - ssh_ca_trust_vm_default_data.ssh_ca_trust_principals_dir == '/etc/ssh/principals'
+      - ssh_ca_trust_vm_default_data.ssh_ca_trust_dropin == '/etc/ssh/sshd_config.d/99-openbao-ca.conf'
+      - "'ssh_ca_trust_vm_principals.items()' in ssh_ca_trust_vm_push_text"
+      - "'ssh_ca_trust_principals_dir ~ '/' ~ user' in ssh_ca_trust_vm_push_text"
+      - "'ssh_ca_trust_lxc_principals' not in ssh_ca_trust_vm_push_text"
+      - "'TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem' in ssh_ca_trust_vm_dropin_template"
+      - "'AuthorizedPrincipalsFile /etc/ssh/principals/%u' in ssh_ca_trust_vm_dropin_template"
+      - "'AllowUsers' not in ssh_ca_trust_vm_dropin_template"
+      - "'authorized_keys' not in (ssh_ca_trust_vm_push_text ~ ssh_ca_trust_vm_file_text)"
+    fail_msg: >-
+      VM trust must use the Debian principal map, the apps-role paths and
+      directives, and must not restrict sshd with AllowUsers or alter static keys.
+
+- name: Assert guest file transfer, staged validation, rollback, reload, and check-mode guards
+  ansible.builtin.assert:
+    that:
+      - "'--pass-stdin' in ssh_ca_trust_vm_file_text"
+      - "'sshd' in ssh_ca_trust_vm_push_text"
+      - "'-t' in ssh_ca_trust_vm_push_text"
+      - "'/bin/rm' in ssh_ca_trust_vm_push_text"
+      - "'ssh_ca_trust_vm_rollback_files' in ssh_ca_trust_vm_push_text"
+      - "'vm_rollback.yml' in ssh_ca_trust_vm_push_text"
+      - "'ssh_ca_trust_vm_rollback_files' in ssh_ca_trust_vm_file_text"
+      - "'Preserve a VM trust file before replacing it' in ssh_ca_trust_vm_file_text"
+      - "'Restore VM trust files that existed before the failed transaction' in ssh_ca_trust_vm_rollback_text"
+      - "'Remove VM trust files that did not exist before the failed transaction' in ssh_ca_trust_vm_rollback_text"
+      - "'systemctl reload ssh' in ssh_ca_trust_vm_push_text"
+      - "'systemctl restart' not in ssh_ca_trust_vm_push_text"
+      - "'not ansible_check_mode' in ssh_ca_trust_vm_push_text"
+      - "'not ansible_check_mode' in ssh_ca_trust_vm_file_text"
+      - "'argv: [qm, config' in ssh_ca_trust_vm_guest_text"
+      - "'-- hostname' not in ssh_ca_trust_vm_host_cert_text"
+    fail_msg: >-
+      VM guest writes must use stdin, validate sshd before reload, roll back
+      invalid staged files, reload without restart, and remain check-mode safe.

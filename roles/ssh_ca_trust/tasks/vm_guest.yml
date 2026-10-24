@@ -1,0 +1,116 @@
+---
+- name: Reset per-VM probe state
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_ping: {}
+    ssh_ca_trust_vm_osinfo_raw: {}
+    ssh_ca_trust_vm_osinfo: {}
+    ssh_ca_trust_vm_os_name: ''
+    ssh_ca_trust_vm_guest_exec: {}
+
+- name: Read VM configuration
+  ansible.builtin.command:
+    argv: [qm, config, "{{ ssh_ca_trust_vm_id }}"]
+  register: ssh_ca_trust_vm_config
+  changed_when: false
+  check_mode: false
+
+- name: Report a VM whose guest agent is not enabled
+  ansible.builtin.debug:
+    msg: "Skipping VM {{ ssh_ca_trust_vm_id }}: QEMU guest agent is not enabled."
+  when: >-
+    (ssh_ca_trust_vm_config.stdout | regex_search('(?m)^agent:\\s*(?:enabled=)?1(?:,|$)')) is none
+
+- name: Report a VM that is not configured as Linux
+  ansible.builtin.debug:
+    msg: "Skipping VM {{ ssh_ca_trust_vm_id }}: Proxmox OS type is not Linux."
+  when: >-
+    (ssh_ca_trust_vm_config.stdout | regex_search('(?m)^ostype:\\s*l(?:24|26)\\s*$')) is none
+
+- name: Check whether the enabled guest agent answers
+  ansible.builtin.command:
+    argv: [qm, agent, "{{ ssh_ca_trust_vm_id }}", ping]
+  register: ssh_ca_trust_vm_ping
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: >-
+    (ssh_ca_trust_vm_config.stdout | regex_search('(?m)^agent:\\s*(?:enabled=)?1(?:,|$)')) is not none
+    and (ssh_ca_trust_vm_config.stdout | regex_search('(?m)^ostype:\\s*l(?:24|26)\\s*$')) is not none
+
+- name: Report a VM whose guest agent does not answer
+  ansible.builtin.debug:
+    msg: "Skipping VM {{ ssh_ca_trust_vm_id }}: QEMU guest agent did not answer ping."
+  when:
+    - ssh_ca_trust_vm_ping.rc is defined
+    - ssh_ca_trust_vm_ping.rc != 0
+
+- name: Read VM operating-system information through the guest agent
+  ansible.builtin.command:
+    argv: [qm, agent, "{{ ssh_ca_trust_vm_id }}", get-osinfo]
+  register: ssh_ca_trust_vm_osinfo_raw
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - ssh_ca_trust_vm_ping.rc is defined
+    - ssh_ca_trust_vm_ping.rc == 0
+    - (ssh_ca_trust_vm_config.stdout | regex_search('(?m)^ostype:\\s*l(?:24|26)\\s*$')) is not none
+
+- name: Report a VM whose agent cannot provide OS information
+  ansible.builtin.debug:
+    msg: "Skipping VM {{ ssh_ca_trust_vm_id }}: guest agent OS information is unavailable."
+  when:
+    - ssh_ca_trust_vm_osinfo_raw.rc is defined
+    - ssh_ca_trust_vm_osinfo_raw.rc != 0
+
+- name: Parse VM operating-system information
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_osinfo: "{{ ssh_ca_trust_vm_osinfo_raw.stdout | from_json }}"
+  when:
+    - ssh_ca_trust_vm_osinfo_raw.rc is defined
+    - ssh_ca_trust_vm_osinfo_raw.rc == 0
+
+- name: Normalize the VM operating-system identity
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_os_name: "{{ ssh_ca_trust_vm_osinfo.id | default('') | lower }}"
+  when: ssh_ca_trust_vm_osinfo | length > 0
+
+- name: Report a VM that cannot be confirmed as Debian
+  ansible.builtin.debug:
+    msg: "Skipping VM {{ ssh_ca_trust_vm_id }}: guest agent did not confirm a Debian operating system."
+  when:
+    - ssh_ca_trust_vm_osinfo | length > 0
+    - >-
+      (ssh_ca_trust_vm_osinfo['kernel-release'] | default('') | length == 0)
+      or ssh_ca_trust_vm_os_name != 'debian'
+
+- name: Check whether QEMU guest exec is available
+  ansible.builtin.command:
+    argv: [qm, guest, exec, "{{ ssh_ca_trust_vm_id }}", --, /bin/true]
+  register: ssh_ca_trust_vm_guest_exec
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - ssh_ca_trust_vm_osinfo | length > 0
+    - ssh_ca_trust_vm_osinfo['kernel-release'] | default('') | length > 0
+    - ssh_ca_trust_vm_os_name == 'debian'
+
+- name: Report a VM where QEMU guest exec is unavailable
+  ansible.builtin.debug:
+    msg: "Skipping VM {{ ssh_ca_trust_vm_id }}: QEMU guest exec is unavailable."
+  when:
+    - ssh_ca_trust_vm_guest_exec.rc is defined
+    - >-
+      ssh_ca_trust_vm_guest_exec.rc != 0
+      or (ssh_ca_trust_vm_guest_exec.stdout | from_json).get('exitcode', 1) | int != 0
+
+- name: Push CA trust into an eligible Debian VM
+  ansible.builtin.include_tasks: vm_push.yml
+  when:
+    - ssh_ca_trust_vm_osinfo | length > 0
+    - ssh_ca_trust_vm_osinfo['kernel-release'] | default('') | length > 0
+    - ssh_ca_trust_vm_os_name == 'debian'
+    - ssh_ca_trust_vm_guest_exec.rc is defined
+    - ssh_ca_trust_vm_guest_exec.rc == 0
+    - (ssh_ca_trust_vm_guest_exec.stdout | from_json).get('exitcode', 1) | int == 0
