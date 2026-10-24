@@ -87,6 +87,7 @@
       - "'not ansible_check_mode' in ssh_ca_trust_vm_file_text"
       - "'argv: [qm, config' in ssh_ca_trust_vm_guest_text"
       - "'-- hostname' not in ssh_ca_trust_vm_host_cert_text"
+      - "\"regex_findall('(?m)^name:\" in ssh_ca_trust_vm_host_cert_text"
     fail_msg: >-
       VM guest writes must use stdin, validate sshd before reload, roll back
       invalid staged files, reload without restart, and remain check-mode safe.
