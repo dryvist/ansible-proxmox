@@ -1,22 +1,22 @@
 ---
 collections:
   - name: ansible.posix
-    version: ">=2.1.0"
+    version: "2.2.2"
   - name: community.general
-    version: ">=12.0.0"
+    version: "13.5.0"
   # RustFS inventory resolver fetches the published inventory natively.
   - name: amazon.aws
-    version: ">=11.3.0"
+    version: "12.0.0"
   - name: community.hashi_vault
-    version: ">=6.0.0"
+    version: "7.1.0"
   # proxmox_cluster (pve_cluster role) — wraps pvecm create/join via the PVE API.
   # Ceiling at <2.0.0: validate_certs default flips to true at 2.0.0; opt in
   # deliberately rather than inherit the change silently.
   - name: community.proxmox
-    version: ">=2.1.0,<2.2.0"
+    version: "2.1.0"
   # Molecule's docker driver; listed here so the Galaxy cache carries it.
   - name: community.docker
-    version: ">=3.0.2"
+    version: "5.4.0"
 
   # Shared homelab roles (cribl_edge, cribl_packs, inventory_resolve). A
   # collection, not `roles:`
@@ -30,15 +30,15 @@ collections:
   # Cribl Edge must run on every Proxmox host — without a local agent, host
   # signals have no approved route into Splunk. Shared with
   # ansible-proxmox-apps (Edge containers) rather than copied.
-  # Follow homelab-contracts' major tag; breaking changes ship as v6.
+  # Pin the current v5 release revision; breaking changes ship as v6.
+  # renovate: datasource=github-releases depName=dryvist/homelab-contracts currentValue=v5.15.0 extractVersion=^(?<version>.*)$
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: v5
+    version: fac9da02c9e2eb70e55d4e663482d3df5d023e88
   # renovate: datasource=github-releases depName=jpe-ansible/ansible-nautobot currentValue=v0.2.0 extractVersion=^(?<version>.*)$
   - name: https://github.com/jpe-ansible/ansible-nautobot.git
     type: git
     version: 10171fee91eef0624c62fe156b97adbe688ac247
-
 # No `roles:` section — inventory_resolve comes from the collection above, by
 # FQCN, for the reason stated there. Its old git-scm `roles:` entry installed
 # another role's tasks under the name roles/inventory_resolve, and the pin still

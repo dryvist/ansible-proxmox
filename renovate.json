@@ -1,27 +1,29 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "github>JacobPEvans/.github"
+  "extends": ["github>JacobPEvans/.github"],
+  "customManagers": [
+    {
+      "description": "Track digest-pinned Molecule platform images.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^molecule/.+/molecule\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=docker depName=(?<depName>\\S+)\\n\\s*image:\\s*\"\\$\\{MOLECULE_IMAGE:-[^:]+:(?<currentValue>[^@]+)@(?<currentDigest>sha256:[a-fA-F0-9]{64})\\}\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
   ],
   "packageRules": [
     {
       "description": "Keep the current SHA pin until a new release version is available.",
-      "matchDatasources": [
-        "github-releases"
-      ],
-      "matchPackageNames": [
-        "jpe-ansible/ansible-nautobot"
-      ],
-      "matchUpdateTypes": [
-        "digest"
-      ],
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["jpe-ansible/ansible-nautobot"],
+      "matchUpdateTypes": ["digest"],
       "enabled": false
     },
     {
       "description": "Apply the seven-day soak to GitHub release updates for this first-party dependency.",
-      "matchPackageNames": [
-        "jpe-ansible/ansible-nautobot"
-      ],
+      "matchPackageNames": ["jpe-ansible/ansible-nautobot"],
       "minimumReleaseAge": "7 days"
     }
   ]
