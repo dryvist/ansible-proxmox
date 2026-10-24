@@ -131,3 +131,6 @@
 
     - name: Host-certificate coverage (renewal decisions, principal-source and reload regressions)
       ansible.builtin.include_tasks: tasks/verify_host_cert.yml
+
+    - name: QEMU VM trust task structural coverage
+      ansible.builtin.include_tasks: tasks/verify_vm.yml

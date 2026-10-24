@@ -27,16 +27,23 @@ unless a group flips rollout on for that host class.
    `/etc/ssh/principals/`, and a late-numbered `sshd_config.d` drop-in.
 4. Proves the **effective** config (`sshd -T`) resolves to the CA directives,
    and that a static root key still authenticates (human lockout guard).
-5. On PVE nodes, pushes the same trust into every **running** LXC via `pct`
-   (no SSH chicken-and-egg); non-running containers are reported as blockers —
-   static-key retirement stays gated on every guest carrying CA trust. Each
-   container's sshd is hardened to the same `PasswordAuthentication no` /
+5. On opted-in PVE host groups, pushes the same client trust into every
+   **running** LXC via `pct` and eligible Debian VM (SSH-reached) selected from the
+   published inventory via the QEMU guest agent (no SSH chicken-and-egg).
+   Non-running containers are reported as blockers — static-key retirement
+   stays gated on every guest carrying CA trust. Each container's sshd is
+   hardened to the same `PasswordAuthentication no` /
    `KbdInteractiveAuthentication no` / principal-scoped `AllowUsers` as a PVE
    node, best-effort installs `openssh-server` on an apt-based guest that
    lacks it, and — where sshd is present — proves the **effective** config
    carries that hardening before recording the container as ready in
    `ssh_ca_trust_lxc_ready` (keyed by CTID; a container without sshd is
    recorded not-ready, never failed over its package manager).
+   VMs must be SSH-reached in the published inventory, running locally, and
+   confirmed as Debian by a responding guest agent. VMs without guest exec are
+   logged and skipped. `ssh_ca_trust_manage_vms` follows the existing
+   host-class rollout gate and defaults to enabled. VM principals default to
+   `debian: [ansible, semaphore]`, matching the apps role.
 
 ## Principals (default-deny)
 

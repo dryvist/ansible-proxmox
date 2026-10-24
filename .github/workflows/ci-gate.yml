@@ -3,7 +3,7 @@
 #
 # Lint and Molecule change detection live in
 # JacobPEvans/.github/.github/workflows/_ansible-ci.yml. This wrapper runs the
-# selected local scenario matrix and aggregates it with the data contract.
+# selected shared Molecule matrix and aggregates local contracts.
 #
 # The shared workflow runs with emit_gate:false and this wrapper aggregates its
 # own "Merge Gate" instead, so the repo-local data-contract job sits INSIDE the
@@ -76,6 +76,9 @@ jobs:
           - 'tests/test_inventory_proxmox_host_connection.py'
           - '.github/workflows/ci-gate.yml'
           - '.github/workflows/molecule.yml'
+          - '.github/workflows/_static-contracts.yml'
+          - '.github/workflows/molecule-dispatch.yml'
+          - '.github/workflows/upstream-revalidate.yml'
           - '.github/workflows/_role-contracts.yml'
           - 'tests/workflow_policy/**'
       molecule_scenario_filters: &molecule_scenario_filters |
@@ -217,21 +220,61 @@ jobs:
     name: Role Contracts
     uses: ./.github/workflows/_role-contracts.yml
 
+  static-contracts:
+    name: Molecule Static Contracts
+    needs: changes
+    if: >-
+      needs.changes.outputs.molecule == 'true' ||
+      github.event_name == 'push'
+    uses: ./.github/workflows/_static-contracts.yml
+
   molecule:
     name: Molecule Test
     needs: changes
     if: >-
       needs.changes.outputs.molecule == 'true' ||
       github.event_name == 'push'
-    uses: ./.github/workflows/molecule.yml
+    uses: JacobPEvans/.github/.github/workflows/_molecule.yml@v1
     with:
-      scenarios: >-
-        ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-        'FULL' || needs.changes.outputs.molecule_scenarios }}
+      scenarios: ${{ needs.changes.outputs.molecule_scenarios }}
+      full_suite: >-
+        ${{ github.event_name == 'push' &&
+        github.ref == 'refs/heads/main' }}
+      scenario_discovery: directories
+      scenario_name_profile: lower_underscore
+      scenario_require_molecule_yml: true
+      discover_timeout_minutes: 360
+      pull_request_discover_timeout_minutes: 360
+      runner_label: ubuntu-latest
+      public_and_fork_hosted: true
+      timeout_minutes: 15
+      pull_request_timeout_minutes: 32
+      python_version: "3.14"
+      python_install_mode: pip_requirements
+      requirements_files: '["requirements-ci.txt"]'
+      ansible_home_mode: shared
+      molecule_roles_path: roles
+      galaxy_cache_enabled: true
+      galaxy_cache_prefix: ansible-galaxy-v2-
+      galaxy_install_mode: requirements
+      galaxy_force_install: true
+      fail_fast: false
+      max_parallel: 12
+      docker_timeout_seconds: 0
+      docker_prune: false
+      pre_steps_script: .github/scripts/pull-molecule-image.sh
+      extra_env: ANSIBLE_ALLOW_BROKEN_CONDITIONALS=1
+      molecule_workdir_mode: repo_root
+      molecule_scenario_arg: matrix
+      instance_suffix: false
+      isolate_ephemeral_directory: false
+      doppler_enabled: false
+      test_secret_env_map: "{}"
+      use_homarr_token: false
 
   gate:
     name: Merge Gate
-    needs: [ci, changes, data-contract, role-contracts, molecule]
+    needs: [ci, changes, data-contract, role-contracts, static-contracts, molecule]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
@@ -242,5 +285,5 @@ jobs:
           # Workflow-only changes run their caller contract; the full matrix
           # runs only after a merge to main.
           allowed-skips: >-
-            ${{ github.event_name == 'pull_request' && 'molecule' || '' }}
+            ${{ github.event_name == 'pull_request' && 'molecule,static-contracts' || '' }}
           jobs: ${{ toJSON(needs) }}

@@ -1,0 +1,162 @@
+---
+- name: Initialize this VM's change state
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_changed: false
+    ssh_ca_trust_vm_dropin_changed: false
+    ssh_ca_trust_vm_rollback_files: []
+
+- name: Issue and install this VM's SSH host certificate
+  ansible.builtin.include_tasks: vm_host_cert.yml
+  when: ssh_ca_trust_host_cert_enabled | bool
+
+- name: Build the expected CA, principals, and sshd files for this VM
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_file_specs: >-
+      {%- set ns = namespace(files=[{
+        'path': ssh_ca_trust_ca_file,
+        'content': (([ssh_ca_trust_fetched.content | trim] + ssh_ca_trust_extra_ca_keys) | join('\n')) ~ '\n'
+      }]) -%}
+      {%- for user, principals in ssh_ca_trust_vm_principals.items() -%}
+        {%- set ns.files = ns.files + [{
+          'path': ssh_ca_trust_principals_dir ~ '/' ~ user,
+          'content': (principals | join('\n')) ~ '\n'
+        }] -%}
+      {%- endfor -%}
+      {%- set ns.files = ns.files + [{
+           'path': ssh_ca_trust_dropin,
+           'write_path': ssh_ca_trust_dropin ~ '.new',
+           'content': lookup('template', 'vm_sshd_ca.conf.j2'),
+           'dropin': true
+         }] -%}
+      {{ ns.files }}
+
+- name: Ensure SSH directories exist before file transfer
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /usr/bin/install
+      - -d
+      - -o
+      - root
+      - -g
+      - root
+      - -m
+      - "0755"
+      - --
+      - "{{ ssh_ca_trust_principals_dir }}"
+      - "{{ ssh_ca_trust_dropin | dirname }}"
+      - /run/sshd
+  changed_when: false
+  failed_when: (ssh_ca_trust_vm_directories.stdout | from_json).get('exitcode', 1) | int != 0
+  register: ssh_ca_trust_vm_directories
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Apply and validate VM trust files as a transaction
+  block:
+    - name: Reconcile the VM trust files
+      ansible.builtin.include_tasks: vm_file.yml
+      loop: "{{ ssh_ca_trust_vm_file_specs }}"
+      loop_control:
+        loop_var: ssh_ca_trust_vm_file
+        label: "{{ ssh_ca_trust_vm_file.path }}"
+
+    - name: Validate and install the staged sshd drop-in
+      when:
+        - ssh_ca_trust_vm_dropin_changed | bool
+        - not ansible_check_mode
+      block:
+        - name: Validate staged sshd configuration in the VM
+          ansible.builtin.command:
+            argv:
+              - qm
+              - guest
+              - exec
+              - "{{ ssh_ca_trust_vm_id }}"
+              - --
+              - /usr/sbin/sshd
+              - -t
+              - -f
+              - "{{ ssh_ca_trust_dropin }}.new"
+          register: ssh_ca_trust_vm_staged_validation
+          failed_when: (ssh_ca_trust_vm_staged_validation.stdout | from_json).get('exitcode', 1) | int != 0
+          changed_when: false
+          check_mode: false
+
+        - name: Move validated drop-in into place in the VM
+          ansible.builtin.command:
+            argv:
+              - qm
+              - guest
+              - exec
+              - "{{ ssh_ca_trust_vm_id }}"
+              - --
+              - /bin/mv
+              - --
+              - "{{ ssh_ca_trust_dropin }}.new"
+              - "{{ ssh_ca_trust_dropin }}"
+          register: ssh_ca_trust_vm_dropin_install
+          failed_when: (ssh_ca_trust_vm_dropin_install.stdout | from_json).get('exitcode', 1) | int != 0
+          changed_when: true
+          check_mode: false
+
+    - name: Validate the effective sshd configuration before any reload
+      ansible.builtin.command:
+        argv: [qm, guest, exec, "{{ ssh_ca_trust_vm_id }}", --, /usr/sbin/sshd, -t]
+      register: ssh_ca_trust_vm_sshd_validation
+      failed_when: (ssh_ca_trust_vm_sshd_validation.stdout | from_json).get('exitcode', 1) | int != 0
+      changed_when: false
+      check_mode: false
+  rescue:
+    - name: Roll back changed VM trust files after a write or sshd validation failure
+      ansible.builtin.include_tasks: vm_rollback.yml
+
+    - name: Fail after rolling back the VM trust files
+      ansible.builtin.fail:
+        msg: >-
+          VM {{ ssh_ca_trust_vm_id }} rejected the staged or effective sshd
+          configuration; changed trust files were rolled back.
+
+- name: Remove VM trust backups after successful validation
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /bin/rm
+      - --
+      - "{{ item.path }}.rollback"
+  register: ssh_ca_trust_vm_backup_cleanup
+  failed_when: (ssh_ca_trust_vm_backup_cleanup.stdout | from_json).get('exitcode', 1) | int != 0
+  changed_when: false
+  check_mode: false
+  loop: "{{ ssh_ca_trust_vm_rollback_files | selectattr('backup_created', 'equalto', true) | list }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Reload sshd in the VM only after validation and trust changes
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /bin/sh
+      - -c
+      - >-
+        if systemctl is-active --quiet ssh; then systemctl reload ssh;
+        elif systemctl is-active --quiet sshd; then systemctl reload sshd;
+        else exit 1; fi
+  register: ssh_ca_trust_vm_reload
+  failed_when: (ssh_ca_trust_vm_reload.stdout | from_json).get('exitcode', 1) | int != 0
+  changed_when: true
+  when:
+    - ssh_ca_trust_vm_changed | bool
+    - not ansible_check_mode
