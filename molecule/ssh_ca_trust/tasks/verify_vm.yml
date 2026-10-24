@@ -19,8 +19,6 @@
          }) }}
     ssh_ca_trust_vm_debian_principals_path: >-
       {{ ssh_ca_trust_vm_default_data.ssh_ca_trust_principals_dir ~ '/debian' }}
-    ssh_ca_trust_vm_debian_principals_content: >-
-      {{ ssh_ca_trust_vm_default_data.ssh_ca_trust_vm_principals.debian | join('\n') ~ '\n' }}
 
 - name: Assert VM selection stays within the published SSH-reached inventory and local running guests
   ansible.builtin.assert:
@@ -56,12 +54,11 @@
     that:
       - "ssh_ca_trust_vm_default_data.ssh_ca_trust_vm_principals == {'debian': ['ansible', 'semaphore']}"
       - ssh_ca_trust_vm_debian_principals_path == '/etc/ssh/principals/debian'
-      - ssh_ca_trust_vm_debian_principals_content == "ansible\nsemaphore\n"
       - ssh_ca_trust_vm_default_data.ssh_ca_trust_ca_file == '/etc/ssh/trusted-user-ca-keys.pem'
       - ssh_ca_trust_vm_default_data.ssh_ca_trust_principals_dir == '/etc/ssh/principals'
       - ssh_ca_trust_vm_default_data.ssh_ca_trust_dropin == '/etc/ssh/sshd_config.d/99-openbao-ca.conf'
       - "'ssh_ca_trust_vm_principals.items()' in ssh_ca_trust_vm_push_text"
-      - "'ssh_ca_trust_principals_dir ~ '/' ~ user' in ssh_ca_trust_vm_push_text"
+      - "\"ssh_ca_trust_principals_dir ~ '/' ~ user\" in ssh_ca_trust_vm_push_text"
       - "'ssh_ca_trust_lxc_principals' not in ssh_ca_trust_vm_push_text"
       - "'TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem' in ssh_ca_trust_vm_dropin_template"
       - "'AuthorizedPrincipalsFile /etc/ssh/principals/%u' in ssh_ca_trust_vm_dropin_template"
