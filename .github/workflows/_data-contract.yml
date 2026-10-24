@@ -53,7 +53,7 @@ jobs:
       # play to fail later on a missing dependency. Passing `-p` also makes
       # `install` drop collections — so no install path here, deliberately.
       # Cache Galaxy content keyed on requirements.yml; a hit refreshes only the
-      # floating homelab-contracts tag. Same key/paths as the central _ansible-ci.yml.
+      # pinned homelab-contracts revision. Same key/paths as the central _ansible-ci.yml.
       - &setup_galaxy_cache
         name: Cache Ansible Galaxy content
         id: galaxy-cache
@@ -74,11 +74,11 @@ jobs:
         run: ansible-galaxy install -r requirements.yml --force
 
       - &setup_contracts_refresh
-        name: Refresh homelab-contracts major tag
+        name: Refresh homelab-contracts pinned revision
         if: steps.galaxy-cache.outputs.cache-hit == 'true'
         run: >-
           ansible-galaxy collection install
-          'git+https://github.com/dryvist/homelab-contracts.git#/ansible/,v5'
+          'git+https://github.com/dryvist/homelab-contracts.git#/ansible/,fac9da02c9e2eb70e55d4e663482d3df5d023e88'
           --force
 
       # load_tofu.yml (imported by verify_inventory.yml) include_role's the

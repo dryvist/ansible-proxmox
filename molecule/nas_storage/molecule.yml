@@ -1,7 +1,8 @@
 ---
 platforms:
   - name: proxmox-nas-test
-    image: "${MOLECULE_IMAGE:-mirror.gcr.io/library/debian:stable-slim}"
+    # renovate: datasource=docker depName=mirror.gcr.io/library/debian
+    image: "${MOLECULE_IMAGE:-mirror.gcr.io/library/debian:stable-slim@sha256:a717a33469731894e77e912ea7d714e27c2dc38ee6554fd1a3102e92999cfc66}"
     pre_build_image: true
     privileged: true
     tmpfs:
