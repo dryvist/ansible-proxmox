@@ -2,5 +2,27 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>JacobPEvans/.github"
+  ],
+  "packageRules": [
+    {
+      "description": "Keep the current SHA pin until a new release version is available.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "jpe-ansible/ansible-nautobot"
+      ],
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Apply the seven-day soak to GitHub release updates for this first-party dependency.",
+      "matchPackageNames": [
+        "jpe-ansible/ansible-nautobot"
+      ],
+      "minimumReleaseAge": "7 days"
+    }
   ]
 }
