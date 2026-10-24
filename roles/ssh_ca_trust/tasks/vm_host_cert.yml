@@ -4,7 +4,7 @@
 - name: Resolve the VM host-certificate principal from Proxmox configuration
   ansible.builtin.set_fact:
     ssh_ca_trust_vm_host_cert_name: >-
-      {{ (ssh_ca_trust_vm_config.stdout | regex_search('(?m)^name:\\s*(\\S+)', '\\1') | first) | default('', true) }}
+      {{ ssh_ca_trust_vm_config.stdout | regex_findall('(?m)^name:\s*(\S+)') | first | default('', true) }}
 
 - name: Assert host-certificate inputs are available
   ansible.builtin.assert:
