@@ -1,0 +1,56 @@
+---
+- name: Remove any staged VM sshd drop-in after a failed transaction
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /bin/rm
+      - --
+      - "{{ ssh_ca_trust_dropin }}.new"
+  register: ssh_ca_trust_vm_staged_cleanup
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Restore VM trust files that existed before the failed transaction
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /bin/mv
+      - --
+      - "{{ item.path }}.rollback"
+      - "{{ item.path }}"
+  register: ssh_ca_trust_vm_file_restore
+  failed_when: (ssh_ca_trust_vm_file_restore.stdout | from_json).get('exitcode', 1) | int != 0
+  changed_when: true
+  check_mode: false
+  loop: "{{ ssh_ca_trust_vm_rollback_files | reverse | selectattr('backup_created', 'equalto', true) | list }}"
+  loop_control:
+    label: "{{ item.path }}"
+  no_log: true
+
+- name: Remove VM trust files that did not exist before the failed transaction
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /bin/rm
+      - --
+      - "{{ item.path }}"
+  register: ssh_ca_trust_vm_new_file_cleanup
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  loop: "{{ ssh_ca_trust_vm_rollback_files | reverse | selectattr('previously_present', 'equalto', false) | list }}"
+  loop_control:
+    label: "{{ item.path }}"

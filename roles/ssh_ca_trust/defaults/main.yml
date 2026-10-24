@@ -55,6 +55,13 @@ ssh_ca_trust_manage_lxc: true
 ssh_ca_trust_lxc_principals:
   root: [ansible, semaphore]
 
+# Also push client-CA trust into opted-in local QEMU VMs through the guest
+# agent. The host-class rollout gate remains the outer opt-in. The defaults
+# match the apps role's Debian SSH login and certificate principals.
+ssh_ca_trust_manage_vms: true
+ssh_ca_trust_vm_principals:
+  debian: [ansible, semaphore]
+
 # Extra AllowUsers entries for a container that also has a NON-root user
 # logging in over SSH (e.g. a git-over-ssh service user, an sftp-only user,
 # an rsync/backup-pull user) — set per-host/group via inventory, never here.

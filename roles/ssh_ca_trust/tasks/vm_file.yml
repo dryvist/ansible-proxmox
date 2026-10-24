@@ -1,0 +1,182 @@
+---
+- name: Read the current VM file content and mode
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /bin/sh
+      - -c
+      - >-
+        if [ -f "$1" ]; then
+          printf 'PRESENT:%s\n' "$(stat -c '%a:%U:%G' -- "$1")";
+          cat -- "$1";
+        else
+          printf 'MISSING\n';
+        fi
+      - ssh-ca-trust-read
+      - "{{ ssh_ca_trust_vm_file.path }}"
+  register: ssh_ca_trust_vm_file_read
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Assert the guest file read returned a content marker
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '')).startswith('PRESENT:')
+        or ((ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '')).startswith('MISSING')
+    fail_msg: "QEMU guest exec did not return a readable file result."
+  no_log: true
+
+- name: Parse the current VM file state
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_file_out_data: "{{ (ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '') }}"
+    ssh_ca_trust_vm_file_present: "{{ ((ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '')).startswith('PRESENT:') }}"
+    ssh_ca_trust_vm_file_mode: >-
+      {{ (((ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '').split('\n', 1)[0]
+           | regex_replace('^PRESENT:', '')).split(':')[0])
+         if ((ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '')).startswith('PRESENT:') else '' }}
+    ssh_ca_trust_vm_file_owner: >-
+      {{ (((ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '').split('\n', 1)[0]
+           | regex_replace('^PRESENT:', '')).split(':')[1])
+         if ((ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '')).startswith('PRESENT:') else '' }}
+    ssh_ca_trust_vm_file_group: >-
+      {{ (((ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '').split('\n', 1)[0]
+           | regex_replace('^PRESENT:', '')).split(':')[2])
+         if ((ssh_ca_trust_vm_file_read.stdout | from_json).get('out-data', '')).startswith('PRESENT:') else '' }}
+  no_log: true
+
+- name: Extract the current VM file content
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_file_current_content: >-
+      {{ (ssh_ca_trust_vm_file_out_data.split('\n', 1)[1] if '\n' in ssh_ca_trust_vm_file_out_data else '')
+         if ssh_ca_trust_vm_file_present | bool else '' }}
+  no_log: true
+
+- name: Record a VM file that needs to be replaced
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_file_needs_write: >-
+      {{ not (ssh_ca_trust_vm_file_present | bool)
+         or ssh_ca_trust_vm_file_current_content != ssh_ca_trust_vm_file.content
+         or ssh_ca_trust_vm_file_mode != '644'
+         or ssh_ca_trust_vm_file_owner != 'root'
+         or ssh_ca_trust_vm_file_group != 'root' }}
+  no_log: true
+
+- name: Record prior state for a VM trust file that needs replacement
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_rollback_files: >-
+      {{ ssh_ca_trust_vm_rollback_files + [{
+           'path': ssh_ca_trust_vm_file.path,
+           'previously_present': ssh_ca_trust_vm_file_present | bool,
+           'backup_created': false
+         }] }}
+  when:
+    - ssh_ca_trust_vm_file_needs_write | bool
+    - not ansible_check_mode
+  no_log: true
+
+- name: Preserve a VM trust file before replacing it
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /bin/cp
+      - -p
+      - --
+      - "{{ ssh_ca_trust_vm_file.path }}"
+      - "{{ ssh_ca_trust_vm_file.path }}.rollback"
+  register: ssh_ca_trust_vm_file_backup
+  failed_when: (ssh_ca_trust_vm_file_backup.stdout | from_json).get('exitcode', 1) | int != 0
+  changed_when: false
+  when:
+    - ssh_ca_trust_vm_file_needs_write | bool
+    - ssh_ca_trust_vm_file_present | bool
+    - not ansible_check_mode
+  no_log: true
+
+- name: Record the VM trust file backup
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_rollback_files: >-
+      {{ ssh_ca_trust_vm_rollback_files[:-1]
+         + [ssh_ca_trust_vm_rollback_files[-1] | combine({'backup_created': true})] }}
+  when:
+    - ssh_ca_trust_vm_file_needs_write | bool
+    - ssh_ca_trust_vm_file_present | bool
+    - not ansible_check_mode
+  no_log: true
+
+- name: Write a changed VM file through guest-agent stdin
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --pass-stdin
+      - --
+      - /usr/bin/tee
+      - --
+      - "{{ ssh_ca_trust_vm_file.write_path | default(ssh_ca_trust_vm_file.path) }}"
+    stdin: "{{ ssh_ca_trust_vm_file.content }}"
+    stdin_add_newline: false
+  register: ssh_ca_trust_vm_file_write
+  failed_when: (ssh_ca_trust_vm_file_write.stdout | from_json).get('exitcode', 1) | int != 0
+  changed_when: true
+  when:
+    - ssh_ca_trust_vm_file_needs_write | bool
+    - not ansible_check_mode
+  no_log: true
+
+- name: Set VM file ownership to root
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /bin/chown
+      - root:root
+      - "{{ ssh_ca_trust_vm_file.write_path | default(ssh_ca_trust_vm_file.path) }}"
+  register: ssh_ca_trust_vm_file_chown
+  failed_when: (ssh_ca_trust_vm_file_chown.stdout | from_json).get('exitcode', 1) | int != 0
+  changed_when: false
+  when:
+    - ssh_ca_trust_vm_file_needs_write | bool
+    - not ansible_check_mode
+  no_log: true
+
+- name: Set VM file mode to 0644
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ssh_ca_trust_vm_id }}"
+      - --
+      - /bin/chmod
+      - "0644"
+      - "{{ ssh_ca_trust_vm_file.write_path | default(ssh_ca_trust_vm_file.path) }}"
+  register: ssh_ca_trust_vm_file_chmod
+  failed_when: (ssh_ca_trust_vm_file_chmod.stdout | from_json).get('exitcode', 1) | int != 0
+  changed_when: false
+  when:
+    - ssh_ca_trust_vm_file_needs_write | bool
+    - not ansible_check_mode
+  no_log: true
+
+- name: Record the VM trust file change
+  ansible.builtin.set_fact:
+    ssh_ca_trust_vm_changed: true
+    ssh_ca_trust_vm_dropin_changed: "{{ ssh_ca_trust_vm_dropin_changed or (ssh_ca_trust_vm_file.dropin | default(false) | bool) }}"
+  when:
+    - ssh_ca_trust_vm_file_needs_write | bool
+    - not ansible_check_mode

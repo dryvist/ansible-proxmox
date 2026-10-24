@@ -1,8 +1,9 @@
 ---
 # ssh_ca_trust tasks — pinned-fingerprint CA fetch, trust file, principals map,
 # sshd drop-in with EFFECTIVE-config assertion, human-key lockout guard, and
-# (on PVE nodes) pct push into local LXCs. Live-touch tasks skip under Docker
-# (molecule); the structural pieces still run there.
+# (on PVE nodes) pct push into local LXCs and guest-agent push into VMs.
+# Live-touch tasks skip under Docker (molecule); the structural pieces still
+# run there.
 
 - name: Assert the pinned CA fingerprint and OpenBao address are present
   ansible.builtin.assert:
@@ -199,5 +200,13 @@
   when:
     - ssh_ca_trust_enabled | bool
     - ssh_ca_trust_manage_lxc | bool
+    - ansible_virtualization_type != 'docker'
+  tags: [ssh_ca_trust]
+
+- name: Distribute CA trust into this node's opted-in QEMU VMs (guest agent)
+  ansible.builtin.include_tasks: vm.yml
+  when:
+    - ssh_ca_trust_enabled | bool
+    - ssh_ca_trust_manage_vms | bool
     - ansible_virtualization_type != 'docker'
   tags: [ssh_ca_trust]
