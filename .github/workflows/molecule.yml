@@ -130,8 +130,8 @@ jobs:
       # `install` covers both sections of requirements.yml. Do not narrow this to
       # `collection install` or `role install` — each silently ignores the other
       # section, so a dependency can go missing with a zero exit status.
-      # Cache Galaxy content keyed on requirements.yml. Exact hits refresh only
-      # the pinned homelab-contracts revision; misses force-install the requirements.
+      # Cache Galaxy content keyed on requirements.yml. Exact hits refresh the
+      # pinned dependencies from requirements.yml; misses force-install them.
       # Same key/paths as JacobPEvans/.github's _ansible-ci.yml so a warm run of
       # either workflow warms the other.
       - name: Cache Ansible Galaxy content
@@ -147,12 +147,9 @@ jobs:
         if: steps.galaxy-cache.outputs.cache-hit != 'true'
         run: ansible-galaxy install -r requirements.yml --force
 
-      - name: Refresh homelab-contracts pinned revision
+      - name: Refresh Ansible dependencies from requirements.yml
         if: steps.galaxy-cache.outputs.cache-hit == 'true'
-        run: >-
-          ansible-galaxy collection install
-          'git+https://github.com/dryvist/homelab-contracts.git#/ansible/,fac9da02c9e2eb70e55d4e663482d3df5d023e88'
-          --force
+        run: ansible-galaxy install -r requirements.yml --force
 
       # The shared workflow supplies only scenario names declared in this
       # caller's filter map; the full-matrix fallback discovers directories.
