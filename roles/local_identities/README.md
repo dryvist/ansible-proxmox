@@ -6,6 +6,13 @@ Create the named accounts that replace shared-`root` administration:
 - **`admin`** — break-glass only. Created and sudo-capable, reachable
   **only** via the OpenBao SSH CA (no static key), so it is not a second
   standing door the way a static key would be.
+- Any further account is one row in `local_identities_extra_accounts`
+  (user, optional `principals` for the SSH CA, and `sudo`: `[ALL]`, an exact
+  command allowlist, or `[]`). `inventory/group_vars/proxmox.yml` defines
+  `ai-diag`, the trusted-AI read-only diagnostic account, from the shared
+  `local_identities_readonly_diagnostics_sudo` allowlist. A different
+  identity or host class adds a row in that group's group_vars; no new task,
+  template or role.
 
 ## Installation
 

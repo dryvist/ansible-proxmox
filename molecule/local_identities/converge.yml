@@ -9,6 +9,14 @@
     local_identities_host_admin_enabled: true
     local_identities_jevans_ssh_public_key: >-
       ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGmoleculetestfixturekeyonly test@molecule
+    # One restricted row from the shared allowlist, and one with no sudo to prove
+    # a stale grant from an earlier run is revoked.
+    local_identities_extra_accounts:
+      - user: ai-diag
+        principals: [ai-diag]
+        sudo: "{{ local_identities_readonly_diagnostics_sudo }}"
+      - user: reporter
+        sudo: []
 
   roles:
     - role: local_identities

@@ -1,0 +1,14 @@
+---
+- name: Prepare
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    # Runs once, before converge, so the converge/idempotence passes see the
+    # same stale grant a host would carry from a role version that granted it.
+    - name: Leave a stale sudoers grant for the account that now has none
+      ansible.builtin.copy:
+        content: "reporter ALL=(ALL) NOPASSWD:ALL\n"
+        dest: /etc/sudoers.d/reporter
+        mode: "0440"

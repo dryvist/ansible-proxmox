@@ -34,6 +34,16 @@ host_admin_user: host-admin
 ssh_ca_trust_host_admin_principals: [ai-agent]
 ssh_ca_trust_host_admin_guest_tags: []
 
+# Read-only diagnostic login for a trusted AI session on every Proxmox node: a
+# non-root account reached by the `ai-diag` CA principal (ssh-client-ca role
+# automation-ai-diag, 15m certs) whose sudo is the exact diagnostics allowlist
+# in the local_identities defaults. Another identity or host class is one more
+# row here or in that group's group_vars; no new task, template or role.
+local_identities_extra_accounts:
+  - user: ai-diag
+    principals: [ai-diag]
+    sudo: "{{ local_identities_readonly_diagnostics_sudo }}"
+
 # Cribl Edge's native GPU metrics require NVIDIA's nvidia-smi utility. Reuse the
 # driver opt-in derived from the node's NVIDIA capability group.
 cribl_edge_gpu_mode: >-

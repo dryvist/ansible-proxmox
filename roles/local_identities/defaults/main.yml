@@ -69,6 +69,39 @@ local_identities_builtin_accounts:
 local_identities_extra_accounts: []
 local_identities_accounts: "{{ local_identities_builtin_accounts + local_identities_extra_accounts }}"
 
+# Root-only read-only diagnostics, for an extra account's `sudo`. Exact
+# argument forms, no wildcard beyond a device-name class: a free `*` would let
+# smartctl change a drive's SMART settings or dmidecode write a dump file.
+# lsblk, lspci, lscpu, nvidia-smi and `zpool status/list` need no root, so they
+# are deliberately absent. Command paths are Debian's.
+local_identities_readonly_diagnostics_sudo:
+  - /usr/sbin/dmidecode -t system
+  - /usr/sbin/dmidecode -t baseboard
+  - /usr/sbin/dmidecode -t chassis
+  - /usr/sbin/dmidecode -t processor
+  - /usr/sbin/dmidecode -t memory
+  - /usr/sbin/dmidecode -t 39
+  - /usr/sbin/dmidecode -s system-manufacturer
+  - /usr/sbin/dmidecode -s system-product-name
+  - /usr/sbin/dmidecode -s system-serial-number
+  - /usr/sbin/dmidecode -s baseboard-product-name
+  - /usr/sbin/dmidecode -s bios-version
+  - /usr/sbin/smartctl -i /dev/sd[a-z]
+  - /usr/sbin/smartctl -a /dev/sd[a-z]
+  - /usr/sbin/smartctl -x /dev/sd[a-z]
+  - /usr/sbin/smartctl -H /dev/sd[a-z]
+  - /usr/sbin/smartctl -i /dev/nvme[0-9]n[0-9]
+  - /usr/sbin/smartctl -a /dev/nvme[0-9]n[0-9]
+  - /usr/sbin/smartctl -x /dev/nvme[0-9]n[0-9]
+  - /usr/sbin/smartctl --scan
+  - /usr/bin/ipmitool sdr list
+  - /usr/bin/ipmitool sensor list
+  - /usr/bin/ipmitool fru print
+  - /usr/bin/ipmitool sel list
+  - /usr/bin/ipmitool mc info
+  - /usr/bin/ipmitool chassis status
+  - /usr/bin/ipmitool lan print 1
+
 # --- backup ingress ---
 # A service account for an off-box backup push. Unlike jevans and admin it is
 # NOT an administrative identity: no sudo, and its key carries a forced command
