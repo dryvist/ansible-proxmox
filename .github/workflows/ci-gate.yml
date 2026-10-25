@@ -102,6 +102,7 @@ jobs:
           - 'molecule/docker_lxc_features/**'
         hba_storcli:
           - 'roles/hba_storcli/**'
+          - 'roles/hardware_facts/tasks/lspci.yml'
           - 'molecule/hba_storcli/**'
         idrac_power:
           - 'roles/idrac_power/**'
@@ -135,6 +136,7 @@ jobs:
           - 'molecule/zfs_scrub_window/**'
         nvidia_driver:
           - 'roles/nvidia_driver/**'
+          - 'roles/hardware_facts/tasks/lspci.yml'
           - 'molecule/nvidia_driver/**'
           - 'tests/nvidia_driver/**'
         postgres_standby:
