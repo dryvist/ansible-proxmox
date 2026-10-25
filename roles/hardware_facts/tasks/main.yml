@@ -1,0 +1,143 @@
+---
+# Read-only hardware facts. Every command task is `changed_when: false` and runs in
+# check mode too; nothing is installed or changed, and the only write is the
+# optional controller-side artifact in tasks/publish.yml.
+#
+# Reuse, not duplication: board, CPU and memory come from the builtin `setup`
+# module; Proxmox disks from the existing pve_disk_inventory role (publishing
+# switched off); the `lspci` probe is shared with the roles that need it.
+
+- name: Validate the request
+  ansible.builtin.include_tasks: request.yml
+
+- name: Start this host's report
+  ansible.builtin.set_fact:
+    hardware_facts_report:
+      host: "{{ inventory_hostname }}"
+    hardware_facts_is_pve: "{{ inventory_hostname in groups.get(hardware_facts_proxmox_group, []) }}"
+
+- name: Gather the platform facts the request needs
+  ansible.builtin.setup:
+    gather_subset:
+      - hardware
+    filter: "{{ hardware_facts_setup_filters }}"
+  vars:
+    hardware_facts_setup_filters: >-
+      {{ ['ansible_hostname', 'ansible_virtualization_type']
+         + (['ansible_system_vendor', 'ansible_product_*', 'ansible_board_*', 'ansible_bios_*', 'ansible_form_factor']
+            if 'board' in hardware_facts_cats else [])
+         + (['ansible_processor', 'ansible_processor_count', 'ansible_processor_cores', 'ansible_processor_vcpus']
+            if 'cpu' in hardware_facts_cats else [])
+         + (['ansible_memtotal_mb'] if 'memory' in hardware_facts_cats else [])
+         + (['ansible_devices'] if 'disks' in hardware_facts_cats or 'pools' in hardware_facts_cats else []) }}
+
+- name: Record the board facts
+  ansible.builtin.set_fact:
+    hardware_facts_report: "{{ hardware_facts_report | combine({'board': hardware_facts_board}) }}"
+  vars:
+    hardware_facts_board:
+      system_vendor: "{{ ansible_system_vendor | default(none) }}"
+      product_name: "{{ ansible_product_name | default(none) }}"
+      product_serial: "{{ ansible_product_serial | default(none) }}"
+      board_vendor: "{{ ansible_board_vendor | default(none) }}"
+      board_name: "{{ ansible_board_name | default(none) }}"
+      board_serial: "{{ ansible_board_serial | default(none) }}"
+      bios_version: "{{ ansible_bios_version | default(none) }}"
+      form_factor: "{{ ansible_form_factor | default(none) }}"
+  when: "'board' in hardware_facts_cats"
+
+- name: Record the CPU facts
+  ansible.builtin.set_fact:
+    hardware_facts_report: "{{ hardware_facts_report | combine({'cpu': hardware_facts_cpu}) }}"
+  vars:
+    hardware_facts_cpu:
+      model: "{{ (ansible_processor | default([]))[2] | default(none) }}"
+      sockets: "{{ ansible_processor_count | default(none) }}"
+      cores_per_socket: "{{ ansible_processor_cores | default(none) }}"
+      threads: "{{ ansible_processor_vcpus | default(none) }}"
+  when: "'cpu' in hardware_facts_cats"
+
+- name: Read the installed memory modules
+  ansible.builtin.include_tasks: dmidecode.yml
+  vars:
+    hardware_facts_dmi_type: 17
+    hardware_facts_dmi_fields: "{{ hardware_facts_dmi_memory_fields }}"
+    hardware_facts_dmi_fact: hardware_facts_memory_modules
+    hardware_facts_dmi_skip_key: Size
+    hardware_facts_dmi_skip_value: No Module Installed
+  when: "'memory' in hardware_facts_cats"
+
+- name: Record the memory facts
+  ansible.builtin.set_fact:
+    hardware_facts_report: "{{ hardware_facts_report | combine({'memory': hardware_facts_memory}) }}"
+  vars:
+    hardware_facts_memory:
+      total_mb: "{{ ansible_memtotal_mb | default(none) }}"
+      modules: "{{ hardware_facts_memory_modules }}"
+      dmidecode_rc: "{{ hardware_facts_dmi_result.rc | default(none) }}"
+  when: "'memory' in hardware_facts_cats"
+
+- name: Read the power supplies
+  ansible.builtin.include_tasks: dmidecode.yml
+  vars:
+    hardware_facts_dmi_type: 39
+    hardware_facts_dmi_fields: "{{ hardware_facts_dmi_psu_fields }}"
+    hardware_facts_dmi_fact: hardware_facts_psu_units
+  when: "'psu' in hardware_facts_cats"
+
+- name: Record the power supplies
+  ansible.builtin.set_fact:
+    hardware_facts_report: "{{ hardware_facts_report | combine({'psu': hardware_facts_psu}) }}"
+  vars:
+    hardware_facts_psu:
+      units: "{{ hardware_facts_psu_units }}"
+      dmidecode_rc: "{{ hardware_facts_dmi_result.rc | default(none) }}"
+  when: "'psu' in hardware_facts_cats"
+
+- name: Read the PCI bus
+  ansible.builtin.include_tasks: lspci.yml
+  vars:
+    hardware_facts_lspci_args: ['-nn']
+    hardware_facts_lspci_fact: hardware_facts_lspci_raw
+    hardware_facts_lspci_tolerate_missing: true
+  when: "'pci' in hardware_facts_cats or 'gpus' in hardware_facts_cats"
+
+- name: Split the PCI listing into devices and display adapters
+  ansible.builtin.include_tasks: pci_parse.yml
+  when: "'pci' in hardware_facts_cats or 'gpus' in hardware_facts_cats"
+
+- name: Record the PCI devices
+  ansible.builtin.set_fact:
+    hardware_facts_report: "{{ hardware_facts_report | combine({'pci': hardware_facts_pci_devices}) }}"
+  when: "'pci' in hardware_facts_cats"
+
+- name: Record the display adapters
+  ansible.builtin.set_fact:
+    hardware_facts_report: "{{ hardware_facts_report | combine({'gpus': hardware_facts_gpu_devices}) }}"
+  when: "'gpus' in hardware_facts_cats"
+
+- name: Read the physical drives
+  ansible.builtin.include_tasks: disks.yml
+  when: "'disks' in hardware_facts_cats or 'pools' in hardware_facts_cats"
+
+- name: Record the drives
+  ansible.builtin.set_fact:
+    hardware_facts_report: "{{ hardware_facts_report | combine({'disks': hardware_facts_drives}) }}"
+  when: "'disks' in hardware_facts_cats"
+
+- name: Record the pools the drives belong to
+  ansible.builtin.set_fact:
+    hardware_facts_report: "{{ hardware_facts_report | combine({'pools': hardware_facts_pools_json | from_json}) }}"
+  vars:
+    hardware_facts_pools_json: >-
+      {% set out = {} %}
+      {% for d in hardware_facts_drives %}
+      {% if d.used | default(none) %}
+      {% set _ = out.update({d.used: out.get(d.used, []) + [d.devpath | default(d.name | default('unknown'))]}) %}
+      {% endif %}
+      {% endfor %}
+      {{ out | to_json }}
+  when: "'pools' in hardware_facts_cats"
+
+- name: Publish the report
+  ansible.builtin.include_tasks: publish.yml

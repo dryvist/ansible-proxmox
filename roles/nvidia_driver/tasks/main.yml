@@ -7,18 +7,21 @@
 # build a module for, so the hardware steps are guarded off the same way
 # wol_enable guards its ethtool steps.
 
-# `lspci -d <vendor>:` filters on the vendor id itself and exits 0 with empty
-# output when nothing matches. Grepping the rendered `lspci -nn` text instead
-# is what broke the first version of this gate: the id appears as "[10de:2702]",
-# so a pattern anchored on a leading colon matched nothing and the assert below
-# failed on a host that plainly has the card.
+# The probe is shared with every role that asks what is on the PCI bus; see
+# hardware_facts/tasks/lspci.yml for why it filters on the vendor id itself.
+# It leaves the registered result in nvidia_driver_lspci, as before.
 - name: Detect NVIDIA PCI devices on this host
-  ansible.builtin.command:
-    cmd: "lspci -n -d {{ nvidia_driver_pci_vendor_id }}:"
-  register: nvidia_driver_lspci
-  changed_when: false
-  # Read-only; a check run needs the live value to preview the driver state.
-  check_mode: false
+  ansible.builtin.include_role:
+    name: hardware_facts
+    tasks_from: lspci
+    apply:
+      tags:
+        - nvidia_driver
+        - nvidia_driver_power_limit
+        - nvidia_driver_graphics_clock
+  vars:
+    hardware_facts_lspci_args: ['-n', '-d', "{{ nvidia_driver_pci_vendor_id }}:"]
+    hardware_facts_lspci_fact: nvidia_driver_lspci
   when:
     - nvidia_driver_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'

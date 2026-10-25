@@ -1,0 +1,10 @@
+---
+# Split the shared `lspci -nn` listing into every device and the display adapters.
+# Input: hardware_facts_lspci_raw (the registered result, see tasks/lspci.yml).
+- name: Record PCI devices and display adapters
+  ansible.builtin.set_fact:
+    hardware_facts_pci_devices: "{{ hardware_facts_lspci_raw.stdout_lines | default([]) }}"
+    hardware_facts_gpu_devices: >-
+      {{ hardware_facts_lspci_raw.stdout_lines | default([])
+         | select('search', hardware_facts_gpu_classes | map('regex_escape') | join('|'))
+         | list }}

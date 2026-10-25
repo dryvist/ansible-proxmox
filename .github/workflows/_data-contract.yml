@@ -340,3 +340,6 @@ jobs:
           ansible-playbook tests/preflight_gate/verify.yml -i localhost, -c local
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/preflight_gate/verify_guards.yml -i localhost, -c local
+
+      - name: Verify hardware facts parsers on offline fixtures
+        run: ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp ansible-playbook tests/hardware_facts/verify.yml -i localhost, -c local

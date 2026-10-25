@@ -1,0 +1,21 @@
+---
+# Normalise and validate the request once, so every later task reads one list.
+
+- name: Normalise the requested categories
+  ansible.builtin.set_fact:
+    hardware_facts_cats: >-
+      {{ (hardware_facts_categories.split(',') if hardware_facts_categories is string
+          else hardware_facts_categories)
+         | map('trim') | reject('equalto', '') | list
+         | default(hardware_facts_all_categories, true) }}
+
+- name: Refuse an unknown category or output mode
+  ansible.builtin.assert:
+    that:
+      - hardware_facts_cats | difference(hardware_facts_all_categories) | length == 0
+      - hardware_facts_output in ['report', 'artifact']
+    fail_msg: >-
+      Unknown request: categories must come from {{ hardware_facts_all_categories | join(', ') }}
+      (got {{ hardware_facts_cats | join(', ') }}) and output must be report or artifact
+      (got {{ hardware_facts_output }}).
+    quiet: true

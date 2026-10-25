@@ -1,0 +1,26 @@
+---
+# One read-only `lspci` probe, shared by every role that asks what is on the PCI bus.
+#
+# Inputs:
+#   hardware_facts_lspci_args  list of `lspci` arguments, for example ['-n', '-d', '10de:']
+#   hardware_facts_lspci_fact  name of the fact that receives the command result, so the
+#                              caller keeps reading its own variable name
+#
+# `lspci -d <vendor>:` filters on the id itself and exits 0 with empty output when
+# nothing matches. Grepping rendered `lspci -nn` text instead is what broke the first
+# NVIDIA gate: the id appears as "[10de:2702]", so a pattern anchored on a leading
+# colon matched nothing on a host that plainly has the card.
+- name: Read the PCI bus
+  ansible.builtin.command:
+    argv: "{{ ['lspci'] + hardware_facts_lspci_args }}"
+  register: hardware_facts_lspci_result
+  changed_when: false
+  # Read-only; a check run needs the live PCI inventory.
+  check_mode: false
+  failed_when:
+    - hardware_facts_lspci_result.rc | default(0) != 0
+    - not (hardware_facts_lspci_tolerate_missing | bool)
+
+- name: Hand the PCI result to the caller under its own fact name
+  ansible.builtin.set_fact:
+    "{{ hardware_facts_lspci_fact }}": "{{ hardware_facts_lspci_result }}"

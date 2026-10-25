@@ -34,3 +34,9 @@ pve_disk_inventory_group: proxmox
 # dangerous case looks exactly like the safe one -- a partial artifact is
 # non-empty and entirely plausible.
 pve_disk_inventory_allow_partial: false
+
+# Whether to write the aggregated artifact. On by default: the consumer ingests it.
+# A caller that only wants this node's drives in `pve_disk_inventory_node_drives`
+# (the read-only hardware_facts role) sets it false, so it can never overwrite the
+# artifact the consumer deletes against.
+pve_disk_inventory_publish: true

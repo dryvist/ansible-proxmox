@@ -4,12 +4,15 @@
 # any node with no MegaRAID/PERC-family RAID controller on its PCI bus.
 
 - name: Detect a MegaRAID/PERC-family RAID controller on the PCI bus
-  ansible.builtin.command:
-    cmd: "lspci -n -d 1000::0104"
-  register: hba_storcli_pci_scan
-  changed_when: false
-  # Read-only; a check run needs the PCI inventory to preview HBA management.
-  check_mode: false
+  ansible.builtin.include_role:
+    name: hardware_facts
+    tasks_from: lspci
+    apply:
+      tags:
+        - hba_storcli
+  vars:
+    hardware_facts_lspci_args: ['-n', '-d', '1000::0104']
+    hardware_facts_lspci_fact: hba_storcli_pci_scan
   when:
     - hba_storcli_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
