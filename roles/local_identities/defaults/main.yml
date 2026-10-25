@@ -100,7 +100,6 @@ local_identities_readonly_diagnostics_sudo:
   - /usr/bin/ipmitool sel list
   - /usr/bin/ipmitool mc info
   - /usr/bin/ipmitool chassis status
-  - /usr/bin/ipmitool lan print 1
 
 # --- backup ingress ---
 # A service account for an off-box backup push. Unlike jevans and admin it is
