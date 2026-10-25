@@ -19,6 +19,8 @@
           - "'jevans' in ansible_facts.getent_passwd"
           - "'admin' in ansible_facts.getent_passwd"
           - "'host-admin' in ansible_facts.getent_passwd"
+          - "'ai-diag' in ansible_facts.getent_passwd"
+          - "'reporter' in ansible_facts.getent_passwd"
         fail_msg: "local_identities did not create all enabled accounts"
 
     - name: Confirm sudoers files are present and valid
@@ -27,7 +29,31 @@
         - jevans
         - admin
         - host-admin
+        - ai-diag
       changed_when: false
+
+    - name: Read the diagnostic account's sudoers file
+      ansible.builtin.slurp:
+        src: /etc/sudoers.d/ai-diag
+      register: ai_diag_sudoers
+
+    - name: Stat the sudoers file of the account that has no sudo
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/reporter
+      register: reporter_sudoers
+
+    - name: Assert the diagnostic account is an exact allowlist and the empty row is revoked
+      ansible.builtin.assert:
+        that:
+          - "'NOPASSWD:ALL' not in (ai_diag_sudoers.content | b64decode)"
+          - "(ai_diag_sudoers.content | b64decode) is search('/usr/sbin/dmidecode -t system')"
+          - "(ai_diag_sudoers.content | b64decode) is search('/usr/sbin/smartctl -a /dev/sd\\[a-z\\]')"
+          - "(ai_diag_sudoers.content | b64decode) is search('/usr/bin/ipmitool sdr list')"
+          - "(ai_diag_sudoers.content | b64decode) is not search('(^|[ ,])ALL *(,|$)')"
+          - not reporter_sudoers.stat.exists
+        fail_msg: >-
+          ai-diag must have a restricted command allowlist, never unrestricted
+          sudo, and an account with `sudo: []` must have no sudoers file.
 
     # Read rather than grep: a missing file makes grep exit non-zero, which
     # aborts the play before the assertion below and shows the operator a bare
