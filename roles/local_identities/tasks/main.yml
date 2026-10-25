@@ -4,29 +4,60 @@
 # principals map (see site.yml), not here -- this role owns account
 # existence and sudo, not certificate trust.
 
-- name: Create the jevans account
+# One loop creates every account and writes its sudoers entry. jevans, admin
+# and host-admin are rows of local_identities_builtin_accounts (defaults);
+# anything else -- a CA-only diagnostic account for a trusted AI, say -- is one
+# more row in local_identities_extra_accounts. No account gets its own task.
+- name: Create the named accounts
   ansible.builtin.user:
-    name: "{{ local_identities_jevans_user }}"
-    shell: "{{ local_identities_jevans_shell }}"
+    name: "{{ item.user }}"
+    shell: "{{ item.shell | default('/bin/bash') }}"
     create_home: true
     state: present
+  loop: "{{ local_identities_accounts }}"
+  loop_control:
+    label: "{{ item.user }}"
   when:
     - local_identities_enabled | bool
-    - local_identities_jevans_enabled | bool
+    - item.enabled | default(true) | bool
   tags:
     - local_identities
 
-- name: Grant jevans passwordless sudo
+# `sudo: [ALL]` is unrestricted passwordless sudo, exactly what jevans, admin
+# and host-admin always had. Any other list is an exact command allowlist, run
+# as root without a password. An empty list grants none and removes the file a
+# previous run wrote, so shrinking a row revokes the grant.
+- name: Grant each account its sudo allowlist
   ansible.builtin.copy:
-    content: "{{ local_identities_jevans_user }} ALL=(ALL) NOPASSWD:ALL\n"
-    dest: "{{ local_identities_sudoers_dir }}/{{ local_identities_jevans_user }}"
+    content: >
+      {{ (item.user ~ ' ALL=(ALL) NOPASSWD:ALL') if item.sudo == ['ALL']
+         else (item.user ~ ' ALL=(root) NOPASSWD: ' ~ (item.sudo | join(', '))) }}
+    dest: "{{ local_identities_sudoers_dir }}/{{ item.user }}"
     owner: root
     group: root
     mode: "0440"
     validate: "visudo -cf %s"
+  loop: "{{ local_identities_accounts }}"
+  loop_control:
+    label: "{{ item.user }}"
   when:
     - local_identities_enabled | bool
-    - local_identities_jevans_enabled | bool
+    - item.enabled | default(true) | bool
+    - item.sudo | default([]) | length > 0
+  tags:
+    - local_identities
+
+- name: Remove the sudoers file of an account that has no sudo
+  ansible.builtin.file:
+    path: "{{ local_identities_sudoers_dir }}/{{ item.user }}"
+    state: absent
+  loop: "{{ local_identities_accounts }}"
+  loop_control:
+    label: "{{ item.user }}"
+  when:
+    - local_identities_enabled | bool
+    - item.enabled | default(true) | bool
+    - item.sudo | default([]) | length == 0
   tags:
     - local_identities
 
@@ -76,61 +107,9 @@
   tags:
     - local_identities
 
-- name: Create the admin (break-glass) account
-  ansible.builtin.user:
-    name: "{{ local_identities_admin_user }}"
-    shell: "{{ local_identities_admin_shell }}"
-    create_home: true
-    state: present
-  when:
-    - local_identities_enabled | bool
-    - local_identities_admin_enabled | bool
-  tags:
-    - local_identities
-
-- name: Grant admin passwordless sudo
-  ansible.builtin.copy:
-    content: "{{ local_identities_admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
-    dest: "{{ local_identities_sudoers_dir }}/{{ local_identities_admin_user }}"
-    owner: root
-    group: root
-    mode: "0440"
-    validate: "visudo -cf %s"
-  when:
-    - local_identities_enabled | bool
-    - local_identities_admin_enabled | bool
-  tags:
-    - local_identities
-
 # admin intentionally gets NO static authorized_key here -- it is reached
 # only via the OpenBao SSH CA (ssh_ca_trust_principals), which is the point
 # of a break-glass account that is not a standing, always-open door.
-
-- name: Create the host-admin account
-  ansible.builtin.user:
-    name: "{{ local_identities_host_admin_user }}"
-    shell: "{{ local_identities_host_admin_shell }}"
-    create_home: true
-    state: present
-  when:
-    - local_identities_enabled | bool
-    - local_identities_host_admin_enabled | bool
-  tags:
-    - local_identities
-
-- name: Grant host-admin passwordless sudo
-  ansible.builtin.copy:
-    content: "{{ local_identities_host_admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
-    dest: "{{ local_identities_sudoers_dir }}/{{ local_identities_host_admin_user }}"
-    owner: root
-    group: root
-    mode: "0440"
-    validate: "visudo -cf %s"
-  when:
-    - local_identities_enabled | bool
-    - local_identities_host_admin_enabled | bool
-  tags:
-    - local_identities
 
 # --- backup ingress service account ---
 # Deliberately has no sudo task: it is a write-into-one-directory identity, not

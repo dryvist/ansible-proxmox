@@ -41,6 +41,34 @@ local_identities_host_admin_shell: /bin/bash
 # just reintroduce root-login habits through a side door.
 local_identities_sudoers_dir: /etc/sudoers.d
 
+# --- accounts, as data ---
+# Every account is one row: user, shell (default /bin/bash), enabled (default
+# true), sudo, and optionally principals (the OpenBao SSH CA principals that
+# may log in as it; playbooks/site.yml feeds them to ssh_ca_trust, so a row
+# needs no other file).
+#   sudo: [ALL]        unrestricted passwordless sudo
+#   sudo: [<cmd>, ...] exact command allowlist, run as root, no password
+#   sudo: []           no sudo; a sudoers file left by an earlier run is removed
+# jevans, admin and host-admin keep their own variables above and are rows
+# here. A new identity -- another trusted AI, or a read-only account on a
+# different host class -- is one row in local_identities_extra_accounts, set
+# in the group_vars of the hosts it applies to.
+local_identities_builtin_accounts:
+  - user: "{{ local_identities_jevans_user }}"
+    shell: "{{ local_identities_jevans_shell }}"
+    enabled: "{{ local_identities_jevans_enabled }}"
+    sudo: [ALL]
+  - user: "{{ local_identities_admin_user }}"
+    shell: "{{ local_identities_admin_shell }}"
+    enabled: "{{ local_identities_admin_enabled }}"
+    sudo: [ALL]
+  - user: "{{ local_identities_host_admin_user }}"
+    shell: "{{ local_identities_host_admin_shell }}"
+    enabled: "{{ local_identities_host_admin_enabled }}"
+    sudo: [ALL]
+local_identities_extra_accounts: []
+local_identities_accounts: "{{ local_identities_builtin_accounts + local_identities_extra_accounts }}"
+
 # --- backup ingress ---
 # A service account for an off-box backup push. Unlike jevans and admin it is
 # NOT an administrative identity: no sudo, and its key carries a forced command
