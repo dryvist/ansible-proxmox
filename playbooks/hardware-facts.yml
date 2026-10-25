@@ -1,0 +1,35 @@
+---
+# Read-only hardware facts for any inventory host or group.
+#
+#   ansible-playbook playbooks/hardware-facts.yml -e hardware_facts_hosts=<host-or-group>
+#
+# Optional: hardware_facts_categories (board, cpu, memory, pci, disks, gpus, psu, pools;
+# default all, comma separated), hardware_facts_output (report | artifact; default report),
+# hardware_facts_group and hardware_facts_allow_partial (see the role defaults).
+# The role is read-only: nothing is installed or changed on the target.
+
+- name: Validate the hardware facts request
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Require a target host or group
+      ansible.builtin.assert:
+        that:
+          - hardware_facts_hosts is defined
+          - hardware_facts_hosts | string | trim | length > 0
+        fail_msg: >-
+          Set hardware_facts_hosts to an inventory host name or group, for example
+          -e hardware_facts_hosts=proxmox.
+        quiet: true
+
+- name: Gather read-only hardware facts
+  # The first play refuses an unset value, so this default only lets the playbook parse.
+  hosts: "{{ hardware_facts_hosts | default('localhost') }}"
+  become: true
+  gather_facts: false
+
+  roles:
+    - role: hardware_facts

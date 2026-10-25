@@ -1,0 +1,20 @@
+---
+# Read one SMBIOS record type and parse it into a list of dicts.
+#
+# Inputs: hardware_facts_dmi_type, hardware_facts_dmi_fields, hardware_facts_dmi_fact
+# (name of the fact that receives the list) and the optional skip pair from defaults.
+# `failed_when: false` because a VM or container has no SMBIOS; the caller reports the
+# command's rc beside the list, so an empty list is never mistaken for "no hardware".
+- name: Read SMBIOS records
+  ansible.builtin.command:
+    argv: [dmidecode, --type, "{{ hardware_facts_dmi_type | string }}"]
+  register: hardware_facts_dmi_result
+  changed_when: false
+  # Read-only; a check run needs the live records.
+  check_mode: false
+  failed_when: false
+
+- name: Parse the SMBIOS records
+  ansible.builtin.include_tasks: dmi_parse.yml
+  vars:
+    hardware_facts_dmi_text: "{{ hardware_facts_dmi_result.stdout | default('') }}"

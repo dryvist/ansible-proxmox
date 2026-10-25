@@ -1,0 +1,19 @@
+---
+# Turn `dmidecode` text into a list of dicts, one per record, keeping only the named fields.
+# Records are blank-line separated; each field is a tab-indented "Key: value" line, so one
+# regex covers every record type and no per-type parser is needed.
+# Inputs: hardware_facts_dmi_text, hardware_facts_dmi_fields, hardware_facts_dmi_fact,
+# and the optional hardware_facts_dmi_skip_key / hardware_facts_dmi_skip_value pair.
+- name: Parse SMBIOS text into the requested fact
+  ansible.builtin.set_fact:
+    "{{ hardware_facts_dmi_fact }}": "{{ hardware_facts_dmi_json | from_json }}"
+  vars:
+    hardware_facts_dmi_json: >-
+      {% set out = [] %}
+      {% for block in hardware_facts_dmi_text.split('\n\n') %}
+      {% set rec = dict(block | regex_findall('^\t([^:\n]+): (.*)$', multiline=True)) %}
+      {% if rec and rec.get(hardware_facts_dmi_skip_key | default('')) != hardware_facts_dmi_skip_value | default('') %}
+      {% set _ = out.append(rec | dict2items | selectattr('key', 'in', hardware_facts_dmi_fields) | items2dict) %}
+      {% endif %}
+      {% endfor %}
+      {{ out | to_json }}
