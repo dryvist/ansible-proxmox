@@ -92,7 +92,9 @@
       vars:
         ansible_become: false
       run_once: true
-      when: not (pve_disk_inventory_allow_partial | bool)
+      when:
+        - pve_disk_inventory_publish | bool
+        - not (pve_disk_inventory_allow_partial | bool)
 
     - name: Ensure the controller artifact directory exists
       ansible.builtin.file:
@@ -104,6 +106,7 @@
       vars:
         ansible_become: false
       run_once: true
+      when: pve_disk_inventory_publish | bool
 
     - name: Write the aggregated drive inventory artifact
       ansible.builtin.copy:
@@ -119,3 +122,4 @@
       vars:
         ansible_become: false
       run_once: true
+      when: pve_disk_inventory_publish | bool
