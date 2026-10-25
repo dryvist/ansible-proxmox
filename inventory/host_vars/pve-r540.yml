@@ -126,3 +126,8 @@ zfs_scrub_window_pools: [bulk]
 # Only the address: pve_power_managed is deliberately NOT set here. This node
 # is always-on, and that flag drives site.yml's power-on/power-off bookends.
 idrac_power_bmc_host: "{{ lookup('env', 'PVE5_BMC_HOSTNAME') | default('', true) }}"
+
+# Enable the host-admin login on this node.
+local_identities_host_admin_enabled: true
+ssh_ca_trust_principals_host_overrides: >-
+  {{ {host_admin_user: ssh_ca_trust_host_admin_principals} }}
