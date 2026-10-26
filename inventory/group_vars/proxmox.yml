@@ -279,12 +279,12 @@ sanoid_splunk_datasets_json: >-
   }
 sanoid_splunk_datasets: "{{ sanoid_splunk_datasets_json | from_json }}"
 
-# PBS guest backups (pve_backup_jobs). Off until PBS publishes its token.
-pve_backup_jobs_manage: false
+# PBS guest backups (pve_backup_jobs). Jobs are enabled one node at a time.
+pve_backup_jobs_manage: true
 pve_backup_jobs_prune_unmanaged: false
 pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
 pve_backup_jobs_pbs_node: pve-w1700
-pve_backup_jobs_pbs_server: "pbs.{{ domain_from_tofu }}"
+pve_backup_jobs_pbs_server: "{{ hostvars['localhost'].tofu_data.containers.pbs.fqdn }}"
 pve_backup_jobs_jobs:
   - {id: guests-pve-r540, all: true, node: pve-r540, storage: guests, schedule: "01:15", enabled: false}
   - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "01:15", enabled: false}
