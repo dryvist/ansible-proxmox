@@ -18,6 +18,14 @@ configures the management bridge to use that same name.
 - Missing MACs, uplink names, addresses, or gateways fail before network files
   are written.
 
+## Extra routed interfaces
+
+Set `pve_host_network_extra_interfaces` to a list of mappings with `name` and
+`address` keys and an optional `comment` key. The role writes the entries to
+`/etc/network/interfaces.d/ansible-extra-interfaces` and runs `ifup` for each
+declared interface. An empty list removes the file. This setting is independent
+of `pve_host_network_enforce`.
+
 ## Proxmox interface-pinning tool
 
 Proxmox VE 9 documents `pve-network-interface-pinning`; earlier discussion
@@ -97,6 +105,7 @@ ansible-playbook playbooks/site.yml --tags pve_host_network \
 | `pve_host_network_uplink_mac` | empty | Required permanent MAC for the pinned interface. |
 | `pve_host_network_address` | current host fact | Management address in CIDR form; set an override when required. |
 | `pve_host_network_gateway` | current host fact | Management gateway; set an override when required. |
+| `pve_host_network_extra_interfaces` | `[]` | Additional routed interfaces written under `/etc/network/interfaces.d/`. |
 
 ## Tags
 
