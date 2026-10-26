@@ -71,38 +71,134 @@
           is missing PBS_TOKEN_ID, PBS_TOKEN_SECRET, PBS_FINGERPRINT or PBS_DATASTORE.
         quiet: true
 
-    - name: Install the Proxmox API library the storage module imports
-      ansible.builtin.apt:
-        name: python3-proxmoxer
-        state: present
-      register: pve_backup_jobs_proxmoxer
+    - name: Read PVE storage definitions
+      ansible.builtin.uri:
+        url: "https://{{ pve_backup_jobs_api_host }}:8006/api2/json/storage"
+        method: GET
+        headers:
+          Authorization: >-
+            PVEAPIToken={{ pve_backup_jobs_api_user }}!{{ pve_backup_jobs_api_token_id }}={{ pve_backup_jobs_api_token_secret }}
+        validate_certs: "{{ pve_backup_jobs_api_validate_certs | bool }}"
+        status_code: 200
+      register: pve_backup_jobs_storage_list
+      changed_when: false
+      check_mode: false
+      no_log: true
 
-    - name: Ensure the PBS backup target storage exists
-      # Check mode cannot import a library it has not installed yet.
-      when: not ansible_check_mode or not pve_backup_jobs_proxmoxer.changed
+    - name: Select the declared PBS storage from the PVE storage list
+      ansible.builtin.set_fact:
+        pve_backup_jobs_existing_storage: >-
+          {{ pve_backup_jobs_storage_list.json.data
+             | selectattr('storage', 'equalto', pve_backup_jobs_storage_id)
+             | first
+             | default({}) }}
+      changed_when: false
+      no_log: true
+
+    - name: Require the existing PBS storage identity to match
+      ansible.builtin.assert:
+        that:
+          - pve_backup_jobs_existing_storage.type | default('') == 'pbs'
+          - pve_backup_jobs_existing_storage.server | default('') == pve_backup_jobs_pbs_server
+          - pve_backup_jobs_existing_storage.datastore | default('') == pve_backup_jobs_pbs_secret.secret.PBS_DATASTORE
+        fail_msg: >-
+          PBS storage {{ pve_backup_jobs_storage_id }} already exists with a different type, server or datastore.
+          Its server and datastore are fixed; remove and re-add it deliberately to change them.
+        quiet: true
+      when: pve_backup_jobs_existing_storage | length > 0
+
+    - name: Detect drift in mutable PBS storage settings
+      ansible.builtin.set_fact:
+        pve_backup_jobs_storage_drift: >-
+          {{ pve_backup_jobs_existing_storage | length > 0 and (
+               pve_backup_jobs_existing_storage.username | default('') != pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_ID
+               or pve_backup_jobs_existing_storage.fingerprint | default('') != pve_backup_jobs_pbs_secret.secret.PBS_FINGERPRINT
+               or (pve_backup_jobs_existing_storage.content | default('') | string | split(',')
+                   | map('trim') | reject('equalto', '') | unique | list | sort) != ['backup']
+               or (pve_backup_jobs_existing_storage.nodes | default('') | string | split(',')
+                   | map('trim') | reject('equalto', '') | unique | list | sort)
+                  != (pve_backup_jobs_storage_nodes | unique | list | sort)
+             ) }}
+      changed_when: false
+      no_log: true
+
+    - name: Report PBS storage creation in check mode
+      ansible.builtin.debug:
+        msg: "PBS storage {{ pve_backup_jobs_storage_id }} would be created."
+      changed_when: true
+      when:
+        - ansible_check_mode
+        - pve_backup_jobs_existing_storage | length == 0
+
+    - name: Create the PBS backup target storage
       # The fingerprint is PINNED. PBS serves a self-signed certificate, so
       # without it every node either refuses the storage or is asked to trust
       # whatever answers on that name — which is the whole value of pinning.
-      community.proxmox.proxmox_storage:
-        api_host: "{{ pve_backup_jobs_api_host }}"
-        api_user: "{{ pve_backup_jobs_api_user }}"
-        api_token_id: "{{ pve_backup_jobs_api_token_id }}"
-        api_token_secret: "{{ pve_backup_jobs_api_token_secret }}"
+      ansible.builtin.uri:
+        url: "https://{{ pve_backup_jobs_api_host }}:8006/api2/json/storage"
+        method: POST
+        headers:
+          Authorization: >-
+            PVEAPIToken={{ pve_backup_jobs_api_user }}!{{ pve_backup_jobs_api_token_id }}={{ pve_backup_jobs_api_token_secret }}
         validate_certs: "{{ pve_backup_jobs_api_validate_certs | bool }}"
-        name: "{{ pve_backup_jobs_storage_id }}"
-        type: pbs
-        nodes: "{{ pve_backup_jobs_storage_nodes }}"
-        content:
-          - backup
-        state: present
-        pbs_options:
+        body_format: form-urlencoded
+        body:
+          storage: "{{ pve_backup_jobs_storage_id }}"
+          type: pbs
           # An FQDN, never a literal address: the guest moves, the name does not.
           server: "{{ pve_backup_jobs_pbs_server }}"
           datastore: "{{ pve_backup_jobs_pbs_secret.secret.PBS_DATASTORE }}"
           username: "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_ID }}"
           password: "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}"
           fingerprint: "{{ pve_backup_jobs_pbs_secret.secret.PBS_FINGERPRINT }}"
+          content: backup
+          nodes: "{{ pve_backup_jobs_storage_nodes | join(',') }}"
+        status_code: 200
+      when:
+        - not ansible_check_mode
+        - pve_backup_jobs_existing_storage | length == 0
+      changed_when: true
       no_log: true
+
+    - name: Report PBS storage update in check mode
+      ansible.builtin.debug:
+        msg: "PBS storage {{ pve_backup_jobs_storage_id }} would be updated."
+      changed_when: true
+      when:
+        - ansible_check_mode
+        - pve_backup_jobs_existing_storage | length > 0
+        - pve_backup_jobs_storage_drift
+
+    - name: Update mutable PBS backup target storage settings
+      ansible.builtin.uri:
+        url: "https://{{ pve_backup_jobs_api_host }}:8006/api2/json/storage/{{ pve_backup_jobs_storage_id }}"
+        method: PUT
+        headers:
+          Authorization: >-
+            PVEAPIToken={{ pve_backup_jobs_api_user }}!{{ pve_backup_jobs_api_token_id }}={{ pve_backup_jobs_api_token_secret }}
+        validate_certs: "{{ pve_backup_jobs_api_validate_certs | bool }}"
+        body_format: form-urlencoded
+        body:
+          username: "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_ID }}"
+          password: "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}"
+          fingerprint: "{{ pve_backup_jobs_pbs_secret.secret.PBS_FINGERPRINT }}"
+          content: backup
+          nodes: "{{ pve_backup_jobs_storage_nodes | join(',') }}"
+        status_code: 200
+      when:
+        - not ansible_check_mode
+        - pve_backup_jobs_existing_storage | length > 0
+        - pve_backup_jobs_storage_drift
+      changed_when: true
+      no_log: true
+
+    - name: Report PBS storage already matches the declaration
+      ansible.builtin.debug:
+        msg: "PBS storage {{ pve_backup_jobs_storage_id }} is already current."
+      changed_when: false
+      when:
+        - pve_backup_jobs_existing_storage | length > 0
+        - not pve_backup_jobs_storage_drift
 
     - name: Reconcile the live job set against the declaration
       ansible.builtin.import_tasks: reconcile.yml
