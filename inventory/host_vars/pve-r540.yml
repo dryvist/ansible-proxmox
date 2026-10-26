@@ -111,6 +111,14 @@ postgres_standby_jobs: >-
 zfs_pools_vm_disk_properties:
   bulk/vm-915100-disk-1:
     sync: disabled
+  # Proxmox's install-time local-zfs storage points at this existing dataset;
+  # it is not declared in node_storage, so set its cap through the property map.
+  rpool/data:
+    quota: "1T"
+
+# Keep guaranteed space for the OS on this node's ZFS root dataset.
+zfs_pools_root_dataset: rpool/ROOT
+zfs_pools_root_refreservation: 150G
 
 # Scrubs on this HDD pool progress only off-peak.
 # Operator decision 2026-10-11.
