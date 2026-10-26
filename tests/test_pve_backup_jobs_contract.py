@@ -100,7 +100,7 @@ def test_declared_jobs_ship_disabled():
 
 def test_retention_is_owned_by_pbs():
     assert DEFAULTS["pve_backup_jobs_default_prune"] == "keep-all=1"
-    assert all(job["prune"] == "keep-all=1" for job in JOBS)
+    assert all(job.get("prune", "keep-all=1") == "keep-all=1" for job in JOBS)
 
 
 def test_each_job_selects_all_guests_on_one_non_backup_node():

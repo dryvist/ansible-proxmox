@@ -279,62 +279,13 @@ sanoid_splunk_datasets_json: >-
   }
 sanoid_splunk_datasets: "{{ sanoid_splunk_datasets_json | from_json }}"
 
-# --- PBS guest backups (roles/pve_backup_jobs) --------------------------------
-# Every guest backup goes to the Proxmox Backup Server. Retention is PBS-side:
-# vzdump keeps what it writes (keep-all=1) and a PBS datastore prune job removes
-# old snapshots. That prune job is not declared in this repo, so it must exist on
-# the PBS server before these jobs are enabled.
-# Off until the PBS server is converged and has published its token: with it on,
-# every converge reads that token and fails while the path is empty.
+# PBS guest backups (pve_backup_jobs). Off until PBS publishes its token.
 pve_backup_jobs_manage: false
-pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
-
-# The node that hosts the PBS guest and its datastore (its `backup` pool).
-# Guests on this node are not covered until a second target exists on another node.
-pve_backup_jobs_pbs_node: pve-w1700
-
-# Server name, resolved from the tofu domain. The PBS guest must have a DNS
-# record of this exact name. The first-element idiom raises on an empty domain.
-pve_backup_jobs_pbs_server: "pbs.{{ [domain_from_tofu | default('')] | reject('equalto', '') | list | first }}"
-
-# Off. An undeclared vzdump job would otherwise be deleted on the first converge,
-# and the live job set has not been checked against this declaration. Enable only
-# after the live set is confirmed declared.
 pve_backup_jobs_prune_unmanaged: false
-
-# One all-guest job per non-backup node. Combining `all` with `node` selects
-# every guest on that node without moving guests out of their existing pools.
-# The storage id is set here, not only in the role default, so the jobs below
-# resolve it outside the role too.
-pve_backup_jobs_storage_id: guests
+pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
+pve_backup_jobs_pbs_node: pve-w1700
+pve_backup_jobs_pbs_server: "pbs.{{ domain_from_tofu }}"
 pve_backup_jobs_jobs:
-  - id: guests-pve-r540
-    all: true
-    node: pve-r540
-    storage: "{{ pve_backup_jobs_storage_id }}"
-    schedule: "01:15"
-    enabled: false
-    mode: snapshot
-    compress: zstd
-    prune: keep-all=1
-    comment: All guests on pve-r540 to PBS, nightly. Retention is PBS-side.
-  - id: guests-pve-r710
-    all: true
-    node: pve-r710
-    storage: "{{ pve_backup_jobs_storage_id }}"
-    schedule: "01:15"
-    enabled: false
-    mode: snapshot
-    compress: zstd
-    prune: keep-all=1
-    comment: All guests on pve-r710 to PBS, nightly. Retention is PBS-side.
-  - id: guests-pve-w5900
-    all: true
-    node: pve-w5900
-    storage: "{{ pve_backup_jobs_storage_id }}"
-    schedule: "01:15"
-    enabled: false
-    mode: snapshot
-    compress: zstd
-    prune: keep-all=1
-    comment: All guests on pve-w5900 to PBS, nightly. Retention is PBS-side.
+  - {id: guests-pve-r540, all: true, node: pve-r540, storage: guests, schedule: "01:15", enabled: false}
+  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "01:15", enabled: false}
+  - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "01:15", enabled: false}
