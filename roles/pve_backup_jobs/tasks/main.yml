@@ -71,7 +71,15 @@
           is missing PBS_TOKEN_ID, PBS_TOKEN_SECRET, PBS_FINGERPRINT or PBS_DATASTORE.
         quiet: true
 
+    - name: Install the Proxmox API library the storage module imports
+      ansible.builtin.apt:
+        name: python3-proxmoxer
+        state: present
+      register: pve_backup_jobs_proxmoxer
+
     - name: Ensure the PBS backup target storage exists
+      # Check mode cannot import a library it has not installed yet.
+      when: not ansible_check_mode or not pve_backup_jobs_proxmoxer.changed
       # The fingerprint is PINNED. PBS serves a self-signed certificate, so
       # without it every node either refuses the storage or is asked to trust
       # whatever answers on that name — which is the whole value of pinning.
