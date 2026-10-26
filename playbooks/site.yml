@@ -231,6 +231,12 @@
       tags:
         - media_lxc_features
 
+    # Node-declared bind mounts and CPU weights for LXCs whose root-only
+    # settings cannot be applied by the OpenTofu API token.
+    - role: pve_lxc_datastore_mount
+      tags:
+        - pve_lxc_datastore_mount
+
     # Docker-tagged guests keep their existing root-only feature projection;
     # container-nesting selects the same shared feature role for guests whose
     # runtime is managed by another capability group.
