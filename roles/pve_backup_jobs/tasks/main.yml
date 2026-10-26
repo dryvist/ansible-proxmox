@@ -145,15 +145,26 @@
         state: directory
         mode: "0700"
 
+    - name: Read the current PBS storage password file
+      ansible.builtin.slurp:
+        src: "/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw"
+      register: pve_backup_jobs_pw_current
+      failed_when: false
+      check_mode: false
+      no_log: true
+
     - name: Write the PBS token secret to the storage password file
       # The same file and format PVE's own PBS plugin writes ("$password\n").
       # /etc/pve is the cluster filesystem, so one write reaches every node.
-      ansible.builtin.copy:
-        content: "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}\n"
-        dest: "/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw"
-        mode: "0600"
-        # pmxcfs refuses the attribute copy of an atomic temp-file move; write in place.
-        unsafe_writes: true
+      # pmxcfs refuses the chmod, chown and utime calls the copy module makes,
+      # so dd writes it with a plain open-truncate-write. The secret is on stdin.
+      ansible.builtin.command:
+        argv: [dd, "of=/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw", status=none]
+        stdin: "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}"
+      when: >-
+        (pve_backup_jobs_pw_current.content | default('') | b64decode)
+        != pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET ~ '\n'
+      changed_when: true
       no_log: true
 
     - name: Enable the PBS storage once its password file is in place

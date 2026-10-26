@@ -63,13 +63,15 @@ def test_password_directory_exists_before_the_write():
 
 
 def test_secret_goes_to_the_pve_password_file():
+    read = task_named("Read the current PBS storage password file")
     write = task_named("Write the PBS token secret to the storage password file")
-    copy = write["ansible.builtin.copy"]
-    assert copy["dest"] == "/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw"
-    assert copy["content"] == "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}\n"
-    assert copy["mode"] == "0600"
-    assert copy["unsafe_writes"] is True
-    assert write["no_log"] is True
+    path = "/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw"
+    assert read["ansible.builtin.slurp"]["src"] == path
+    command = write["ansible.builtin.command"]
+    assert command["argv"] == ["dd", "of=" + path, "status=none"]
+    assert command["stdin"] == "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}"
+    assert "PBS_TOKEN_SECRET" in write["when"]
+    assert read["no_log"] is True and write["no_log"] is True
 
 
 def test_no_directory_storage_branch_remains():
