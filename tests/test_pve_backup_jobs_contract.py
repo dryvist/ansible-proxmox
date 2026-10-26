@@ -39,7 +39,7 @@ def module_pbs_options():
         and isinstance(node.value, ast.Constant)
         and any(isinstance(target, ast.Name) and target.id == "DOCUMENTATION" for target in node.targets)
     )
-    keys = set(yaml.safe_load(docs)["options"]["pbs_options"]["suboptions"])
+    keys = set(yaml.safe_load(str(docs))["options"]["pbs_options"]["suboptions"])
     assert keys == PINNED_PBS_OPTIONS, "installed proxmox_storage differs from the pin in requirements.yml"
     return keys
 
