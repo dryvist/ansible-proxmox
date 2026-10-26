@@ -43,6 +43,17 @@ def test_storage_argv_never_carries_the_secret():
     assert "--server" not in update and "--datastore" not in update
 
 
+def test_storage_is_created_disabled_and_enabled_after_the_password():
+    tasks = list(walk(MAIN))
+    define = task_named("Define or update the PBS backup target storage")
+    write = task_named("Write the PBS token secret to the storage password file")
+    enable = task_named("Enable the PBS storage once its password file is in place")
+    create = define["ansible.builtin.command"]["argv"].split("| ternary(")[1].split("],", 1)[0]
+    assert "'--disable', '1'" in create
+    assert enable["ansible.builtin.command"]["argv"][-2:] == ["--delete", "disable"]
+    assert tasks.index(define) < tasks.index(write) < tasks.index(enable)
+
+
 def test_secret_goes_to_the_pve_password_file():
     write = task_named("Write the PBS token secret to the storage password file")
     copy = write["ansible.builtin.copy"]

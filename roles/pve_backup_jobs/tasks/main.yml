@@ -119,12 +119,14 @@
       # without it every node either refuses the storage or is asked to trust
       # whatever answers on that name — which is the whole value of pinning.
       # server and datastore are fixed after creation, so only create sets them.
+      # Create starts disabled: PVE activates a new enabled storage at once and
+      # rolls it back when that fails, and the password file does not exist yet.
       ansible.builtin.command:
         argv: >-
           {{ ((pve_backup_jobs_existing_storage | length == 0)
               | ternary(['pvesh', 'create', '/storage', '--storage', pve_backup_jobs_storage_id, '--type', 'pbs',
                          '--server', pve_backup_jobs_pbs_server,
-                         '--datastore', pve_backup_jobs_pbs_secret.secret.PBS_DATASTORE],
+                         '--datastore', pve_backup_jobs_pbs_secret.secret.PBS_DATASTORE, '--disable', '1'],
                         ['pvesh', 'set', '/storage/' ~ pve_backup_jobs_storage_id]))
              + ['--username', pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_ID,
                 '--fingerprint', pve_backup_jobs_pbs_secret.secret.PBS_FINGERPRINT,
@@ -142,6 +144,14 @@
         dest: "/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw"
         mode: "0600"
       no_log: true
+
+    - name: Enable the PBS storage once its password file is in place
+      ansible.builtin.command:
+        argv: [pvesh, set, "/storage/{{ pve_backup_jobs_storage_id }}", --delete, disable]
+      when: >-
+        pve_backup_jobs_existing_storage | length == 0
+        or (pve_backup_jobs_existing_storage.disable | default(0) | int) == 1
+      changed_when: true
 
     - name: Reconcile the live job set against the declaration
       ansible.builtin.import_tasks: reconcile.yml
