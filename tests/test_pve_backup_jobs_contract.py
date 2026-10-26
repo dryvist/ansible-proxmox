@@ -68,6 +68,7 @@ def test_secret_goes_to_the_pve_password_file():
     assert copy["dest"] == "/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw"
     assert copy["content"] == "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}\n"
     assert copy["mode"] == "0600"
+    assert copy["unsafe_writes"] is True
     assert write["no_log"] is True
 
 
