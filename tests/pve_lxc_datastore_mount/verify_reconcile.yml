@@ -1,0 +1,107 @@
+---
+# Offline integration fixture for the node-declared PBS mount role.
+# Run with pytest tests/pve_lxc_datastore_mount; all pct and findmnt calls are stubbed.
+- name: Verify pve_lxc_datastore_mount reconciliation
+  hosts: localhost
+  become: false
+  gather_facts: false
+  environment:
+    PATH: "{{ pve_lxc_datastore_mount_fixture_dir }}:{{ lookup('ansible.builtin.env', 'PATH') }}"
+  vars:
+    pve_lxc_datastore_mount_fixture_dir: /tmp/pve-lxc-datastore-mount-fixture
+    pve_lxc_datastore_mount_fixture_mode: mixed
+    pve_lxc_datastore_mount_fixture_mount:
+      source: /backup/guests
+      mountpoint: /mnt/datastore/backup
+      backup: false
+      cpuunits: 50
+      require_source_mountpoint: true
+    pve_lxc_datastore_mount_fixture_cases:
+      mixed:
+        "212000": "{{ pve_lxc_datastore_mount_fixture_mount }}"
+        "212001": "{{ pve_lxc_datastore_mount_fixture_mount }}"
+        "212002": "{{ pve_lxc_datastore_mount_fixture_mount }}"
+        "212004": "{{ pve_lxc_datastore_mount_fixture_mount }}"
+        "212005": "{{ pve_lxc_datastore_mount_fixture_mount }}"
+      insync:
+        "212001": "{{ pve_lxc_datastore_mount_fixture_mount }}"
+      missing_source:
+        "212003":
+          source: /not-mounted
+          mountpoint: /mnt/datastore/backup
+          backup: false
+          cpuunits: 50
+          require_source_mountpoint: true
+
+  tasks:
+    - name: Create the fixture command directory
+      ansible.builtin.file:
+        path: "{{ pve_lxc_datastore_mount_fixture_dir }}"
+        state: directory
+        mode: "0755"
+      changed_when: false
+
+    - name: Reset the pct command log
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ pve_lxc_datastore_mount_fixture_dir }}/pct.log"
+        mode: "0644"
+      changed_when: false
+
+    - name: Install the pct fixture
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          case "$1" in
+            status)
+              case "$2" in
+                212002) exit 1 ;;
+                212005) printf '%s\n' 'status: stopped' ;;
+                *) printf '%s\n' 'status: running' ;;
+              esac
+              ;;
+            config)
+              printf '%s\n' 'protection: 1'
+              case "$2" in
+                212000)
+                  printf '%s\n' 'mp0: /old,mp=/old,backup=1' 'cpuunits: 100'
+                  ;;
+                212001)
+                  printf '%s\n' 'mp0: /backup/guests,mp=/mnt/datastore/backup,backup=0' 'cpuunits: 50'
+                  ;;
+                212004)
+                  printf '%s\n' 'mp0: /backup/guests,mp=/mnt/datastore/backup,backup=0' 'cpuunits: 100'
+                  ;;
+                212005)
+                  printf '%s\n' 'mp0: /old,mp=/old,backup=1' 'cpuunits: 50'
+                  ;;
+                *) exit 2 ;;
+              esac
+              ;;
+            set|reboot)
+              printf '%s\n' "$*" >> {{ pve_lxc_datastore_mount_fixture_dir }}/pct.log
+              ;;
+            *) exit 2 ;;
+          esac
+        dest: "{{ pve_lxc_datastore_mount_fixture_dir }}/pct"
+        mode: "0755"
+      changed_when: false
+
+    - name: Install the findmnt fixture
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          case "$2" in
+            /backup/guests) printf '%s\n' 'backup/guests' ;;
+            /) printf '%s\n' 'rpool/ROOT/pve-1' ;;
+            *) exit 1 ;;
+          esac
+        dest: "{{ pve_lxc_datastore_mount_fixture_dir }}/findmnt"
+        mode: "0755"
+      changed_when: false
+
+    - name: Reconcile the selected fixture case
+      ansible.builtin.include_role:
+        name: pve_lxc_datastore_mount
+      vars:
+        pve_lxc_datastore_mount_containers: "{{ pve_lxc_datastore_mount_fixture_cases[pve_lxc_datastore_mount_fixture_mode] }}"

@@ -1,0 +1,3 @@
+---
+# Per-node declarations keyed by VMID. Hosts without declarations are a no-op.
+pve_lxc_datastore_mount_containers: {}

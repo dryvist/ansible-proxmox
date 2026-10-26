@@ -1,0 +1,147 @@
+---
+- name: Check LXC status for VMID {{ pve_lxc_datastore_mount.key }}
+  ansible.builtin.command:
+    argv:
+      - pct
+      - status
+      - "{{ pve_lxc_datastore_mount.key }}"
+  register: pve_lxc_datastore_mount_status
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Report an LXC that is not present yet
+  ansible.builtin.debug:
+    msg: >-
+      LXC {{ pve_lxc_datastore_mount.key }} is not present (`pct status` failed);
+      skipping its datastore mount and CPU weight.
+  when: pve_lxc_datastore_mount_status.rc != 0
+
+- name: Find the declared datastore source mount
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - --mountpoint
+      - "{{ pve_lxc_datastore_mount.value.source }}"
+      - --noheadings
+      - --output
+      - SOURCE
+  register: pve_lxc_datastore_mount_source
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - pve_lxc_datastore_mount_status.rc == 0
+    - pve_lxc_datastore_mount.value.require_source_mountpoint | default(true) | bool
+
+- name: Find the root filesystem source
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - --mountpoint
+      - /
+      - --noheadings
+      - --output
+      - SOURCE
+  register: pve_lxc_datastore_mount_root_source
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - pve_lxc_datastore_mount_status.rc == 0
+    - pve_lxc_datastore_mount.value.require_source_mountpoint | default(true) | bool
+
+- name: Require the datastore source to be a separate mountpoint
+  ansible.builtin.assert:
+    that:
+      - pve_lxc_datastore_mount_source.rc == 0
+      - pve_lxc_datastore_mount_root_source.rc == 0
+      - (pve_lxc_datastore_mount_source.stdout | trim) != (pve_lxc_datastore_mount_root_source.stdout | trim)
+    fail_msg: >-
+      {{ pve_lxc_datastore_mount.value.source }} must be an exact findmnt
+      mountpoint whose source differs from the root filesystem.
+    quiet: true
+  when:
+    - pve_lxc_datastore_mount_status.rc == 0
+    - pve_lxc_datastore_mount.value.require_source_mountpoint | default(true) | bool
+
+- name: Read configuration of VMID {{ pve_lxc_datastore_mount.key }}
+  ansible.builtin.command:
+    argv:
+      - pct
+      - config
+      - "{{ pve_lxc_datastore_mount.key }}"
+  register: pve_lxc_datastore_mount_config
+  changed_when: false
+  check_mode: false
+  when: pve_lxc_datastore_mount_status.rc == 0
+
+- name: Compare the declared mount and CPU weight with current configuration
+  ansible.builtin.set_fact:
+    pve_lxc_datastore_mount_desired_line: >-
+      {{ pve_lxc_datastore_mount.value.source
+         ~ ',mp=' ~ pve_lxc_datastore_mount.value.mountpoint
+         ~ ',backup=' ~ ('1' if (pve_lxc_datastore_mount.value.backup | bool) else '0') }}
+    pve_lxc_datastore_mount_current_line: >-
+      {{ pve_lxc_datastore_mount_config.stdout_lines
+         | select('match', '^mp0:')
+         | map('regex_replace', '^mp0:\s*', '')
+         | list | first | default('') }}
+    pve_lxc_datastore_mount_current_cpuunits: >-
+      {{ pve_lxc_datastore_mount_config.stdout_lines
+         | select('match', '^cpuunits:')
+         | map('regex_replace', '^cpuunits:\s*', '')
+         | list | first | default('100') }}
+    pve_lxc_datastore_mount_is_running: "{{ pve_lxc_datastore_mount_status.stdout | trim == 'status: running' }}"
+  when: pve_lxc_datastore_mount_status.rc == 0
+
+- name: Record which LXC settings need to change
+  ansible.builtin.set_fact:
+    pve_lxc_datastore_mount_mp_changed: "{{ pve_lxc_datastore_mount_current_line != pve_lxc_datastore_mount_desired_line }}"
+    pve_lxc_datastore_mount_cpuunits_changed: "{{ (pve_lxc_datastore_mount_current_cpuunits | int) != (pve_lxc_datastore_mount.value.cpuunits | int) }}"
+  when: pve_lxc_datastore_mount_status.rc == 0
+
+- name: Set the datastore bind mount through the protected pct wrapper
+  ansible.builtin.include_role:
+    name: pve_lxc_protected_pct_set
+    apply:
+      tags:
+        - pve_lxc_datastore_mount
+  vars:
+    pve_lxc_protected_pct_set_vmid: "{{ pve_lxc_datastore_mount.key }}"
+    pve_lxc_protected_pct_set_option: --mp0
+    pve_lxc_protected_pct_set_value: "{{ pve_lxc_datastore_mount_desired_line }}"
+  when:
+    - pve_lxc_datastore_mount_status.rc == 0
+    - pve_lxc_datastore_mount_mp_changed
+  tags:
+    - pve_lxc_datastore_mount
+
+- name: Set the CPU weight through the protected pct wrapper
+  ansible.builtin.include_role:
+    name: pve_lxc_protected_pct_set
+    apply:
+      tags:
+        - pve_lxc_datastore_mount
+  vars:
+    pve_lxc_protected_pct_set_vmid: "{{ pve_lxc_datastore_mount.key }}"
+    pve_lxc_protected_pct_set_option: --cpuunits
+    pve_lxc_protected_pct_set_value: "{{ pve_lxc_datastore_mount.value.cpuunits }}"
+  when:
+    - pve_lxc_datastore_mount_status.rc == 0
+    - pve_lxc_datastore_mount_cpuunits_changed
+  tags:
+    - pve_lxc_datastore_mount
+
+# A new bind mount on a running CT needs a restart before the guest can use it.
+- name: Restart a running LXC after changing its datastore mount
+  ansible.builtin.command:
+    argv:
+      - pct
+      - reboot
+      - "{{ pve_lxc_datastore_mount.key }}"
+  changed_when: true
+  when:
+    - pve_lxc_datastore_mount_status.rc == 0
+    - pve_lxc_datastore_mount_is_running
+    - pve_lxc_datastore_mount_mp_changed
