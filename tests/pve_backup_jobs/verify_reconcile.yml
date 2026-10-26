@@ -31,9 +31,10 @@
         storage: fixture-backup-store
         schedule: "02:30"
         enabled: false
-      # Does not exist yet — the create case.
+      # Does not exist yet — the create case, with a node pin.
       - id: fixture-new
         pool: fixture-pool-b
+        node: fixture-node-b
         storage: fixture-backup-store
         schedule: "03:30"
         enabled: false
@@ -45,6 +46,12 @@
         schedule: "04:30"
         enabled: false
         prune: keep-daily=3
+      # Exists with a node pin the declaration no longer carries — the clear case.
+      - id: fixture-unpin
+        pool: fixture-pool-d
+        storage: fixture-backup-store
+        schedule: "06:30"
+        enabled: false
     # Serves as `pvesh get /cluster/backup`. `fixture-orphan` models the job
     # left behind after the node it named left the cluster.
     pve_backup_jobs_fixture_state:
@@ -78,6 +85,17 @@
         compress: zstd
         comment: ""
         prune-backups: {keep-last: "1"}
+      - id: fixture-unpin
+        type: vzdump
+        pool: fixture-pool-d
+        node: fixture-node-a
+        storage: fixture-backup-store
+        schedule: "06:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
 
   tasks:
     - name: Create the stub directory
@@ -128,6 +146,11 @@
           - "'set /cluster/backup/fixture-convert' in pve_backup_jobs_commands"
           - "'--pool fixture-pool' in pve_backup_jobs_commands"
           - "'--delete vmid' in pve_backup_jobs_commands"
+          # A node pin the declaration dropped is cleared, not kept; a declared
+          # node is passed as one name on create.
+          - "'set /cluster/backup/fixture-unpin' in pve_backup_jobs_commands"
+          - "'--delete node' in pve_backup_jobs_commands"
+          - "'--node fixture-node-b' in pve_backup_jobs_commands"
           # The create: carries an explicit id so the job is addressable by the
           # declaration afterwards rather than by a generated UUID.
           - "'create /cluster/backup --id fixture-new' in pve_backup_jobs_commands"

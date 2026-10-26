@@ -2,6 +2,8 @@
 # Declaration validation, deliberately separate from the reconcile so it runs on
 # every host and can be exercised without a cluster
 # (tests/pve_backup_jobs/verify_declaration.yml).
+# It reads no credential. The OpenBao read happens on the config host only, in
+# main.yml.
 
 - name: Assert every declared job selects a pool and names a storage
   # A guest-id list is exactly the shape this role exists to replace: it keeps
@@ -40,37 +42,43 @@
   tags:
     - pve_backup_jobs
 
-- name: Assert a backup storage is declared when jobs are
+- name: Assert the PBS target is declared when jobs are
   # A job pointing at a storage nothing ensures fails hours after a converge
-  # that reported success.
+  # that reported success. Every job must name the one PBS target this role
+  # ensures.
   ansible.builtin.assert:
     that:
-      - pve_backup_jobs_storage | length > 0
-      - pve_backup_jobs_storage.name | default('') | length > 0
-      - pve_backup_jobs_storage.path | default('') | length > 0
-      - pve_backup_jobs_storage.nodes | default([]) | length > 0
+      - pve_backup_jobs_storage_id | length > 0
+      - pve_backup_jobs_pbs_server | length > 0
+      - pve_backup_jobs_pbs_node | length > 0
+      - pve_backup_jobs_storage_nodes | length > 0
+      - pve_backup_jobs_jobs | map(attribute='storage') | reject('equalto', pve_backup_jobs_storage_id) | list | length == 0
     fail_msg: >-
-      pve_backup_jobs_jobs is non-empty but pve_backup_jobs_storage does not
-      declare name, path and nodes.
+      pve_backup_jobs_jobs is non-empty but the PBS target is not fully declared.
+      pve_backup_jobs_storage_id, pve_backup_jobs_pbs_server, pve_backup_jobs_pbs_node
+      and pve_backup_jobs_storage_nodes must be set, and every job must name
+      pve_backup_jobs_storage_id.
     quiet: true
   when: pve_backup_jobs_jobs | length > 0
   tags:
     - pve_backup_jobs
 
-# A PBS target with no credentials is the silent-skip failure this role exists
-# to prevent: the storage is never defined, every job then fails per guest, and
-# the converge that caused it reported success hours earlier.
-- name: Refuse a PBS storage with missing credentials
+- name: Assert each job runs on one node that is not the backup node
+  # vzdump matches one node name per job, so a list would select nothing. A job
+  # with no node also covers the backup node's own guests, which would then be
+  # backed up onto the same host that holds them.
   ansible.builtin.assert:
     that:
-      - pve_backup_jobs_pbs_token_id | length > 0
-      - pve_backup_jobs_pbs_token_secret | length > 0
-      - pve_backup_jobs_pbs_fingerprint | length > 0
+      - item.node | default('') | length > 0
+      - item.node | default('') | regex_search(',') is none
+      - item.node | default('') != pve_backup_jobs_pbs_node
     fail_msg: >-
-      pve_backup_jobs: the declared storage is type pbs but its credentials are
-      empty. Requires token_id, token_secret and fingerprint.
+      Backup job '{{ item.id | default('<no id>') }}' must set node to exactly one
+      node name, and that node must not be pve_backup_jobs_pbs_node.
     quiet: true
-  when:
-    - pve_backup_jobs_manage | bool
-    - pve_backup_jobs_storage | length > 0
-    - (pve_backup_jobs_storage.type | default('dir')) == 'pbs'
+  loop: "{{ pve_backup_jobs_jobs }}"
+  loop_control:
+    label: "{{ item.id | default('<no id>') }}"
+  when: pve_backup_jobs_jobs | length > 0
+  tags:
+    - pve_backup_jobs

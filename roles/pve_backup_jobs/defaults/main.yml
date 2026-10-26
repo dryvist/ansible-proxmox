@@ -42,26 +42,21 @@ pve_backup_jobs_config_host: ""
 # Desired job set. Each entry:
 #   id        stable job id; the reconcile keys off it
 #   pool      pool id to select (never a guest id list — see above)
-#   storage   storage id to write to; MUST NOT be backed by a pool that holds
-#             the guests being protected, or one failure takes both
+#   node      the ONE node that runs this job. vzdump matches a single node
+#             name (PVE format pve-node), so a pool spread over two nodes needs
+#             two jobs. Required: a job with no node also protects guests on
+#             pve_backup_jobs_pbs_node, which would back them up onto themselves.
+#   storage   storage id to write to; pve_backup_jobs_storage_id
 #   schedule  systemd calendar expression
 #   enabled   false ships the job present-but-off, so a first full run stays a
 #             deliberate act rather than a side effect of a converge
-#   prune     retention, e.g. keep-daily=7,keep-weekly=4
+#   prune     retention. Leave at keep-all=1: PBS owns retention (see below)
 #   mode      snapshot | suspend | stop
 #   compress  zstd | gzip | lzo | 0
 #   comment   free text shown in the UI
 #
-# Empty by default, and no pool id is committed here: the ids are environment
-# values, set in host_vars/group_vars alongside the other environment-derived
-# settings. Example (placeholders, keep the live list empty):
-#   pve_backup_jobs_jobs:
-#     - id: platform-daily
-#       pool: "<pool-id>"
-#       storage: "<backup-storage-id>"
-#       schedule: "02:30"
-#       enabled: false
-#       prune: keep-daily=7,keep-weekly=4
+# Empty here. The live list is environment data, declared in
+# inventory/group_vars/proxmox.yml with the other environment-derived settings.
 pve_backup_jobs_jobs: []
 
 # --- Data-mount backup flags -------------------------------------------------
@@ -95,7 +90,10 @@ pve_backup_jobs_this_pve_node: "{{ proxmox_node_name | default(inventory_hostnam
 
 pve_backup_jobs_default_mode: snapshot
 pve_backup_jobs_default_compress: zstd
-pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
+# Retention belongs to PBS. A datastore prune job removes snapshots for every
+# writer at once. vzdump pruning would apply per job and see only the snapshots
+# that one job wrote. keep-all=1 stops vzdump from pruning.
+pve_backup_jobs_default_prune: keep-all=1
 
 # Remove vzdump jobs this role does not declare. On by default because the
 # failure being designed out is a job nobody remembers aiming: a job left behind
@@ -105,18 +103,32 @@ pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
 # cluster by accident.
 pve_backup_jobs_prune_unmanaged: true
 
-# Backup target storage, ensured before the jobs that write to it. Empty by
-# default; a `dir` on a pool that does NOT hold the guests being protected is
-# the intended shape. Keys map to community.proxmox.proxmox_storage:
-#   name, type, nodes, content, path, prune_backups
-pve_backup_jobs_storage: {}
+# --- PBS target ---------------------------------------------------------------
+# The only backup target. Its storage id is `guests`. `pbs` is the storage TYPE
+# (the protocol), so it stays out of the id. Every job names this id.
+pve_backup_jobs_storage_id: guests
 
-# --- PBS credentials ---------------------------------------------------------
-pve_backup_jobs_pbs_secret_path: secret/platform/pbs/pve-nodes
-pve_backup_jobs_pbs_token_id: ""
-pve_backup_jobs_pbs_token_secret: ""
-# Pinned; PBS serves a self-signed certificate.
-pve_backup_jobs_pbs_fingerprint: ""
+# FQDN of the Proxmox Backup Server. No default: inventory sets it. A name, never
+# an address, so the server can move without a change here.
+pve_backup_jobs_pbs_server: ""
+
+# The node that hosts the PBS guest. Guests on this node stay uncovered until a
+# second target exists, so no job may run on it.
+pve_backup_jobs_pbs_node: ""
+
+# Every PVE node may use the storage.
+pve_backup_jobs_storage_nodes: "{{ groups['proxmox'] | map('extract', hostvars, 'proxmox_node_name') | list }}"
+
+# Credentials come from OpenBao KV v2, read on the controller by the same
+# mechanism pve_api_tokens and bmc_console_user use. The path holds
+# PBS_TOKEN_ID (the full auth id), PBS_TOKEN_SECRET, PBS_FINGERPRINT and
+# PBS_DATASTORE. The fingerprint is PINNED: PBS serves a self-signed certificate.
+pve_backup_jobs_bao_addr: >-
+  {{ lookup('env', 'BAO_ADDR')
+     | default(lookup('env', 'VAULT_ADDR') | default('', true), true) }}
+pve_backup_jobs_bao_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
+pve_backup_jobs_bao_kv_mount: secret
+pve_backup_jobs_pbs_secret_path: platform/pbs/pve-nodes
 
 # PVE API connection for the storage definition. Same input names the
 # other API-using roles here take; no literal belongs in this file.
