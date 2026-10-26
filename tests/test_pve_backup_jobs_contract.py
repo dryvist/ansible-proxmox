@@ -21,65 +21,35 @@ def walk(tasks):
             yield from walk(task.get(section, []))
 
 
-def test_storage_uses_uri_without_proxmoxer():
+def task_named(name):
+    return next(task for task in walk(MAIN) if task.get("name") == name)
+
+
+def test_storage_needs_no_api_token_or_proxmoxer():
     tasks = list(walk(MAIN))
     assert not any("community.proxmox.proxmox_storage" in task for task in tasks)
-    assert not any(task.get("ansible.builtin.apt", {}).get("name") == "python3-proxmoxer" for task in tasks)
+    assert not any("ansible.builtin.uri" in task for task in tasks)
+    assert not any(key.startswith("pve_backup_jobs_api_") for key in DEFAULTS)
 
 
-def test_storage_create_body_is_pbs_with_exact_options():
-    create = next(task for task in walk(MAIN) if task.get("name") == "Create the PBS backup target storage")
-    body = create["ansible.builtin.uri"]["body"]
-    assert body["type"] == "pbs"
-    assert set(body) == {
-        "server",
-        "datastore",
-        "username",
-        "password",
-        "fingerprint",
-        "content",
-        "storage",
-        "nodes",
-        "type",
-    }
+def test_storage_argv_never_carries_the_secret():
+    define = task_named("Define or update the PBS backup target storage")
+    argv = define["ansible.builtin.command"]["argv"]
+    assert "PBS_TOKEN_SECRET" not in argv
+    assert "--password" not in argv
+    # server and datastore are fixed after creation, so only create sets them.
+    create, update = argv.split("| ternary(")[1].split("],", 1)
+    assert "'--server'" in create and "'--datastore'" in create
+    assert "--server" not in update and "--datastore" not in update
 
 
-def test_storage_update_only_sends_mutable_pbs_options():
-    update = next(
-        task for task in walk(MAIN) if task.get("name") == "Update mutable PBS backup target storage settings"
-    )
-    body = update["ansible.builtin.uri"]["body"]
-    assert set(body) == {"username", "password", "fingerprint", "content", "nodes"}
-
-
-def test_storage_auth_header_matches_proxmoxer_token_parts():
-    expected = (
-        "PVEAPIToken={{ pve_backup_jobs_api_user }}!{{ pve_backup_jobs_api_token_id }}="
-        "{{ pve_backup_jobs_api_token_secret }}"
-    )
-    for task in walk(MAIN):
-        if "ansible.builtin.uri" in task:
-            assert task["ansible.builtin.uri"]["headers"]["Authorization"] == expected
-
-
-def test_storage_uri_credentials_are_censored():
-    uri_tasks = [task for task in walk(MAIN) if "ansible.builtin.uri" in task]
-    credential_tasks = [
-        task
-        for task in uri_tasks
-        if "pve_backup_jobs_api_token_" in yaml.safe_dump(task) or "PBS_" in yaml.safe_dump(task)
-    ]
-    assert credential_tasks
-    for task in credential_tasks:
-        assert task.get("no_log") is True, task.get("name")
-
-
-def test_storage_writes_are_gated_in_check_mode():
-    tasks = list(walk(MAIN))
-    for name in ("Create the PBS backup target storage", "Update mutable PBS backup target storage settings"):
-        task = next(task for task in tasks if task.get("name") == name)
-        when = task["when"] if isinstance(task["when"], list) else [task["when"]]
-        assert "not ansible_check_mode" in when
+def test_secret_goes_to_the_pve_password_file():
+    write = task_named("Write the PBS token secret to the storage password file")
+    copy = write["ansible.builtin.copy"]
+    assert copy["dest"] == "/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw"
+    assert copy["content"] == "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}\n"
+    assert copy["mode"] == "0600"
+    assert write["no_log"] is True
 
 
 def test_no_directory_storage_branch_remains():
@@ -106,7 +76,7 @@ def test_credential_tasks_are_censored():
         # An assert only tests field lengths; no_log would hide its fail_msg.
         and "ansible.builtin.assert" not in task
         and (
-            any(key.startswith(("community.proxmox.", "community.hashi_vault.")) for key in task)
+            any(key.startswith("community.hashi_vault.") for key in task)
             or "PBS_" in yaml.safe_dump(task)
         )
     ]
