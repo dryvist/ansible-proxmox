@@ -54,6 +54,14 @@ def test_storage_is_created_disabled_and_enabled_after_the_password():
     assert tasks.index(define) < tasks.index(write) < tasks.index(enable)
 
 
+def test_password_directory_exists_before_the_write():
+    tasks = list(walk(MAIN))
+    directory = task_named("Create the PVE storage secrets directory")
+    write = task_named("Write the PBS token secret to the storage password file")
+    assert directory["ansible.builtin.file"] == {"path": "/etc/pve/priv/storage", "state": "directory", "mode": "0700"}
+    assert tasks.index(directory) < tasks.index(write)
+
+
 def test_secret_goes_to_the_pve_password_file():
     write = task_named("Write the PBS token secret to the storage password file")
     copy = write["ansible.builtin.copy"]
