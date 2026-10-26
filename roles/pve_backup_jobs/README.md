@@ -1,8 +1,8 @@
 # pve_backup_jobs
 
-Reconciles the cluster's vzdump backup jobs from a declared desired state. Guests
-are selected **by pool**. Every job writes to one Proxmox Backup Server (PBS)
-storage.
+Reconciles the cluster's vzdump backup jobs from a declared desired state. Each
+job selects guests by pool or selects all guests on one node. Every job writes
+to one Proxmox Backup Server (PBS) storage.
 
 ## Installation
 
@@ -14,19 +14,34 @@ Ships with this repo. Reference it from a play:
     - role: pve_backup_jobs
 ```
 
-## Why pool selection
+## Selection
 
-`vzdump` offers three selection modes: every guest, a pool, or a literal list of
-guest ids. A literal list records which numbers were true on the day someone
-typed them, not what the job was for. When a guest id is later reused for a
-different guest, the list keeps selecting the number — so the job runs on the
-same schedule, writes to the same storage, prunes normally and exits clean,
-while protecting something else entirely. Nothing the job emits contradicts it.
+PVE supports selecting either all guests or one resource pool. The API treats
+`all` and `pool` as mutually exclusive. `all: true` together with `node` selects
+every guest on that node, regardless of its pool. **All guests per node is the
+fleet standard**, so inventory does not need to move guests out of their
+existing category pools.
 
-Every guest already carries a declared pool in the published inventory, so a
-pool-scoped job states the intent directly: a guest enters or leaves coverage by
-its declared identity, and a newly provisioned guest is covered with no edit
-here. There is no tag-based selection available to use instead.
+Pool selection remains available for a job that intentionally covers only one
+pool on one node. Validation refuses a job that sets both `pool` and `all`, and
+a job that sets neither. A literal `vmid` list is refused: if an id is reused
+for a different guest, the job would silently protect that new guest instead.
+
+```yaml
+# Fleet standard: every guest on one node.
+- id: guests-pve-r540
+  all: true
+  node: pve-r540
+  storage: guests
+  schedule: "01:15"
+
+# Scoped alternative: one pool on one node.
+- id: platform-pve-r540
+  pool: platform
+  node: pve-r540
+  storage: guests
+  schedule: "01:15"
+```
 
 ## What this role does not do
 
@@ -42,21 +57,6 @@ with a check that the expected data is inside, is. That is out of scope here.
 
 It does not create the PBS prune job. Retention is PBS-side (see below), and
 that job lives on the PBS server.
-
-## Scope: far less needs image backup than it looks
-
-An image backup is the fallback for state with no better home. Excluded
-deliberately:
-
-| Excluded | Because |
-| --- | --- |
-| Bulk media | Re-acquirable, and multiple TB of it |
-| Model / agent working sets | Reconstructed by their roles from source |
-| Log and telemetry data | Explicitly outside the DR scope |
-| Databases | A native dump beats a crash-consistent image of a live engine |
-
-What remains is service state that is neither re-acquirable nor covered by a
-native mechanism.
 
 ## Backup target
 
@@ -94,15 +94,13 @@ you enable any job. Without it, snapshots accumulate.
 
 ## Node restriction
 
-vzdump matches one node name per job (`node`, PVE format `pve-node`). A job runs
-on that node and backs up its guests only. A job that names two nodes matches
-nothing. So a pool that spans several nodes needs one job per node.
+Every job must name exactly one node (`node`, PVE format `pve-node`). An
+all-node job backs up every guest on that node; a pool job backs up guests in
+that pool on that node. A job that names two nodes matches nothing.
 
-Every job must set `node` to a single node that is not
-`pve_backup_jobs_pbs_node`. The validation refuses a job that names no node, a
-list, or the backup node. A job with no node would also back up the guests on
-the backup node, onto the same host that stores them. Those guests stay uncovered
-until a second target exists.
+Validation refuses a job that names no node, a list, or
+`pve_backup_jobs_pbs_node`. Jobs cannot target the backup node because that
+would store its guests' backups on the same host.
 
 ## Usage
 
@@ -116,8 +114,9 @@ Backup jobs live in the cluster filesystem, so all work runs on the single
 environment values. They belong in `host_vars` or `group_vars`, never in this
 role.
 
-PVE rejects a job whose pool does not exist. The first converge with jobs
-declared fails at that job until the pool exists.
+PVE rejects a pool-scoped job whose pool does not exist. The first converge
+with that job declared fails until the pool exists. All-node jobs do not depend
+on a resource pool.
 
 `pve_backup_jobs_prune_unmanaged` (default `true`) removes every vzdump job the
 declaration does not contain. That includes enabled and disabled jobs, and jobs

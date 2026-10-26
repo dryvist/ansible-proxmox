@@ -21,9 +21,9 @@
 - name: Reconcile each declared backup job
   # One command covers create and update: the option set is identical, only
   # the verb and the path differ. `--delete vmid` clears a guest-id list left
-  # by a job that predates pool selection — without it the API keeps both and
-  # the id list continues to decide what is protected. `--delete node` clears a
-  # node pin the declaration no longer carries, for the same reason.
+  # by an older job; `--delete pool` and `--delete all` clear the previous
+  # selector when a job changes selection mode. `--delete node` clears a node
+  # pin the declaration no longer carries.
   ansible.builtin.command:
     argv: >-
       {{
@@ -32,8 +32,9 @@
          (pve_backup_jobs_existing | length > 0)
            | ternary('/cluster/backup/' ~ item.id, '/cluster/backup')]
         + ((pve_backup_jobs_existing | length > 0) | ternary([], ['--id', item.id]))
-        + ['--pool', item.pool,
-           '--storage', item.storage,
+        + (pve_backup_jobs_desired.all
+           | ternary(['--all', '1'], ['--pool', pve_backup_jobs_desired.pool]))
+        + ['--storage', item.storage,
            '--schedule', item.schedule,
            '--enabled', pve_backup_jobs_desired.enabled,
            '--mode', pve_backup_jobs_desired.mode,
@@ -50,7 +51,8 @@
       {{ pve_backup_jobs_observed | selectattr('id', 'eq', item.id) | list }}
     pve_backup_jobs_found: "{{ (pve_backup_jobs_existing | first) | default({}, true) }}"
     pve_backup_jobs_desired:
-      pool: "{{ item.pool }}"
+      pool: "{{ item.pool | default('') }}"
+      all: "{{ item.all | default(false) | bool }}"
       node: "{{ item.node | default('') }}"
       storage: "{{ item.storage }}"
       schedule: "{{ item.schedule }}"
@@ -60,6 +62,7 @@
       comment: "{{ item.comment | default('') }}"
     pve_backup_jobs_actual:
       pool: "{{ pve_backup_jobs_found.pool | default('') }}"
+      all: "{{ pve_backup_jobs_found.all | default(false) | bool }}"
       node: "{{ pve_backup_jobs_found.node | default('') }}"
       storage: "{{ pve_backup_jobs_found.storage | default('') }}"
       schedule: "{{ pve_backup_jobs_found.schedule | default('') }}"
@@ -73,7 +76,11 @@
     pve_backup_jobs_clear: >-
       {{ (['vmid'] if pve_backup_jobs_found.vmid is defined else [])
          + (['node'] if (pve_backup_jobs_found.node is defined
-                         and (item.node | default('') | length) == 0) else []) }}
+                         and (item.node | default('') | length) == 0) else [])
+         + (['pool'] if (pve_backup_jobs_desired.all
+                         and (pve_backup_jobs_found.pool | default('') | length > 0)) else [])
+         + (['all'] if ((pve_backup_jobs_found.all | default(false) | bool)
+                        and not pve_backup_jobs_desired.all) else []) }}
     # The API returns retention as a dict and accepts it as a string, so the
     # declared string is parsed rather than the returned dict flattened —
     # one direction, and it fails loudly on a malformed declaration.
@@ -87,7 +94,7 @@
     pve_backup_jobs_existing | length == 0
     or pve_backup_jobs_desired != pve_backup_jobs_actual
     or pve_backup_jobs_prune_desired != (pve_backup_jobs_found['prune-backups'] | default({}))
-    or pve_backup_jobs_found.vmid is defined
+    or pve_backup_jobs_clear | length > 0
   changed_when: true
 
 - name: Remove backup jobs this role does not declare

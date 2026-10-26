@@ -103,14 +103,16 @@ def test_retention_is_owned_by_pbs():
     assert all(job["prune"] == "keep-all=1" for job in JOBS)
 
 
-def test_each_job_runs_on_one_node_that_is_not_the_backup_node():
+def test_each_job_selects_all_guests_on_one_non_backup_node():
     backup = INVENTORY["pve_backup_jobs_pbs_node"]
     nodes = [job["node"] for job in JOBS]
     assert all("," not in node for node in nodes)
     assert backup not in nodes
     assert set(nodes) == {"pve-r540", "pve-r710", "pve-w5900"}
     assert len({job["id"] for job in JOBS}) == len(JOBS)
-    assert {job["pool"] for job in JOBS} == {"protected"}
+    assert all(job["all"] is True for job in JOBS)
+    assert all("pool" not in job for job in JOBS)
+    assert not any(job.get("pool") == "protected" for job in JOBS)
 
 
 def test_undeclared_vzdump_jobs_are_not_removed():

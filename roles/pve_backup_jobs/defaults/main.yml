@@ -1,35 +1,8 @@
 ---
-# Declarative Proxmox VE backup jobs, selected by POOL rather than by guest id.
-#
-# WHY POOL SELECTION
-# ------------------
-# vzdump offers exactly three selection modes: every guest, a pool, or a literal
-# list of guest ids. A literal list is a snapshot of an intent, not the intent
-# itself: it says which numbers were true on the day someone typed them, and it
-# keeps selecting those numbers after a number is reused for something else. The
-# job then protects a different guest on the same schedule to the same storage
-# with the same clean exits, and no signal the job produces contradicts it.
-#
-# Every guest already carries a declared pool in the published inventory, so a
-# pool-scoped job expresses the intent directly — a guest enters or leaves
-# coverage by its declared identity, and provisioning a new one covers it with
-# no edit here. There is no tag-based selection to use instead.
-#
-# The identity assertion that catches the failure this design prevents lives in
-# pve_health_telemetry, not here: a job cannot be trusted to audit itself.
-#
-# WHAT IS NOT COVERED, DELIBERATELY
-# ---------------------------------
-# An image backup is the fallback for state that has no better home, so most
-# guests want none. Excluded on purpose, per pool:
-#   - bulk media: re-acquirable, and multiple TB of it
-#   - model/agent working sets: reconstructed by their roles from source
-#   - log/telemetry data: explicitly outside the DR scope
-# Databases are excluded even inside a covered pool's rationale, because a
-# native dump is a better artifact than an image of a running engine — a
-# crash-consistent image of a database is a restore you have to be lucky with.
-# What remains is service state that is neither re-acquirable nor covered by a
-# native mechanism, which is a small set.
+# Declarative Proxmox VE backup jobs. A job selects exactly one of a resource
+# pool or all guests on one node. Guest-id lists are refused because a reused id
+# could silently change which guest the job protects. Fleet inventory uses
+# all-node selection so guests need no pool reassignment to receive backups.
 
 # Inert by default. Nothing is created, changed or removed until this is on —
 # the same shape as the other roles here that alter live cluster behaviour.
@@ -41,11 +14,12 @@ pve_backup_jobs_config_host: ""
 
 # Desired job set. Each entry:
 #   id        stable job id; the reconcile keys off it
-#   pool      pool id to select (never a guest id list — see above)
+#   pool      pool id to select; mutually exclusive with all
+#   all       true to select every guest on node; mutually exclusive with pool
 #   node      the ONE node that runs this job. vzdump matches a single node
-#             name (PVE format pve-node), so a pool spread over two nodes needs
-#             two jobs. Required: a job with no node also protects guests on
-#             pve_backup_jobs_pbs_node, which would back them up onto themselves.
+#             name (PVE format pve-node). Required: a job with no node also
+#             protects guests on pve_backup_jobs_pbs_node, which would back
+#             them up onto themselves.
 #   storage   storage id to write to; pve_backup_jobs_storage_id
 #   schedule  systemd calendar expression
 #   enabled   false ships the job present-but-off, so a first full run stays a

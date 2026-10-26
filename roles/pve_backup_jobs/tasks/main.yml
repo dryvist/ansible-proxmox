@@ -1,6 +1,6 @@
 ---
-# pve_backup_jobs — reconcile the cluster's vzdump job set from a declared,
-# pool-scoped desired state. Backup jobs live in the cluster filesystem, so all
+# pve_backup_jobs — reconcile the cluster's vzdump job set from a declared
+# desired state. Backup jobs live in the cluster filesystem, so all
 # work runs on exactly ONE node (pve_backup_jobs_config_host), the same shape
 # pve_ha uses for cluster-wide state. Inert unless pve_backup_jobs_manage; all
 # CLI work is skipped under Docker so the role stays molecule-testable without a

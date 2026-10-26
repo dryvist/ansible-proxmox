@@ -19,8 +19,8 @@
     pve_backup_jobs_default_prune: keep-all=1
 
   tasks:
-    # A well-formed pool-scoped declaration must pass, or every refusal below
-    # proves nothing — a guard that rejects everything is not a guard.
+    # Both supported selections must pass, or every refusal below proves
+    # nothing — a guard that rejects everything is not a guard.
     - name: Accept a pool-scoped declaration
       ansible.builtin.include_role:
         name: pve_backup_jobs
@@ -30,6 +30,19 @@
           - id: fixture-platform-daily
             pool: fixture-pool
             node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+            enabled: false
+
+    - name: Accept an all-node declaration
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs:
+          - id: fixture-all-node
+            all: true
+            node: fixture-node-b
             storage: fixture-backup-store
             schedule: "02:30"
             enabled: false
@@ -59,26 +72,49 @@
           ansible.builtin.set_fact:
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['vmid'] }}"
 
-    - name: Refuse a declaration with no pool
+    - name: Refuse a declaration that sets both selection modes
       block:
-        - name: Run the guard against a pool-less declaration
+        - name: Run the guard against a declaration with pool and all
           ansible.builtin.include_role:
             name: pve_backup_jobs
             tasks_from: validate.yml
           vars:
             pve_backup_jobs_jobs:
-              - id: fixture-no-pool
+              - id: fixture-both-selections
+                pool: fixture-pool
+                all: true
                 node: fixture-node-a
                 storage: fixture-backup-store
                 schedule: "02:30"
 
-        - name: Fail because the pool-less declaration was accepted
+        - name: Fail because both selection modes were accepted
           ansible.builtin.fail:
-            msg: "A declaration selecting no pool was ACCEPTED; it would protect nothing."
+            msg: "A declaration setting pool and all was ACCEPTED; PVE forbids both together."
       rescue:
-        - name: Record the pool-less refusal
+        - name: Record the both-selection refusal
           ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['pool'] }}"
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['both'] }}"
+
+    - name: Refuse a declaration with neither selection mode
+      block:
+        - name: Run the guard against a declaration with no pool or all
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-neither-selection
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because neither selection mode was accepted
+          ansible.builtin.fail:
+            msg: "A declaration with neither pool nor all was ACCEPTED; it would protect nothing."
+      rescue:
+        - name: Record the neither-selection refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['neither'] }}"
 
     - name: Refuse two jobs sharing one id
       block:
@@ -201,9 +237,9 @@
       ansible.builtin.assert:
         that:
           - (pve_backup_jobs_refusals | default([]) | sort)
-            == ['backup-node', 'duplicate', 'node', 'node-list', 'pool', 'storage', 'vmid']
+            == ['backup-node', 'both', 'duplicate', 'neither', 'node', 'node-list', 'storage', 'vmid']
         fail_msg: >-
-          Expected seven refusals (vmid, pool, duplicate, storage, node, node-list,
-          backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
-        success_msg: "PASS: all seven declaration refusals fired"
+          Expected eight refusals (vmid, both, neither, duplicate, storage, node,
+          node-list, backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
+        success_msg: "PASS: all eight declaration refusals fired"
         quiet: false
