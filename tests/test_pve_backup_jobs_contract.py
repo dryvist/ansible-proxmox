@@ -1,6 +1,5 @@
 """Contract checks for the PBS-only pve_backup_jobs target and its node layout."""
 
-import ast
 from pathlib import Path
 
 import yaml
@@ -15,11 +14,6 @@ RECONCILE = (ROLE / "tasks/reconcile.yml").read_text()
 INVENTORY = yaml.safe_load((ROOT / "inventory/group_vars/proxmox.yml").read_text())
 JOBS = INVENTORY["pve_backup_jobs_jobs"]
 
-# community.proxmox 2.1.0, the pin in requirements.yml: proxmox_storage pbs_options.
-PINNED_PBS_OPTIONS = {"server", "datastore", "username", "password", "namespace", "fingerprint", "encryption_key"}
-MODULE = Path.home() / ".ansible/collections/ansible_collections/community/proxmox/plugins/modules/proxmox_storage.py"
-
-
 def walk(tasks):
     for task in tasks:
         yield task
@@ -27,43 +21,65 @@ def walk(tasks):
             yield from walk(task.get(section, []))
 
 
-def module_pbs_options():
-    """The pbs_options keys. Read from the installed module when present, else the pin."""
-    if not MODULE.exists():
-        return PINNED_PBS_OPTIONS
-    tree = ast.parse(MODULE.read_text())
-    docs = next(
-        node.value.value
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        and isinstance(node.value, ast.Constant)
-        and any(isinstance(target, ast.Name) and target.id == "DOCUMENTATION" for target in node.targets)
-    )
-    keys = set(yaml.safe_load(str(docs))["options"]["pbs_options"]["suboptions"])
-    assert keys == PINNED_PBS_OPTIONS, "installed proxmox_storage differs from the pin in requirements.yml"
-    return keys
-
-
-def storage_options():
-    tasks = [task for task in walk(MAIN) if "community.proxmox.proxmox_storage" in task]
-    assert len(tasks) == 1
-    return tasks[0]["community.proxmox.proxmox_storage"]
-
-
-def test_storage_is_pbs_with_only_valid_options():
-    storage = storage_options()
-    assert storage["type"] == "pbs"
-    assert set(storage["pbs_options"]) == {"server", "datastore", "username", "password", "fingerprint"}
-    assert set(storage["pbs_options"]) <= module_pbs_options()
-    assert "dir_options" not in storage
-
-
-def test_storage_module_library_is_installed_first():
+def test_storage_uses_uri_without_proxmoxer():
     tasks = list(walk(MAIN))
-    install = next(t for t in tasks if t.get("ansible.builtin.apt", {}).get("name") == "python3-proxmoxer")
-    storage = next(t for t in tasks if "community.proxmox.proxmox_storage" in t)
-    assert tasks.index(install) < tasks.index(storage)
-    assert storage["when"] == "not ansible_check_mode or not pve_backup_jobs_proxmoxer.changed"
+    assert not any("community.proxmox.proxmox_storage" in task for task in tasks)
+    assert not any(task.get("ansible.builtin.apt", {}).get("name") == "python3-proxmoxer" for task in tasks)
+
+
+def test_storage_create_body_is_pbs_with_exact_options():
+    create = next(task for task in walk(MAIN) if task.get("name") == "Create the PBS backup target storage")
+    body = create["ansible.builtin.uri"]["body"]
+    assert body["type"] == "pbs"
+    assert set(body) == {
+        "server",
+        "datastore",
+        "username",
+        "password",
+        "fingerprint",
+        "content",
+        "storage",
+        "nodes",
+        "type",
+    }
+
+
+def test_storage_update_only_sends_mutable_pbs_options():
+    update = next(
+        task for task in walk(MAIN) if task.get("name") == "Update mutable PBS backup target storage settings"
+    )
+    body = update["ansible.builtin.uri"]["body"]
+    assert set(body) == {"username", "password", "fingerprint", "content", "nodes"}
+
+
+def test_storage_auth_header_matches_proxmoxer_token_parts():
+    expected = (
+        "PVEAPIToken={{ pve_backup_jobs_api_user }}!{{ pve_backup_jobs_api_token_id }}="
+        "{{ pve_backup_jobs_api_token_secret }}"
+    )
+    for task in walk(MAIN):
+        if "ansible.builtin.uri" in task:
+            assert task["ansible.builtin.uri"]["headers"]["Authorization"] == expected
+
+
+def test_storage_uri_credentials_are_censored():
+    uri_tasks = [task for task in walk(MAIN) if "ansible.builtin.uri" in task]
+    credential_tasks = [
+        task
+        for task in uri_tasks
+        if "pve_backup_jobs_api_token_" in yaml.safe_dump(task) or "PBS_" in yaml.safe_dump(task)
+    ]
+    assert credential_tasks
+    for task in credential_tasks:
+        assert task.get("no_log") is True, task.get("name")
+
+
+def test_storage_writes_are_gated_in_check_mode():
+    tasks = list(walk(MAIN))
+    for name in ("Create the PBS backup target storage", "Update mutable PBS backup target storage settings"):
+        task = next(task for task in tasks if task.get("name") == name)
+        when = task["when"] if isinstance(task["when"], list) else [task["when"]]
+        assert "not ansible_check_mode" in when
 
 
 def test_no_directory_storage_branch_remains():
