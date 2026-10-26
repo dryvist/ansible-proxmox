@@ -3,3 +3,11 @@
   ansible.builtin.command:
     cmd: update-initramfs -u -k all
   changed_when: true
+
+- name: Apply extra routed interfaces
+  ansible.builtin.command:
+    argv:
+      - ifup
+      - "{{ item.name }}"
+  loop: "{{ pve_host_network_extra_interfaces }}"
+  changed_when: false

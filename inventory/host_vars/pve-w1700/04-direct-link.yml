@@ -1,0 +1,4 @@
+---
+pve_host_network_extra_interfaces:
+  - name: enp4s0f0
+    address: 169.254.99.2/30

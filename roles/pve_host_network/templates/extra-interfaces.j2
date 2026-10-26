@@ -1,0 +1,9 @@
+{% for extra_interface in pve_host_network_extra_interfaces %}
+{% if extra_interface.comment | default('') | trim %}
+# {{ extra_interface.comment | trim | replace('\r', ' ') | replace('\n', ' ') }}
+{% endif %}
+auto {{ extra_interface.name }}
+iface {{ extra_interface.name }} inet static
+    address {{ extra_interface.address }}
+
+{% endfor %}
