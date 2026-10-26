@@ -6,10 +6,8 @@
 #
 # These command lines otherwise execute for the first time on a live cluster, so
 # a rendering error surfaces during a converge that is already touching backup
-# configuration. The fixture models the conversion that matters: a job that
-# currently selects a bare guest id must be moved to pool selection AND have the
-# id list explicitly deleted, because the API keeps both and the id list is what
-# then decides what gets protected.
+# configuration. The fixture covers selector cleanup, an all-node job created
+# with `all 1`, and a second converge after the created job is read back in sync.
 - name: Verify the pve_backup_jobs reconcile command construction
   hosts: localhost
   become: false
@@ -31,9 +29,10 @@
         storage: fixture-backup-store
         schedule: "02:30"
         enabled: false
-      # Does not exist yet — the create case.
+      # Does not exist yet — the pool create case, with a node pin.
       - id: fixture-new
         pool: fixture-pool-b
+        node: fixture-node-b
         storage: fixture-backup-store
         schedule: "03:30"
         enabled: false
@@ -45,6 +44,19 @@
         schedule: "04:30"
         enabled: false
         prune: keep-daily=3
+      # Exists with a node pin the declaration no longer carries — the clear case.
+      - id: fixture-unpin
+        pool: fixture-pool-d
+        storage: fixture-backup-store
+        schedule: "06:30"
+        enabled: false
+      # Does not exist yet — create every guest on one node without a pool.
+      - id: fixture-all
+        all: true
+        node: fixture-node-all
+        storage: fixture-backup-store
+        schedule: "05:45"
+        enabled: false
     # Serves as `pvesh get /cluster/backup`. `fixture-orphan` models the job
     # left behind after the node it named left the cluster.
     pve_backup_jobs_fixture_state:
@@ -78,6 +90,72 @@
         compress: zstd
         comment: ""
         prune-backups: {keep-last: "1"}
+      - id: fixture-unpin
+        type: vzdump
+        pool: fixture-pool-d
+        node: fixture-node-a
+        storage: fixture-backup-store
+        schedule: "06:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+    # The state after the first converge: selector jobs are reconciled and the
+    # undeclared orphan has been removed.
+    pve_backup_jobs_fixture_state_after_create:
+      - id: fixture-convert
+        type: vzdump
+        pool: fixture-pool
+        storage: fixture-backup-store
+        schedule: "02:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-new
+        type: vzdump
+        pool: fixture-pool-b
+        node: fixture-node-b
+        storage: fixture-backup-store
+        schedule: "03:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-insync
+        type: vzdump
+        pool: fixture-pool-c
+        storage: fixture-backup-store
+        schedule: "04:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "3"}
+      - id: fixture-unpin
+        type: vzdump
+        pool: fixture-pool-d
+        storage: fixture-backup-store
+        schedule: "06:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-all
+        type: vzdump
+        all: 1
+        node: fixture-node-all
+        storage: fixture-backup-store
+        schedule: "05:45"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
 
   tasks:
     - name: Create the stub directory
@@ -122,15 +200,23 @@
     - name: Assert the reconcile issued exactly the intended commands
       ansible.builtin.assert:
         that:
-          # The conversion: updated in place, moved to pool selection, and the
-          # guest-id list explicitly removed. Without the delete the API keeps
-          # the ids and they, not the pool, decide what is protected.
+          # A stale guest-id list is explicitly removed when the pool selector
+          # is applied.
           - "'set /cluster/backup/fixture-convert' in pve_backup_jobs_commands"
           - "'--pool fixture-pool' in pve_backup_jobs_commands"
           - "'--delete vmid' in pve_backup_jobs_commands"
+          # A node pin the declaration dropped is cleared, not kept; a declared
+          # node is passed as one name on create.
+          - "'set /cluster/backup/fixture-unpin' in pve_backup_jobs_commands"
+          - "'--delete node' in pve_backup_jobs_commands"
+          - "'--node fixture-node-b' in pve_backup_jobs_commands"
           # The create: carries an explicit id so the job is addressable by the
           # declaration afterwards rather than by a generated UUID.
           - "'create /cluster/backup --id fixture-new' in pve_backup_jobs_commands"
+          # All-node selection is created with --all 1 and no pool selector.
+          - "'--all 1' in pve_backup_jobs_all_create"
+          - "'--pool' not in pve_backup_jobs_all_create"
+          - "'--node fixture-node-all' in pve_backup_jobs_all_create"
           # Jobs ship disabled; a first full run is a deliberate act.
           - "'--enabled 1' not in pve_backup_jobs_commands"
           # The already-correct job must not be touched.
@@ -142,10 +228,48 @@
         fail_msg: |
           Reconcile issued the wrong commands.
           {{ pve_backup_jobs_commands }}
-        success_msg: "PASS: reconcile converts, creates, skips in-sync and prunes orphans"
+        success_msg: "PASS: reconcile creates the all-node job with no pool and prunes orphans"
         quiet: false
       vars:
         pve_backup_jobs_commands: "{{ pve_backup_jobs_command_log.content | b64decode }}"
+        pve_backup_jobs_all_create: >-
+          {{ pve_backup_jobs_commands.splitlines()
+             | select('search', 'create /cluster/backup --id fixture-all')
+             | first | default('') }}
+
+    - name: Write back the jobs created by the first converge
+      ansible.builtin.copy:
+        content: "{{ pve_backup_jobs_fixture_state_after_create | to_json }}"
+        dest: "{{ pve_backup_jobs_stub_dir }}/state.json"
+        mode: "0644"
+
+    - name: Reset the recorded command log for the second converge
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+        mode: "0644"
+
+    - name: Run a second reconcile after reading back the created all-node job
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: reconcile.yml
+
+    - name: Read back the second converge command lines
+      ansible.builtin.slurp:
+        src: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+      register: pve_backup_jobs_second_command_log
+
+    - name: Assert the all-node job is in sync on the second converge
+      ansible.builtin.assert:
+        that:
+          - pve_backup_jobs_second_commands | trim == 'get /cluster/backup --output-format json'
+        fail_msg: >-
+          Second converge should only read the current jobs, got:
+          {{ pve_backup_jobs_second_commands }}
+        success_msg: "PASS: all-node job is in sync after creation"
+        quiet: false
+      vars:
+        pve_backup_jobs_second_commands: "{{ pve_backup_jobs_second_command_log.content | b64decode }}"
 
     - name: Remove the stub directory
       ansible.builtin.file:
