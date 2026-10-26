@@ -8,6 +8,9 @@
 # hardware_facts_group and hardware_facts_allow_partial (see the role defaults).
 # The role is read-only: nothing is installed or changed on the target.
 
+- name: Load OpenTofu host services
+  ansible.builtin.import_playbook: load_tofu.yml
+
 - name: Validate the hardware facts request
   hosts: localhost
   connection: local
