@@ -117,4 +117,4 @@ def test_each_job_selects_all_guests_on_one_non_backup_node():
 
 def test_undeclared_vzdump_jobs_are_not_removed():
     assert INVENTORY["pve_backup_jobs_prune_unmanaged"] is False
-    assert INVENTORY["pve_backup_jobs_manage"] is False
+    assert INVENTORY["pve_backup_jobs_manage"] is True
