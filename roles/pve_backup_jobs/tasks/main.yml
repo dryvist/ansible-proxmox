@@ -152,6 +152,8 @@
         content: "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}\n"
         dest: "/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw"
         mode: "0600"
+        # pmxcfs refuses the attribute copy of an atomic temp-file move; write in place.
+        unsafe_writes: true
       no_log: true
 
     - name: Enable the PBS storage once its password file is in place
