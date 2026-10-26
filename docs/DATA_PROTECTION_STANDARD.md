@@ -79,7 +79,7 @@ falls on.
 | Artifact buckets | P1 | infra | Built/uploaded periodically, not continuously written. |
 | Guest OS disks | **P2 (exemption)** | infra | Daily `vzdump` of every guest to Proxmox Backup Server; see below. |
 | Homebox | **P2 (exemption)** | infra | Inventory data changes rarely; nightly restic to object storage with an offsite copy. |
-| Langfuse ClickHouse | **P2 (exemption)** | infra | Trace history is written by live producers and is neither reproducible from IaC nor re-downloadable, so the P3 assignment rule never applied to it. The pending Langfuse v4 cutover makes the loss irreversible rather than merely inconvenient. |
+| Langfuse ClickHouse | **P2 (exemption)** | infra | Live traces: not reproducible or re-downloadable. The v4 cutover makes loss irreversible. |
 | Media library (3.48 TiB) | P3 | infra | Re-downloadable; already canary-proven by a live `seerr` destroy/recreate (container replaced, full history intact). |
 | Splunk **indexed** data | P3 | infra | Already declared acceptable-loss; the durable copy is the frozen→B2 archive, not the live index. |
 | Prometheus TSDB | P3 | infra | Already remote-writes to Splunk; the local TSDB is a scrape cache, not a store of record. |
