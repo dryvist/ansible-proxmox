@@ -77,7 +77,8 @@ falls on.
 | `bulk/appdata` | P1 | infra | Changes on a deploy/config cadence, not continuously. |
 | Splunk **config** | P1 | infra | Same — edited by a human or by IaC, not written to every second. |
 | Artifact buckets | P1 | infra | Built/uploaded periodically, not continuously written. |
-| Guest OS disks | **P2 (exemption)** | infra | IaC rebuilds them, but convergence takes real time — declared, not defaulted or assumed instant. |
+| Guest OS disks | **P2 (exemption)** | infra | Daily `vzdump` of every guest to Proxmox Backup Server; see below. |
+| Homebox | **P2 (exemption)** | infra | Inventory data changes rarely; nightly restic to object storage with an offsite copy. |
 | Langfuse ClickHouse | **P2 (exemption)** | infra | Trace history is written by live producers and is neither reproducible from IaC nor re-downloadable, so the P3 assignment rule never applied to it. The pending Langfuse v4 cutover makes the loss irreversible rather than merely inconvenient. |
 | Media library (3.48 TiB) | P3 | infra | Re-downloadable; already canary-proven by a live `seerr` destroy/recreate (container replaced, full history intact). |
 | Splunk **indexed** data | P3 | infra | Already declared acceptable-loss; the durable copy is the frozen→B2 archive, not the live index. |
@@ -87,6 +88,17 @@ falls on.
 | Redis / Valkey | P3 | infra | Sessions and job queues — ephemeral by design; losing it forces re-login / re-enqueue, not data loss. |
 | LLM weights | P3 | infra | Re-downloadable from the model's public source. |
 | Cribl PQ | P3 | infra | A transient on-disk buffer for in-flight events — drained or replayed from source, never restored from backup. |
+
+### Guest backup mechanism
+
+| Layer | Mechanism | Roles | Retention |
+| --- | --- | --- | --- |
+| Guest disks | `vzdump` to Proxmox Backup Server | `pve_backup_jobs`, `proxmox_backup_server` | Owned by the backup server. |
+
+Every guest is backed up daily. Opting a guest out needs a written exemption. A
+disk whose data is already protected elsewhere (for example, a log index volume
+on redundant storage with an offsite archive) may set backup off. The PVE jobs
+keep everything they write, so the backup server alone prunes.
 
 ## The telemetry contract
 
