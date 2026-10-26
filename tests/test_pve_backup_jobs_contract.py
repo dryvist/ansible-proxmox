@@ -58,6 +58,14 @@ def test_storage_is_pbs_with_only_valid_options():
     assert "dir_options" not in storage
 
 
+def test_storage_module_library_is_installed_first():
+    tasks = list(walk(MAIN))
+    install = next(t for t in tasks if t.get("ansible.builtin.apt", {}).get("name") == "python3-proxmoxer")
+    storage = next(t for t in tasks if "community.proxmox.proxmox_storage" in t)
+    assert tasks.index(install) < tasks.index(storage)
+    assert storage["when"] == "not ansible_check_mode or not pve_backup_jobs_proxmoxer.changed"
+
+
 def test_no_directory_storage_branch_remains():
     for forbidden in ("dir_options", "is_mountpoint", "prune_backups", "pve_backup_jobs_storage.", "type: dir"):
         assert forbidden not in TASK_TEXT, forbidden
