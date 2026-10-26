@@ -136,6 +136,15 @@
       changed_when: true
       no_log: true
 
+    - name: Create the PVE storage secrets directory
+      # PVE's PBS plugin creates it on its first password write. pmxcfs reports
+      # every priv/ directory as 0700 and refuses chmod to that, so declaring
+      # 0700 matches what it reports and never triggers a chmod.
+      ansible.builtin.file:
+        path: /etc/pve/priv/storage
+        state: directory
+        mode: "0700"
+
     - name: Write the PBS token secret to the storage password file
       # The same file and format PVE's own PBS plugin writes ("$password\n").
       # /etc/pve is the cluster filesystem, so one write reaches every node.
