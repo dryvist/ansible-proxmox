@@ -17,7 +17,7 @@
 # vmid (not in the inventory) contribute nothing.
 
 # ---------------------------------------------------------------------------
-# Shared media data root — POSIX layer inside the bulk/data dataset
+# Shared media data root — POSIX layer inside the bulk-nobackup/data dataset
 # ---------------------------------------------------------------------------
 # zfs_pools creates/mounts the dataset (from the tofu node_storage contract);
 # this prepares what the bind-mounts expose: the shared `media` group (fixed

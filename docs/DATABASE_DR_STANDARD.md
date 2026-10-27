@@ -16,7 +16,7 @@ restores on a live guest.
 
 ## Topology (why the archive lives where it does)
 
-- The **live** database guest runs on the primary compute node (`fast` pool). Its
+- The **live** database guest runs on flash storage on its node. Its
   own volume is not snapshotted/replicated.
 - The **always-on standby node** owns `bulk/databases` (recursive `sanoid` `database`
   template) — the warm-standby home for all DB archives.

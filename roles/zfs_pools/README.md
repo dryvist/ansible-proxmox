@@ -129,9 +129,9 @@ dataset directly via `datastore_id`:
 
 ```yaml
 datasets:
-  fast-splunk:
+  nvme-splunk:
     quota: "500G"
-    pvesm_id: fast-splunk # register this dataset as its own zfspool storage
+    pvesm_id: nvme-splunk # register this dataset as its own zfspool storage
 ```
 
 **Why a quota is not enough.** A `zfspool`-backed VM disk lands at the pool
@@ -139,7 +139,7 @@ datasets:
 child dataset does _not_ confine a disk to it. Registering the dataset itself
 (`pvesm add zfspool <pvesm_id> -pool <pool>/<dataset>`) is what makes it a real,
 isolated storage target — the disk lives inside the dataset and is capped by its
-quota. This is the mechanism behind the `fast-splunk` and `bulk-splunk` tiers,
+quota. This is the mechanism behind the `nvme-splunk` and `bulk-splunk` tiers,
 which give Splunk a volume-level cap so indexed data can no longer fill a pool.
 
 Registration is gated with `pvesm status --storage <pvesm_id>` and only added
@@ -169,8 +169,8 @@ it carries engine-appropriate tuning, its own quota, snapshot policy, and
 
 | Role                              | Pool              | Why                    |
 | --------------------------------- | ----------------- | ---------------------- |
-| hot / primary                     | `fast` (NVMe)     | low-latency random I/O |
-| warm / standby / backup / archive | `bulk` (non-fast) | capacity over latency  |
+| hot / primary                     | `nvme` (NVMe)     | low-latency random I/O |
+| warm / standby / backup / archive | `bulk` (HDD)      | capacity over latency  |
 
 **Engine → `recordsize`.** Match ZFS `recordsize` to the engine's page/IO unit:
 
