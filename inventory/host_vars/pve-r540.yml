@@ -51,7 +51,7 @@ sanoid_datasets: >-
   {{ {
        'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24},
        'bulk/appdata': {'use_template': 'critical', 'recursive': 'yes'},
-       'bulk/subvol-' ~ object_store_vmid ~ '-disk-1': {'use_template': 'critical'}
+       'bulk/object/subvol-' ~ object_store_vmid ~ '-disk-1': {'use_template': 'critical'}
      } }}
 
 # This node is a replication SOURCE, not a target: the DR leg pulls from it, so
@@ -91,7 +91,7 @@ postgres_standby_jobs: >-
 # ansible-proxmox-apps inventory/host_vars/docker-host-540.yml) carries its
 # Docker + containerd data on this zvol. `sync=standard` (the pool default)
 # means every build-user creation during a Nix install does a synchronous
-# write through this node's HDD RAIDZ2 pool (`bulk`): 32 users took 2m39s in
+# write through this node's HDD RAIDZ1 pool (`bulk`): 32 users took 2m39s in
 # a live microbenchmark on the unmodified disk. CI scratch on an ephemeral
 # runner disk is disposable — losing in-flight writes on an unclean power
 # loss costs nothing a fresh job wouldn't already redo — so fsync can be

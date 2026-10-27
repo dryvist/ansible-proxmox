@@ -51,7 +51,7 @@ syncoid_jobs:
   # longer runs on fails every cycle while the replica it left behind ages.
   - name: "object-store"
     schedule: hourly
-    source: "root@{{ object_store_node }}:bulk/subvol-{{ object_store_vmid }}-disk-1"
+    source: "root@{{ object_store_node }}:bulk/object/subvol-{{ object_store_vmid }}-disk-1"
     target: "bulk/replica/{{ object_store_node }}/subvol-{{ object_store_vmid }}-disk-1"
   #
   # Database DR: pull the whole bulk/databases namespace off the storage node

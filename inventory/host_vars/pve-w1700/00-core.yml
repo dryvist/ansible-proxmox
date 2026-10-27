@@ -4,9 +4,8 @@
 # This file declares host-local snapshot policy. Splunk's protected disks are
 # declared in group_vars/proxmox.yml and follow its placement.
 #
-# Object storage is NOT protected from this layer. It is erasure-coded across
-# nodes and owns its own redundancy; a storage-layer snapshot underneath it would
-# reintroduce exactly the duplication that erasure coding replaces.
+# Object storage is a single volume on the storage node's `bulk/object` dataset.
+# `sanoid` snapshots it, and the DR node pulls it hourly with `syncoid`.
 
 # The `postgres` guest's mp0 (`/var/lib/postgresql`) carries BOTH the cluster's
 # PGDATA and `/var/lib/postgresql/backups`, the nightly per-database pg_dump
