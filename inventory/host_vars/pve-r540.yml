@@ -123,7 +123,7 @@ zfs_pools_root_refreservation: 150G
 # Scrubs on this HDD pool progress only off-peak.
 # Operator decision 2026-10-11.
 zfs_scrub_window_enabled: true
-zfs_scrub_window_pools: [bulk]
+zfs_scrub_window_pools: [bulk, bulk-nobackup]
 
 # BMC address for the idrac_power role. This node has a BMC but carried no
 # address, so the role skipped it entirely -- including the chassis

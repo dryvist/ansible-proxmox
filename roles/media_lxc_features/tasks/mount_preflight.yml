@@ -20,7 +20,7 @@
 # directory and mount it over the in-container target. For an app-config mount
 # (bulk/appdata/<app>) that would SHADOW the app's live database with emptiness
 # and the app would re-initialise on restart (data loss). So stat every source
-# first and only mount the ones that already exist (the shared bulk/data plus any
+# first and only mount the ones that already exist (the shared bulk-nobackup/data plus any
 # appdata dataset zfs_pools has realised). A missing dataset is surfaced loudly
 # and skipped, never silently emptied.
 - name: "Stat host mount sources on {{ media_ct.key }}"

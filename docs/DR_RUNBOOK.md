@@ -14,14 +14,13 @@ wake, or sleep step anywhere in this procedure.
 ## 1. How replication works
 
 - Storage is **node-local ZFS** — no shared storage, no Ceph. Each node has
-  its own `bulk` pool; `proxmox-3` holds replica datasets
-  (`bulk/replica/proxmox-1/...`, `bulk/replica/proxmox-2/...`) declared in
+  its own `bulk` pool; the DR node holds replica datasets
+  (`bulk/replica/<source-node>/...`) declared in
   tofu-proxmox `node_storage`.
 - Replication uses **syncoid** (from the `sanoid` package) in **PULL** mode:
-  it runs **on `proxmox-3`** and SSHes out to each source to pull that
-  source's sanoid snapshots. Pull-from-backup is safer than push (a
-  compromised source cannot reach the backup) and tolerates the source being
-  briefly unreachable.
+  it runs **on the DR node** and SSHes out to each source node to pull its
+  sanoid snapshots. Pull-from-backup is safer than push (a compromised source
+  cannot reach the backup) and tolerates the source being briefly unreachable.
 - Syncoid runs on a **wall-clock timer**, same as every other node — there is
   no boot-triggered or power-window-gated replication anymore. See
   [`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md) for the
@@ -44,7 +43,7 @@ wake, or sleep step anywhere in this procedure.
 [`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md) for the full
 class-assignment table):
 
-- **The media library** (`bulk/data`) — P3, large and re-acquirable;
+- **The media library** (`bulk-nobackup/data`) — P3, large and re-acquirable;
   declared with `com.sun:auto-snapshot=false` in tofu-proxmox.
 - **Guest definitions** (`/etc/pve/qemu-server/*.conf`, `/etc/pve/lxc/*.conf`).
   syncoid ships **data only**, never the VM/CT config. A failover therefore

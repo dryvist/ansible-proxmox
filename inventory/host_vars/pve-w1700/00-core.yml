@@ -122,7 +122,7 @@ kernel_tuning_tsc_mode: nowatchdog
 
 # --- STAGED-ONLY: Plex relocation prereqs (issue #395, terraform-proxmox#615) ---
 # Uncomment BOTH blocks only after the staged node_storage entries are applied
-# upstream (fast/appdata parent dataset exists here + the library dataset on the
+# upstream (nvme/appdata parent dataset exists here + the library dataset on the
 # storage node carries its nfs_export) — GATE-A in terraform-proxmox#615.
 # Until then the syncoid cron would fail nightly (no recv parent) and the NFS
 # mount would error (no export), so they stay commented, same staged convention
@@ -135,12 +135,12 @@ kernel_tuning_tsc_mode: nowatchdog
 #
 # syncoid_jobs:
 #   # Appdata seed/refresh for the relocation: pull Plex's identity +
-#   # watch-history dataset from the storage node into the local fast pool.
+#   # watch-history dataset from the storage node into the local nvme pool.
 #   # Repeated runs keep it fresh until the cutover flip; after the flip this
 #   # job is REMOVED (the dataset becomes live here, direction would invert).
 #   - name: "plex-appdata-relocation"
 #     source: "root@{{ proxmox_node_names.storage }}:bulk/appdata/plex"
-#     target: "fast/appdata/plex"
+#     target: "nvme/appdata/plex"
 
 # The iDRAC kiosk drives a physical monitor and belongs to this node alone. It
 # is off everywhere else: the other nodes have no usable GL, where the kiosk
