@@ -41,6 +41,11 @@
            '--compress', pve_backup_jobs_desired.compress,
            '--comment', pve_backup_jobs_desired.comment,
            '--prune-backups', item.prune | default(pve_backup_jobs_default_prune)]
+        + (((pve_backup_jobs_desired.exclude | length) > 0)
+           | ternary(
+               ['--exclude', pve_backup_jobs_desired.exclude | map('string') | join(',')],
+               []
+             ))
         + (((pve_backup_jobs_desired.node | length) > 0)
            | ternary(['--node', pve_backup_jobs_desired.node], []))
         + (((pve_backup_jobs_clear | length) > 0)
@@ -56,20 +61,31 @@
       node: "{{ item.node | default('') }}"
       storage: "{{ item.storage }}"
       schedule: "{{ item.schedule }}"
-      enabled: "{{ (item.enabled | default(false) | bool) | ternary(1, 0) }}"
+      enabled: "{{ (item.enabled | default(false) | bool) | ternary('1', '0') }}"
       mode: "{{ item.mode | default(pve_backup_jobs_default_mode) }}"
       compress: "{{ item.compress | default(pve_backup_jobs_default_compress) }}"
       comment: "{{ item.comment | default('') }}"
+      exclude: >-
+        {{ item.exclude_names | default([])
+           | map('extract', pve_backup_jobs_tofu_guest_map)
+           | map(attribute='vmid') | map('int') | unique | list | sort }}
+    # PVE can return numeric fields as numbers or strings. Normalize them here
+    # (and below for retention/exclude lists) so JSON representation alone does
+    # not cause an update on every converge.
     pve_backup_jobs_actual:
-      pool: "{{ pve_backup_jobs_found.pool | default('') }}"
+      pool: "{{ pve_backup_jobs_found.pool | default('', true) | string }}"
       all: "{{ pve_backup_jobs_found.all | default(false) | bool }}"
-      node: "{{ pve_backup_jobs_found.node | default('') }}"
-      storage: "{{ pve_backup_jobs_found.storage | default('') }}"
-      schedule: "{{ pve_backup_jobs_found.schedule | default('') }}"
-      enabled: "{{ pve_backup_jobs_found.enabled | default(0) }}"
-      mode: "{{ pve_backup_jobs_found.mode | default('') }}"
-      compress: "{{ pve_backup_jobs_found.compress | default('') }}"
-      comment: "{{ pve_backup_jobs_found.comment | default('') }}"
+      node: "{{ pve_backup_jobs_found.node | default('', true) | string }}"
+      storage: "{{ pve_backup_jobs_found.storage | default('', true) | string }}"
+      schedule: "{{ pve_backup_jobs_found.schedule | default('', true) | string }}"
+      enabled: "{{ (pve_backup_jobs_found.enabled | default(0, true) | bool) | ternary('1', '0') }}"
+      mode: "{{ pve_backup_jobs_found.mode | default('', true) | string }}"
+      compress: "{{ pve_backup_jobs_found.compress | default('', true) | string }}"
+      comment: "{{ pve_backup_jobs_found.comment | default('', true) | string }}"
+      exclude: >-
+        {{ pve_backup_jobs_found.exclude | default('', true) | string
+           | split(',') | map('trim') | reject('equalto', '')
+           | map('int') | list | sort }}
     # Fields the live job carries that the declaration does not. `--delete`
     # removes them; the API would otherwise keep them and they would keep
     # deciding what runs.
@@ -80,20 +96,31 @@
          + (['pool'] if (pve_backup_jobs_desired.all
                          and (pve_backup_jobs_found.pool | default('') | length > 0)) else [])
          + (['all'] if ((pve_backup_jobs_found.all | default(false) | bool)
-                        and not pve_backup_jobs_desired.all) else []) }}
+                        and not pve_backup_jobs_desired.all) else [])
+         + (['exclude'] if (pve_backup_jobs_desired.exclude | length == 0
+                            and (pve_backup_jobs_found.exclude | default('', true) | string | length > 0)) else []) }}
     # The API returns retention as a dict and accepts it as a string, so the
     # declared string is parsed rather than the returned dict flattened —
     # one direction, and it fails loudly on a malformed declaration.
     pve_backup_jobs_prune_desired: >-
       {{ dict((item.prune | default(pve_backup_jobs_default_prune)).split(',')
               | map('ansible.builtin.split', '=') | list) }}
+    pve_backup_jobs_prune_actual: >-
+      {{ dict(
+           (pve_backup_jobs_found['prune-backups'] | default({}, true)
+            | dict2items | map(attribute='key') | list)
+           | zip(
+               pve_backup_jobs_found['prune-backups'] | default({}, true)
+               | dict2items | map(attribute='value') | map('string') | list
+             )
+         ) }}
   loop: "{{ pve_backup_jobs_jobs }}"
   loop_control:
     label: "{{ item.id }}"
   when: >-
     pve_backup_jobs_existing | length == 0
     or pve_backup_jobs_desired != pve_backup_jobs_actual
-    or pve_backup_jobs_prune_desired != (pve_backup_jobs_found['prune-backups'] | default({}))
+    or pve_backup_jobs_prune_desired != pve_backup_jobs_prune_actual
     or pve_backup_jobs_clear | length > 0
   changed_when: true
 

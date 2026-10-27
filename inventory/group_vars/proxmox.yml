@@ -115,8 +115,7 @@ kernel_tuning_dirty_background_ratio: 5
 kernel_tuning_overcommit_memory: 0
 
 # Kernel Tuning - Boot Parameters (AMD Zen1 stability)
-# NOTE: This role manages boot params via /etc/kernel/cmdline (UEFI) or GRUB (BIOS).
-# The crash_diagnostics role ALSO manages GRUB params - they will be merged, not conflict.
+# Boot params go to /etc/kernel/cmdline (UEFI) or GRUB (BIOS); crash_diagnostics GRUB params merge.
 # For UEFI systems, only kernel_tuning manages /etc/kernel/cmdline.
 kernel_tuning_boot_params_enabled: true
 # Clocksource is deliberately not forced here; see the role defaults for the
@@ -279,13 +278,13 @@ sanoid_splunk_datasets_json: >-
   }
 sanoid_splunk_datasets: "{{ sanoid_splunk_datasets_json | from_json }}"
 
-# PBS guest backups (pve_backup_jobs). Jobs are enabled one node at a time.
+# PBS guest backups, enabled one node at a time.
 pve_backup_jobs_manage: true
 pve_backup_jobs_prune_unmanaged: false
 pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
 pve_backup_jobs_pbs_node: pve-w1700
 pve_backup_jobs_pbs_server: "{{ hostvars['localhost'].tofu_data.containers.pbs.fqdn }}"
 pve_backup_jobs_jobs:
-  - {id: guests-pve-r540, all: true, node: pve-r540, storage: guests, schedule: "01:15", enabled: false}
-  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "01:15", enabled: false}
-  - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "01:15", enabled: false}
+  - {id: guests-pve-r540, all: true, node: pve-r540, storage: guests, schedule: "06:30", enabled: false}
+  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:15", enabled: false}
+  - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:00", enabled: false, exclude_names: [splunk]}

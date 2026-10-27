@@ -22,6 +22,10 @@
     pve_backup_jobs_default_compress: zstd
     pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
     pve_backup_jobs_prune_unmanaged: true
+    # Stands in for the guest map load_tofu publishes on localhost.
+    pve_backup_jobs_tofu_guest_map:
+      fixture-splunk:
+        vmid: 4244
     pve_backup_jobs_jobs:
       # Exists, but selects a guest id — the conversion case.
       - id: fixture-convert
@@ -36,6 +40,7 @@
         storage: fixture-backup-store
         schedule: "03:30"
         enabled: false
+        exclude_names: [fixture-splunk]
       # Exists and already matches — must produce no command at all, or the
       # role churns the cluster on every converge.
       - id: fixture-insync
@@ -44,6 +49,7 @@
         schedule: "04:30"
         enabled: false
         prune: keep-daily=3
+        exclude_names: [fixture-splunk]
       # Exists with a node pin the declaration no longer carries — the clear case.
       - id: fixture-unpin
         pool: fixture-pool-d
@@ -63,9 +69,10 @@
       - id: fixture-convert
         type: vzdump
         vmid: "4242,4243"
+        exclude: "4244"
         storage: fixture-backup-store
         schedule: "02:30"
-        enabled: 0
+        enabled: "0"
         mode: snapshot
         compress: zstd
         comment: ""
@@ -73,13 +80,15 @@
       - id: fixture-insync
         type: vzdump
         pool: fixture-pool-c
+        all: "0"
         storage: fixture-backup-store
         schedule: "04:30"
-        enabled: 0
+        enabled: "0"
+        exclude: "4244"
         mode: snapshot
         compress: zstd
         comment: ""
-        prune-backups: {keep-daily: "3"}
+        prune-backups: {keep-daily: 3}
       - id: fixture-orphan
         type: vzdump
         pool: fixture-pool-gone
@@ -121,6 +130,7 @@
         storage: fixture-backup-store
         schedule: "03:30"
         enabled: 0
+        exclude: "4244"
         mode: snapshot
         compress: zstd
         comment: ""
@@ -128,9 +138,11 @@
       - id: fixture-insync
         type: vzdump
         pool: fixture-pool-c
+        all: 0
         storage: fixture-backup-store
         schedule: "04:30"
         enabled: 0
+        exclude: "4244"
         mode: snapshot
         compress: zstd
         comment: ""
@@ -205,11 +217,13 @@
           - "'set /cluster/backup/fixture-convert' in pve_backup_jobs_commands"
           - "'--pool fixture-pool' in pve_backup_jobs_commands"
           - "'--delete vmid' in pve_backup_jobs_commands"
+          - "'--delete vmid,exclude' in pve_backup_jobs_commands"
           # A node pin the declaration dropped is cleared, not kept; a declared
           # node is passed as one name on create.
           - "'set /cluster/backup/fixture-unpin' in pve_backup_jobs_commands"
           - "'--delete node' in pve_backup_jobs_commands"
           - "'--node fixture-node-b' in pve_backup_jobs_commands"
+          - "'--exclude 4244' in pve_backup_jobs_new_create"
           # The create: carries an explicit id so the job is addressable by the
           # declaration afterwards rather than by a generated UUID.
           - "'create /cluster/backup --id fixture-new' in pve_backup_jobs_commands"
@@ -232,6 +246,10 @@
         quiet: false
       vars:
         pve_backup_jobs_commands: "{{ pve_backup_jobs_command_log.content | b64decode }}"
+        pve_backup_jobs_new_create: >-
+          {{ pve_backup_jobs_commands.splitlines()
+             | select('search', 'create /cluster/backup --id fixture-new')
+             | first | default('') }}
         pve_backup_jobs_all_create: >-
           {{ pve_backup_jobs_commands.splitlines()
              | select('search', 'create /cluster/backup --id fixture-all')

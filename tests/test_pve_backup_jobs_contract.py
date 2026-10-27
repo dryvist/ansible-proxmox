@@ -114,6 +114,13 @@ def test_declared_jobs_ship_disabled():
     assert all(job["enabled"] is False for job in JOBS)
 
 
+def test_splunk_is_excluded_by_desired_state_name():
+    job = next(job for job in JOBS if job["id"] == "guests-pve-w5900")
+    assert job["exclude_names"] == ["splunk"]
+    assert job.get("mode", DEFAULTS["pve_backup_jobs_default_mode"]) == "snapshot"
+    assert "vmid" not in job
+
+
 def test_retention_is_owned_by_pbs():
     assert DEFAULTS["pve_backup_jobs_default_prune"] == "keep-all=1"
     assert all(job.get("prune", "keep-all=1") == "keep-all=1" for job in JOBS)
@@ -129,6 +136,11 @@ def test_each_job_selects_all_guests_on_one_non_backup_node():
     assert all(job["all"] is True for job in JOBS)
     assert all("pool" not in job for job in JOBS)
     assert not any(job.get("pool") == "protected" for job in JOBS)
+    assert {job["id"]: job["schedule"] for job in JOBS} == {
+        "guests-pve-r540": "06:30",
+        "guests-pve-r710": "06:15",
+        "guests-pve-w5900": "06:00",
+    }
 
 
 def test_undeclared_vzdump_jobs_are_not_removed():

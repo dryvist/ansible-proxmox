@@ -20,8 +20,10 @@ pve_backup_jobs_config_host: ""
 #             name (PVE format pve-node). Required: a job with no node also
 #             protects guests on pve_backup_jobs_pbs_node, which would back
 #             them up onto themselves.
+#   exclude_names guest names from tofu_data; resolved to current VMIDs before
+#             the job is reconciled, so a renumber never changes the exclusion.
 #   storage   storage id to write to; pve_backup_jobs_storage_id
-#   schedule  systemd calendar expression
+#   schedule  PVE calendar event (on UTC nodes, HH:MM is daily)
 #   enabled   false ships the job present-but-off, so a first full run stays a
 #             deliberate act rather than a side effect of a converge
 #   prune     retention. Leave at keep-all=1: PBS owns retention (see below)
@@ -32,6 +34,15 @@ pve_backup_jobs_config_host: ""
 # Empty here. The live list is environment data, declared in
 # inventory/group_vars/proxmox.yml with the other environment-derived settings.
 pve_backup_jobs_jobs: []
+
+# Desired-state guest maps injected by playbooks/load_tofu.yml onto localhost.
+# Combining the same categories used by verify_guest_placement keeps name
+# resolution on the published inventory instead of duplicating VMIDs here.
+pve_backup_jobs_tofu_guest_map: >-
+  {{ ((hostvars['localhost'].tofu_data | default({})).get('containers', {}))
+     | combine((hostvars['localhost'].tofu_data | default({})).get('vms', {}))
+     | combine((hostvars['localhost'].tofu_data | default({})).get('docker_vms', {}))
+     | combine((hostvars['localhost'].tofu_data | default({})).get('splunk_vm', {})) }}
 
 # --- Data-mount backup flags -------------------------------------------------
 # vzdump skips an LXC mount point with no backup=1 and still exits 0, so a guest

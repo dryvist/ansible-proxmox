@@ -10,8 +10,8 @@ scrub, so it never starts a new one.
 | --- | --- | --- |
 | `zfs_scrub_window_enabled` | `false` | Master switch. |
 | `zfs_scrub_window_pools` | `[]` | Pools whose scrubs follow the window. |
-| `zfs_scrub_window_resume_oncalendar` | `*-*-* 01:00:00 UTC` | Resume schedule. |
-| `zfs_scrub_window_pause_oncalendar` | `*-*-* 07:00:00 UTC` | Pause schedule. |
+| `zfs_scrub_window_resume_oncalendar` | `*-*-* 04:00:00 UTC` | Resume schedule. |
+| `zfs_scrub_window_pause_oncalendar` | `*-*-* 10:00:00 UTC` | Pause schedule. |
 | `zfs_scrub_window_module_params` | `zfs_vdev_scrub_max_active: 1`, `zfs_scan_vdev_limit: 4194304` | ZFS module parameters that limit scrub I/O. |
 
 For each pool, the role renders pause and resume oneshot services with matching
