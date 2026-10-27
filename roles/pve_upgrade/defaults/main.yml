@@ -28,6 +28,11 @@ pve_upgrade_ha_drain: true
 pve_upgrade_ha_drain_retries: 30
 pve_upgrade_ha_drain_delay: 10
 
+# Do not upgrade or reboot a node while one of its vzdump jobs is active.
+# Poll once per minute and stop after this bounded wait budget.
+pve_upgrade_vzdump_wait_timeout_seconds: 10800
+pve_upgrade_vzdump_poll_interval_seconds: 60
+
 # This role runs the upgrade only. Repository normalization (keeping the node on
 # the no-subscription channel) is handled by the pve_repositories role, which
 # playbooks/upgrade.yml applies first.

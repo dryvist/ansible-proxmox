@@ -52,6 +52,57 @@
   tags:
     - pve_upgrade
 
+- name: Validate the vzdump wait budget
+  ansible.builtin.assert:
+    that:
+      - pve_upgrade_vzdump_wait_timeout_seconds | int > 0
+      - pve_upgrade_vzdump_poll_interval_seconds | int > 0
+      - pve_upgrade_vzdump_wait_timeout_seconds | int >= pve_upgrade_vzdump_poll_interval_seconds | int
+    fail_msg: >-
+      pve_upgrade_vzdump_wait_timeout_seconds must be positive and at least one
+      pve_upgrade_vzdump_poll_interval_seconds. Refusing an unbounded or empty wait.
+    quiet: true
+  tags:
+    - pve_upgrade
+
+- name: Wait for active vzdump tasks before upgrading this node
+  block:
+    - name: Query active vzdump tasks until this node is clear
+      ansible.builtin.command:
+        argv:
+          - pvesh
+          - get
+          - "/nodes/{{ pve_upgrade_node_name }}/tasks"
+          - --source
+          - active
+          - --typefilter
+          - vzdump
+          - --output-format
+          - json
+      register: pve_upgrade_vzdump_tasks
+      until: >-
+        pve_upgrade_vzdump_tasks.rc != 0
+        or (pve_upgrade_vzdump_tasks.stdout | from_json | length == 0)
+      retries: >-
+        {{ ((pve_upgrade_vzdump_wait_timeout_seconds | int)
+            // (pve_upgrade_vzdump_poll_interval_seconds | int)) - 1 }}
+      delay: "{{ pve_upgrade_vzdump_poll_interval_seconds | int }}"
+      changed_when: false
+      check_mode: false
+
+  rescue:
+    - name: Stop the node upgrade when vzdump tasks do not drain
+      ansible.builtin.fail:
+        msg: >-
+          Active vzdump tasks did not clear, or the PVE task query failed,
+          within the {{ pve_upgrade_vzdump_wait_timeout_seconds }} second wait
+          budget on {{ pve_upgrade_node_name }}. The node's upgrade and reboot
+          are stopped. Last pvesh result: rc
+          {{ pve_upgrade_vzdump_tasks.rc | default('unknown') }};
+          {{ pve_upgrade_vzdump_tasks.stdout | default(pve_upgrade_vzdump_tasks.msg | default('no output')) }}
+  tags:
+    - pve_upgrade
+
 - name: Drain HA guests to peer nodes before rebooting
   ansible.builtin.command:
     cmd: "ha-manager crm-command node-maintenance enable {{ pve_upgrade_node_name }}"

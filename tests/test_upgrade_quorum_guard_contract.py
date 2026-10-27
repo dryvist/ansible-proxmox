@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLAYBOOK = yaml.safe_load((ROOT / "playbooks/upgrade.yml").read_text())
 ROLE = yaml.safe_load((ROOT / "roles/pve_upgrade/tasks/main.yml").read_text())
 WAIT = yaml.safe_load((ROOT / "roles/pve_upgrade/tasks/wait_full_quorum.yml").read_text())
+DEFAULTS = yaml.safe_load((ROOT / "roles/pve_upgrade/defaults/main.yml").read_text())
 
 
 def _walk(tasks):
@@ -73,3 +74,34 @@ def test_major_version_is_asserted_without_a_pin() -> None:
     names = [t["name"] for t in _block()]
     assert names.index("Query Proxmox VE version before the package upgrade") < names.index("Update apt cache")
     assert "Assert the Proxmox VE major version is unchanged" in names
+
+
+def test_active_vzdump_tasks_clear_before_the_node_upgrade() -> None:
+    wait = next(
+        t for t in ROLE if t.get("name") == "Wait for active vzdump tasks before upgrading this node"
+    )
+    upgrade = next(
+        t for t in ROLE if t.get("name") == "Upgrade the node, always returning it to normal HA scheduling"
+    )
+    assert ROLE.index(wait) < ROLE.index(upgrade)
+
+    query = wait["block"][0]
+    argv = query["ansible.builtin.command"]["argv"]
+    assert argv == [
+        "pvesh",
+        "get",
+        "/nodes/{{ pve_upgrade_node_name }}/tasks",
+        "--source",
+        "active",
+        "--typefilter",
+        "vzdump",
+        "--output-format",
+        "json",
+    ]
+    assert query["changed_when"] is False
+    assert query["check_mode"] is False
+    assert "length == 0" in query["until"]
+    assert "pve_upgrade_vzdump_wait_timeout_seconds" in query["retries"]
+    assert wait["rescue"][0]["ansible.builtin.fail"]
+    assert DEFAULTS["pve_upgrade_vzdump_wait_timeout_seconds"] == 10800
+    assert DEFAULTS["pve_upgrade_vzdump_poll_interval_seconds"] == 60
