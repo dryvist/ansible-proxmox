@@ -37,7 +37,7 @@ namespace — this role only fills it.
 | `pve_config_backup_enabled`         | `false`                   | Master enable — set per-host        |
 | `pve_config_backup_source_dir`      | `/etc/pve`                | Directory tarred                    |
 | `pve_config_backup_archive_dir`     | `/bulk/databases/pve-etc` | Archive destination                 |
-| `pve_config_backup_on_calendar`     | `*-*-* 06:00:00 UTC`       | `systemd` `OnCalendar` (daily, UTC) |
+| `pve_config_backup_on_calendar`     | `*-*-* 06:00:00 UTC`      | `systemd` `OnCalendar` (daily, UTC) |
 | `pve_config_backup_persistent`      | `true`                    | Run a missed schedule on next boot  |
 | `pve_config_backup_retain_count`    | `14`                      | Archives kept before pruning oldest |
 | `pve_config_backup_healthcheck_url` | `""`                      | Optional healthchecks.io URL        |
