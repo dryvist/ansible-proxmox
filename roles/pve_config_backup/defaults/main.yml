@@ -16,7 +16,7 @@ pve_config_backup_source_dir: /etc/pve
 pve_config_backup_archive_dir: /bulk/databases/pve-etc
 
 # Daily, matching the sibling standby roles' cadence for the same namespace.
-pve_config_backup_on_calendar: "*-*-* 04:15:00"
+pve_config_backup_on_calendar: "*-*-* 06:00:00 UTC"
 pve_config_backup_persistent: true
 
 # Local tars only, no per-guest history requirement — this is config, not
