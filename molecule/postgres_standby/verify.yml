@@ -47,6 +47,6 @@
     - name: Assert the timer is daily and persistent
       ansible.builtin.assert:
         that:
-          - "'OnCalendar=*-*-* 04:00:00' in postgres_standby_timer_text"
+          - "'OnCalendar=*-*-* 06:50:00 UTC' in postgres_standby_timer_text"
           - "'Persistent=true' in postgres_standby_timer_text"
         fail_msg: "postgres-standby timer did not render the expected schedule"
