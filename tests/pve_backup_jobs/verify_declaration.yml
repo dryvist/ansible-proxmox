@@ -17,6 +17,10 @@
     pve_backup_jobs_pbs_node: fixture-backup-node
     pve_backup_jobs_storage_nodes: [fixture-node-a, fixture-node-b]
     pve_backup_jobs_default_prune: keep-all=1
+    # Stands in for the guest map load_tofu publishes on localhost.
+    pve_backup_jobs_tofu_guest_map:
+      fixture-splunk:
+        vmid: 4244
 
   tasks:
     # Both supported selections must pass, or every refusal below proves
@@ -47,6 +51,19 @@
             schedule: "02:30"
             enabled: false
 
+    - name: Accept a desired-state name exclusion
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs:
+          - id: fixture-named-exclusion
+            all: true
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+            exclude_names: [fixture-splunk]
+
     - name: Refuse a declaration carrying a guest-id list
       block:
         - name: Run the guard against a guest-id declaration
@@ -71,6 +88,29 @@
         - name: Record the guest-id refusal
           ansible.builtin.set_fact:
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['vmid'] }}"
+
+    - name: Refuse an exclusion name missing from desired state
+      block:
+        - name: Run the guard against an unknown guest name
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-unknown-exclusion
+                pool: fixture-pool
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+                exclude_names: [missing-guest]
+
+        - name: Fail because an unknown guest name was accepted
+          ansible.builtin.fail:
+            msg: "An exclusion name missing from tofu_data was ACCEPTED."
+      rescue:
+        - name: Record the unknown-name refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['exclude-name'] }}"
 
     - name: Refuse a declaration that sets both selection modes
       block:
@@ -237,9 +277,9 @@
       ansible.builtin.assert:
         that:
           - (pve_backup_jobs_refusals | default([]) | sort)
-            == ['backup-node', 'both', 'duplicate', 'neither', 'node', 'node-list', 'storage', 'vmid']
+            == ['backup-node', 'both', 'duplicate', 'exclude-name', 'neither', 'node', 'node-list', 'storage', 'vmid']
         fail_msg: >-
-          Expected eight refusals (vmid, both, neither, duplicate, storage, node,
-          node-list, backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
-        success_msg: "PASS: all eight declaration refusals fired"
+          Expected nine refusals (vmid, exclude-name, both, neither, duplicate,
+          storage, node, node-list, backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
+        success_msg: "PASS: all nine declaration refusals fired"
         quiet: false

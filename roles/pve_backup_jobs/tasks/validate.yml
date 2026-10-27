@@ -17,6 +17,8 @@
       - item.storage | default('') | length > 0
       - item.schedule | default('') | length > 0
       - item.vmid is not defined
+      - (item.exclude_names | default([], true)) is sequence
+      - (item.exclude_names | default([], true)) is not string
     fail_msg: >-
       Backup job '{{ item.id | default('<no id>') }}' must declare id, exactly
       one of pool or all: true, storage and schedule, and must not carry a vmid
@@ -40,6 +42,38 @@
     fail_msg: "Duplicate backup job id in pve_backup_jobs_jobs; ids must be unique."
     quiet: true
   when: pve_backup_jobs_jobs | length > 0
+  tags:
+    - pve_backup_jobs
+
+- name: Assert every named guest exclusion resolves to one desired-state VMID
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item.exclude_names | default([], true) | unique | list | length)
+        == (item.exclude_names | default([], true) | length)
+      - >-
+        (item.exclude_names | default([], true)
+         | reject('in', pve_backup_jobs_tofu_guest_map.keys() | list)
+         | list | length) == 0
+      - >-
+        (item.exclude_names | default([], true)
+         | map('extract', pve_backup_jobs_tofu_guest_map)
+         | selectattr('vmid', 'defined') | list | length)
+        == (item.exclude_names | default([], true) | length)
+      - >-
+        (item.exclude_names | default([], true)
+         | map('extract', pve_backup_jobs_tofu_guest_map)
+         | selectattr('vmid', 'defined') | map(attribute='vmid')
+         | map('int') | select('gt', 0) | list | length)
+        == (item.exclude_names | default([], true) | length)
+    fail_msg: >-
+      Backup job '{{ item.id | default('<no id>') }}' has exclude_names that
+      must be unique names in tofu_data (containers, vms, docker_vms or
+      splunk_vm), each with a positive VMID. Raw VMID lists are not accepted.
+    quiet: true
+  loop: "{{ pve_backup_jobs_jobs }}"
+  loop_control:
+    label: "{{ item.id | default('<no id>') }}"
   tags:
     - pve_backup_jobs
 

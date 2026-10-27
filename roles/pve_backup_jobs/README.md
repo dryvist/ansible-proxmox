@@ -21,6 +21,8 @@ PVE supports selecting either all guests or one resource pool. The API treats
 every guest on that node, regardless of its pool. **All guests per node is the
 fleet standard**, so inventory does not need to move guests out of their
 existing category pools.
+The `schedule` value uses PVE calendar syntax; an `HH:MM` value is a daily
+event, and the Proxmox nodes run in UTC.
 
 Pool selection remains available for a job that intentionally covers only one
 pool on one node. Validation refuses a job that sets both `pool` and `all`, and
@@ -33,14 +35,14 @@ for a different guest, the job would silently protect that new guest instead.
   all: true
   node: pve-r540
   storage: guests
-  schedule: "01:15"
+  schedule: "06:00"
 
 # Scoped alternative: one pool on one node.
 - id: platform-pve-r540
   pool: platform
   node: pve-r540
   storage: guests
-  schedule: "01:15"
+  schedule: "06:00"
 ```
 
 ## What this role does not do
@@ -54,6 +56,11 @@ cannot be trusted to audit its own aim. Its contract is pinned by
 It does not assert restorability either. Archive size and presence are not
 evidence that an archive restores; only a periodic restore into a scratch pool,
 with a check that the expected data is inside, is. That is out of scope here.
+
+`exclude_names` can omit selected guests using their keys in the published
+`tofu_data` inventory. The role resolves those names to current VMIDs and fails
+validation when a name is missing or has no valid VMID; literal guest-id lists
+remain refused.
 
 It does not create the PBS prune job. Retention is PBS-side (see below), and
 that job lives on the PBS server.
