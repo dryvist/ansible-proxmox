@@ -66,6 +66,8 @@
     - pve_upgrade
 
 - name: Wait for active vzdump tasks before upgrading this node
+  tags:
+    - pve_upgrade
   block:
     - name: Query active vzdump tasks until this node is clear
       ansible.builtin.command:
@@ -100,8 +102,6 @@
           are stopped. Last pvesh result: rc
           {{ pve_upgrade_vzdump_tasks.rc | default('unknown') }};
           {{ pve_upgrade_vzdump_tasks.stdout | default(pve_upgrade_vzdump_tasks.msg | default('no output')) }}
-  tags:
-    - pve_upgrade
 
 - name: Drain HA guests to peer nodes before rebooting
   ansible.builtin.command:
