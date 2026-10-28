@@ -168,6 +168,36 @@
   tags:
     - media_lxc_features
 
+- name: Read the live source of each node-declared NFS mount
+  ansible.builtin.command:
+    argv: [findmnt, -n, -o, SOURCE, --mountpoint, "{{ item.path }}"]
+  register: media_lxc_features_nfs_live
+  changed_when: false
+  check_mode: false
+  # rc 1 means nothing is mounted there yet.
+  failed_when: media_lxc_features_nfs_live.rc not in [0, 1]
+  loop: "{{ media_lxc_features_nfs_mounts | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - media_lxc_features
+
+# state: mounted rewrites fstab but keeps a mount whose declared source moved.
+- name: Unmount NFS mounts whose declared source changed
+  ansible.posix.mount:
+    path: "{{ item.item.path }}"
+    state: unmounted
+  loop: "{{ media_lxc_features_nfs_live.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path | default('') }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - item.rc | default(1) == 0
+    - item.stdout | trim != item.item.src
+  tags:
+    - media_lxc_features
+
 - name: Mount node-declared filesystems over NFS
   ansible.posix.mount:
     src: "{{ item.src }}"
