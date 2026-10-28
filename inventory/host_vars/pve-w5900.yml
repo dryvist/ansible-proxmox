@@ -39,10 +39,6 @@ pve_host_network_uplink_mac: "10:ff:e0:c4:32:db"
 # not per-host, because host and guest userspace must match exactly and a
 # per-host override would let this node's pin drift from pve-w1700's.
 
-# Enable the host-admin login on this node and on GPU guests placed here.
-local_identities_host_admin_enabled: true
-ssh_ca_trust_principals_host_overrides: >-
-  {{ {host_admin_user: ssh_ca_trust_host_admin_principals} }}
 ssh_ca_trust_host_admin_guest_tags:
   - gpu-passthrough
   - llm-gpu

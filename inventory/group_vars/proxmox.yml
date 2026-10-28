@@ -29,9 +29,12 @@ pve_ha_enabled: true
 # built from Tofu node tags in playbooks/load_tofu.yml.
 nvidia_driver_enabled: "{{ 'nvidia_gpu_nodes' in group_names }}"
 
-# Access-tier login used where inventory explicitly enables this account.
+# Access-tier host-admin login is enabled on every Proxmox node.
 host_admin_user: host-admin
 ssh_ca_trust_host_admin_principals: [ai-agent]
+local_identities_host_admin_enabled: true
+ssh_ca_trust_principals_host_overrides: >-
+  {{ {host_admin_user: ssh_ca_trust_host_admin_principals} }}
 ssh_ca_trust_host_admin_guest_tags: []
 
 # Read-only diagnostic login for a trusted AI session on every Proxmox node: a
