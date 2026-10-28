@@ -45,7 +45,7 @@ break-glass path from a workstation:
 | Component              | What It Does                                   |
 | ---------------------- | ---------------------------------------------- |
 | **Common Packages**    | Installs utilities: htop, iotop, lm-sensors    |
-| **ZFS Swap**           | Creates optimized swap on ZFS                  |
+| **Zram Swap**          | Creates compressed RAM swap with zram          |
 | **Kernel Tuning**      | Optimizes memory and disk settings             |
 | **System Limits**      | Increases file and process limits              |
 | **Crash Diagnostics**  | System crash diagnostics configuration         |
@@ -56,7 +56,7 @@ break-glass path from a workstation:
 ### Why Each Matters
 
 - **Common Packages**: See what your server is doing at a glance
-- **ZFS Swap**: Prevents out-of-memory crashes when VMs use too much RAM
+- **Zram Swap**: Provides compressed swap without storing swap on a ZFS zvol
 - **Kernel Tuning**: Better performance for NVMe drives and VMs
 - **System Limits**: Prevents "too many open files" errors under load
 
@@ -180,8 +180,10 @@ All settings have sensible defaults. Override them in
 `inventory/group_vars/proxmox/`:
 
 ```yaml
-# Swap size (default: 96GB - reduce for smaller systems)
-zfs_swap_size: "32G"
+# Zram size in MiB: one quarter of RAM, capped at 16 GiB
+swap_zram_size: "min(ram / 4, 16384)"
+swap_zram_compression_algorithm: zstd
+swap_zram_priority: 100
 
 # Kernel tuning (lower swappiness = prefer RAM over swap)
 kernel_tuning_swappiness: 10

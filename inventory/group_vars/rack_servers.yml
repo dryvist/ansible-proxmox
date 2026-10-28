@@ -3,16 +3,9 @@
 # joining the Proxmox cluster — Dell PowerEdge, HPE ProLiant, Supermicro, etc.).
 # Shared defaults for older Intel-class hardware; per-node overrides go in host_vars.
 
-# ZFS swap — smaller default than the existing pve box since rack servers
-# typically join with less swap headroom expectation.
-zfs_swap_size: "32G"
-zfs_swap_pool: "rpool"
-zfs_swap_dataset: "swap"
-
 # Kernel tuning — same baselines as the existing pve, sans the AMD Zen1 boot
-# params (current rack-server inventory is Intel Westmere/Nehalem; AMD nodes
-# can re-enable boot params per-host).
-kernel_tuning_swappiness: 10
+# params and shared swappiness. Current rack-server inventory is Intel
+# Westmere/Nehalem; AMD nodes can re-enable boot params per-host.
 kernel_tuning_vfs_cache_pressure: 50
 kernel_tuning_dirty_ratio: 10
 kernel_tuning_dirty_background_ratio: 5

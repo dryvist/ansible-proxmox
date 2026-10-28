@@ -95,7 +95,7 @@ jobs:
           - 'roles/nas_storage/**'
           - 'roles/proxmox_monitoring/**'
           - 'roles/ulimits/**'
-          - 'roles/zfs_swap/**'
+          - 'roles/swap/**'
           - 'molecule/default/**'
         docker_lxc_features:
           - 'roles/docker_lxc_features/**'

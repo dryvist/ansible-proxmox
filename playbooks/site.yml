@@ -68,9 +68,9 @@
       tags:
         - cluster_ssh_trust
 
-    - role: zfs_swap
+    - role: swap
       tags:
-        - zfs_swap
+        - swap
 
     - role: kernel_tuning
       tags:
