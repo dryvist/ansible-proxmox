@@ -349,19 +349,6 @@
     - nas_storage
     - nas_storage_samba
 
-- name: Template smb.conf
-  ansible.builtin.template:
-    src: smb.conf.j2
-    dest: /etc/samba/smb.conf
-    owner: root
-    group: root
-    mode: "0644"
-    validate: "{{ nas_storage_smb_validate_cmd }}"
-  notify: Restart smbd
-  tags:
-    - nas_storage
-    - nas_storage_samba
-
 - name: Template Samba share configurations
   ansible.builtin.template:
     src: share.conf.j2
@@ -373,6 +360,19 @@
   loop: "{{ nas_storage_shares }}"
   loop_control:
     label: "{{ item.name }}"
+  notify: Restart smbd
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
+- name: Template smb.conf
+  ansible.builtin.template:
+    src: smb.conf.j2
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "{{ nas_storage_smb_validate_cmd }}"
   notify: Restart smbd
   tags:
     - nas_storage

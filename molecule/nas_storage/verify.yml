@@ -75,6 +75,16 @@
           Effective smb.conf does not report a minimum protocol of SMB3 --
           the global 'server min protocol' setting did not render or apply.
 
+    - name: Assert every declared share is in the effective configuration
+      ansible.builtin.assert:
+        that:
+          - "'[jdrive]' in testparm_output.stdout"
+          - "'[models]' in testparm_output.stdout"
+          - "'[timemachine]' in testparm_output.stdout"
+        fail_msg: >-
+          testparm does not list every share file under smb.conf.d; smb.conf
+          is not including them.
+
     # The account is created under the name from the SECRET MAP
     # ("molecule-resolved-user"), not the one from the declaration -- the
     # declaration has no name at all. A role that skipped resolution would

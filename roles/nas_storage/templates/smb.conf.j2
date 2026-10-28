@@ -23,4 +23,7 @@
    fruit:wipe_intentionally_left_blank_rfork = yes
    fruit:delete_empty_adfiles = yes
 {% endif %}
-   include = /etc/samba/smb.conf.d/*.conf
+   # Samba does not expand wildcards in include, so each share is listed.
+{% for share in nas_storage_shares %}
+   include = /etc/samba/smb.conf.d/{{ share.name }}.conf
+{% endfor %}
