@@ -21,6 +21,10 @@
     pve_backup_jobs_tofu_guest_map:
       fixture-splunk:
         vmid: 4244
+      fixture-app-1:
+        vmid: 4241
+      fixture-app-2:
+        vmid: 4242
 
   tasks:
     # Both supported selections must pass, or every refusal below proves
@@ -63,6 +67,18 @@
             storage: fixture-backup-store
             schedule: "02:30"
             exclude_names: [fixture-splunk]
+
+    - name: Accept a guest selected by desired-state name
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs:
+          - id: fixture-named-guest
+            names: [fixture-app-1, fixture-app-2]
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
 
     - name: Refuse a declaration carrying a guest-id list
       block:
@@ -134,6 +150,96 @@
         - name: Record the both-selection refusal
           ansible.builtin.set_fact:
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['both'] }}"
+
+    - name: Refuse a declaration that combines names and pool
+      block:
+        - name: Run the guard against names and pool
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-names-and-pool
+                pool: fixture-pool
+                names: [fixture-app-1]
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because names and pool were both accepted
+          ansible.builtin.fail:
+            msg: "A declaration with names and pool was ACCEPTED."
+      rescue:
+        - name: Record the names-and-pool refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['names-pool'] }}"
+
+    - name: Refuse a declaration that combines names and exclude_names
+      block:
+        - name: Run the guard against names and exclude_names
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-names-and-exclusion
+                names: [fixture-app-1]
+                exclude_names: [fixture-splunk]
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because names and exclude_names were both accepted
+          ansible.builtin.fail:
+            msg: "A declaration with names and exclude_names was ACCEPTED."
+      rescue:
+        - name: Record the names-and-exclusion refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['names-exclude'] }}"
+
+    - name: Refuse an empty names list
+      block:
+        - name: Run the guard against empty names
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-empty-names
+                names: []
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because empty names were accepted
+          ansible.builtin.fail:
+            msg: "An empty names list was ACCEPTED."
+      rescue:
+        - name: Record the empty-names refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['empty-names'] }}"
+
+    - name: Refuse an unknown selected guest name
+      block:
+        - name: Run the guard against an unknown selected guest
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-unknown-guest
+                names: [missing-guest]
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because an unknown selected guest name was accepted
+          ansible.builtin.fail:
+            msg: "A selected guest name missing from tofu_data was ACCEPTED."
+      rescue:
+        - name: Record the unknown-name refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['guest-name'] }}"
 
     - name: Refuse a declaration with neither selection mode
       block:
@@ -277,9 +383,11 @@
       ansible.builtin.assert:
         that:
           - (pve_backup_jobs_refusals | default([]) | sort)
-            == ['backup-node', 'both', 'duplicate', 'exclude-name', 'neither', 'node', 'node-list', 'storage', 'vmid']
+            == ['backup-node', 'both', 'duplicate', 'empty-names', 'exclude-name', 'guest-name',
+                'names-exclude', 'names-pool', 'neither', 'node', 'node-list', 'storage', 'vmid']
         fail_msg: >-
-          Expected nine refusals (vmid, exclude-name, both, neither, duplicate,
-          storage, node, node-list, backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
-        success_msg: "PASS: all nine declaration refusals fired"
+          Expected thirteen refusals (vmid, exclude-name, both, names-pool,
+          names-exclude, empty-names, guest-name, neither, duplicate, storage,
+          node, node-list, backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
+        success_msg: "PASS: all thirteen declaration refusals fired"
         quiet: false

@@ -121,25 +121,33 @@ def test_exclusions_are_desired_state_names():
         assert "vmid" not in job
 
 
+def test_name_scoped_jobs_select_by_name_only():
+    for job in (job for job in JOBS if "names" in job):
+        assert job["names"] and all(isinstance(name, str) and not name.isdigit() for name in job["names"])
+        assert "all" not in job and "pool" not in job and "vmid" not in job
+        assert "exclude_names" not in job
+
+
 def test_retention_is_owned_by_pbs():
     assert DEFAULTS["pve_backup_jobs_default_prune"] == "keep-all=1"
     assert all(job.get("prune", "keep-all=1") == "keep-all=1" for job in JOBS)
 
 
-def test_each_job_selects_all_guests_on_one_non_backup_node():
+def test_each_job_selects_one_scope_on_one_non_backup_node():
     backup = INVENTORY["pve_backup_jobs_pbs_node"]
     nodes = [job["node"] for job in JOBS]
     assert all("," not in node for node in nodes)
     assert backup not in nodes
     assert set(nodes) == {"pve-r540", "pve-r710", "pve-w5900"}
     assert len({job["id"] for job in JOBS}) == len(JOBS)
-    assert all(job["all"] is True for job in JOBS)
     assert all("pool" not in job for job in JOBS)
-    assert not any(job.get("pool") == "protected" for job in JOBS)
+    assert all(job.get("all") is True for job in JOBS if "names" not in job)
+    assert all(job.get("all") is not True for job in JOBS if "names" in job)
     assert {job["id"]: job["schedule"] for job in JOBS} == {
         "guests-pve-r540": "06:30",
         "guests-pve-r710": "06:15",
         "guests-pve-w5900": "06:00",
+        "guests-pve-w5900-stop": "06:45",
     }
 
 

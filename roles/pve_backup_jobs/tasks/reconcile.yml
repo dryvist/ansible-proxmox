@@ -20,9 +20,9 @@
 
 - name: Reconcile each declared backup job
   # One command covers create and update: the option set is identical, only
-  # the verb and the path differ. `--delete vmid` clears a guest-id list left
-  # by an older job; `--delete pool` and `--delete all` clear the previous
-  # selector when a job changes selection mode. `--delete node` clears a node
+  # the verb and the path differ. `--delete vmid` clears a guest-id selector
+  # when switching to pool/all; `--delete pool` and `--delete all` clear the
+  # previous selector when switching to names. `--delete node` clears a node
   # pin the declaration no longer carries.
   ansible.builtin.command:
     argv: >-
@@ -32,8 +32,12 @@
          (pve_backup_jobs_existing | length > 0)
            | ternary('/cluster/backup/' ~ item.id, '/cluster/backup')]
         + ((pve_backup_jobs_existing | length > 0) | ternary([], ['--id', item.id]))
-        + (pve_backup_jobs_desired.all
-           | ternary(['--all', '1'], ['--pool', pve_backup_jobs_desired.pool]))
+        + ((item.names is defined)
+           | ternary(
+               ['--vmid', pve_backup_jobs_desired.vmid | map('string') | join(',')],
+               pve_backup_jobs_desired.all
+               | ternary(['--all', '1'], ['--pool', pve_backup_jobs_desired.pool])
+             ))
         + ['--storage', item.storage,
            '--schedule', item.schedule,
            '--enabled', pve_backup_jobs_desired.enabled,
@@ -65,6 +69,10 @@
       mode: "{{ item.mode | default(pve_backup_jobs_default_mode) }}"
       compress: "{{ item.compress | default(pve_backup_jobs_default_compress) }}"
       comment: "{{ item.comment | default('') }}"
+      vmid: >-
+        {{ item.names | default([])
+           | map('extract', pve_backup_jobs_tofu_guest_map)
+           | map(attribute='vmid') | map('int') | unique | list | sort }}
       exclude: >-
         {{ item.exclude_names | default([])
            | map('extract', pve_backup_jobs_tofu_guest_map)
@@ -82,6 +90,10 @@
       mode: "{{ pve_backup_jobs_found.mode | default('', true) | string }}"
       compress: "{{ pve_backup_jobs_found.compress | default('', true) | string }}"
       comment: "{{ pve_backup_jobs_found.comment | default('', true) | string }}"
+      vmid: >-
+        {{ pve_backup_jobs_found.vmid | default('', true) | string
+           | split(',') | map('trim') | reject('equalto', '')
+           | map('int') | unique | list | sort }}
       exclude: >-
         {{ pve_backup_jobs_found.exclude | default('', true) | string
            | split(',') | map('trim') | reject('equalto', '')
@@ -90,10 +102,11 @@
     # removes them; the API would otherwise keep them and they would keep
     # deciding what runs.
     pve_backup_jobs_clear: >-
-      {{ (['vmid'] if pve_backup_jobs_found.vmid is defined else [])
+      {{ (['vmid'] if (pve_backup_jobs_found.vmid is defined
+                       and not (item.names is defined)) else [])
          + (['node'] if (pve_backup_jobs_found.node is defined
                          and (item.node | default('') | length) == 0) else [])
-         + (['pool'] if (pve_backup_jobs_desired.all
+         + (['pool'] if ((pve_backup_jobs_desired.all or (item.names is defined))
                          and (pve_backup_jobs_found.pool | default('') | length > 0)) else [])
          + (['all'] if ((pve_backup_jobs_found.all | default(false) | bool)
                         and not pve_backup_jobs_desired.all) else [])
