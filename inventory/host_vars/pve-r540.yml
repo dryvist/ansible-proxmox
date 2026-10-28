@@ -124,6 +124,8 @@ postgres_standby_jobs: >-
 zfs_pools_vm_disk_properties_node:
   bulk/appdata:
     quota: "200G"
+  bulk/replica:
+    quota: "2T"
   bulk/vm-915100-disk-1:
     sync: disabled
 
