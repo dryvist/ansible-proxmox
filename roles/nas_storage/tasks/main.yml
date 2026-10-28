@@ -9,9 +9,23 @@
 # creating datasets is how the old global NAS ended up with an identical
 # rpool/data/nas on every node.
 #
-# playbooks/site.yml skips this role entirely on a node that declares no
-# share, so reaching here means nas_storage_shares is non-empty.
+# A node that declares no share only has its leftover share files removed;
+# the role ends there.
 # systemd tasks are skipped in Docker containers (molecule testing).
+
+- name: Remove share configurations from a node that declares no share
+  ansible.builtin.include_tasks: no_shares.yml
+  when: nas_storage_shares | length == 0
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
+- name: End the role on a node that declares no share
+  ansible.builtin.meta: end_role
+  when: nas_storage_shares | length == 0
+  tags:
+    - nas_storage
+    - nas_storage_samba
 
 # ============================================================
 # Input validation
