@@ -18,6 +18,15 @@
   tags:
     - zfs_pools
 
+# Check mode skips the create below, so per-dataset reads would fail on these.
+- name: "List datasets still to be created in pool {{ zfs_pool.key }}"
+  ansible.builtin.set_fact:
+    zfs_pools_ds_pending: >-
+      {{ zfs_pools_ds_check.results | rejectattr('rc', 'eq', 0)
+         | map(attribute='item.key') | list }}
+  tags:
+    - zfs_pools
+
 - name: "Create missing datasets in pool {{ zfs_pool.key }}"
   ansible.builtin.command:
     cmd: "zfs create -p {{ zfs_pool.key }}/{{ item.key }}"
@@ -73,7 +82,9 @@
   loop_control:
     loop_var: zfs_dataset
     label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }}"
-  when: zfs_dataset.value.properties | default({}) | length > 0
+  when:
+    - zfs_dataset.value.properties | default({}) | length > 0
+    - not (ansible_check_mode and zfs_dataset.key in zfs_pools_ds_pending)
   tags:
     - zfs_pools
 
@@ -105,6 +116,7 @@
   when:
     - zfs_dataset.value.nfs_export | default(None) is not none
     - zfs_dataset.value.nfs_export | default('') | length > 0
+    - not (ansible_check_mode and zfs_dataset.key in zfs_pools_ds_pending)
   tags:
     - zfs_pools
 
@@ -121,5 +133,6 @@
   when:
     - zfs_dataset.value.pvesm_id | default(None) is not none
     - zfs_dataset.value.pvesm_id | default('') | length > 0
+    - not (ansible_check_mode and zfs_dataset.key in zfs_pools_ds_pending)
   tags:
     - zfs_pools
