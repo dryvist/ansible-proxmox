@@ -99,9 +99,7 @@ syncoid_jobs:
   # absent produces no error — the copies left behind just aged in place while
   # their fresh local autosnaps made them look current.
   #
-  # The stale copies under bulk/replica/pve2/ are deliberately left untouched
-  # here; deleting them is a separate change, after these targets prove current
-  # by snapshot-name match against their sources.
+  # Stale replicas whose source no longer exists are destroyed, not kept.
   #
   # Media guests are NOT here on purpose: their rootfs is re-acquirable and
   # their state already rides along in the appdata job above.

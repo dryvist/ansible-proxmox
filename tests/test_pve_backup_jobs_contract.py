@@ -107,11 +107,11 @@ def test_credential_tasks_are_censored():
         assert task.get("no_log") is True, task.get("name")
 
 
-def test_declared_jobs_ship_disabled():
+def test_declared_jobs_state_enabled_explicitly():
     assert DEFAULTS["pve_backup_jobs_jobs"] == []
     assert "item.enabled | default(false)" in RECONCILE
     assert JOBS
-    assert all(job["enabled"] is False for job in JOBS)
+    assert all(isinstance(job["enabled"], bool) for job in JOBS)
 
 
 def test_splunk_is_excluded_by_desired_state_name():

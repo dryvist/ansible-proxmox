@@ -38,12 +38,6 @@ syncoid_trigger: cron
 syncoid_cron_hour: "*/4"
 syncoid_boot_poweroff_on_complete: false
 
-zfs_pools_vm_disk_properties:
-  bulk/scratch:
-    quota: "100G"
-  rpool/data:
-    quota: "1T"
-
 # The Splunk configuration disk is ~4 GB of text that changes whenever anything
 # is reconfigured, and its incrementals are kilobytes — so a 4 h RPO on it buys
 # nothing and costs a day's worth of config edits in a restore. It gets its own
@@ -109,18 +103,13 @@ object_store_vmid: >-
        cannot be resolved. Run playbooks/load_tofu.yml (see splunk_vmid above).
        Refusing to guess a VMID.') }}
 
-# Layer-1 protection (local ZFS snapshots via sanoid) for postgres-ai-1's live
-# PGDATA mount (mp0, the ai-VLAN Hindsight memory cluster's primary — see
+# Node-specific Layer-1 protection (local ZFS snapshots via sanoid) for
+# postgres-ai-1's live PGDATA mount (mp0, the ai-VLAN Hindsight memory cluster's primary — see
 # ansible-proxmox-apps inventory/group_vars/postgres_ai_group.yml). `critical`
 # (hourly cadence), not `database`: per the sanoid role's own doc comment,
 # `database` is for warm/standby/backup copies and `critical` is for the
 # hot/primary that needs point-in-time recovery, which this is — it is the
 # live cluster, not the nightly dump archive.
-#
-# This node is ALSO now a pull target (see postgres_standby_jobs below), so it
-# needs its own "databases" entry the same way host_vars/pve-r540.yml does: the
-# `database` template with the hourly override, so a nightly dump is captured
-# same-day instead of waiting for the next daily-only snapshot window.
 #
 # The recursive rpool/data pull also copies this guest dataset to the peer.
 # Use the pg_dump archive below as the consistent PostgreSQL restore source.
@@ -130,12 +119,9 @@ postgres_ai_vmid: >-
        cannot be resolved. Run playbooks/load_tofu.yml — it targets
        localhost, so any --limit must include localhost. Refusing to guess
        a VMID.') }}
-sanoid_datasets: >-
+sanoid_datasets_node: >-
   {{ {
        'rpool/data/subvol-' ~ postgres_ai_vmid ~ '-disk-0': {'use_template': 'critical'},
-       'rpool/data': {'use_template': 'rpool_guest', 'recursive': 'yes'},
-       'bulk/backups': {'use_template': 'critical', 'recursive': 'yes'},
-       'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24},
        'bulk/jdrive': {'use_template': 'critical', 'recursive': 'yes'},
        'bulk/timemachine': {'use_template': 'critical', 'recursive': 'yes'}
      } }}

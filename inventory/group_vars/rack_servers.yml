@@ -33,5 +33,17 @@ ulimits_users:
 # nas_storage role on `rack_server_enable_nas_storage` directly; set it to
 # `true` in the host_vars file of the chosen NAS node.
 
+# Shared sanoid policy for both servers, plus each host's sanoid_datasets_node.
+# Conventions: https://docs.jacobpevans.com/infrastructure/repos/ansible-proxmox/#inventory-conventions
+sanoid_datasets_common:
+  'rpool/data': {'use_template': 'rpool_guest', 'recursive': 'yes'}
+  'bulk': {'use_template': 'rpool_guest', 'recursive': 'yes'}
+  'bulk/replica': {'use_template': 'replica', 'recursive': 'yes'}
+  'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24}
+  'bulk/backups': {'use_template': 'critical', 'recursive': 'yes'}
+sanoid_datasets: >-
+  {{ sanoid_datasets_common
+     | combine(sanoid_datasets_node | default({}), recursive=True) }}
+
 # NTP — rack servers are clients of the cluster's existing NTP server
 ntp_serve: false
