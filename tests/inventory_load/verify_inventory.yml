@@ -101,15 +101,11 @@
           - hostvars['pve-r540'].syncoid_jobs | map(attribute='source') | list == [
               'root@pve-r710:rpool/data',
               'root@pve-r710:bulk/backups',
-              'root@pve-r710:bulk/databases',
-              'root@pve-r710:bulk/jdrive',
-              'root@pve-r710:bulk/timemachine']
+              'root@pve-r710:bulk/databases']
           - hostvars['pve-r540'].syncoid_jobs | map(attribute='target') | list == [
               'bulk/replica/pve-r710/rpool/data',
               'bulk/replica/pve-r710/backups',
-              'bulk/replica/pve-r710/databases',
-              'bulk/replica/pve-r710/jdrive',
-              'bulk/replica/pve-r710/timemachine']
+              'bulk/replica/pve-r710/databases']
           - hostvars['pve-r540'].sanoid_replica_retention_enabled | bool
         fail_msg: >-
           pve-r540 must pull the selected pve-r710 datasets into its own replica
@@ -122,8 +118,6 @@
           - hostvars['pve-r710'].sanoid_datasets['rpool/data'].recursive == 'yes'
           - "'bulk/backups' in hostvars['pve-r710'].sanoid_datasets"
           - "'bulk/databases' in hostvars['pve-r710'].sanoid_datasets"
-          - "'bulk/jdrive' in hostvars['pve-r710'].sanoid_datasets"
-          - "'bulk/timemachine' in hostvars['pve-r710'].sanoid_datasets"
         fail_msg: >-
           Every pve-r710 source dataset in the reverse pull needs a sanoid
           policy because syncoid uses --no-sync-snap.

@@ -121,9 +121,7 @@ postgres_ai_vmid: >-
        a VMID.') }}
 sanoid_datasets_node: >-
   {{ {
-       'rpool/data/subvol-' ~ postgres_ai_vmid ~ '-disk-0': {'use_template': 'critical'},
-       'bulk/jdrive': {'use_template': 'critical', 'recursive': 'yes'},
-       'bulk/timemachine': {'use_template': 'critical', 'recursive': 'yes'}
+       'rpool/data/subvol-' ~ postgres_ai_vmid ~ '-disk-0': {'use_template': 'critical'}
      } }}
 
 # Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).
