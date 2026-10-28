@@ -39,6 +39,8 @@ syncoid_cron_hour: "*/4"
 syncoid_boot_poweroff_on_complete: false
 
 zfs_pools_vm_disk_properties:
+  bulk/replica:
+    quota: "2T"
   bulk/scratch:
     quota: "100G"
   rpool/data:
