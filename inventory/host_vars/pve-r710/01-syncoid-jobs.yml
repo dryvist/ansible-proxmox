@@ -87,6 +87,9 @@ syncoid_jobs:
   - name: "music"
     source: "root@{{ proxmox_node_names.storage }}:bulk/music"
     target: "bulk/replica/{{ proxmox_node_names.storage }}/music"
+  - name: "jdrive"
+    source: "root@{{ proxmox_node_names.storage }}:bulk/jdrive"
+    target: "bulk/replica/{{ proxmox_node_names.storage }}/jdrive"
   # Every guest disk on the storage node's rpool/data, recursive via default
   # options: the mirror of that node's pull of this node's rpool/data.
   - name: "rpool-data"

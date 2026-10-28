@@ -47,6 +47,7 @@ sanoid_datasets_node: >-
        'bulk/home-videos': {'use_template': 'critical', 'recursive': 'yes'},
        'bulk/photos': {'use_template': 'critical', 'recursive': 'yes'},
        'bulk/music': {'use_template': 'critical', 'recursive': 'yes'},
+       'bulk/jdrive': {'use_template': 'critical', 'recursive': 'yes'},
        'bulk/object/subvol-' ~ object_store_vmid ~ '-disk-1': {'use_template': 'critical'}
      } }}
 
@@ -65,12 +66,6 @@ syncoid_jobs:
   - name: databases
     source: "root@pve-r710:bulk/databases"
     target: "bulk/replica/pve-r710/databases"
-  - name: jdrive
-    source: "root@pve-r710:bulk/jdrive"
-    target: "bulk/replica/pve-r710/jdrive"
-  - name: timemachine
-    source: "root@pve-r710:bulk/timemachine"
-    target: "bulk/replica/pve-r710/timemachine"
 
 # Prune received autosnap snapshots on replica targets, matching the retention
 # policy already enabled on the other server.
