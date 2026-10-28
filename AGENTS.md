@@ -11,7 +11,7 @@ Ansible automation for Proxmox VE host configuration.
 Configure the Proxmox VE hypervisor itself:
 
 - Kernel parameters and tuning
-- Swap configuration (including ZFS-backed swap)
+- Swap configuration (zram-backed swap on Proxmox hosts)
 - Host monitoring and metrics
 - Process and file descriptor limits
 - Crash diagnostics and troubleshooting data collection
@@ -97,7 +97,7 @@ and fact-gathering serialization. To increase speed:
 ### Common Operations
 
 - **Kernel tuning**: Updates sysctl parameters
-- **Swap management**: Configures swappiness and ZFS swap devices
+- **Swap management**: Configures zram swap and swappiness
 - **Monitoring setup**: Installs sysstat, atop, and crash-monitor
 
 ## Development Environment

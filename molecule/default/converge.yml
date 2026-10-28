@@ -54,7 +54,6 @@
         - proxmox_monitoring
 
     # Note: common role requires specific packages (lm-sensors, rasdaemon)
-    # Note: zfs_swap role requires ZFS which is not available in containers
     # Note: nas_storage role requires ZFS which is not available in containers
     # Note: GRUB configuration in crash_diagnostics is skipped in containers (no GRUB)
     # Full integration tests should run on actual Proxmox hosts

@@ -68,7 +68,10 @@
     path: "{{ zfs_pools_nfs_mountpoint.stdout | trim }}"
     follow: false
   register: zfs_pools_nfs_mountpoint_stat
-  when: zfs_dataset.value.nfs_export_permissions | default(none) is not none
+  # Check mode skips the property step that mounts a new dataset; the real run validates it.
+  when:
+    - zfs_dataset.value.nfs_export_permissions | default(none) is not none
+    - not (ansible_check_mode and zfs_pools_nfs_mounted.stdout | trim != 'yes')
   tags:
     - zfs_pools
 
@@ -92,7 +95,10 @@
       nfs_export_permissions must declare a mounted dataset root, explicit
       owner and group values, and a four-digit octal mode.
     quiet: true
-  when: zfs_dataset.value.nfs_export_permissions | default(none) is not none
+  # Check mode skips the property step that mounts a new dataset; the real run validates it.
+  when:
+    - zfs_dataset.value.nfs_export_permissions | default(none) is not none
+    - not (ansible_check_mode and zfs_pools_nfs_mounted.stdout | trim != 'yes')
   tags:
     - zfs_pools
 
@@ -103,6 +109,9 @@
     owner: "{{ zfs_dataset.value.nfs_export_permissions.owner }}"
     group: "{{ zfs_dataset.value.nfs_export_permissions.group }}"
     mode: "{{ zfs_dataset.value.nfs_export_permissions.mode }}"
-  when: zfs_dataset.value.nfs_export_permissions | default(none) is not none
+  # Check mode skips the property step that mounts a new dataset; the real run validates it.
+  when:
+    - zfs_dataset.value.nfs_export_permissions | default(none) is not none
+    - not (ansible_check_mode and zfs_pools_nfs_mounted.stdout | trim != 'yes')
   tags:
     - zfs_pools

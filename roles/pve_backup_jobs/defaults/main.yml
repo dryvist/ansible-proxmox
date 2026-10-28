@@ -1,8 +1,7 @@
 ---
-# Declarative Proxmox VE backup jobs. A job selects exactly one of a resource
-# pool or all guests on one node. Guest-id lists are refused because a reused id
-# could silently change which guest the job protects. Fleet inventory uses
-# all-node selection so guests need no pool reassignment to receive backups.
+# Declarative Proxmox VE backup jobs. A job selects exactly one resource pool,
+# all guests on one node, or guests by name. Raw guest-id lists are refused
+# because a reused id could silently change which guest the job protects.
 
 # Inert by default. Nothing is created, changed or removed until this is on —
 # the same shape as the other roles here that alter live cluster behaviour.
@@ -14,8 +13,9 @@ pve_backup_jobs_config_host: ""
 
 # Desired job set. Each entry:
 #   id        stable job id; the reconcile keys off it
-#   pool      pool id to select; mutually exclusive with all
-#   all       true to select every guest on node; mutually exclusive with pool
+#   pool      pool id to select; mutually exclusive with all and names
+#   all       true to select every guest on node; mutually exclusive with pool and names
+#   names     guest names from tofu_data, resolved to current VMIDs; exclusive with pool/all
 #   node      the ONE node that runs this job. vzdump matches a single node
 #             name (PVE format pve-node). Required: a job with no node also
 #             protects guests on pve_backup_jobs_pbs_node, which would back
@@ -32,7 +32,7 @@ pve_backup_jobs_config_host: ""
 #   comment   free text shown in the UI
 #
 # Empty here. The live list is environment data, declared in
-# inventory/group_vars/proxmox.yml with the other environment-derived settings.
+# inventory/group_vars/proxmox/ with the other environment-derived settings.
 pve_backup_jobs_jobs: []
 
 # Desired-state guest maps injected by playbooks/load_tofu.yml onto localhost.

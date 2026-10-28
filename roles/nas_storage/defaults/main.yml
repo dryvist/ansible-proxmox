@@ -40,7 +40,7 @@ nas_storage_managed_users: "{{ nas_storage_config.managed_users | default([], tr
 # Shares, each derived by playbooks/load_tofu.yml from the `smb` block on the
 # dataset it serves. There is deliberately NO single-share fallback: a share
 # with no dataset behind it is what the per-dataset contract exists to prevent,
-# and playbooks/site.yml already skips this role when the list is empty.
+# and a node with an empty list only has its leftover share files removed.
 nas_storage_shares: "{{ nas_storage_config.shares | default([], true) }}"
 
 # Both halves of the identity are secrets: an account is selected by its ROLE

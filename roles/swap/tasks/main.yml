@@ -1,0 +1,167 @@
+---
+- name: Install systemd zram generator
+  ansible.builtin.apt:
+    name: systemd-zram-generator
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags:
+    - swap
+
+- name: Configure zram swap
+  ansible.builtin.template:
+    src: zram-generator.conf.j2
+    dest: /etc/systemd/zram-generator.conf
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - swap
+
+- name: Prepare the zram device
+  ansible.builtin.systemd_service:
+    name: systemd-zram-setup@zram0.service
+    state: started
+    # Reads the new generator config; reports no change by itself.
+    daemon_reload: true
+  when: not ansible_check_mode
+  tags:
+    - swap
+
+- name: Activate zram swap
+  ansible.builtin.systemd_service:
+    name: dev-zram0.swap
+    state: started
+  when: not ansible_check_mode
+  tags:
+    - swap
+
+- name: Read active swap devices
+  ansible.builtin.command:
+    argv:
+      - cat
+      - /proc/swaps
+  register: swap_active_devices
+  changed_when: false
+  check_mode: false
+  tags:
+    - swap
+
+- name: Verify zram is active before retiring legacy swap
+  ansible.builtin.assert:
+    that:
+      - >-
+        swap_active_devices.stdout_lines
+        | select('match', '^/dev/zram0\s')
+        | list
+        | length == 1
+    fail_msg: /dev/zram0 is not active swap; the legacy zvol will be left intact.
+    quiet: true
+  when: not ansible_check_mode
+  tags:
+    - swap
+
+- name: Inspect the legacy swap zvol
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -t
+      - volume
+      - -o
+      - name
+      - rpool/swap
+  register: swap_legacy_zvol
+  changed_when: false
+  check_mode: false
+  # Non-zero means the zvol is absent, or ZFS is not installed (LVM nodes).
+  # Destruction below runs only on rc 0.
+  failed_when: false
+  tags:
+    - swap
+
+- name: Resolve the legacy zvol device node
+  # /proc/swaps lists the resolved node (for example /dev/zd0), not the
+  # /dev/zvol symlink, so the symlink target is matched too.
+  ansible.builtin.command:
+    argv:
+      - readlink
+      - -f
+      - /dev/zvol/rpool/swap
+  register: swap_legacy_zvol_node
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  tags:
+    - swap
+
+- name: Build the legacy zvol match for /proc/swaps
+  ansible.builtin.set_fact:
+    swap_legacy_zvol_pattern: '^(/dev/zvol/rpool/swap|{{ swap_legacy_zvol_node.stdout }})\s'
+  tags:
+    - swap
+
+- name: Disable active legacy zvol swap
+  ansible.builtin.command:
+    argv:
+      - swapoff
+      - /dev/zvol/rpool/swap
+  when:
+    - not ansible_check_mode
+    - >-
+      swap_active_devices.stdout_lines
+      | select('match', swap_legacy_zvol_pattern)
+      | list
+      | length > 0
+  changed_when: true
+  tags:
+    - swap
+
+- name: Remove the legacy zvol swap fstab entry
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^/dev/zvol/rpool/swap\s+none\s+swap\s+sw\s+0\s+0$'
+    state: absent
+  tags:
+    - swap
+
+- name: Read active swap devices after retiring the zvol
+  ansible.builtin.command:
+    argv:
+      - cat
+      - /proc/swaps
+  register: swap_active_after_retire
+  changed_when: false
+  check_mode: false
+  tags:
+    - swap
+
+- name: Verify legacy zvol is inactive before destruction
+  ansible.builtin.assert:
+    that:
+      - >-
+        swap_active_after_retire.stdout_lines
+        | select('match', swap_legacy_zvol_pattern)
+        | list
+        | length == 0
+    fail_msg: The legacy zvol is still active swap; it will not be destroyed.
+    quiet: true
+  when: not ansible_check_mode
+  tags:
+    - swap
+
+- name: Destroy the inactive legacy swap zvol
+  # -r also removes the zvol's snapshots; a swap snapshot holds nothing restorable.
+  ansible.builtin.command:
+    argv:
+      - zfs
+      - destroy
+      - -r
+      - rpool/swap
+  when:
+    - not ansible_check_mode
+    - swap_legacy_zvol.rc == 0
+  changed_when: true
+  tags:
+    - swap

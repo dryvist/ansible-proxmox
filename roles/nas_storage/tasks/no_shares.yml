@@ -1,0 +1,14 @@
+---
+- name: Find leftover Samba share configurations
+  ansible.builtin.find:
+    paths: /etc/samba/smb.conf.d
+    patterns: "*.conf"
+  register: nas_storage_leftover_share_files
+
+- name: Remove leftover Samba share configurations
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ nas_storage_leftover_share_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"

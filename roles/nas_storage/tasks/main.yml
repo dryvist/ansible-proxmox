@@ -9,9 +9,23 @@
 # creating datasets is how the old global NAS ended up with an identical
 # rpool/data/nas on every node.
 #
-# playbooks/site.yml skips this role entirely on a node that declares no
-# share, so reaching here means nas_storage_shares is non-empty.
+# A node that declares no share only has its leftover share files removed;
+# the role ends there.
 # systemd tasks are skipped in Docker containers (molecule testing).
+
+- name: Remove share configurations from a node that declares no share
+  ansible.builtin.include_tasks: no_shares.yml
+  when: nas_storage_shares | length == 0
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
+- name: End the role on a node that declares no share
+  ansible.builtin.meta: end_role
+  when: nas_storage_shares | length == 0
+  tags:
+    - nas_storage
+    - nas_storage_samba
 
 # ============================================================
 # Input validation
@@ -349,19 +363,6 @@
     - nas_storage
     - nas_storage_samba
 
-- name: Template smb.conf
-  ansible.builtin.template:
-    src: smb.conf.j2
-    dest: /etc/samba/smb.conf
-    owner: root
-    group: root
-    mode: "0644"
-    validate: "{{ nas_storage_smb_validate_cmd }}"
-  notify: Restart smbd
-  tags:
-    - nas_storage
-    - nas_storage_samba
-
 - name: Template Samba share configurations
   ansible.builtin.template:
     src: share.conf.j2
@@ -373,6 +374,43 @@
   loop: "{{ nas_storage_shares }}"
   loop_control:
     label: "{{ item.name }}"
+  notify: Restart smbd
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
+- name: Find Samba share configurations
+  ansible.builtin.find:
+    paths: /etc/samba/smb.conf.d
+    patterns: "*.conf"
+  register: nas_storage_share_files
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
+- name: Remove share configurations for undeclared shares
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: >-
+    {{ nas_storage_share_files.files
+       | rejectattr('path', 'in', nas_storage_shares | map(attribute='name')
+                    | map('regex_replace', '^(.*)$', '/etc/samba/smb.conf.d/\1.conf') | list) }}
+  loop_control:
+    label: "{{ item.path }}"
+  notify: Restart smbd
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
+- name: Template smb.conf
+  ansible.builtin.template:
+    src: smb.conf.j2
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "{{ nas_storage_smb_validate_cmd }}"
   notify: Restart smbd
   tags:
     - nas_storage

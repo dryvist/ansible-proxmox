@@ -37,6 +37,7 @@
   when: ansible_virtualization_type != 'docker'
   tags:
     - zfs_pools
+    - zfs_bulk_node_datasets
 
 - name: Build set of present pools
   ansible.builtin.set_fact:
@@ -50,6 +51,7 @@
   when: ansible_virtualization_type != 'docker'
   tags:
     - zfs_pools
+    - zfs_bulk_node_datasets
 
 - name: Create missing pools (opt-in, guarded by zfs_pools_allow_create + devices)
   ansible.builtin.command:
@@ -89,6 +91,7 @@
   when: ansible_virtualization_type != 'docker'
   tags:
     - zfs_pools
+    - zfs_bulk_node_datasets
 
 - name: Assert registerable pools exist (creation is a commissioning step)
   ansible.builtin.assert:

@@ -3,16 +3,9 @@
 # joining the Proxmox cluster — Dell PowerEdge, HPE ProLiant, Supermicro, etc.).
 # Shared defaults for older Intel-class hardware; per-node overrides go in host_vars.
 
-# ZFS swap — smaller default than the existing pve box since rack servers
-# typically join with less swap headroom expectation.
-zfs_swap_size: "32G"
-zfs_swap_pool: "rpool"
-zfs_swap_dataset: "swap"
-
 # Kernel tuning — same baselines as the existing pve, sans the AMD Zen1 boot
-# params (current rack-server inventory is Intel Westmere/Nehalem; AMD nodes
-# can re-enable boot params per-host).
-kernel_tuning_swappiness: 10
+# params and shared swappiness. Current rack-server inventory is Intel
+# Westmere/Nehalem; AMD nodes can re-enable boot params per-host.
 kernel_tuning_vfs_cache_pressure: 50
 kernel_tuning_dirty_ratio: 10
 kernel_tuning_dirty_background_ratio: 5
@@ -32,6 +25,18 @@ ulimits_users:
 # NAS storage — opt-in per node. The commissioning playbook gates the
 # nas_storage role on `rack_server_enable_nas_storage` directly; set it to
 # `true` in the host_vars file of the chosen NAS node.
+
+# Shared sanoid policy for both servers, plus each host's sanoid_datasets_node.
+# Conventions: https://docs.jacobpevans.com/infrastructure/repos/ansible-proxmox/#inventory-conventions
+sanoid_datasets_common:
+  'rpool/data': {'use_template': 'rpool_guest', 'recursive': 'yes'}
+  'bulk': {'use_template': 'rpool_guest', 'recursive': 'yes'}
+  'bulk/replica': {'use_template': 'replica', 'recursive': 'yes'}
+  'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24}
+  'bulk/backups': {'use_template': 'critical', 'recursive': 'yes'}
+sanoid_datasets: >-
+  {{ sanoid_datasets_common
+     | combine(sanoid_datasets_node | default({}), recursive=True) }}
 
 # NTP — rack servers are clients of the cluster's existing NTP server
 ntp_serve: false

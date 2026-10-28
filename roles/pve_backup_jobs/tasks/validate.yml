@@ -6,24 +6,48 @@
 # main.yml.
 
 - name: Assert every declared job selects exactly one scope and names a storage
-  # A guest-id list is exactly the shape this role exists to replace: it keeps
-  # selecting a number after that number is reused for a different guest, and
-  # every signal the job then emits still says the job ran. Refusing it here is
-  # what stops it coming back in through the declaration.
+  # Raw guest-id lists keep selecting a number after that number is reused for a
+  # different guest. Names are safe because the current id is resolved from the
+  # published desired-state inventory on every run.
   ansible.builtin.assert:
     that:
       - item.id | default('') | length > 0
-      - (item.pool | default('', true) | length > 0) != (item.all | default(false) | bool)
+      - >-
+        ((item.pool | default('', true) | length > 0) | int
+         + (item.all | default(false) | bool | int)
+         + ((item.names is defined) | int)) == 1
       - item.storage | default('') | length > 0
       - item.schedule | default('') | length > 0
       - item.vmid is not defined
-      - (item.exclude_names | default([], true)) is sequence
-      - (item.exclude_names | default([], true)) is not string
+      - >-
+        item.names is not defined
+        or (
+          item.names is sequence
+          and item.names is not string
+          and item.names is not mapping
+          and (item.names | length) > 0
+          and (item.names | select('string') | list | length) == (item.names | length)
+          and (item.names | unique | list | length) == (item.names | length)
+        )
+      - >-
+        item.exclude_names is not defined
+        or (
+          (item.exclude_names | default([], true)) is sequence
+          and (item.exclude_names | default([], true)) is not string
+          and (item.exclude_names | default([], true)) is not mapping
+          and (item.exclude_names | default([], true) | select('string') | list | length)
+              == (item.exclude_names | default([], true) | length)
+        )
+      - >-
+        item.exclude_names is not defined
+        or (item.pool | default('', true) | length > 0)
+        or (item.all | default(false) | bool)
+      - item.names is not defined or item.exclude_names is not defined
     fail_msg: >-
       Backup job '{{ item.id | default('<no id>') }}' must declare id, exactly
-      one of pool or all: true, storage and schedule, and must not carry a vmid
-      list. Guest-id selection keeps pointing at a number after that number is
-      reused for another guest.
+      one of pool, all: true, or a non-empty unique string names list, storage
+      and schedule. Raw vmid lists are forbidden; exclude_names requires pool
+      or all and cannot be combined with names.
     quiet: true
   loop: "{{ pve_backup_jobs_jobs }}"
   loop_control:
@@ -70,6 +94,32 @@
       Backup job '{{ item.id | default('<no id>') }}' has exclude_names that
       must be unique names in tofu_data (containers, vms, docker_vms or
       splunk_vm), each with a positive VMID. Raw VMID lists are not accepted.
+    quiet: true
+  loop: "{{ pve_backup_jobs_jobs }}"
+  loop_control:
+    label: "{{ item.id | default('<no id>') }}"
+  tags:
+    - pve_backup_jobs
+
+- name: Assert every named guest selection resolves to one desired-state VMID
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item.names | default([], true) | reject('in', pve_backup_jobs_tofu_guest_map.keys() | list)
+         | list | length) == 0
+      - >-
+        (item.names | default([], true) | map('extract', pve_backup_jobs_tofu_guest_map)
+         | selectattr('vmid', 'defined') | list | length)
+        == (item.names | default([], true) | length)
+      - >-
+        (item.names | default([], true) | map('extract', pve_backup_jobs_tofu_guest_map)
+         | selectattr('vmid', 'defined') | map(attribute='vmid')
+         | map('int') | select('gt', 0) | list | length)
+        == (item.names | default([], true) | length)
+    fail_msg: >-
+      Backup job '{{ item.id | default('<no id>') }}' has names that must
+      resolve to guests in tofu_data (containers, vms, docker_vms or splunk_vm),
+      each with a positive VMID.
     quiet: true
   loop: "{{ pve_backup_jobs_jobs }}"
   loop_control:
