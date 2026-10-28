@@ -365,6 +365,30 @@
     - nas_storage
     - nas_storage_samba
 
+- name: Find Samba share configurations
+  ansible.builtin.find:
+    paths: /etc/samba/smb.conf.d
+    patterns: "*.conf"
+  register: nas_storage_share_files
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
+- name: Remove share configurations for undeclared shares
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: >-
+    {{ nas_storage_share_files.files
+       | rejectattr('path', 'in', nas_storage_shares | map(attribute='name')
+                    | map('regex_replace', '^(.*)$', '/etc/samba/smb.conf.d/\1.conf') | list) }}
+  loop_control:
+    label: "{{ item.path }}"
+  notify: Restart smbd
+  tags:
+    - nas_storage
+    - nas_storage_samba
+
 - name: Template smb.conf
   ansible.builtin.template:
     src: smb.conf.j2
