@@ -23,11 +23,11 @@ ansible-galaxy install -r requirements.yml
 bits are deliberately removed from OpenTofu because the API token cannot apply
 them. This role realizes them after creation.
 
-| Layer                | Owns                                                                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| tofu-proxmox         | Create the media LXCs (CPU, RAM, disk, network, `nesting`) + declare the `bulk-nobackup/data` and `bulk/appdata` datasets (`node_storage`) |
-| **this role**        | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough, shared `media` group + `/bulk/data` skeleton, per-app config ownership |
-| ansible-proxmox-apps | Converge the services inside each LXC                                                                                                     |
+| Layer                | Owns                                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| tofu-proxmox         | Create the media LXCs (CPU, RAM, disk, network, `nesting`); declare `bulk-nobackup/data` and `bulk/appdata` datasets (`node_storage`) |
+| **this role**        | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough, `media` group + `/bulk/data` skeleton, per-app config ownership    |
+| ansible-proxmox-apps | Converge the services inside each LXC                                                                                                 |
 
 `nesting=1` stays **OpenTofu-managed**. This role never drops it: `keyctl=1` is
 **merged** into the live `features` string (existing tokens preserved), not
@@ -59,8 +59,8 @@ service, never a hardcoded VMID:
 
 Every mounted service gets the unified `bulk-nobackup/data` dataset -> `/data`.
 One dataset (replacing the old separate `downloads` + `media` datasets/mounts) is
-what lets qBittorrent and the arr applications **hardlink** between `/data/torrents/*` and `/data/media/*` — hardlinks cannot cross dataset boundaries. All bind-mounts are
-**read-write** (no`ro=1`), the role's existing convention (plex is read-mostly
+what lets qBittorrent and the arr applications **hardlink** between `/data/torrents/*` and `/data/media/*` — hardlinks cannot cross dataset boundaries.
+All bind-mounts are **read-write** (no `ro=1`), the role's existing convention (plex is read-mostly
 by usage, not by mount flag). `/dev/net/tun` is char device **10:200** (verified
 on the primary node). Every service additionally gets a **persistent config
 mount** — see below.

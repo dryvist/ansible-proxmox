@@ -181,10 +181,10 @@ Set it to power on **unconditionally**, not to restore the previous state. A
 down, and — where the firmware records the state at the moment of loss rather
 than the last commanded one — can leave a node that was running down as well.
 
-| Node has | How it is set                                                                               | Where                                                        |
-| -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| A BMC    | `ipmitool chassis policy always-on` — applied immediately, no reboot                        | Converged by [`idrac_power`](../roles/idrac_power/README.md) |
-| No BMC   | BIOS/UEFI: "AC Power Recovery" (Dell) or "Restore AC Power Loss" (consumer boards) → **On** | At the console, during commissioning                         |
+| Node has | How it is set                                                                      | Where                                                        |
+| -------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| A BMC    | `ipmitool chassis policy always-on` — applied immediately, no reboot               | Converged by [`idrac_power`](../roles/idrac_power/README.md) |
+| No BMC   | BIOS/UEFI: "AC Power Recovery" (Dell), "Restore AC Power Loss" (consumer) → **On** | At the console, during commissioning                         |
 
 Verify on a BMC-bearing node with `ipmitool ... chassis status` and read back
 the `Power Restore Policy` line. On a node with no BMC the setting can only be
