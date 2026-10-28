@@ -32,7 +32,7 @@ pve_backup_jobs_config_host: ""
 #   comment   free text shown in the UI
 #
 # Empty here. The live list is environment data, declared in
-# inventory/group_vars/proxmox.yml with the other environment-derived settings.
+# inventory/group_vars/proxmox/ with the other environment-derived settings.
 pve_backup_jobs_jobs: []
 
 # Desired-state guest maps injected by playbooks/load_tofu.yml onto localhost.

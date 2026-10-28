@@ -29,9 +29,12 @@ pve_ha_enabled: true
 # built from Tofu node tags in playbooks/load_tofu.yml.
 nvidia_driver_enabled: "{{ 'nvidia_gpu_nodes' in group_names }}"
 
-# Access-tier login used where inventory explicitly enables this account.
+# Access-tier host-admin login is enabled on every Proxmox node.
 host_admin_user: host-admin
 ssh_ca_trust_host_admin_principals: [ai-agent]
+local_identities_host_admin_enabled: true
+ssh_ca_trust_principals_host_overrides: >-
+  {{ {host_admin_user: ssh_ca_trust_host_admin_principals} }}
 ssh_ca_trust_host_admin_guest_tags: []
 
 # Read-only diagnostic login for a trusted AI session on every Proxmox node: a
@@ -168,123 +171,3 @@ pve_quorum_guard_powered_off_voters:
 # reports the arithmetic on every run. Raise to 1 once a zero-vote member or an
 # external arbiter lands — see roles/pve_quorum_guard/README.md.
 pve_quorum_guard_min_headroom: 0
-
-# Storage id -> ZFS dataset root, built from each node's OWN declared storage
-# (zfs_pools_from_tofu, injected per host by load_tofu.yml) rather than from a
-# second copy of it. Two shapes produce a PVE storage:
-#   - a registered POOL puts guest volumes at the pool root  (ssd -> ssd)
-#   - a dataset with pvesm_id puts them under it  (nvme-splunk -> nvme/splunk)
-# 'local-zfs' is Proxmox's install-time default zfspool and is not declared in
-# node_storage, so it is the one entry that must be stated.
-#
-# Group-level, not per host: every node resolves its own storage through the
-# same expression, so a snapshot policy anywhere can name a STORAGE and let the
-# pool follow. A pool name written into a snapshot policy is the false green
-# this exists to prevent -- once the guest's volume moves tier the policy keeps
-# snapshotting the frozen copy, and counts and timestamps stay healthy while
-# capturing nothing. Copying this map into a second host_vars file would
-# reintroduce the same drift one level up.
-#
-# Rendered as JSON then parsed -- the same pattern load_tofu.yml uses for
-# nas_storage_by_node, because Jinja has no dict comprehension.
-#
-# Every default() below is the BOOLEAN-AWARE two-argument form. The one-argument
-# form substitutes for UNDEFINED only, so a key published as an explicit null
-# passes straight through and the .items() beneath it renders garbage: the
-# failure surfaces as a from_json parse error about column 2, naming neither the
-# key nor the node. Fired both ways against a null `pools` and a null `datasets`
-# before and after; the one-argument form produced exactly that.
-pve_dataset_root_by_storage_json: >-
-  {
-  {%- set ns = namespace(sep='') -%}
-  {%- for pool_key, pool in ((zfs_pools_from_tofu | default({}, true)).pools | default({}, true)).items() -%}
-    {%- if pool.register | default(true) -%}
-      {{ ns.sep }}{{ pool_key | to_json }}: {{ pool_key | to_json }}
-      {%- set ns.sep = ',' -%}
-    {%- endif -%}
-    {%- for ds_key, ds in (pool.datasets | default({}, true)).items() -%}
-      {%- if ds.pvesm_id | default('') -%}
-        {{ ns.sep }}{{ ds.pvesm_id | to_json }}: {{ (pool_key ~ '/' ~ ds_key) | to_json }}
-        {%- set ns.sep = ',' -%}
-      {%- endif -%}
-    {%- endfor -%}
-  {%- endfor -%}
-  {{ ns.sep }}"local-zfs": "rpool/data"
-  }
-pve_dataset_root_by_storage: "{{ pve_dataset_root_by_storage_json | from_json }}"
-
-# Splunk protected-disk policy. It applies on whichever node the published
-# inventory places the Splunk VM, so it follows a move with no edit.
-#
-# Opt-in by INTERFACE, with no exclusion list: a disk is protected only by being
-# named here, so the hot/warm and cold index tiers (virtio2, virtio3) stay out
-# of every snapshot and replication policy as a stated decision -- Splunk owns
-# index durability through its own bucket archival.
-#
-# Volume names and the datastore come from the published `disks` list, which
-# carries the name Proxmox assigned. They are never built by counting: indices
-# are allocated per (vmid, storage) as next-free, so a counted name can be the
-# retained pre-move copy, a frozen dataset that snapshots perfectly while
-# capturing nothing.
-#
-# The interface list is iterated, not the disk list filtered, so an interface
-# that stops being published fails the converge instead of silently dropping
-# that disk's coverage. Every `| mandatory(...)` is bare: a `default()` on the
-# asserted value would satisfy it unconditionally.
-splunk_protected_disk_interfaces:
-  - scsi0 # OS disk
-  - virtio1 # configuration + logs
-
-splunk_protected_disks_json: >-
-  {%- set splunk = (splunk_vm_from_tofu | default({}, true)).splunk | default({}, true) -%}
-  {%- set disks = splunk.disks | mandatory(
-        'The Splunk VM publishes no .disks, so its dataset paths cannot be
-          resolved. Run playbooks/load_tofu.yml (it targets localhost, so any
-          --limit must include localhost); if the published inventory predates
-          the disks field, apply tofu-proxmox first. Refusing to guess a pool
-          or a volume name.') -%}
-  {%- set out = {} -%}
-  {%- for iface in splunk_protected_disk_interfaces -%}
-    {%- set message = (splunk.node | default('Splunk')) ~ ': the Splunk VM publishes no disk on interface "'
-          ~ iface ~ '", named in splunk_protected_disk_interfaces. Reconcile the list against published disks.' -%}
-    {%- set matches = disks | selectattr('interface', 'eq', iface) | list -%}
-    {%- if matches | length == 0 -%}
-      {{ undef(hint=message) | mandatory(message) }}
-    {%- endif -%}
-    {%- set _ = out.update({iface: matches[0]}) -%}
-  {%- endfor -%}
-  {{ out | to_json }}
-splunk_protected_disks_by_interface: "{{ splunk_protected_disks_json | from_json }}"
-
-sanoid_splunk_datasets_json: >-
-  {
-  {%- set splunk = (splunk_vm_from_tofu | default({}, true)).splunk | default({}, true) -%}
-  {%- set node = splunk.node | mandatory('The Splunk VM node cannot be resolved from splunk_vm_from_tofu.') -%}
-  {%- if node == (proxmox_node_name | default(inventory_hostname)) -%}
-    {%- set ns = namespace(sep='') -%}
-    {%- for iface in splunk_protected_disk_interfaces -%}
-      {%- set disk = splunk_protected_disks_by_interface[iface] -%}
-      {%- set datastore = disk.datastore | mandatory(node ~ ': Splunk disk on interface "' ~ iface ~ '" publishes no .datastore.') -%}
-      {%- set path = disk.path | mandatory(node ~ ': Splunk disk on interface "' ~ iface ~ '" publishes no .path.') -%}
-      {%- set root = pve_dataset_root_by_storage[datastore]
-            | mandatory(node ~ ': the Splunk disk on storage "' ~ datastore
-              ~ '" resolves to no ZFS dataset root. A dir-type storage has no
-              per-guest dataset and cannot be snapshotted; move that disk to a
-              zfspool storage or declare the storage in node_storage.') -%}
-      {{ ns.sep }}{{ (root ~ '/' ~ path) | to_json }}: {{ {'use_template': 'critical'} | to_json }}
-      {%- set ns.sep = ',' -%}
-    {%- endfor -%}
-  {%- endif -%}
-  }
-sanoid_splunk_datasets: "{{ sanoid_splunk_datasets_json | from_json }}"
-
-# PBS guest backups, enabled one node at a time.
-pve_backup_jobs_manage: true
-pve_backup_jobs_prune_unmanaged: false
-pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
-pve_backup_jobs_pbs_node: pve-w1700
-pve_backup_jobs_pbs_server: "{{ hostvars['localhost'].tofu_data.containers.pbs.fqdn }}"
-pve_backup_jobs_jobs:
-  - {id: guests-pve-r540, all: true, node: pve-r540, storage: guests, schedule: "06:30", enabled: false}
-  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:15", enabled: false}
-  - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:00", enabled: false, exclude_names: [splunk]}
