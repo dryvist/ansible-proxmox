@@ -60,10 +60,9 @@ syncoid_extra_schedules:
 proxmox_monitoring_enable_healthchecks: false
 
 # Layer-2 protection (cross-node ZFS replication via syncoid, PULL model): this
-# node is the replica target for the estate. It pulls each source node's
-# snapshots into bulk/replica/<node>, so every dataset named below holds a copy
-# on a pool that is not the one it lives on — which is the whole point, and the
-# reason a dump sitting on a sibling dataset of the same pool does not count.
+# node pulls selected peer and workstation datasets into bulk/replica/<node>.
+# Its own primary datasets are also snapshotted below for the reverse pull. A
+# replica lives on a pool other than its source; a sibling dataset is not a copy.
 # The source NODE NAME is derived from tofu
 # (splunk_vm_from_tofu, injected by load_tofu) — never hard-coded — so this
 # follows the VM if it is ever defined on a different node. bulk is pve-r710's own
@@ -116,19 +115,15 @@ object_store_vmid: >-
 # (hourly cadence), not `database`: per the sanoid role's own doc comment,
 # `database` is for warm/standby/backup copies and `critical` is for the
 # hot/primary that needs point-in-time recovery, which this is — it is the
-# live cluster, not a replicated archive.
+# live cluster, not the nightly dump archive.
 #
 # This node is ALSO now a pull target (see postgres_standby_jobs below), so it
 # needs its own "databases" entry the same way host_vars/pve-r540.yml does: the
 # `database` template with the hourly override, so a nightly dump is captured
 # same-day instead of waiting for the next daily-only snapshot window.
 #
-# Deliberately NOT given a syncoid pull job off THIS node's live disk. The
-# off-node copy for the live cluster is the pg_dump pulled by the job below —
-# a consistent logical backup, the correct restore granularity for a
-# database — never a ZFS snapshot of a running cluster (inconsistent by
-# construction). Every syncoid job in this repo pulls INTO a node; none pull
-# FROM one, and that stays true here.
+# The recursive rpool/data pull also copies this guest dataset to the peer.
+# Use the pg_dump archive below as the consistent PostgreSQL restore source.
 postgres_ai_vmid: >-
   {{ ((containers_from_tofu | default({}))['postgres-ai-1'] | default({})).vmid
      | mandatory('containers_from_tofu is unset, so the postgres-ai-1 VMID
@@ -138,7 +133,11 @@ postgres_ai_vmid: >-
 sanoid_datasets: >-
   {{ {
        'rpool/data/subvol-' ~ postgres_ai_vmid ~ '-disk-0': {'use_template': 'critical'},
-       'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24}
+       'rpool/data': {'use_template': 'rpool_guest', 'recursive': 'yes'},
+       'bulk/backups': {'use_template': 'critical', 'recursive': 'yes'},
+       'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24},
+       'bulk/jdrive': {'use_template': 'critical', 'recursive': 'yes'},
+       'bulk/timemachine': {'use_template': 'critical', 'recursive': 'yes'}
      } }}
 
 # Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).

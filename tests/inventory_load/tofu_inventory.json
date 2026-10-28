@@ -17,6 +17,18 @@
     }
   },
   "containers": {
+    "postgres-ai-1": {
+      "ansible_connection": "community.proxmox.proxmox_pct_remote",
+      "hostname": "postgres-ai-1",
+      "node": "pve-r710",
+      "pool_id": "test-only",
+      "tags": [
+        "container",
+        "database"
+      ],
+      "vmid": 999998,
+      "ansible_pct_vmid": 999998
+    },
     "s3": {
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "hostname": "s3",
@@ -29,7 +41,6 @@
         "storage"
       ],
       "vmid": 902000,
-      "mac": "02:00:00:00:00:01",
       "ansible_pct_vmid": 902000
     }
   },
