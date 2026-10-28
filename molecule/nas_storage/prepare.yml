@@ -8,3 +8,8 @@
       ansible.builtin.raw: |
         apt-get update && apt-get install -y python3 procps
       changed_when: true
+
+    - name: Plant a share file for a share nothing declares
+      ansible.builtin.raw: |
+        mkdir -p /etc/samba/smb.conf.d && printf '[fixture-stale]\n   path = /tmp\n' > /etc/samba/smb.conf.d/fixture-stale.conf
+      changed_when: true

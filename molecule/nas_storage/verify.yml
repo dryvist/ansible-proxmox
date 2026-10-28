@@ -85,6 +85,18 @@
           testparm does not list every share file under smb.conf.d; smb.conf
           is not including them.
 
+    - name: Verify the undeclared share file was removed
+      ansible.builtin.stat:
+        path: /etc/samba/smb.conf.d/fixture-stale.conf
+      register: nas_stale_share
+
+    - name: Assert no undeclared share file remains
+      ansible.builtin.assert:
+        that:
+          - not nas_stale_share.stat.exists
+          - "'[fixture-stale]' not in testparm_output.stdout"
+        fail_msg: A share file for an undeclared share survived the converge.
+
     # The account is created under the name from the SECRET MAP
     # ("molecule-resolved-user"), not the one from the declaration -- the
     # declaration has no name at all. A role that skipped resolution would
