@@ -152,10 +152,12 @@
     - swap
 
 - name: Destroy the inactive legacy swap zvol
+  # -r also removes the zvol's snapshots; a swap snapshot holds nothing restorable.
   ansible.builtin.command:
     argv:
       - zfs
       - destroy
+      - -r
       - rpool/swap
   when:
     - not ansible_check_mode
