@@ -177,7 +177,7 @@ The upgrade assumes the node already has working apt repos for its channel
 ## Customization
 
 All settings have sensible defaults. Override them in
-`inventory/group_vars/proxmox.yml`:
+`inventory/group_vars/proxmox/`:
 
 ```yaml
 # Swap size (default: 96GB - reduce for smaller systems)

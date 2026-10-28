@@ -2,7 +2,7 @@
 # Host vars for pve-w1700 (primary, always-on).
 #
 # This file declares host-local snapshot policy. Splunk's protected disks are
-# declared in group_vars/proxmox.yml and follow its placement.
+# declared in group_vars/proxmox/ and follow its placement.
 #
 # Object storage is a single volume on the storage node's `bulk/object` dataset.
 # `sanoid` snapshots it, and the DR node pulls it hourly with `syncoid`.

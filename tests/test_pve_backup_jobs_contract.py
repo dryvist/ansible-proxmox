@@ -11,7 +11,7 @@ DEFAULTS = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
 MAIN = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
 TASK_TEXT = "\n".join(path.read_text() for path in sorted((ROLE / "tasks").glob("*.yml")))
 RECONCILE = (ROLE / "tasks/reconcile.yml").read_text()
-INVENTORY = yaml.safe_load((ROOT / "inventory/group_vars/proxmox.yml").read_text())
+INVENTORY = yaml.safe_load((ROOT / "inventory/group_vars/proxmox/01-storage.yml").read_text())
 JOBS = INVENTORY["pve_backup_jobs_jobs"]
 
 def walk(tasks):

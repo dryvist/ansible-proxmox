@@ -86,7 +86,7 @@ kernel_tuning_cpu_governor: performance
 # false green by construction, so the pool is now resolved, not asserted.
 
 # The storage id -> ZFS dataset root map used below is
-# `pve_dataset_root_by_storage`, defined once in inventory/group_vars/proxmox.yml
+# `pve_dataset_root_by_storage`, defined once in inventory/group_vars/proxmox/
 # and resolved per host from that node's own zfs_pools_from_tofu. It used to be
 # defined here; a second node needed the same map, and a copy would have been a
 # second definition of the very thing that must not drift.

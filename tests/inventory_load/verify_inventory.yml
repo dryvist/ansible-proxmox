@@ -69,7 +69,7 @@
           - hostvars['pve-w1700'].pve_repositories_apt_proxies
             == hostvars['localhost'].tofu_data.cache_proxy_urls.apt_cache
         fail_msg: >-
-          group_vars/proxmox.yml did not propagate the shared APT cache URL
+          group_vars/proxmox/ did not propagate the shared APT cache URL
           list from the published inventory.
 
     - name: Assert the storage node declares a snapshot policy for the state it holds
