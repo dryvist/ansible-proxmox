@@ -6,6 +6,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 DATASET_TASKS = yaml.safe_load((ROOT / "roles/zfs_pools/tasks/datasets.yml").read_text())
 EXPORT_TASKS = yaml.safe_load((ROOT / "roles/zfs_pools/tasks/nfs_export.yml").read_text())
+PERMISSION_GUARD = [
+    "zfs_dataset.value.nfs_export_permissions | default(none) is not none",
+    "not (ansible_check_mode and zfs_pools_nfs_mounted.stdout | trim != 'yes')",
+]
 
 
 def test_export_permissions_require_a_declared_nfs_export():
@@ -40,7 +44,7 @@ def test_root_squashed_directory_permissions_follow_the_export_restriction():
     )
 
     assert set_export < validate < set_permissions
-    assert EXPORT_TASKS[validate]["when"] == "zfs_dataset.value.nfs_export_permissions | default(none) is not none"
+    assert EXPORT_TASKS[validate]["when"] == PERMISSION_GUARD
     assert all(
         task["check_mode"] is False
         for task in EXPORT_TASKS
@@ -68,4 +72,4 @@ def test_root_squashed_directory_permissions_follow_the_export_restriction():
     assert permissions["owner"] == "{{ zfs_dataset.value.nfs_export_permissions.owner }}"
     assert permissions["group"] == "{{ zfs_dataset.value.nfs_export_permissions.group }}"
     assert permissions["mode"] == "{{ zfs_dataset.value.nfs_export_permissions.mode }}"
-    assert EXPORT_TASKS[set_permissions]["when"] == "zfs_dataset.value.nfs_export_permissions | default(none) is not none"
+    assert EXPORT_TASKS[set_permissions]["when"] == PERMISSION_GUARD

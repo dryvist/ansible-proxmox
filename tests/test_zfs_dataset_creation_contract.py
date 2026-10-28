@@ -38,3 +38,18 @@ def test_check_mode_skips_per_dataset_steps_for_pending_datasets():
 
     for prefix in ("Apply per-dataset properties", "Apply NFS exports", "Register datasets as Proxmox"):
         assert GUARD in _task(prefix)["when"]
+
+
+def test_check_mode_skips_nfs_permissions_until_the_dataset_is_mounted():
+    nfs_tasks = yaml.safe_load((ROOT / "roles/zfs_pools/tasks/nfs_export.yml").read_text())
+    unmounted = "not (ansible_check_mode and zfs_pools_nfs_mounted.stdout | trim != 'yes')"
+    guarded = [task["name"] for task in nfs_tasks if unmounted in (task.get("when") or [])]
+    assert [name.split(" for ")[0].split(" on ")[0] for name in guarded] == [
+        "Inspect the dataset mountpoint",
+        "Validate NFS export permissions",
+        "Set the dataset root directory permissions",
+    ]
+    guard = Environment().compile_expression(unmounted)
+    assert guard(ansible_check_mode=True, zfs_pools_nfs_mounted={"stdout": "no"}) is False
+    assert guard(ansible_check_mode=False, zfs_pools_nfs_mounted={"stdout": "no"}) is True
+    assert guard(ansible_check_mode=True, zfs_pools_nfs_mounted={"stdout": "yes\n"}) is True
