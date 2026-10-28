@@ -3,9 +3,9 @@
 pve_host_network_uplink: nic0
 pve_host_network_uplink_mac: "d0:94:66:3e:ae:81"
 
-# Host vars for the replacement storage node — now the primary home for
-# persistent application state and the database dump archive, and the source
-# the DR leg pulls from.
+# Host vars for the replacement storage node — the primary home for persistent
+# application state and the database dump archive. The other server pulls this
+# node's selected data, and this node pulls the other server's primary data.
 #
 # The migration-window guard that kept snapshots off here is removed. It was
 # correct while this node held nothing; it is not correct now that the node
@@ -54,11 +54,31 @@ sanoid_datasets: >-
        'bulk/object/subvol-' ~ object_store_vmid ~ '-disk-1': {'use_template': 'critical'}
      } }}
 
-# This node is a replication SOURCE, not a target: the DR leg pulls from it, so
-# it runs no pull jobs of its own. Kept declared (rather than omitted) so the
-# role reconciles any leftover schedule to absent.
+# This node pulls selected primary datasets from the other server. Keep the
+# default group at the same four-hour cadence as the existing server pulls.
 syncoid_enabled: true
-syncoid_jobs: []
+syncoid_trigger: cron
+syncoid_cron_hour: "*/4"
+syncoid_jobs:
+  - name: rpool-data
+    source: "root@pve-r710:rpool/data"
+    target: "bulk/replica/pve-r710/rpool/data"
+  - name: backups
+    source: "root@pve-r710:bulk/backups"
+    target: "bulk/replica/pve-r710/backups"
+  - name: databases
+    source: "root@pve-r710:bulk/databases"
+    target: "bulk/replica/pve-r710/databases"
+  - name: jdrive
+    source: "root@pve-r710:bulk/jdrive"
+    target: "bulk/replica/pve-r710/jdrive"
+  - name: timemachine
+    source: "root@pve-r710:bulk/timemachine"
+    target: "bulk/replica/pve-r710/timemachine"
+
+# Prune received autosnap snapshots on replica targets, matching the retention
+# policy already enabled on the other server.
+sanoid_replica_retention_enabled: true
 
 # Postgres dump archive pull (postgres_standby role, docs/DATABASE_DR_STANDARD.md).
 # Mirrors each source guest's pg-backup directory into the bulk/databases
