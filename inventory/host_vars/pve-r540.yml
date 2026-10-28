@@ -38,6 +38,11 @@ sanoid_timer_enabled: true
 #   and the bucket other backups are written into. Its dataset path is derived
 #   from the published inventory rather than written out, so a renumbered VMID
 #   or a relocated guest flows through with no edit here.
+# - bulk and rpool/data: every guest disk on either pool, recursive with the
+#   shorter `rpool_guest` retention, as the other server does for its rpool/data.
+#   The other server pulls these disks, and with no snapshot here it has nothing
+#   to send. The explicit entries above and the derived replica entries override
+#   this for their own datasets.
 #
 # Built as an expression because one key is derived; same idiom as the splunk
 # and postgres datasets on the always-on node.
@@ -49,6 +54,8 @@ object_store_vmid: >-
 
 sanoid_datasets: >-
   {{ {
+       'bulk': {'use_template': 'rpool_guest', 'recursive': 'yes'},
+       'rpool/data': {'use_template': 'rpool_guest', 'recursive': 'yes'},
        'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24},
        'bulk/appdata': {'use_template': 'critical', 'recursive': 'yes'},
        'bulk/home-videos': {'use_template': 'critical', 'recursive': 'yes'},

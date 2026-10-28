@@ -82,6 +82,10 @@
           - hostvars['pve-r540'].sanoid_datasets['bulk/appdata'].recursive == 'yes'
           - "'bulk/home-videos' in hostvars['pve-r540'].sanoid_datasets"
           - "'bulk/object/subvol-902000-disk-1' in hostvars['pve-r540'].sanoid_datasets"
+          - hostvars['pve-r540'].sanoid_datasets['bulk'].recursive == 'yes'
+          - hostvars['pve-r540'].sanoid_datasets['rpool/data'].use_template == 'rpool_guest'
+          - hostvars['pve-r540'].sanoid_datasets['rpool/data'].recursive == 'yes'
+          - "'rpool-data' in hostvars['pve-r710'].syncoid_jobs | map(attribute='name') | list"
         fail_msg: >-
           The storage node holds live application state and the dump archive, so
           it must declare a sanoid policy for both. syncoid runs --no-sync-snap:
