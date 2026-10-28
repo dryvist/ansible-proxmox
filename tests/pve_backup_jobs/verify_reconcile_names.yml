@@ -1,0 +1,259 @@
+---
+# Pin names-based reconcile without a live cluster: the pvesh stub serves the
+# fixture jobs and records commands from the role's own reconcile.yml.
+# Run: ansible-playbook tests/pve_backup_jobs/verify_reconcile_names.yml -i localhost, -c local
+- name: Verify pve_backup_jobs names reconcile command construction
+  hosts: localhost
+  become: false
+  gather_facts: false
+  environment:
+    PATH: "/tmp/pve-backup-jobs-fixture:{{ ansible_env.PATH | default('/usr/bin:/bin') }}"
+  vars:
+    pve_backup_jobs_stub_dir: /tmp/pve-backup-jobs-fixture
+    pve_backup_jobs_default_mode: snapshot
+    pve_backup_jobs_default_compress: zstd
+    pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
+    pve_backup_jobs_prune_unmanaged: true
+    pve_backup_jobs_tofu_guest_map:
+      fixture-app-1:
+        vmid: 4241
+      fixture-app-2:
+        vmid: 4242
+    pve_backup_jobs_jobs:
+      - id: fixture-to-names
+        names: [fixture-app-1]
+        node: fixture-node-a
+        storage: fixture-backup-store
+        schedule: "07:00"
+        enabled: false
+      - id: fixture-from-all-to-names
+        names: [fixture-app-2]
+        node: fixture-node-b
+        storage: fixture-backup-store
+        schedule: "07:30"
+        enabled: false
+      - id: fixture-to-all
+        all: true
+        node: fixture-node-c
+        storage: fixture-backup-store
+        schedule: "08:00"
+        enabled: false
+      - id: fixture-names-insync
+        names: [fixture-app-2, fixture-app-1]
+        node: fixture-node-order
+        storage: fixture-backup-store
+        schedule: "08:30"
+        enabled: false
+        prune: keep-daily=3
+      - id: fixture-names-create
+        names: [fixture-app-2, fixture-app-1]
+        node: fixture-node-names
+        storage: fixture-backup-store
+        schedule: "09:00"
+        enabled: false
+        mode: stop
+    pve_backup_jobs_fixture_state:
+      - id: fixture-to-names
+        type: vzdump
+        pool: fixture-pool-old
+        node: fixture-node-a
+        storage: fixture-backup-store
+        schedule: "07:00"
+        enabled: "0"
+        exclude: "4244"
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-from-all-to-names
+        type: vzdump
+        all: 1
+        node: fixture-node-b
+        storage: fixture-backup-store
+        schedule: "07:30"
+        enabled: "0"
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-to-all
+        type: vzdump
+        vmid: "4242,4241"
+        node: fixture-node-c
+        storage: fixture-backup-store
+        schedule: "08:00"
+        enabled: "0"
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-names-insync
+        type: vzdump
+        vmid: "4242,4241"
+        node: fixture-node-order
+        storage: fixture-backup-store
+        schedule: "08:30"
+        enabled: "0"
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: 3}
+    pve_backup_jobs_fixture_state_after_create:
+      - id: fixture-to-names
+        type: vzdump
+        vmid: "4241"
+        node: fixture-node-a
+        storage: fixture-backup-store
+        schedule: "07:00"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-from-all-to-names
+        type: vzdump
+        vmid: "4242"
+        node: fixture-node-b
+        storage: fixture-backup-store
+        schedule: "07:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-to-all
+        type: vzdump
+        all: 1
+        node: fixture-node-c
+        storage: fixture-backup-store
+        schedule: "08:00"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-names-insync
+        type: vzdump
+        vmid: "4242,4241"
+        node: fixture-node-order
+        storage: fixture-backup-store
+        schedule: "08:30"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: 3}
+      - id: fixture-names-create
+        type: vzdump
+        vmid: "4241,4242"
+        node: fixture-node-names
+        storage: fixture-backup-store
+        schedule: "09:00"
+        enabled: 0
+        mode: stop
+        compress: zstd
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+
+  tasks:
+    - name: Create the stub directory
+      ansible.builtin.file:
+        path: "{{ pve_backup_jobs_stub_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Write the fixture job set the stub serves
+      ansible.builtin.copy:
+        content: "{{ pve_backup_jobs_fixture_state | to_json }}"
+        dest: "{{ pve_backup_jobs_stub_dir }}/state.json"
+        mode: "0644"
+
+    - name: Reset the recorded command log
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+        mode: "0644"
+
+    - name: Install the pvesh stub
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          printf '%s\n' "$*" >> {{ pve_backup_jobs_stub_dir }}/commands.log
+          [ "$1" = get ] && cat {{ pve_backup_jobs_stub_dir }}/state.json
+          exit 0
+        dest: "{{ pve_backup_jobs_stub_dir }}/pvesh"
+        mode: "0755"
+
+    - name: Run the role's own reconcile against the stub
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: reconcile.yml
+
+    - name: Read back the recorded command lines
+      ansible.builtin.slurp:
+        src: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+      register: pve_backup_jobs_command_log
+
+    - name: Assert the names reconcile issued the intended commands
+      ansible.builtin.assert:
+        that:
+          - "'--vmid 4241,4242' in pve_backup_jobs_names_create"
+          - "'--node fixture-node-names' in pve_backup_jobs_names_create"
+          - "'--mode stop' in pve_backup_jobs_names_create"
+          - "'--vmid 4241' in pve_backup_jobs_commands"
+          - "'--delete pool,exclude' in pve_backup_jobs_commands"
+          - "'--delete all' in pve_backup_jobs_commands"
+          - "'--all 1' in pve_backup_jobs_commands"
+          - "'--delete vmid' in pve_backup_jobs_commands"
+          - "'fixture-names-insync' not in pve_backup_jobs_commands"
+          - "'create /cluster/backup --id fixture-names-create' in pve_backup_jobs_commands"
+        fail_msg: |
+          Reconcile issued the wrong names commands.
+          {{ pve_backup_jobs_commands }}
+        success_msg: "PASS: names reconcile translates, creates, and preserves selector jobs"
+        quiet: false
+      vars:
+        pve_backup_jobs_commands: "{{ pve_backup_jobs_command_log.content | b64decode }}"
+        pve_backup_jobs_names_create: >-
+          {{ pve_backup_jobs_commands.splitlines()
+             | select('search', 'create /cluster/backup --id fixture-names-create')
+             | first | default('') }}
+
+    - name: Write back the names jobs created by the first converge
+      ansible.builtin.copy:
+        content: "{{ pve_backup_jobs_fixture_state_after_create | to_json }}"
+        dest: "{{ pve_backup_jobs_stub_dir }}/state.json"
+        mode: "0644"
+
+    - name: Reset the command log for the second converge
+      ansible.builtin.copy:
+        content: ""
+        dest: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+        mode: "0644"
+
+    - name: Run a second reconcile after reading back the names jobs
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: reconcile.yml
+
+    - name: Read back the second converge command lines
+      ansible.builtin.slurp:
+        src: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+      register: pve_backup_jobs_second_command_log
+
+    - name: Assert names jobs are in sync on the second converge
+      ansible.builtin.assert:
+        that:
+          - pve_backup_jobs_second_commands | trim == 'get /cluster/backup --output-format json'
+        fail_msg: >-
+          Second converge should only read the current jobs, got:
+          {{ pve_backup_jobs_second_commands }}
+        success_msg: "PASS: names jobs are in sync after creation"
+        quiet: false
+      vars:
+        pve_backup_jobs_second_commands: "{{ pve_backup_jobs_second_command_log.content | b64decode }}"
+
+    - name: Remove the stub directory
+      ansible.builtin.file:
+        path: "{{ pve_backup_jobs_stub_dir }}"
+        state: absent

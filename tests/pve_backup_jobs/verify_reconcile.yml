@@ -26,10 +26,6 @@
     pve_backup_jobs_tofu_guest_map:
       fixture-splunk:
         vmid: 4244
-      fixture-app-1:
-        vmid: 4241
-      fixture-app-2:
-        vmid: 4242
     pve_backup_jobs_jobs:
       # Exists, but selects a guest id — the conversion case.
       - id: fixture-convert
@@ -67,43 +63,6 @@
         storage: fixture-backup-store
         schedule: "05:45"
         enabled: false
-      # Existing pool selection becomes a VMID list resolved from names.
-      - id: fixture-to-names
-        names: [fixture-app-1]
-        node: fixture-node-a
-        storage: fixture-backup-store
-        schedule: "07:00"
-        enabled: false
-      # Existing all selection becomes a VMID list resolved from names.
-      - id: fixture-from-all-to-names
-        names: [fixture-app-2]
-        node: fixture-node-b
-        storage: fixture-backup-store
-        schedule: "07:30"
-        enabled: false
-      # Existing VMID selection becomes all-node selection.
-      - id: fixture-to-all
-        all: true
-        node: fixture-node-c
-        storage: fixture-backup-store
-        schedule: "08:00"
-        enabled: false
-      # The live VMIDs are deliberately reversed; an unchanged set must not churn.
-      - id: fixture-names-insync
-        names: [fixture-app-2, fixture-app-1]
-        node: fixture-node-order
-        storage: fixture-backup-store
-        schedule: "08:30"
-        enabled: false
-        prune: keep-daily=3
-      # New names-based job, with a pinned node and stop mode.
-      - id: fixture-names-create
-        names: [fixture-app-2, fixture-app-1]
-        node: fixture-node-names
-        storage: fixture-backup-store
-        schedule: "09:00"
-        enabled: false
-        mode: stop
     # Serves as `pvesh get /cluster/backup`. `fixture-orphan` models the job
     # left behind after the node it named left the cluster.
     pve_backup_jobs_fixture_state:
@@ -151,51 +110,6 @@
         compress: zstd
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
-      - id: fixture-to-names
-        type: vzdump
-        pool: fixture-pool-old
-        node: fixture-node-a
-        storage: fixture-backup-store
-        schedule: "07:00"
-        enabled: "0"
-        exclude: "4244"
-        mode: snapshot
-        compress: zstd
-        comment: ""
-        prune-backups: {keep-daily: "7", keep-weekly: "4"}
-      - id: fixture-from-all-to-names
-        type: vzdump
-        all: 1
-        node: fixture-node-b
-        storage: fixture-backup-store
-        schedule: "07:30"
-        enabled: "0"
-        mode: snapshot
-        compress: zstd
-        comment: ""
-        prune-backups: {keep-daily: "7", keep-weekly: "4"}
-      - id: fixture-to-all
-        type: vzdump
-        vmid: "4242,4241"
-        node: fixture-node-c
-        storage: fixture-backup-store
-        schedule: "08:00"
-        enabled: "0"
-        mode: snapshot
-        compress: zstd
-        comment: ""
-        prune-backups: {keep-daily: "7", keep-weekly: "4"}
-      - id: fixture-names-insync
-        type: vzdump
-        vmid: "4242,4241"
-        node: fixture-node-order
-        storage: fixture-backup-store
-        schedule: "08:30"
-        enabled: "0"
-        mode: snapshot
-        compress: zstd
-        comment: ""
-        prune-backups: {keep-daily: 3}
     # The state after the first converge: selector jobs are reconciled and the
     # undeclared orphan has been removed.
     pve_backup_jobs_fixture_state_after_create:
@@ -251,61 +165,6 @@
         schedule: "05:45"
         enabled: 0
         mode: snapshot
-        compress: zstd
-        comment: ""
-        prune-backups: {keep-daily: "7", keep-weekly: "4"}
-      - id: fixture-to-names
-        type: vzdump
-        vmid: "4241"
-        node: fixture-node-a
-        storage: fixture-backup-store
-        schedule: "07:00"
-        enabled: 0
-        mode: snapshot
-        compress: zstd
-        comment: ""
-        prune-backups: {keep-daily: "7", keep-weekly: "4"}
-      - id: fixture-from-all-to-names
-        type: vzdump
-        vmid: "4242"
-        node: fixture-node-b
-        storage: fixture-backup-store
-        schedule: "07:30"
-        enabled: 0
-        mode: snapshot
-        compress: zstd
-        comment: ""
-        prune-backups: {keep-daily: "7", keep-weekly: "4"}
-      - id: fixture-to-all
-        type: vzdump
-        all: 1
-        node: fixture-node-c
-        storage: fixture-backup-store
-        schedule: "08:00"
-        enabled: 0
-        mode: snapshot
-        compress: zstd
-        comment: ""
-        prune-backups: {keep-daily: "7", keep-weekly: "4"}
-      - id: fixture-names-insync
-        type: vzdump
-        vmid: "4242,4241"
-        node: fixture-node-order
-        storage: fixture-backup-store
-        schedule: "08:30"
-        enabled: 0
-        mode: snapshot
-        compress: zstd
-        comment: ""
-        prune-backups: {keep-daily: 3}
-      - id: fixture-names-create
-        type: vzdump
-        vmid: "4241,4242"
-        node: fixture-node-names
-        storage: fixture-backup-store
-        schedule: "09:00"
-        enabled: 0
-        mode: stop
         compress: zstd
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
@@ -365,19 +224,6 @@
           - "'--delete node' in pve_backup_jobs_commands"
           - "'--node fixture-node-b' in pve_backup_jobs_commands"
           - "'--exclude 4244' in pve_backup_jobs_new_create"
-          # Guest names resolve to current VMIDs for a node-pinned stop job.
-          - "'--vmid 4241,4242' in pve_backup_jobs_names_create"
-          - "'--node fixture-node-names' in pve_backup_jobs_names_create"
-          - "'--mode stop' in pve_backup_jobs_names_create"
-          # Changing from pool/all to names clears the old selectors and exclusions.
-          - "'--vmid 4241' in pve_backup_jobs_commands"
-          - "'--delete pool,exclude' in pve_backup_jobs_commands"
-          - "'--delete all' in pve_backup_jobs_commands"
-          # Changing back to all clears the old VMID list.
-          - "'--all 1' in pve_backup_jobs_commands"
-          - "'--delete vmid' in pve_backup_jobs_commands"
-          # Reversed live VMID order is still in sync.
-          - "'fixture-names-insync' not in pve_backup_jobs_commands"
           # The create: carries an explicit id so the job is addressable by the
           # declaration afterwards rather than by a generated UUID.
           - "'create /cluster/backup --id fixture-new' in pve_backup_jobs_commands"
@@ -407,10 +253,6 @@
         pve_backup_jobs_all_create: >-
           {{ pve_backup_jobs_commands.splitlines()
              | select('search', 'create /cluster/backup --id fixture-all')
-             | first | default('') }}
-        pve_backup_jobs_names_create: >-
-          {{ pve_backup_jobs_commands.splitlines()
-             | select('search', 'create /cluster/backup --id fixture-names-create')
              | first | default('') }}
 
     - name: Write back the jobs created by the first converge

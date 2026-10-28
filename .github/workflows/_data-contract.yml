@@ -117,20 +117,32 @@ jobs:
           ansible-playbook tests/pve_ha_datacenter_cfg/verify_shutdown_policy.yml -i localhost, -c local
 
       # A backup job's declaration guard is only worth having if it fires. Both
-      # playbooks run the role's OWN task files — the guard against fixtures it
-      # must refuse, the reconcile against a stubbed pvesh — so neither can pass
-      # against a stale copy, and neither reaches a cluster.
+      # declaration and reconcile playbooks run the role's OWN task files — the
+      # guard against fixtures it must refuse, reconcile against stubbed pvesh
+      # — so they cannot pass against a stale copy or reach a cluster.
       - name: Verify pve_backup_jobs declaration guard
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_backup_jobs/verify_declaration.yml -i localhost, -c local
 
+      - name: Verify pve_backup_jobs names declaration guard
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_backup_jobs/verify_declaration_names.yml -i localhost, -c local
+
       - name: Verify pve_backup_jobs reconcile command construction
         run: |
           mkdir -p /tmp/ansible-tmp
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/pve_backup_jobs/verify_reconcile.yml -i localhost, -c local
+
+      - name: Verify pve_backup_jobs names reconcile command construction
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/pve_backup_jobs/verify_reconcile_names.yml -i localhost, -c local
 
       # An assert conditional containing ": " unquoted parses as a mapping, so
       # the task errors instead of evaluating. ansible-lint's production
