@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.37.0](https://github.com/dryvist/ansible-proxmox/compare/v2.36.0...v2.37.0) (2026-10-28)
+
+
+### Features
+
+* **hardware_facts:** add a read-only, parameterized hardware facts playbook ([#1180](https://github.com/dryvist/ansible-proxmox/issues/1180)) ([6cae816](https://github.com/dryvist/ansible-proxmox/commit/6cae816d27ab7e9e7160e76736f3e059068e623d))
+* **inventory:** enable host-admin login on pve-r540 and pve-w1700 ([695c7f1](https://github.com/dryvist/ansible-proxmox/commit/695c7f1524e14f6cbd58abe4d4a4393b9fe703b5))
+* **inventory:** enable host-admin login on pve-r710 ([#1186](https://github.com/dryvist/ansible-proxmox/issues/1186)) ([d643f37](https://github.com/dryvist/ansible-proxmox/commit/d643f37f73b4ea4ddae8a38c3129e5f705237008))
+* **inventory:** enable host-admin login on two more nodes ([#1183](https://github.com/dryvist/ansible-proxmox/issues/1183)) ([695c7f1](https://github.com/dryvist/ansible-proxmox/commit/695c7f1524e14f6cbd58abe4d4a4393b9fe703b5))
+* **local_identities:** add the read-only ai-diag account for trusted AI sessions ([#1181](https://github.com/dryvist/ansible-proxmox/issues/1181)) ([59699c3](https://github.com/dryvist/ansible-proxmox/commit/59699c34d333d35f7bb59cab7547b70099dd3357))
+* **pve_backup_jobs:** back up guests to a PBS storage per node ([#1189](https://github.com/dryvist/ansible-proxmox/issues/1189)) ([a4e00d0](https://github.com/dryvist/ansible-proxmox/commit/a4e00d07b4c51bab0c73a312cdd0ded9a4515ccb))
+* **pve_backup_jobs:** enable the guests-pve-w5900 backup job ([#1201](https://github.com/dryvist/ansible-proxmox/issues/1201)) ([9644e58](https://github.com/dryvist/ansible-proxmox/commit/9644e582c1b63baeba41fa595c805f36b530378c))
+* **pve_backup_jobs:** manage the PBS storage and jobs ([#1192](https://github.com/dryvist/ansible-proxmox/issues/1192)) ([cb194eb](https://github.com/dryvist/ansible-proxmox/commit/cb194eb320a408eeae5e9d33dbefff4da659ed28))
+* **pve_backup_jobs:** name exclusions, UTC window schedules and an upgrade vzdump wait ([#1203](https://github.com/dryvist/ansible-proxmox/issues/1203)) ([4fe0608](https://github.com/dryvist/ansible-proxmox/commit/4fe0608c4bc68d9394f9320c80360640b91edf4e))
+* **pve_host_network:** render extra routed interfaces ([#1185](https://github.com/dryvist/ansible-proxmox/issues/1185)) ([5113e33](https://github.com/dryvist/ansible-proxmox/commit/5113e33ef838f6908b525233bd5f12fb130aaa1c))
+* **pve_lxc_datastore_mount:** bind-mount host datasets into LXCs as root ([#1190](https://github.com/dryvist/ansible-proxmox/issues/1190)) ([10bfae6](https://github.com/dryvist/ansible-proxmox/commit/10bfae649b09922f140d855862dcb254c86da560))
+* **sanoid:** snapshot and replicate home videos, photos and music ([#1210](https://github.com/dryvist/ansible-proxmox/issues/1210)) ([588f80d](https://github.com/dryvist/ansible-proxmox/commit/588f80d04efc1ab74c89e6ca7f1c8947f0202a33))
+* **ssh_ca_trust:** push client-CA trust into SSH-reached VMs via the guest agent ([#1178](https://github.com/dryvist/ansible-proxmox/issues/1178)) ([c471120](https://github.com/dryvist/ansible-proxmox/commit/c47112097057398d2a80f0aa8d5e638a67834e63))
+* **syncoid:** pull the DR server's primary datasets onto the storage server ([#1207](https://github.com/dryvist/ansible-proxmox/issues/1207)) ([d9fc95f](https://github.com/dryvist/ansible-proxmox/commit/d9fc95f7bb2aaa5b7e339106a1c09c2801992e61))
+* **zfs_pools:** cap guest and app-state datasets with quotas ([#1206](https://github.com/dryvist/ansible-proxmox/issues/1206)) ([4fc2e32](https://github.com/dryvist/ansible-proxmox/commit/4fc2e323c929f1dd10476c0ee8f9442e165b656b))
+* **zfs_pools:** cap rpool guest data on pve-r540 ([#1187](https://github.com/dryvist/ansible-proxmox/issues/1187)) ([cdf7213](https://github.com/dryvist/ansible-proxmox/commit/cdf72138d84d54fb5a755a62f2041a8262818752))
+* **zfs-metrics:** expose bounded dataset space accounting ([#1169](https://github.com/dryvist/ansible-proxmox/issues/1169)) ([f864487](https://github.com/dryvist/ansible-proxmox/commit/f864487c7dd5fcdb529b49fc99d6f4624f0ad53c))
+
+
+### Bug Fixes
+
+* disable BMC console targets by default ([#1172](https://github.com/dryvist/ansible-proxmox/issues/1172)) ([f82b258](https://github.com/dryvist/ansible-proxmox/commit/f82b258f698f4fb4692060563ce364a517f9fd35))
+* **hardware_facts:** load the OpenTofu inventory before the hardware facts play ([#1188](https://github.com/dryvist/ansible-proxmox/issues/1188)) ([73a3501](https://github.com/dryvist/ansible-proxmox/commit/73a3501ecd5b474cf15b2d0efdbf360ef667c509))
+* **idrac_power:** pass the BMC password to ipmitool through the environment ([#1170](https://github.com/dryvist/ansible-proxmox/issues/1170)) ([eb5ca12](https://github.com/dryvist/ansible-proxmox/commit/eb5ca12d20eeaa74a98c563ef6d58ff8c1cb719d))
+* **inventory:** follow the object-store volume to bulk/object ([#1204](https://github.com/dryvist/ansible-proxmox/issues/1204)) ([c0bf704](https://github.com/dryvist/ansible-proxmox/commit/c0bf704b424e0e01b9c8b97f52524947536b5830))
+* **local_identities:** drop the BMC network read from the diagnostics allowlist ([#1182](https://github.com/dryvist/ansible-proxmox/issues/1182)) ([4a2e875](https://github.com/dryvist/ansible-proxmox/commit/4a2e8756497b35d639a3f610dc5a03e5b1823fa0))
+* pin Ansible dependencies and track Molecule images ([52b790c](https://github.com/dryvist/ansible-proxmox/commit/52b790c8a09d54796e9179566ec3e84b1dd6abf7))
+* **proxmox_monitoring:** add capacity hysteresis ([#1171](https://github.com/dryvist/ansible-proxmox/issues/1171)) ([1443d24](https://github.com/dryvist/ansible-proxmox/commit/1443d249e577c32421e133212fc9e902f4413282))
+* **pve_backup_jobs:** create the PBS storage disabled and enable it after the password file ([#1197](https://github.com/dryvist/ansible-proxmox/issues/1197)) ([b6de4dc](https://github.com/dryvist/ansible-proxmox/commit/b6de4dc5c3df6bf5161dc40267f9d30ae4519221))
+* **pve_backup_jobs:** create the PVE storage secrets directory before the password write ([#1198](https://github.com/dryvist/ansible-proxmox/issues/1198)) ([2bd25d8](https://github.com/dryvist/ansible-proxmox/commit/2bd25d8a4b203417ace3cc93837cf22451511541))
+* **pve_backup_jobs:** define the PBS storage with pvesh and the PVE password file ([#1196](https://github.com/dryvist/ansible-proxmox/issues/1196)) ([b2a48fb](https://github.com/dryvist/ansible-proxmox/commit/b2a48fb214afd53ccdd0a42094cab3402120c2ab))
+* **pve_backup_jobs:** disable the guests-pve-w5900 backup job ([#1202](https://github.com/dryvist/ansible-proxmox/issues/1202)) ([7d1cdb7](https://github.com/dryvist/ansible-proxmox/commit/7d1cdb7160d824511f788cc1e8f39c00601c2107))
+* **pve_backup_jobs:** install python3-proxmoxer before the storage module runs ([#1194](https://github.com/dryvist/ansible-proxmox/issues/1194)) ([35750d5](https://github.com/dryvist/ansible-proxmox/commit/35750d5dcd909baecf9395ebfbfd5e494457670c))
+* **pve_backup_jobs:** reconcile the PBS storage through the PVE API without proxmoxer ([#1195](https://github.com/dryvist/ansible-proxmox/issues/1195)) ([fcdbd02](https://github.com/dryvist/ansible-proxmox/commit/fcdbd02b0103262dcf0db6170e94b7f57e541d76))
+* **pve_backup_jobs:** write the PBS password file in place on pmxcfs ([#1199](https://github.com/dryvist/ansible-proxmox/issues/1199)) ([0e96ad0](https://github.com/dryvist/ansible-proxmox/commit/0e96ad0499715fd907ad655269868e27104bff91))
+* **pve_backup_jobs:** write the PBS password file with dd from stdin on pmxcfs ([#1200](https://github.com/dryvist/ansible-proxmox/issues/1200)) ([d2766e6](https://github.com/dryvist/ansible-proxmox/commit/d2766e605e5628a699bc4e37bdf2b6faabc0038c))
+* refresh workflow dependencies from requirements.yml ([dcd3d63](https://github.com/dryvist/ansible-proxmox/commit/dcd3d6315834cd38dd9b8275a820cdf04c459e1e))
+* **sanoid:** snapshot every storage-node guest disk and pull its rpool/data ([#1212](https://github.com/dryvist/ansible-proxmox/issues/1212)) ([692347a](https://github.com/dryvist/ansible-proxmox/commit/692347a426d47b61de7732e44f11103153495126))
+* scrub bulk-nobackup off-peak and use current storage names in docs ([#1205](https://github.com/dryvist/ansible-proxmox/issues/1205)) ([f82e42b](https://github.com/dryvist/ansible-proxmox/commit/f82e42bc1560d36543d28c84c53009169daf8843))
+* **ssh_ca_trust:** resolve the VM host-certificate name with regex_findall ([#1179](https://github.com/dryvist/ansible-proxmox/issues/1179)) ([7f8e140](https://github.com/dryvist/ansible-proxmox/commit/7f8e1401d3e86b5967cdd6f8f0d2ba4f336df67c))
+* track Git dependency releases in Renovate ([#1173](https://github.com/dryvist/ansible-proxmox/issues/1173)) ([dc5524f](https://github.com/dryvist/ansible-proxmox/commit/dc5524f6abca2fa170e1920e9e99bd01cd285304))
+* track pinned Ansible dependencies and Molecule images ([#1174](https://github.com/dryvist/ansible-proxmox/issues/1174)) ([52b790c](https://github.com/dryvist/ansible-proxmox/commit/52b790c8a09d54796e9179566ec3e84b1dd6abf7))
+* use the shared Molecule workflow ([660fc3e](https://github.com/dryvist/ansible-proxmox/commit/660fc3e0522a3099987579c8609d62b282e2231e))
+
 ## [2.36.0](https://github.com/dryvist/ansible-proxmox/compare/v2.35.0...v2.36.0) (2026-10-21)
 
 
