@@ -14,6 +14,5 @@ provisioner:
     group_vars:
       all:
         # Override defaults for testing environment
-        zfs_swap_size: "1G"
         common_packages:
           - htop

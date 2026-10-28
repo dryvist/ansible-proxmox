@@ -45,9 +45,9 @@
       tags:
         - ulimits
 
-    - role: zfs_swap
+    - role: swap
       tags:
-        - zfs_swap
+        - swap
 
     - role: lxc_features
       tags:

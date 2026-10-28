@@ -1,7 +1,0 @@
----
-# ZFS Swap role defaults
-
-zfs_swap_size: "96G"
-zfs_swap_pool: "rpool"
-zfs_swap_dataset: "swap"
-zfs_swap_device: "/dev/zvol/{{ zfs_swap_pool }}/{{ zfs_swap_dataset }}"

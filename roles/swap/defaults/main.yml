@@ -1,0 +1,5 @@
+---
+# zram size expression in MiB (zram-generator.conf(5)), derived from RAM.
+swap_zram_size: "min(ram / 4, 16384)"
+swap_zram_compression_algorithm: zstd
+swap_zram_priority: 100

@@ -105,11 +105,6 @@ proxmox_node_names:
   # time, so more or fewer than one here means the inventory artifact is stale.
   storage: "{{ proxmox_node_storage_candidates | reject('equalto', '') | list | first }}"
 
-# ZFS Swap Configuration
-zfs_swap_size: "96G"
-zfs_swap_pool: "rpool"
-zfs_swap_dataset: "swap"
-
 # Kernel Tuning - Sysctl
 kernel_tuning_swappiness: 10
 kernel_tuning_vfs_cache_pressure: 50
