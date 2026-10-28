@@ -109,6 +109,8 @@ postgres_standby_jobs: >-
 # tofu contract. ponytail: literal vmid, re-derive from vms_from_tofu if a
 # second guest ever needs the same override.
 zfs_pools_vm_disk_properties:
+  bulk/appdata:
+    quota: "200G"
   bulk/vm-915100-disk-1:
     sync: disabled
   # Proxmox's install-time local-zfs storage points at this existing dataset;
