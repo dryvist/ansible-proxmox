@@ -1,0 +1,58 @@
+---
+# The run log always carries each host's report. `artifact` also writes one
+# controller-side JSON file covering the play's hosts.
+- name: Show this host's hardware report
+  ansible.builtin.debug:
+    var: hardware_facts_report
+
+# The artifact is rewritten whole, so a limited run would drop every untargeted host
+# from it. ansible_play_hosts_all is who the play TARGETED, not who survived it, for
+# the same reason pve_disk_inventory uses it: an unreachable host must not look like a limit.
+- name: Refuse to write a partial artifact
+  ansible.builtin.assert:
+    that:
+      - (ansible_play_hosts_all | length) >= (groups.get(hardware_facts_group, []) | length)
+    fail_msg: >-
+      This play targeted {{ ansible_play_hosts_all | length }} of
+      {{ groups.get(hardware_facts_group, []) | length }} hosts in '{{ hardware_facts_group }}' --
+      a limited run. The artifact is rewritten whole, so writing it now would drop every
+      untargeted host. Re-run for the whole group, or set hardware_facts_allow_partial=true
+      to write a deliberate partial artifact.
+    quiet: true
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when:
+    - hardware_facts_output == 'artifact'
+    - hardware_facts_group | length > 0
+    - not (hardware_facts_allow_partial | bool)
+
+- name: Ensure the controller artifact directory exists
+  ansible.builtin.file:
+    path: "{{ hardware_facts_artifact | dirname }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: hardware_facts_output == 'artifact'
+
+- name: Write the aggregated hardware artifact
+  ansible.builtin.copy:
+    content: >-
+      {{ {'hosts': ansible_play_hosts
+                   | map('extract', hostvars, 'hardware_facts_report')
+                   | select('defined') | list}
+         | to_nice_json }}
+    dest: "{{ hardware_facts_artifact }}"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: hardware_facts_output == 'artifact'

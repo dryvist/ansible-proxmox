@@ -1,0 +1,24 @@
+---
+# hardware_facts role metadata
+
+galaxy_info:
+  role_name: hardware_facts
+  author: ansible-proxmox
+  description: >-
+    Read-only hardware facts for any inventory host or group: board, CPU,
+    memory, PCI devices, GPUs, disks, power supplies and pools, reported in the
+    run log or written as one controller-side artifact.
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - hardware
+    - inventory
+
+dependencies: []

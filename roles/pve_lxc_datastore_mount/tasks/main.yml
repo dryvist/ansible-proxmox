@@ -1,0 +1,13 @@
+---
+- name: Reconcile each node-declared LXC datastore mount
+  ansible.builtin.include_tasks:
+    file: reconcile_container.yml
+    apply:
+      tags:
+        - pve_lxc_datastore_mount
+  loop: "{{ pve_lxc_datastore_mount_containers | dict2items }}"
+  loop_control:
+    loop_var: pve_lxc_datastore_mount
+    label: "VMID {{ pve_lxc_datastore_mount.key }}"
+  tags:
+    - pve_lxc_datastore_mount

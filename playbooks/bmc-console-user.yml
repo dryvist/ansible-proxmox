@@ -1,0 +1,7 @@
+---
+- name: Reconcile dedicated iDRAC console accounts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - role: bmc_console_user

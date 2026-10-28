@@ -6,7 +6,9 @@ SCRIPT_NAME=pool_fill
 OUTPUT_DIR=${OUTPUT_DIR:-{{ pve_textfile_collectors_textfile_dir | quote }}}
 TIMEOUT=${TIMEOUT:-{{ pve_textfile_collectors_timeout_seconds | quote }}}
 ZPOOL=${ZPOOL:-{{ pve_textfile_collectors_zpool_command | quote }}}
+ZFS=${ZFS:-{{ pve_textfile_collectors_zfs_command | quote }}}
 AWK=${AWK:-{{ pve_textfile_collectors_awk_command | quote }}}
+ZFS_DATASET_INCLUDE_REGEX={{ pve_textfile_collectors_zfs_dataset_include_regexes | join('|') | quote }}
 STARTED=$SECONDS
 SUCCESS=1
 TMP_FILE=${OUTPUT_DIR}/.${SCRIPT_NAME}.$$
@@ -33,6 +35,18 @@ printf '# HELP pve_zpool_frag_percent Fragmentation percentage of a ZFS pool.\n'
 printf '# TYPE pve_zpool_frag_percent gauge\n'
 printf '# HELP pve_zpool_cap_percent Capacity percentage of a ZFS pool.\n'
 printf '# TYPE pve_zpool_cap_percent gauge\n'
+printf '# HELP pve_zfs_dataset_used_bytes Bytes used by a ZFS dataset or volume.\n'
+printf '# TYPE pve_zfs_dataset_used_bytes gauge\n'
+printf '# HELP pve_zfs_dataset_used_by_dataset_bytes Bytes used by a dataset, excluding children, snapshots, and refreservation.\n'
+printf '# TYPE pve_zfs_dataset_used_by_dataset_bytes gauge\n'
+printf '# HELP pve_zfs_dataset_used_by_snapshots_bytes Bytes used by snapshots of a dataset.\n'
+printf '# TYPE pve_zfs_dataset_used_by_snapshots_bytes gauge\n'
+printf '# HELP pve_zfs_dataset_used_by_refreservation_bytes Bytes used to satisfy a dataset refreservation.\n'
+printf '# TYPE pve_zfs_dataset_used_by_refreservation_bytes gauge\n'
+printf '# HELP pve_zfs_dataset_available_bytes Bytes available to a dataset and its children.\n'
+printf '# TYPE pve_zfs_dataset_available_bytes gauge\n'
+printf '# HELP pve_zfs_dataset_growth_threshold_bytes Configured dataset growth alert threshold in bytes.\n'
+printf '# TYPE pve_zfs_dataset_growth_threshold_bytes gauge\n'
 
 if ! POOLS=$(run "$ZPOOL" list -Hp -o name,size,alloc,free,frag,cap); then
   SUCCESS=0
@@ -64,6 +78,25 @@ AWK_PROGRAM_EOF
     printf 'pve_zpool_cap_percent{pool="%s"} %s\n' "$POOL" "$CAP"
   done <<< "$FIELDS"
 fi
+
+printf 'pve_zfs_dataset_growth_threshold_bytes{pool="rpool"} %s\n' \
+  "{{ (pve_textfile_collectors_zfs_growth_threshold_gib | int) * 1073741824 }}"
+
+if ! DATASETS=$(run "$ZFS" list -H -p -t filesystem,volume \
+  -o name,used,usedbydataset,usedbysnapshots,usedbyrefreservation,available); then
+  SUCCESS=0
+  DATASETS=
+fi
+while IFS=$'\t' read -r DATASET USED USED_BY_DATASET USED_BY_SNAPSHOTS USED_BY_REFRESERVATION AVAILABLE; do
+  [ -n "$DATASET" ] || continue
+  [[ "$DATASET" =~ $ZFS_DATASET_INCLUDE_REGEX ]] || continue
+  POOL=${DATASET%%/*}
+  printf 'pve_zfs_dataset_used_bytes{pool="%s",dataset="%s"} %s\n' "$POOL" "$DATASET" "$USED"
+  printf 'pve_zfs_dataset_used_by_dataset_bytes{pool="%s",dataset="%s"} %s\n' "$POOL" "$DATASET" "$USED_BY_DATASET"
+  printf 'pve_zfs_dataset_used_by_snapshots_bytes{pool="%s",dataset="%s"} %s\n' "$POOL" "$DATASET" "$USED_BY_SNAPSHOTS"
+  printf 'pve_zfs_dataset_used_by_refreservation_bytes{pool="%s",dataset="%s"} %s\n' "$POOL" "$DATASET" "$USED_BY_REFRESERVATION"
+  printf 'pve_zfs_dataset_available_bytes{pool="%s",dataset="%s"} %s\n' "$POOL" "$DATASET" "$AVAILABLE"
+done <<< "$DATASETS"
 
 printf 'pve_textfile_success{script="%s"} %s\n' "$SCRIPT_NAME" "$SUCCESS"
 printf 'pve_textfile_duration_seconds{script="%s"} %s\n' "$SCRIPT_NAME" "$((SECONDS - STARTED))"

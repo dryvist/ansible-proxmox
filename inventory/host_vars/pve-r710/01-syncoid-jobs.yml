@@ -51,7 +51,7 @@ syncoid_jobs:
   # longer runs on fails every cycle while the replica it left behind ages.
   - name: "object-store"
     schedule: hourly
-    source: "root@{{ object_store_node }}:bulk/subvol-{{ object_store_vmid }}-disk-1"
+    source: "root@{{ object_store_node }}:bulk/object/subvol-{{ object_store_vmid }}-disk-1"
     target: "bulk/replica/{{ object_store_node }}/subvol-{{ object_store_vmid }}-disk-1"
   #
   # Database DR: pull the whole bulk/databases namespace off the storage node
@@ -77,6 +77,16 @@ syncoid_jobs:
   - name: "appdata"
     source: "root@{{ proxmox_node_names.storage }}:bulk/appdata"
     target: "bulk/replica/{{ proxmox_node_names.storage }}/appdata"
+  # Personal files (home videos, photos, music): irreplaceable, same pull pattern.
+  - name: "home-videos"
+    source: "root@{{ proxmox_node_names.storage }}:bulk/home-videos"
+    target: "bulk/replica/{{ proxmox_node_names.storage }}/home-videos"
+  - name: "photos"
+    source: "root@{{ proxmox_node_names.storage }}:bulk/photos"
+    target: "bulk/replica/{{ proxmox_node_names.storage }}/photos"
+  - name: "music"
+    source: "root@{{ proxmox_node_names.storage }}:bulk/music"
+    target: "bulk/replica/{{ proxmox_node_names.storage }}/music"
   # Guest service-state volumes on the bulk node. These were replicated until
   # 2026-07-25 and then silently stopped: the guests were REBUILT with new
   # dataset suffixes (disk-0 became disk-1, and so on) and the job list still

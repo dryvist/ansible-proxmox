@@ -1,0 +1,74 @@
+---
+# Read-only hardware facts for any inventory host or group.
+#
+# Everything here is a read: setup facts, `lspci`, `dmidecode`, and (on Proxmox
+# nodes) the same `pvesh` disk list pve_disk_inventory already reads. Nothing is
+# installed, changed or restarted, and by default nothing is written anywhere.
+
+# Which facts to gather. Accepts a list or a comma-separated string (a Semaphore
+# survey value). Empty means every category in hardware_facts_all_categories.
+hardware_facts_categories: []
+hardware_facts_all_categories: [board, cpu, memory, pci, disks, gpus, psu, pools]
+
+# `report` prints each host's facts in the run log and writes nothing.
+# `artifact` also writes ONE controller-side JSON file covering the play's hosts.
+hardware_facts_output: report
+
+# Kept apart from pve_disk_inventory's artifact on purpose: that file is the one a
+# consumer deletes against, and this role must never be able to overwrite it.
+hardware_facts_artifact: "{{ playbook_dir }}/../.artifacts/hardware-facts.json"
+
+# Same limit-guard pattern as pve_disk_inventory. The artifact is rewritten whole,
+# so when a group is named here a run that targeted fewer hosts than that group
+# refuses to write it, unless the caller sets the escape hatch. Empty means no
+# guard, which suits an ad hoc look at one host.
+hardware_facts_group: ""
+hardware_facts_allow_partial: false
+
+# Hosts in this group are disk-inventoried through the Proxmox API, as
+# pve_disk_inventory does; every other host reports `ansible_devices`.
+hardware_facts_proxmox_group: proxmox
+
+# Disk names that are not physical drives: loop, ram, zfs volumes, mapper, optical.
+hardware_facts_disk_ignore_prefixes:
+  - loop
+  - ram
+  - zd
+  - dm-
+  - sr
+  - fd
+  - nbd
+
+# PCI class names `lspci` prints for a display adapter.
+hardware_facts_gpu_classes:
+  - VGA compatible controller
+  - 3D controller
+  - Display controller
+
+# SMBIOS fields kept from `dmidecode` type 17 (memory device) and type 39 (power supply).
+hardware_facts_dmi_memory_fields:
+  - Locator
+  - Size
+  - Type
+  - Speed
+  - Configured Memory Speed
+  - Manufacturer
+  - Part Number
+  - Serial Number
+hardware_facts_dmi_psu_fields:
+  - Name
+  - Location
+  - Status
+  - Max Power Capacity
+  - Manufacturer
+  - Model Part Number
+  - Serial Number
+
+# The shared `lspci` probe (tasks/lspci.yml) is also used by roles that need a hard
+# failure when `lspci` is missing; this role tolerates its absence instead.
+hardware_facts_lspci_tolerate_missing: false
+
+# Optional record filter for tasks/dmi_parse.yml: drop a record whose field has this
+# value (an empty memory slot reports Size "No Module Installed"). Empty keeps all.
+hardware_facts_dmi_skip_key: ""
+hardware_facts_dmi_skip_value: ""

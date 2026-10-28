@@ -12,7 +12,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE_SOURCE = (ROOT / ".github/workflows/ci-gate.yml").read_text()
-MOLECULE = yaml.safe_load((ROOT / ".github/workflows/molecule.yml").read_text())
+CENTRAL_MOLECULE_REF = "JacobPEvans/.github/.github/workflows/_molecule.yml@v1"
 GATE_NODE = yaml.compose(GATE_SOURCE)
 GATE = yaml.safe_load(GATE_SOURCE)
 PROMOTION_PATHS = json.loads(
@@ -38,6 +38,7 @@ class CiScopeContract(unittest.TestCase):
     def test_develop_push_uses_shared_scenario_selection(self):
         molecule = GATE["jobs"]["molecule"]
         self.assertEqual(molecule["needs"], "changes")
+        self.assertEqual(molecule["uses"], CENTRAL_MOLECULE_REF)
         self.assertEqual(
             {clause.strip() for clause in molecule["if"].split("||")},
             {"needs.changes.outputs.molecule == 'true'", "github.event_name == 'push'"},
@@ -45,6 +46,9 @@ class CiScopeContract(unittest.TestCase):
         self.assertIn(
             "needs.changes.outputs.molecule_scenarios", molecule["with"]["scenarios"]
         )
+        self.assertEqual(molecule["with"]["scenario_discovery"], "directories")
+        self.assertIs(molecule["with"]["scenario_require_molecule_yml"], True)
+        self.assertEqual(molecule["with"]["molecule_roles_path"], "roles")
 
         jobs = GATE["jobs"]
         self.assertEqual(set(jobs["gate"]["needs"]), set(jobs) - {"gate"})
@@ -59,26 +63,19 @@ class CiScopeContract(unittest.TestCase):
             allowed_skips,
         )
         self.assertIsNotNone(match)
-        self.assertEqual(match[1], "molecule")
+        self.assertEqual(match[1], "molecule,static-contracts")
 
     def test_only_main_push_requests_full_matrix(self):
         self.assertRegex(
-            GATE["jobs"]["molecule"]["with"]["scenarios"],
-            r"github\.event_name == 'push' && github\.ref == 'refs/heads/main'\s*"
-            r"&&\s*'FULL'",
+            GATE["jobs"]["molecule"]["with"]["full_suite"],
+            r"github\.event_name == 'push'\s*&&\s*github\.ref == 'refs/heads/main'",
         )
-        discover = MOLECULE["jobs"]["discover"]
-        self.assertRegex(
-            discover["outputs"]["scenarios"],
-            r"\(inputs\.scenarios != '' && inputs\.scenarios != 'FULL' && "
-            r"inputs\.scenarios\) \|\| steps\.list\.outputs\.scenarios",
-        )
-        list_all = next(step for step in discover["steps"] if step.get("id") == "list")
-        list_selector = list_all["if"].removeprefix("${{").removesuffix("}}")
-        self.assertEqual(
-            {clause.strip() for clause in list_selector.split("||")},
-            {"inputs.scenarios == ''", "inputs.scenarios == 'FULL'"},
-        )
+        manual = yaml.safe_load((ROOT / ".github/workflows/molecule-dispatch.yml").read_text())
+        self.assertEqual(manual["jobs"]["molecule"]["uses"], CENTRAL_MOLECULE_REF)
+        self.assertIs(manual["jobs"]["molecule"]["with"]["full_suite"], True)
+        upstream = yaml.safe_load((ROOT / ".github/workflows/upstream-revalidate.yml").read_text())
+        self.assertEqual(upstream["jobs"]["revalidate"]["uses"], CENTRAL_MOLECULE_REF)
+        self.assertIs(upstream["jobs"]["revalidate"]["with"]["full_suite"], True)
 
     def test_workflow_changes_have_a_caller_contract(self):
         jobs = GATE["jobs"]
@@ -100,8 +97,13 @@ class CiScopeContract(unittest.TestCase):
             )
 
         for pattern in (
+            "roles/bmc_console_user/**",
+            "tests/test_bmc_console_user_contract.py",
             ".github/workflows/ci-gate.yml",
             ".github/workflows/molecule.yml",
+            ".github/workflows/_static-contracts.yml",
+            ".github/workflows/molecule-dispatch.yml",
+            ".github/workflows/upstream-revalidate.yml",
             ".github/workflows/_role-contracts.yml",
             "tests/workflow_policy/**",
         ):

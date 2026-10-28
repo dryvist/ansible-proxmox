@@ -1,0 +1,4 @@
+# Managed by ansible-proxmox-apps ssh_ca_trust — OpenBao SSH client CA
+# trust (ssh-certificate-authority ADR). Late-numbered to win merges.
+TrustedUserCAKeys {{ ssh_ca_trust_ca_file }}
+AuthorizedPrincipalsFile {{ ssh_ca_trust_principals_dir }}/%u

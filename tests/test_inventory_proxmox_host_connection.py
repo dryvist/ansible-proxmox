@@ -11,6 +11,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 INVENTORY_DIR = ROOT / "inventory"
 HOSTS_FILE = INVENTORY_DIR / "hosts.yml"
+HARDWARE_FACTS_PLAYBOOK = ROOT / "playbooks/hardware-facts.yml"
 ANSIBLE_HOST = re.compile(
     r"^\{\{ lookup\('env', '(PVE\d_VE_HOSTNAME)'\) \| default\(proxmox_node_name, true\) \}\}$"
 )
@@ -40,6 +41,24 @@ class ProxmoxHostConnectionTest(unittest.TestCase):
                 for line in path.read_text().splitlines():
                     if re.search(r"\bansible_host\b", line):
                         self.assertNotIn("omit", line)
+
+    def test_hardware_facts_loads_tofu_before_its_proxmox_hosts(self):
+        # ansible_user for every proxmox host is proxmox_user, which resolves from
+        # proxmox_user_from_tofu. Only load_tofu.yml sets that, so it must run first.
+        plays = yaml.safe_load(HARDWARE_FACTS_PLAYBOOK.read_text())
+        loads = [
+            index
+            for index, play in enumerate(plays)
+            if play.get("ansible.builtin.import_playbook", play.get("import_playbook")) == "load_tofu.yml"
+        ]
+        targets = [
+            index
+            for index, play in enumerate(plays)
+            if "hardware_facts_hosts" in str(play.get("hosts", ""))
+        ]
+        self.assertEqual(len(loads), 1)
+        self.assertEqual(len(targets), 1)
+        self.assertLess(loads[0], targets[0])
 
 
 if __name__ == "__main__":

@@ -52,8 +52,8 @@ jobs:
       # silently skips `collections:`, so either half on its own can leave the
       # play to fail later on a missing dependency. Passing `-p` also makes
       # `install` drop collections — so no install path here, deliberately.
-      # Cache Galaxy content keyed on requirements.yml; a hit refreshes only the
-      # floating homelab-contracts tag. Same key/paths as the central _ansible-ci.yml.
+      # Cache Galaxy content keyed on requirements.yml; a hit refreshes the
+      # pinned dependencies from requirements.yml. Same key/paths as the central _ansible-ci.yml.
       - &setup_galaxy_cache
         name: Cache Ansible Galaxy content
         id: galaxy-cache
@@ -74,12 +74,9 @@ jobs:
         run: ansible-galaxy install -r requirements.yml --force
 
       - &setup_contracts_refresh
-        name: Refresh homelab-contracts major tag
+        name: Refresh Ansible dependencies from requirements.yml
         if: steps.galaxy-cache.outputs.cache-hit == 'true'
-        run: >-
-          ansible-galaxy collection install
-          'git+https://github.com/dryvist/homelab-contracts.git#/ansible/,v5'
-          --force
+        run: ansible-galaxy install -r requirements.yml --force
 
       # load_tofu.yml (imported by verify_inventory.yml) include_role's the
       # shared inventory_resolve role by FQCN, so this run is what proves the
@@ -190,6 +187,12 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           PROXMOX_VE_NODES='localhost,node-under-test,controller-node' \
           ansible-playbook tests/idrac_power/verify_controller_exclusion.yml -i localhost, -c local
+
+      - name: Verify idrac_power password environment contract
+        run: python3 -m pytest -q tests/test_idrac_power_contract.py
+
+      - name: Verify BMC console user privilege and password contract
+        run: python3 -m pytest -q tests/test_bmc_console_user_contract.py
 
       # The capacity monitor alerts on a band CHANGE, so the band state write is
       # what decides whether a filling pool keeps reporting. Molecule cannot
@@ -337,3 +340,6 @@ jobs:
           ansible-playbook tests/preflight_gate/verify.yml -i localhost, -c local
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/preflight_gate/verify_guards.yml -i localhost, -c local
+
+      - name: Verify hardware facts parsers on offline fixtures
+        run: ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp ansible-playbook tests/hardware_facts/verify.yml -i localhost, -c local

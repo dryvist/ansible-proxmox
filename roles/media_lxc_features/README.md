@@ -23,11 +23,11 @@ ansible-galaxy install -r requirements.yml
 bits are deliberately removed from OpenTofu because the API token cannot apply
 them. This role realizes them after creation.
 
-| Layer                | Owns                                                                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| tofu-proxmox         | Create the media LXCs (CPU, RAM, disk, network, `nesting`) + declare the `bulk/data` and `bulk/appdata` datasets (`node_storage`)         |
-| **this role**        | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough, shared `media` group + `/bulk/data` skeleton, per-app config ownership |
-| ansible-proxmox-apps | Converge the services inside each LXC                                                                                                     |
+| Layer                | Owns                                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| tofu-proxmox         | Create the media LXCs (CPU, RAM, disk, network, `nesting`); declare `bulk-nobackup/data` and `bulk/appdata` datasets (`node_storage`) |
+| **this role**        | Bind-mounts (`mp`), `keyctl` (merged), `/dev/net/tun` passthrough, `media` group + `/bulk/data` skeleton, per-app config ownership    |
+| ansible-proxmox-apps | Converge the services inside each LXC                                                                                                 |
 
 `nesting=1` stays **OpenTofu-managed**. This role never drops it: `keyctl=1` is
 **merged** into the live `features` string (existing tokens preserved), not
@@ -41,7 +41,7 @@ tofu-proxmox (shells)  ->  media_lxc_features  ->  ansible-proxmox-apps
 
 Run this role **after** the LXCs exist and **before** the apps converge. In
 `playbooks/site.yml` it runs after `lxc_features` and after `zfs_pools` (the
-bind-mount source is the `bulk/data` ZFS dataset, mounted at `/bulk/data`).
+bind-mount source is the `bulk-nobackup/data` ZFS dataset, mounted at `/bulk/data`).
 
 ## Feature map (keyed by service, not VMID)
 
@@ -57,16 +57,16 @@ service, never a hardcoded VMID:
 | radarr       | `/bulk/data`->`/data`, `/bulk/appdata/radarr`->`/var/lib/radarr`                                      | no     | no           |
 | download-vpn | `/bulk/data`->`/data`, `/bulk/appdata/prowlarr`->`/var/lib/prowlarr`, `/bulk/data/seed`->`/data/seed` | yes    | yes          |
 
-Every mounted service gets the unified `bulk/data` dataset -> `/data`. One
-dataset (replacing the old separate `downloads` + `media` datasets/mounts) is
-what lets qBittorrent and the arr applications **hardlink** between `/data/torrents/*` and `/data/media/*` — hardlinks cannot cross dataset boundaries. All bind-mounts are
-**read-write** (no`ro=1`), the role's existing convention (plex is read-mostly
+Every mounted service gets the unified `bulk-nobackup/data` dataset -> `/data`.
+One dataset (replacing the old separate `downloads` + `media` datasets/mounts) is
+what lets qBittorrent and the arr applications **hardlink** between `/data/torrents/*` and `/data/media/*` — hardlinks cannot cross dataset boundaries.
+All bind-mounts are **read-write** (no `ro=1`), the role's existing convention (plex is read-mostly
 by usage, not by mount flag). `/dev/net/tun` is char device **10:200** (verified
 on the primary node). Every service additionally gets a **persistent config
 mount** — see below.
 
-A child dataset under `bulk/data` (such as `bulk/data/seed`) needs its own
-mount entry. A Proxmox `mp` bind-mount is not recursive. Without the entry, the
+A child dataset under `bulk-nobackup/data` (such as `bulk-nobackup/data/seed`)
+needs its own mount entry. A Proxmox `mp` bind-mount is not recursive. Without the entry, the
 container sees only the parent's empty mountpoint directory, not the child
 dataset or its quota.
 
@@ -78,7 +78,8 @@ host uid/gid.
 
 ## Shared data root (host side)
 
-The `bulk/data` **dataset** (recordsize, auto-snapshot, quota) is declared in
+The `bulk-nobackup/data` **dataset** (recordsize, auto-snapshot, quota) is
+declared in
 tofu-proxmox `node_storage` and realized by `zfs_pools`. This role owns
 the **POSIX layer** inside it, on hosts where `/bulk/data` exists:
 
@@ -124,8 +125,8 @@ itself from its own DB on startup — there is no export/replay step.
 - **Dataset**: `bulk/appdata` (parent) + one `bulk/appdata/<app>` child per
   service are declared in tofu-proxmox `node_storage` and realized by
   `zfs_pools`. `bulk/appdata` is the home for app _config/state_ (distinct from
-  `bulk/databases`, for database engines, and `bulk/data`, the re-acquirable
-  media library).
+  `bulk/databases`, for database engines, and `bulk-nobackup/data`, the
+  re-acquirable media library).
 - **Snapshots + DR**: `bulk/appdata` gets the **`critical`** sanoid template
   (hourly point-in-time — right for constantly-changing state) on the always-on
   storage node, and a recursive syncoid pull to the offline-DR leg. Both are

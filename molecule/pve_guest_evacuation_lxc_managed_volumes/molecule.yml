@@ -1,7 +1,8 @@
 ---
 platforms:
   - name: pve-guest-evacuation-lxc-managed-volumes-test
-    image: "${MOLECULE_IMAGE:-mirror.gcr.io/geerlingguy/docker-debian12-ansible:latest}"
+    # renovate: datasource=docker depName=mirror.gcr.io/geerlingguy/docker-debian12-ansible
+    image: "${MOLECULE_IMAGE:-mirror.gcr.io/geerlingguy/docker-debian12-ansible:latest@sha256:43b3f59882ccc0ba5deb3b3ecac727084bb082a3230b5258c500395694b5497f}"
     pre_build_image: true
     privileged: true
     tmpfs:

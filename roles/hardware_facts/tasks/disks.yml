@@ -1,0 +1,33 @@
+---
+# Physical drives as hardware_facts_drives.
+#
+# A Proxmox node reads the same `pvesh` disk list pve_disk_inventory reads, with its
+# publishing switched off so this read-only role can never rewrite the artifact a
+# consumer deletes against. Any other host reports the `ansible_devices` setup fact
+# minus the names in hardware_facts_disk_ignore_prefixes.
+- name: Read this node's drives through the Proxmox API
+  ansible.builtin.include_role:
+    name: pve_disk_inventory
+  vars:
+    pve_disk_inventory_publish: false
+  when: hardware_facts_is_pve | bool
+
+- name: Record the drives of a Proxmox node
+  ansible.builtin.set_fact:
+    hardware_facts_drives: "{{ pve_disk_inventory_node_drives }}"
+  when: hardware_facts_is_pve | bool
+
+- name: Record the drives of any other host
+  ansible.builtin.set_fact:
+    hardware_facts_drives: "{{ hardware_facts_drives_json | from_json }}"
+  vars:
+    hardware_facts_drives_json: >-
+      {% set out = [] %}
+      {% for d in ansible_devices | default({}) | dict2items | sort(attribute='key') %}
+      {% if d.key is not match('^(' ~ (hardware_facts_disk_ignore_prefixes | join('|')) ~ ')') %}
+      {% set _ = out.append({'name': d.key, 'model': d.value.model | default(none), 'vendor': d.value.vendor | default(none),
+      'size': d.value.size | default(none), 'rotational': d.value.rotational | default(none)}) %}
+      {% endif %}
+      {% endfor %}
+      {{ out | to_json }}
+  when: not (hardware_facts_is_pve | bool)

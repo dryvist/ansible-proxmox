@@ -1,0 +1,149 @@
+---
+# Offline proof of the hardware_facts parsers: fixtures only, no host is contacted.
+# Memory, power-supply, PCI and generic-disk parsing, category handling and the output guard.
+- name: Verify the hardware facts parsers against offline fixtures
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars_files:
+    - fixtures.yml
+  vars:
+    hardware_facts_role: "{{ playbook_dir }}/../../roles/hardware_facts"
+
+  tasks:
+    - name: Load the role defaults
+      ansible.builtin.include_vars:
+        file: "{{ hardware_facts_role }}/defaults/main.yml"
+
+    - name: Parse memory modules and drop the empty slot
+      ansible.builtin.include_tasks: "{{ hardware_facts_role }}/tasks/dmi_parse.yml"
+      vars:
+        hardware_facts_dmi_text: "{{ fixture_dmi_memory }}"
+        hardware_facts_dmi_fields: "{{ hardware_facts_dmi_memory_fields }}"
+        hardware_facts_dmi_fact: parsed_memory
+        hardware_facts_dmi_skip_key: Size
+        hardware_facts_dmi_skip_value: No Module Installed
+
+    - name: Require exactly the two populated modules with their fields
+      ansible.builtin.assert:
+        that:
+          - parsed_memory | length == 2
+          - parsed_memory | map(attribute='Locator') | list == ['DIMM_A1', 'DIMM_B1']
+          - parsed_memory[0]['Size'] == '16 GB'
+          - parsed_memory[0]['Part Number'] == 'PART-AAA-01'
+          - parsed_memory[1]['Configured Memory Speed'] == '2133 MT/s'
+          - "'Array Handle' not in parsed_memory[0]"
+        quiet: true
+
+    - name: Parse power supplies without a skip rule
+      ansible.builtin.include_tasks: "{{ hardware_facts_role }}/tasks/dmi_parse.yml"
+      vars:
+        hardware_facts_dmi_text: "{{ fixture_dmi_psu }}"
+        hardware_facts_dmi_fields: "{{ hardware_facts_dmi_psu_fields }}"
+        hardware_facts_dmi_fact: parsed_psu
+
+    - name: Require both power supplies
+      ansible.builtin.assert:
+        that:
+          - parsed_psu | length == 2
+          - parsed_psu | map(attribute='Max Power Capacity') | unique | list == ['750 W']
+        quiet: true
+
+    - name: Parse text with no records into an empty list
+      ansible.builtin.include_tasks: "{{ hardware_facts_role }}/tasks/dmi_parse.yml"
+      vars:
+        hardware_facts_dmi_text: ""
+        hardware_facts_dmi_fields: "{{ hardware_facts_dmi_psu_fields }}"
+        hardware_facts_dmi_fact: parsed_empty
+
+    - name: Require an empty list rather than a failure
+      ansible.builtin.assert:
+        that:
+          - parsed_empty == []
+        quiet: true
+
+    - name: Split a PCI listing into devices and display adapters
+      ansible.builtin.include_tasks: "{{ hardware_facts_role }}/tasks/pci_parse.yml"
+      vars:
+        hardware_facts_lspci_raw:
+          stdout_lines: "{{ fixture_lspci.splitlines() }}"
+
+    - name: Require every device and only the display adapters as GPUs
+      ansible.builtin.assert:
+        that:
+          - hardware_facts_pci_devices | length == 5
+          - hardware_facts_gpu_devices | length == 2
+          - hardware_facts_gpu_devices | select('search', 'Audio') | list | length == 0
+        quiet: true
+
+    - name: Report the drives of a non-Proxmox host without virtual devices
+      ansible.builtin.include_tasks: "{{ hardware_facts_role }}/tasks/disks.yml"
+      vars:
+        hardware_facts_is_pve: false
+        ansible_devices: "{{ fixture_ansible_devices }}"
+
+    - name: Require only the physical drives, in name order
+      ansible.builtin.assert:
+        that:
+          - hardware_facts_drives | map(attribute='name') | list == ['nvme0n1', 'sda']
+          - hardware_facts_drives[1]['model'] == 'Example SSD'
+        quiet: true
+
+    - name: Accept a comma-separated category string
+      ansible.builtin.include_tasks: "{{ hardware_facts_role }}/tasks/request.yml"
+      vars:
+        hardware_facts_categories: "cpu, memory"
+
+    - name: Require the normalised list
+      ansible.builtin.assert:
+        that:
+          - hardware_facts_cats == ['cpu', 'memory']
+        quiet: true
+
+    - name: Default to every category
+      ansible.builtin.include_tasks: "{{ hardware_facts_role }}/tasks/request.yml"
+
+    - name: Require all categories
+      ansible.builtin.assert:
+        that:
+          - hardware_facts_cats | sort == hardware_facts_all_categories | sort
+        quiet: true
+
+    - name: Reject an unknown category
+      block:
+        - name: Validate a request that names an unknown category
+          ansible.builtin.include_tasks: "{{ hardware_facts_role }}/tasks/request.yml"
+          vars:
+            hardware_facts_categories: [cpu, toaster]
+
+        - name: Record that the unknown category was accepted
+          ansible.builtin.set_fact:
+            hardware_facts_bad_category_accepted: true
+      rescue:
+        - name: Record that the unknown category was refused
+          ansible.builtin.set_fact:
+            hardware_facts_bad_category_accepted: false
+
+    - name: Require the unknown category to fail the request
+      ansible.builtin.assert:
+        that:
+          - not hardware_facts_bad_category_accepted
+        quiet: true
+
+    # The vendor id ffff is never assigned, so the probe finds nothing whether or not
+    # `lspci` exists on the runner; tolerating a missing binary keeps one assertion.
+    - name: Run the shared PCI probe for a vendor that cannot match
+      ansible.builtin.include_tasks: "{{ hardware_facts_role }}/tasks/lspci.yml"
+      vars:
+        hardware_facts_lspci_args: ['-n', '-d', 'ffff:']
+        hardware_facts_lspci_fact: probe_result
+        hardware_facts_lspci_tolerate_missing: true
+
+    - name: Require the result under the caller's own fact name, empty and unchanged
+      ansible.builtin.assert:
+        that:
+          - probe_result is defined
+          - probe_result.stdout | default('', true) | trim | length == 0
+          - not probe_result.changed
+        quiet: true

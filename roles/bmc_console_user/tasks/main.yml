@@ -1,0 +1,21 @@
+---
+- name: Assert BMC console user inputs
+  ansible.builtin.assert:
+    that:
+      - bmc_console_user_bao_addr | length > 0
+      - bmc_console_user_bao_token | length > 0
+      - bmc_console_user_admin_username | length > 0
+      - bmc_console_user_admin_password | length > 0
+      - bmc_console_user_admin_username | regex_search('[\r\n]') is none
+      - bmc_console_user_admin_password | regex_search('[\r\n]') is none
+    fail_msg: BMC console user provisioning needs operator OpenBao and iDRAC credentials.
+    quiet: true
+  no_log: true
+  when: bmc_console_user_targets | selectattr('enabled', 'equalto', true) | list | length > 0
+
+- name: Reconcile each enabled console user
+  ansible.builtin.include_tasks: target.yml
+  loop: "{{ bmc_console_user_targets | selectattr('enabled', 'equalto', true) | list }}"
+  loop_control:
+    loop_var: bmc_console_user_target
+    label: "{{ bmc_console_user_target.name }}"

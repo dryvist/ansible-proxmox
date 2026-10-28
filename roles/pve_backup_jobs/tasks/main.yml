@@ -1,6 +1,6 @@
 ---
-# pve_backup_jobs — reconcile the cluster's vzdump job set from a declared,
-# pool-scoped desired state. Backup jobs live in the cluster filesystem, so all
+# pve_backup_jobs — reconcile the cluster's vzdump job set from a declared
+# desired state. Backup jobs live in the cluster filesystem, so all
 # work runs on exactly ONE node (pve_backup_jobs_config_host), the same shape
 # pve_ha uses for cluster-wide state. Inert unless pve_backup_jobs_manage; all
 # CLI work is skipped under Docker so the role stays molecule-testable without a
@@ -41,64 +41,139 @@
   tags:
     - pve_backup_jobs
   block:
-    - name: Ensure the backup target storage exists
-      # Ensured before the jobs that write to it: a job pointing at a storage
-      # that does not exist fails at run time, hours after the converge that
-      # looked successful.
-      community.proxmox.proxmox_storage:
-        api_host: "{{ pve_backup_jobs_api_host }}"
-        api_user: "{{ pve_backup_jobs_api_user }}"
-        api_token_id: "{{ pve_backup_jobs_api_token_id }}"
-        api_token_secret: "{{ pve_backup_jobs_api_token_secret }}"
-        validate_certs: "{{ pve_backup_jobs_api_validate_certs | bool }}"
-        name: "{{ pve_backup_jobs_storage.name }}"
-        type: "{{ pve_backup_jobs_storage.type | default('dir') }}"
-        nodes: "{{ pve_backup_jobs_storage.nodes }}"
-        content: "{{ pve_backup_jobs_storage.content | default(['backup']) }}"
-        state: present
-        dir_options:
-          path: "{{ pve_backup_jobs_storage.path }}"
-          # The path is a dataset mountpoint, so an unmounted pool must mark the
-          # storage offline rather than let vzdump write into the empty
-          # directory underneath it — a backup onto the root filesystem that
-          # reports success is worse than a backup that fails.
-          is_mountpoint: "yes"
-          prune_backups: "{{ pve_backup_jobs_storage.prune_backups | default(pve_backup_jobs_default_prune) }}"
-      when:
-        - pve_backup_jobs_storage | length > 0
-        - (pve_backup_jobs_storage.type | default('dir')) != 'pbs'
-
-    # A Proxmox Backup Server target instead of a directory. Kept as its own
-    # task because the module's option blocks are per-type: passing dir_options
-    # for a pbs storage is rejected, and passing both is not a thing.
-    #
-    # The fingerprint is PINNED. PBS serves a self-signed certificate, so
-    # without it every node either refuses the storage or is asked to trust
-    # whatever answers on that name — which is the whole value of pinning.
-    - name: Ensure the PBS backup target storage exists
-      community.proxmox.proxmox_storage:
-        api_host: "{{ pve_backup_jobs_api_host }}"
-        api_user: "{{ pve_backup_jobs_api_user }}"
-        api_token_id: "{{ pve_backup_jobs_api_token_id }}"
-        api_token_secret: "{{ pve_backup_jobs_api_token_secret }}"
-        validate_certs: "{{ pve_backup_jobs_api_validate_certs | bool }}"
-        name: "{{ pve_backup_jobs_storage.name }}"
-        type: pbs
-        nodes: "{{ pve_backup_jobs_storage.nodes }}"
-        content: "{{ pve_backup_jobs_storage.content | default(['backup']) }}"
-        state: present
-        pbs_options:
-          # An FQDN, never a literal address: the guest moves, the name does not.
-          server: "{{ pve_backup_jobs_storage.server }}"
-          datastore: "{{ pve_backup_jobs_storage.datastore }}"
-          username: "{{ pve_backup_jobs_pbs_token_id }}"
-          password: "{{ pve_backup_jobs_pbs_token_secret }}"
-          fingerprint: "{{ pve_backup_jobs_pbs_fingerprint }}"
-          prune_backups: "{{ pve_backup_jobs_storage.prune_backups | default(pve_backup_jobs_default_prune) }}"
+    - name: Read the PBS target credentials from OpenBao
+      # Read here, not in validate.yml: validation runs on every host, and only
+      # the config host reaches this block. A failed read fails the run.
+      community.hashi_vault.vault_kv2_get:
+        url: "{{ pve_backup_jobs_bao_addr }}"
+        token: "{{ pve_backup_jobs_bao_token }}"
+        engine_mount_point: "{{ pve_backup_jobs_bao_kv_mount }}"
+        path: "{{ pve_backup_jobs_pbs_secret_path }}"
+      register: pve_backup_jobs_pbs_secret
+      delegate_to: localhost
+      become: false
       no_log: true
-      when:
-        - pve_backup_jobs_storage | length > 0
-        - (pve_backup_jobs_storage.type | default('dir')) == 'pbs'
+      changed_when: false
+      check_mode: false
+
+    - name: Require every PBS target credential field
+      # A PBS target with an empty field is the silent-skip failure this role
+      # exists to prevent: the storage is never defined, every job then fails
+      # per guest, and the converge that caused it reported success.
+      ansible.builtin.assert:
+        that:
+          - pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_ID | default('', true) | length > 0
+          - pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET | default('', true) | length > 0
+          - pve_backup_jobs_pbs_secret.secret.PBS_FINGERPRINT | default('', true) | length > 0
+          - pve_backup_jobs_pbs_secret.secret.PBS_DATASTORE | default('', true) | length > 0
+        fail_msg: >-
+          pve_backup_jobs: the OpenBao path {{ pve_backup_jobs_pbs_secret_path }}
+          is missing PBS_TOKEN_ID, PBS_TOKEN_SECRET, PBS_FINGERPRINT or PBS_DATASTORE.
+        quiet: true
+
+    # pvesh runs as root against the node's own API, so no API token is needed.
+    # The PBS secret never goes on argv: PVE keeps it only in the storage's
+    # password file, which the task after the storage definition writes.
+    - name: Read PVE storage definitions
+      ansible.builtin.command: pvesh get /storage --output-format json
+      register: pve_backup_jobs_storage_list
+      changed_when: false
+      check_mode: false
+
+    - name: Select the declared PBS storage from the PVE storage list
+      ansible.builtin.set_fact:
+        pve_backup_jobs_existing_storage: >-
+          {{ pve_backup_jobs_storage_list.stdout | from_json
+             | selectattr('storage', 'equalto', pve_backup_jobs_storage_id)
+             | first
+             | default({}) }}
+
+    - name: Require the existing PBS storage identity to match
+      ansible.builtin.assert:
+        that:
+          - pve_backup_jobs_existing_storage.type | default('') == 'pbs'
+          - pve_backup_jobs_existing_storage.server | default('') == pve_backup_jobs_pbs_server
+          - pve_backup_jobs_existing_storage.datastore | default('') == pve_backup_jobs_pbs_secret.secret.PBS_DATASTORE
+        fail_msg: >-
+          PBS storage {{ pve_backup_jobs_storage_id }} already exists with a different type, server or datastore.
+          Its server and datastore are fixed; remove and re-add it deliberately to change them.
+        quiet: true
+      when: pve_backup_jobs_existing_storage | length > 0
+
+    - name: Detect drift in mutable PBS storage settings
+      ansible.builtin.set_fact:
+        pve_backup_jobs_storage_drift: >-
+          {{ pve_backup_jobs_existing_storage | length > 0 and (
+               pve_backup_jobs_existing_storage.username | default('') != pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_ID
+               or pve_backup_jobs_existing_storage.fingerprint | default('') != pve_backup_jobs_pbs_secret.secret.PBS_FINGERPRINT
+               or (pve_backup_jobs_existing_storage.content | default('') | string | split(',')
+                   | map('trim') | reject('equalto', '') | unique | list | sort) != ['backup']
+               or (pve_backup_jobs_existing_storage.nodes | default('') | string | split(',')
+                   | map('trim') | reject('equalto', '') | unique | list | sort)
+                  != (pve_backup_jobs_storage_nodes | unique | list | sort)
+             ) }}
+      no_log: true
+
+    - name: Define or update the PBS backup target storage
+      # The fingerprint is PINNED. PBS serves a self-signed certificate, so
+      # without it every node either refuses the storage or is asked to trust
+      # whatever answers on that name — which is the whole value of pinning.
+      # server and datastore are fixed after creation, so only create sets them.
+      # Create starts disabled: PVE activates a new enabled storage at once and
+      # rolls it back when that fails, and the password file does not exist yet.
+      ansible.builtin.command:
+        argv: >-
+          {{ ((pve_backup_jobs_existing_storage | length == 0)
+              | ternary(['pvesh', 'create', '/storage', '--storage', pve_backup_jobs_storage_id, '--type', 'pbs',
+                         '--server', pve_backup_jobs_pbs_server,
+                         '--datastore', pve_backup_jobs_pbs_secret.secret.PBS_DATASTORE, '--disable', '1'],
+                        ['pvesh', 'set', '/storage/' ~ pve_backup_jobs_storage_id]))
+             + ['--username', pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_ID,
+                '--fingerprint', pve_backup_jobs_pbs_secret.secret.PBS_FINGERPRINT,
+                '--content', 'backup',
+                '--nodes', pve_backup_jobs_storage_nodes | join(',')] }}
+      when: pve_backup_jobs_existing_storage | length == 0 or pve_backup_jobs_storage_drift
+      changed_when: true
+      no_log: true
+
+    - name: Create the PVE storage secrets directory
+      # PVE's PBS plugin creates it on its first password write. pmxcfs reports
+      # every priv/ directory as 0700 and refuses chmod to that, so declaring
+      # 0700 matches what it reports and never triggers a chmod.
+      ansible.builtin.file:
+        path: /etc/pve/priv/storage
+        state: directory
+        mode: "0700"
+
+    - name: Read the current PBS storage password file
+      ansible.builtin.slurp:
+        src: "/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw"
+      register: pve_backup_jobs_pw_current
+      failed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Write the PBS token secret to the storage password file
+      # The same file and format PVE's own PBS plugin writes ("$password\n").
+      # /etc/pve is the cluster filesystem, so one write reaches every node.
+      # pmxcfs refuses the chmod, chown and utime calls the copy module makes,
+      # so dd writes it with a plain open-truncate-write. The secret is on stdin.
+      ansible.builtin.command:
+        argv: [dd, "of=/etc/pve/priv/storage/{{ pve_backup_jobs_storage_id }}.pw", status=none]
+        stdin: "{{ pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET }}"
+      when: >-
+        (pve_backup_jobs_pw_current.content | default('') | b64decode)
+        != pve_backup_jobs_pbs_secret.secret.PBS_TOKEN_SECRET ~ '\n'
+      changed_when: true
+      no_log: true
+
+    - name: Enable the PBS storage once its password file is in place
+      ansible.builtin.command:
+        argv: [pvesh, set, "/storage/{{ pve_backup_jobs_storage_id }}", --delete, disable]
+      when: >-
+        pve_backup_jobs_existing_storage | length == 0
+        or (pve_backup_jobs_existing_storage.disable | default(0) | int) == 1
+      changed_when: true
 
     - name: Reconcile the live job set against the declaration
       ansible.builtin.import_tasks: reconcile.yml

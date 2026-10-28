@@ -33,3 +33,6 @@ pve_host_network_gateway: ""
 
 # Fail the play when drift is detected. Set false to warn instead.
 pve_host_network_fail_on_drift: true
+
+# Additional routed interfaces to render under /etc/network/interfaces.d.
+pve_host_network_extra_interfaces: []

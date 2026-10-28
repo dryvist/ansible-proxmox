@@ -46,7 +46,7 @@ postgres_standby_ssh_key: /root/.ssh/id_postgres_standby
 
 # Daily, after the source pg-backup timer (02:30 + up to 15 min splay) has
 # certainly finished — a warm archive, not a hot replica.
-postgres_standby_on_calendar: "*-*-* 04:00:00"
+postgres_standby_on_calendar: "*-*-* 06:50:00 UTC"
 # Run a missed schedule on next boot (sensible for a backup job).
 postgres_standby_persistent: true
 

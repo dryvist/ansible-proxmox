@@ -12,15 +12,19 @@
   become: false
   gather_facts: false
   vars:
-    pve_backup_jobs_storage:
-      name: fixture-backup-store
-      path: /fixture/backups
-      nodes: [fixture-node-a, fixture-node-b]
-    pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
+    pve_backup_jobs_storage_id: fixture-backup-store
+    pve_backup_jobs_pbs_server: fixture-pbs-server
+    pve_backup_jobs_pbs_node: fixture-backup-node
+    pve_backup_jobs_storage_nodes: [fixture-node-a, fixture-node-b]
+    pve_backup_jobs_default_prune: keep-all=1
+    # Stands in for the guest map load_tofu publishes on localhost.
+    pve_backup_jobs_tofu_guest_map:
+      fixture-splunk:
+        vmid: 4244
 
   tasks:
-    # A well-formed pool-scoped declaration must pass, or every refusal below
-    # proves nothing — a guard that rejects everything is not a guard.
+    # Both supported selections must pass, or every refusal below proves
+    # nothing — a guard that rejects everything is not a guard.
     - name: Accept a pool-scoped declaration
       ansible.builtin.include_role:
         name: pve_backup_jobs
@@ -29,9 +33,36 @@
         pve_backup_jobs_jobs:
           - id: fixture-platform-daily
             pool: fixture-pool
+            node: fixture-node-a
             storage: fixture-backup-store
             schedule: "02:30"
             enabled: false
+
+    - name: Accept an all-node declaration
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs:
+          - id: fixture-all-node
+            all: true
+            node: fixture-node-b
+            storage: fixture-backup-store
+            schedule: "02:30"
+            enabled: false
+
+    - name: Accept a desired-state name exclusion
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs:
+          - id: fixture-named-exclusion
+            all: true
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+            exclude_names: [fixture-splunk]
 
     - name: Refuse a declaration carrying a guest-id list
       block:
@@ -43,6 +74,7 @@
             pve_backup_jobs_jobs:
               - id: fixture-by-vmid
                 pool: fixture-pool
+                node: fixture-node-a
                 storage: fixture-backup-store
                 schedule: "02:30"
                 vmid: "4242,4243"
@@ -57,25 +89,72 @@
           ansible.builtin.set_fact:
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['vmid'] }}"
 
-    - name: Refuse a declaration with no pool
+    - name: Refuse an exclusion name missing from desired state
       block:
-        - name: Run the guard against a pool-less declaration
+        - name: Run the guard against an unknown guest name
           ansible.builtin.include_role:
             name: pve_backup_jobs
             tasks_from: validate.yml
           vars:
             pve_backup_jobs_jobs:
-              - id: fixture-no-pool
+              - id: fixture-unknown-exclusion
+                pool: fixture-pool
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+                exclude_names: [missing-guest]
+
+        - name: Fail because an unknown guest name was accepted
+          ansible.builtin.fail:
+            msg: "An exclusion name missing from tofu_data was ACCEPTED."
+      rescue:
+        - name: Record the unknown-name refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['exclude-name'] }}"
+
+    - name: Refuse a declaration that sets both selection modes
+      block:
+        - name: Run the guard against a declaration with pool and all
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-both-selections
+                pool: fixture-pool
+                all: true
+                node: fixture-node-a
                 storage: fixture-backup-store
                 schedule: "02:30"
 
-        - name: Fail because the pool-less declaration was accepted
+        - name: Fail because both selection modes were accepted
           ansible.builtin.fail:
-            msg: "A declaration selecting no pool was ACCEPTED; it would protect nothing."
+            msg: "A declaration setting pool and all was ACCEPTED; PVE forbids both together."
       rescue:
-        - name: Record the pool-less refusal
+        - name: Record the both-selection refusal
           ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['pool'] }}"
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['both'] }}"
+
+    - name: Refuse a declaration with neither selection mode
+      block:
+        - name: Run the guard against a declaration with no pool or all
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-neither-selection
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because neither selection mode was accepted
+          ansible.builtin.fail:
+            msg: "A declaration with neither pool nor all was ACCEPTED; it would protect nothing."
+      rescue:
+        - name: Record the neither-selection refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['neither'] }}"
 
     - name: Refuse two jobs sharing one id
       block:
@@ -87,10 +166,12 @@
             pve_backup_jobs_jobs:
               - id: fixture-dup
                 pool: fixture-pool-a
+                node: fixture-node-a
                 storage: fixture-backup-store
                 schedule: "02:30"
               - id: fixture-dup
                 pool: fixture-pool-b
+                node: fixture-node-b
                 storage: fixture-backup-store
                 schedule: "03:30"
 
@@ -102,27 +183,93 @@
           ansible.builtin.set_fact:
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['duplicate'] }}"
 
-    - name: Refuse jobs declared with no backup storage
+    - name: Refuse jobs declared with no PBS server
       block:
-        - name: Run the guard with no storage declared
+        - name: Run the guard with no PBS server declared
           ansible.builtin.include_role:
             name: pve_backup_jobs
             tasks_from: validate.yml
           vars:
-            pve_backup_jobs_storage: {}
+            pve_backup_jobs_pbs_server: ""
             pve_backup_jobs_jobs:
               - id: fixture-no-store
                 pool: fixture-pool
+                node: fixture-node-a
                 storage: fixture-backup-store
                 schedule: "02:30"
 
         - name: Fail because a job with no ensured storage was accepted
           ansible.builtin.fail:
-            msg: "Jobs were ACCEPTED with no storage declared; they would fail hours after converge."
+            msg: "Jobs were ACCEPTED with no PBS server declared; they would fail hours after converge."
       rescue:
         - name: Record the missing-storage refusal
           ansible.builtin.set_fact:
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['storage'] }}"
+
+    - name: Refuse a job that names no node
+      block:
+        - name: Run the guard against a node-less declaration
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-no-node
+                pool: fixture-pool
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because a node-less job was accepted
+          ansible.builtin.fail:
+            msg: "A job with no node was ACCEPTED; it would also back up guests on the backup node."
+      rescue:
+        - name: Record the missing-node refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['node'] }}"
+
+    - name: Refuse a job that names a node list
+      block:
+        - name: Run the guard against a node-list declaration
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-node-list
+                pool: fixture-pool
+                node: "fixture-node-a,fixture-node-b"
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because a node list was accepted
+          ansible.builtin.fail:
+            msg: "A node list was ACCEPTED; vzdump matches one node name, so the job would run nowhere."
+      rescue:
+        - name: Record the node-list refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['node-list'] }}"
+
+    - name: Refuse a job that runs on the backup node
+      block:
+        - name: Run the guard against a backup-node declaration
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-on-backup-node
+                pool: fixture-pool
+                node: fixture-backup-node
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because a job on the backup node was accepted
+          ansible.builtin.fail:
+            msg: "A job on the backup node was ACCEPTED; its guests would back up onto themselves."
+      rescue:
+        - name: Record the backup-node refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['backup-node'] }}"
 
     # Counting the refusals is what makes this test unable to pass vacuously: if
     # a rescue never ran, the list is short and this fails.
@@ -130,9 +277,9 @@
       ansible.builtin.assert:
         that:
           - (pve_backup_jobs_refusals | default([]) | sort)
-            == ['duplicate', 'pool', 'storage', 'vmid']
+            == ['backup-node', 'both', 'duplicate', 'exclude-name', 'neither', 'node', 'node-list', 'storage', 'vmid']
         fail_msg: >-
-          Expected four refusals (vmid, pool, duplicate, storage); got
-          {{ pve_backup_jobs_refusals | default([]) | sort }}.
-        success_msg: "PASS: all four declaration refusals fired"
+          Expected nine refusals (vmid, exclude-name, both, neither, duplicate,
+          storage, node, node-list, backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
+        success_msg: "PASS: all nine declaration refusals fired"
         quiet: false

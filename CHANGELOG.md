@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.36.0](https://github.com/dryvist/ansible-proxmox/compare/v2.35.0...v2.36.0) (2026-10-21)
+
+
+### Features
+
+* reconcile iDRAC6 console account access ([#1167](https://github.com/dryvist/ansible-proxmox/issues/1167)) ([fd10db0](https://github.com/dryvist/ansible-proxmox/commit/fd10db06a6f3b9cfec202ae760615d70484473ac))
+
 ## [2.35.0](https://github.com/dryvist/ansible-proxmox/compare/v2.34.0...v2.35.0) (2026-10-20)
 
 

@@ -32,6 +32,6 @@
     - name: Assert the timer is daily and persistent
       ansible.builtin.assert:
         that:
-          - "'OnCalendar=*-*-* 04:15:00' in pve_config_backup_timer_text"
+          - "'OnCalendar=*-*-* 06:00:00 UTC' in pve_config_backup_timer_text"
           - "'Persistent=true' in pve_config_backup_timer_text"
         fail_msg: "pve-config-backup timer did not render the expected schedule"

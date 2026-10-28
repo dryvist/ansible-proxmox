@@ -1,6 +1,20 @@
 ---
 # Detect, and optionally enforce, the host network contract.
 
+- name: Validate extra routed interface declarations
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - (item.name | default('')) | length > 0
+      - (item.name | default('')) not in [pve_host_network_uplink, pve_host_network_bridge]
+      - (item.address | default('')) is match('^.+/[0-9]+$')
+    fail_msg: >-
+      Each extra interface must have a name outside the managed uplink and
+      bridge, and an address with a prefix length.
+  loop: "{{ pve_host_network_extra_interfaces }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+
 - name: Collect the interface holding the default route
   ansible.builtin.set_fact:
     pve_host_network_primary_iface: "{{ ansible_facts.default_ipv4.interface | default('') }}"
@@ -40,6 +54,20 @@
     - pve_host_network_fail_on_drift | bool
     - not (pve_host_network_enforce | bool)
   tags: [always]
+
+- name: Render extra routed interfaces
+  ansible.builtin.template:
+    src: extra-interfaces.j2
+    dest: /etc/network/interfaces.d/ansible-extra-interfaces
+    mode: "0644"
+  when: pve_host_network_extra_interfaces | length > 0
+  notify: Apply extra routed interfaces
+
+- name: Remove extra routed interfaces file when none are declared
+  ansible.builtin.file:
+    path: /etc/network/interfaces.d/ansible-extra-interfaces
+    state: absent
+  when: pve_host_network_extra_interfaces | length == 0
 
 - name: Enforce the pinned host uplink and bridge configuration
   when: pve_host_network_enforce | bool

@@ -1,0 +1,11 @@
+---
+# Host-path bind mount and CPU weight for the PBS container. OpenTofu creates the
+# container; the source must already be a separate host mountpoint.
+pve_lxc_datastore_mount_containers:
+  "212000":
+    source: /backup/guests
+    mountpoint: /mnt/datastore/backup
+    backup: false
+    # cgroup v2 default is 100; 50 lowers this container's CPU weight so it yields to other guests.
+    cpuunits: 50
+    require_source_mountpoint: true

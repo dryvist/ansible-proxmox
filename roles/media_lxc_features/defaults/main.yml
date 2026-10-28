@@ -41,7 +41,7 @@
 # are skipped (tofu may not have created them yet). All tasks are skipped
 # under Docker virtualization (molecule).
 # Mount layout (bulk-node rebuild): every service bind-mounts the unified
-# `bulk/data` dataset (host /bulk/data) -> /data in-container. The single dataset
+# `bulk-nobackup/data` dataset (host /bulk/data) -> /data in-container. The single dataset
 # is what lets qBittorrent and the *arrs HARDLINK between /data/torrents/* and
 # /data/media/* (hardlinks cannot cross the old downloads/media dataset
 # boundary). All mounts stay read-write (the role's existing convention; plex is
@@ -99,7 +99,7 @@ media_lxc_features_map:
     mounts:
       - { src: /bulk/data, dst: /data }
       - { src: /bulk/appdata/prowlarr, dst: /var/lib/prowlarr, owner_user: qbittorrent }
-      # The ratio dataset (bulk/data/seed) is a CHILD dataset of bulk/data. A
+      # The ratio dataset (bulk-nobackup/data/seed) is a CHILD dataset of bulk-nobackup/data. A
       # Proxmox `mp` bind-mount is non-recursive, so the /data mount above
       # exposes only the parent's empty mountpoint directory there, not the
       # dataset and its quota. Mount it explicitly; kept last so the earlier
@@ -144,7 +144,7 @@ media_lxc_features_tun_lines:
 # ---------------------------------------------------------------------------
 # Shared media data root (host side of the bind-mount)
 # ---------------------------------------------------------------------------
-# The `bulk/data` DATASET itself (recordsize, auto-snapshot, quota) is declared
+# The `bulk-nobackup/data` DATASET itself (recordsize, auto-snapshot, quota) is declared
 # in terraform-proxmox node_storage and realized by the zfs_pools role. This
 # role owns the POSIX layer inside it: the shared `media` group and the
 # group-writable subdirectory skeleton qBittorrent + the *arrs hardlink across.

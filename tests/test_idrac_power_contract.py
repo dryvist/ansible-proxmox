@@ -14,6 +14,24 @@ def _task(name: str) -> dict:
     return next(task for task in TASKS if task.get("name") == name)
 
 
+def nested_tasks(tasks):
+    for task in tasks:
+        yield task
+        for section in ("block", "rescue", "always"):
+            yield from nested_tasks(task.get(section, []))
+
+
+def process_argument_values(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key.rsplit(".", 1)[-1] in {"command", "cmd", "argv", "shell"}:
+                yield item
+            yield from process_argument_values(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from process_argument_values(item)
+
+
 def test_current_status_report_prints_only_query_stdout() -> None:
     query = _task("Query current chassis power status")
     report = _task("Report current chassis power status")
@@ -21,14 +39,30 @@ def test_current_status_report_prints_only_query_stdout() -> None:
     assert TASKS.index(report) == TASKS.index(query) + 1
     assert report["ansible.builtin.debug"] == {"msg": "{{ idrac_power_status.stdout }}"}
     assert report["when"] == query["when"]
-    password_commands = [
+    ipmitool_tasks = [
         task
         for task in TASKS
-        if "idrac_power_password"
-        in task.get("ansible.builtin.command", {}).get("cmd", "")
+        if "ipmitool" in task.get("ansible.builtin.command", {}).get("cmd", "")
     ]
-    assert password_commands
-    assert all(task.get("no_log") is True for task in password_commands)
+    assert ipmitool_tasks
+    assert all(task.get("no_log") is True for task in ipmitool_tasks)
+
+
+def test_ipmitool_password_is_not_a_process_argument() -> None:
+    ipmitool_tasks = []
+    for task in nested_tasks(TASKS):
+        for argument in process_argument_values(task):
+            rendered = str(argument)
+            assert "idrac_power_password" not in rendered
+            if "ipmitool" in rendered:
+                ipmitool_tasks.append((task, rendered))
+
+    assert ipmitool_tasks
+    for task, command in ipmitool_tasks:
+        assert "-E" in command
+        assert task.get("environment") == {
+            "IPMI_PASSWORD": "{{ idrac_power_password }}"
+        }
 
 
 def test_status_runs_report_read_only_fault_evidence() -> None:
