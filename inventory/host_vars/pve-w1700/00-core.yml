@@ -7,10 +7,6 @@
 # Object storage is a single volume on the storage node's `bulk/object` dataset.
 # `sanoid` snapshots it, and the DR node pulls it hourly with `syncoid`.
 
-zfs_pools_vm_disk_properties:
-  rpool/data:
-    quota: "1T"
-
 # The `postgres` guest's mp0 (`/var/lib/postgresql`) carries BOTH the cluster's
 # PGDATA and `/var/lib/postgresql/backups`, the nightly per-database pg_dump
 # archive for nautobot, vikunja and zammad.
