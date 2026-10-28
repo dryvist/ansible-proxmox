@@ -13,7 +13,10 @@
   register: zfs_pools_ds_prop
   changed_when: false
   check_mode: false
-  failed_when: zfs_pools_ds_prop.rc != 0
+  # Check mode skips dataset creation, so a newly declared dataset is still absent here.
+  failed_when: >-
+    zfs_pools_ds_prop.rc != 0
+    and not (ansible_check_mode and 'dataset does not exist' in zfs_pools_ds_prop.stderr)
   loop: "{{ zfs_dataset.value.properties | dict2items }}"
   loop_control:
     label: "{{ zfs_pool.key }}/{{ zfs_dataset.key }} {{ item.key }}"

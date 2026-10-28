@@ -38,7 +38,10 @@
   register: zfs_pools_ds_quota
   changed_when: false
   check_mode: false
-  failed_when: zfs_pools_ds_quota.rc != 0
+  # Check mode skips the create above, so a newly declared dataset is still absent here.
+  failed_when: >-
+    zfs_pools_ds_quota.rc != 0
+    and not (ansible_check_mode and 'dataset does not exist' in zfs_pools_ds_quota.stderr)
   loop: "{{ zfs_pool.value.datasets | default({}) | dict2items }}"
   loop_control:
     label: "{{ zfs_pool.key }}/{{ item.key }}"
