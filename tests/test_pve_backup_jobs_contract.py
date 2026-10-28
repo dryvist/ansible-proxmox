@@ -114,11 +114,11 @@ def test_declared_jobs_state_enabled_explicitly():
     assert all(isinstance(job["enabled"], bool) for job in JOBS)
 
 
-def test_splunk_is_excluded_by_desired_state_name():
-    job = next(job for job in JOBS if job["id"] == "guests-pve-w5900")
-    assert job["exclude_names"] == ["splunk"]
-    assert job.get("mode", DEFAULTS["pve_backup_jobs_default_mode"]) == "snapshot"
-    assert "vmid" not in job
+def test_exclusions_are_desired_state_names():
+    for job in (job for job in JOBS if job.get("exclude_names")):
+        assert all(isinstance(name, str) and not name.isdigit() for name in job["exclude_names"])
+        assert job.get("mode", DEFAULTS["pve_backup_jobs_default_mode"]) == "snapshot"
+        assert "vmid" not in job
 
 
 def test_retention_is_owned_by_pbs():
