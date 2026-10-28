@@ -51,6 +51,9 @@ sanoid_datasets: >-
   {{ {
        'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24},
        'bulk/appdata': {'use_template': 'critical', 'recursive': 'yes'},
+       'bulk/home-videos': {'use_template': 'critical', 'recursive': 'yes'},
+       'bulk/photos': {'use_template': 'critical', 'recursive': 'yes'},
+       'bulk/music': {'use_template': 'critical', 'recursive': 'yes'},
        'bulk/object/subvol-' ~ object_store_vmid ~ '-disk-1': {'use_template': 'critical'}
      } }}
 
