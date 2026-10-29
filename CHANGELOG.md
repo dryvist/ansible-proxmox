@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.38.0](https://github.com/dryvist/ansible-proxmox/compare/v2.37.0...v2.38.0) (2026-10-29)
+
+
+### Features
+
+* **ansible-runner:** use pinned shared runner ([#1230](https://github.com/dryvist/ansible-proxmox/issues/1230)) ([a56b4d2](https://github.com/dryvist/ansible-proxmox/commit/a56b4d2d98536ebd1b1a50b9f3c2c2ba93efdef7))
+* **inventory:** snapshot jdrive on the storage node and pull its replica to the backup node ([#1218](https://github.com/dryvist/ansible-proxmox/issues/1218)) ([59cabb2](https://github.com/dryvist/ansible-proxmox/commit/59cabb281fd8569c87b1c3ff5b044727b83550e9))
+* **pve_backup_jobs:** select backup job guests by name ([#1222](https://github.com/dryvist/ansible-proxmox/issues/1222)) ([1591221](https://github.com/dryvist/ansible-proxmox/commit/159122163df1f8d9af49b1b262bb765190ef45ed))
+* **swap:** replace ZFS zvol swap with zram on every node ([#1216](https://github.com/dryvist/ansible-proxmox/issues/1216)) ([de08697](https://github.com/dryvist/ansible-proxmox/commit/de08697fed9c4340527e84c196d4bc89c6beab75))
+
+
+### Bug Fixes
+
+* **inventory:** exclude prometheus from the w5900 snapshot backup job ([#1221](https://github.com/dryvist/ansible-proxmox/issues/1221)) ([36ee676](https://github.com/dryvist/ansible-proxmox/commit/36ee676bbe75c2622fc45ee9d4e4064b3f708cd9))
+* **media_lxc_features:** remount NFS mounts whose declared source changed ([#1226](https://github.com/dryvist/ansible-proxmox/issues/1226)) ([5b63891](https://github.com/dryvist/ansible-proxmox/commit/5b6389102ff46db38ee5ea93114a1322f3348c01))
+* **nas_storage:** clear share files on nodes with no declared share ([#1228](https://github.com/dryvist/ansible-proxmox/issues/1228)) ([4fca8ba](https://github.com/dryvist/ansible-proxmox/commit/4fca8ba6d8026dd0ad1de3db306440a5356cab8c))
+* **nas_storage:** include each Samba share file explicitly ([#1225](https://github.com/dryvist/ansible-proxmox/issues/1225)) ([3cb135f](https://github.com/dryvist/ansible-proxmox/commit/3cb135f7d33a5921454ed08d342ab7015896f2e0))
+* **nas_storage:** remove share files for undeclared shares ([#1227](https://github.com/dryvist/ansible-proxmox/issues/1227)) ([2ce8523](https://github.com/dryvist/ansible-proxmox/commit/2ce85237db8e4fa4d32a627ca8697be94d3675e3))
+* **swap:** destroy the legacy swap zvol together with its snapshots ([#1219](https://github.com/dryvist/ansible-proxmox/issues/1219)) ([4ffd72d](https://github.com/dryvist/ansible-proxmox/commit/4ffd72df11f69c5afe8495346153a6154f16b8d4))
+* **zfs_pools:** make the zfs_bulk_node_datasets tag run its pool-presence prerequisites ([#1217](https://github.com/dryvist/ansible-proxmox/issues/1217)) ([1e2d93c](https://github.com/dryvist/ansible-proxmox/commit/1e2d93cd8a8ca16bec4b685f183f3f8153bf4a53))
+* **zfs_pools:** skip NFS permission checks for unmounted datasets in check mode ([#1224](https://github.com/dryvist/ansible-proxmox/issues/1224)) ([b2350a5](https://github.com/dryvist/ansible-proxmox/commit/b2350a50ee319983fd53d5667e7eb1a93c394c47))
+* **zfs_pools:** skip per-dataset steps for pending datasets in check mode ([#1223](https://github.com/dryvist/ansible-proxmox/issues/1223)) ([c38dbdb](https://github.com/dryvist/ansible-proxmox/commit/c38dbdbc73109c59d095d1b3b03e8de19beb132f))
+* **zfs_pools:** tolerate not-yet-created datasets in check mode ([#1220](https://github.com/dryvist/ansible-proxmox/issues/1220)) ([848ee62](https://github.com/dryvist/ansible-proxmox/commit/848ee62f8b73d2eeac254f47a1bebad0d8a1dbce))
+
 ## [2.37.0](https://github.com/dryvist/ansible-proxmox/compare/v2.36.0...v2.37.0) (2026-10-28)
 
 
