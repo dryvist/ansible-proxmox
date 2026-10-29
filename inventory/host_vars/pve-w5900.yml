@@ -17,6 +17,8 @@
 # Wake-on-LAN role resolves the current kernel name from the same MAC.
 fan_control: true
 fan_control_active_mode: benchmark-100
+proxmox_monitoring_pvesr_telemetry_minute: "4-59/5"
+proxmox_monitoring_zfs_capacity_minute: "3-59/15"
 
 wol_enable_enabled: true
 wol_enable_interface: nic0

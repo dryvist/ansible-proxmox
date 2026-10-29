@@ -2,6 +2,8 @@
 # Live Ethernet MAC recorded 2026-10-05; pin identity rather than PCI slot.
 pve_host_network_uplink: nic0
 pve_host_network_uplink_mac: "d0:94:66:3e:ae:81"
+proxmox_monitoring_pvesr_telemetry_minute: "1-59/5"
+proxmox_monitoring_zfs_capacity_minute: "7-59/15"
 
 # Host vars for the replacement storage node — the primary home for persistent
 # application state and the database dump archive. The other server pulls this

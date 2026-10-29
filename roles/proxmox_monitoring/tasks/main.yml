@@ -163,7 +163,7 @@
       ansible.builtin.cron:
         name: "zfs-capacity-monitor"
         job: "/usr/local/bin/zfs-capacity-monitor.sh"
-        minute: "*/{{ proxmox_monitoring_zfs_capacity_interval }}"
+        minute: "{{ proxmox_monitoring_zfs_capacity_minute | default('*/' ~ proxmox_monitoring_zfs_capacity_interval) }}"
         user: root
 
 - name: Configure pvesr replication status telemetry
@@ -181,5 +181,5 @@
       ansible.builtin.cron:
         name: "pvesr-status-telemetry"
         job: "/usr/local/bin/pvesr-status-telemetry.sh"
-        minute: "*/{{ proxmox_monitoring_pvesr_telemetry_interval }}"
+        minute: "{{ proxmox_monitoring_pvesr_telemetry_minute | default('*/' ~ proxmox_monitoring_pvesr_telemetry_interval) }}"
         user: root
