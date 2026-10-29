@@ -8,6 +8,7 @@
 sanoid_enabled: true
 sanoid_package: sanoid
 sanoid_timer_enabled: true
+sanoid_timer_randomized_delay_sec: 90
 sanoid_config_dir: /etc/sanoid
 
 # Retention templates by criticality tier. Quote yes/no so YAML keeps them

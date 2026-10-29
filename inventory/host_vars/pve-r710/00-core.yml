@@ -52,6 +52,8 @@ syncoid_extra_schedules:
 # Per-minute healthchecks liveness ping stays off pending its own follow-up
 # (unrelated to the always-on change above).
 proxmox_monitoring_enable_healthchecks: false
+proxmox_monitoring_pvesr_telemetry_minute: "2-59/5"
+proxmox_monitoring_zfs_capacity_minute: "11-59/15"
 
 # Layer-2 protection (cross-node ZFS replication via syncoid, PULL model): this
 # node pulls selected peer and workstation datasets into bulk/replica/<node>.

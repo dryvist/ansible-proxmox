@@ -18,3 +18,4 @@ node_auto_poweroff_enabled: false
 # systemd OnCalendar expression for the nightly power-off. The default is daily
 # at 22:00 local time. Override per host if a node needs a different window.
 node_auto_poweroff_on_calendar: "*-*-* 22:00:00"
+node_auto_poweroff_randomized_delay_sec: 1800

@@ -5,6 +5,8 @@ Documentation=man:zpool-scrub(8)
 
 [Timer]
 OnCalendar={{ item.1.on_calendar }}
+RandomizedDelaySec={{ zfs_scrub_window_randomized_delay_sec }}
+FixedRandomDelay=true
 Persistent=false
 
 [Install]

@@ -95,6 +95,7 @@ zfs_replication_vzdump_compress: zstd
 #   # 602000 postgres-apps · 605000 nautobot · 605010 vikunja · 605020 zammad
 zfs_replication_vzdump_guests: []
 zfs_replication_vzdump_on_calendar: "*-*-* 01:30:00"
+zfs_replication_vzdump_randomized_delay_sec: 1800
 zfs_replication_vzdump_extra_options: ""
 
 # Prune-by-count: keep this many backups per guest. Applied identically to the

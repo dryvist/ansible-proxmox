@@ -5,6 +5,8 @@ Documentation=https://github.com/dryvist/ansible-proxmox/tree/main/roles/sqlite_
 
 [Timer]
 OnCalendar={{ sqlite_standby_on_calendar }}
+RandomizedDelaySec={{ sqlite_standby_randomized_delay_sec }}
+FixedRandomDelay=true
 Persistent={{ sqlite_standby_persistent | ternary('true', 'false') }}
 
 [Install]
