@@ -144,10 +144,10 @@ def test_each_job_selects_one_scope_on_one_non_backup_node():
     assert all(job.get("all") is True for job in JOBS if "names" not in job)
     assert all(job.get("all") is not True for job in JOBS if "names" in job)
     assert {job["id"]: job["schedule"] for job in JOBS} == {
-        "guests-pve-r540": "06:30",
-        "guests-pve-r710": "06:15",
-        "guests-pve-w5900": "06:00",
-        "guests-pve-w5900-stop": "06:45",
+        "guests-pve-r540": "06:33",
+        "guests-pve-r710": "06:31",
+        "guests-pve-w5900": "06:01",
+        "guests-pve-w5900-stop": "06:43",
     }
 
 
