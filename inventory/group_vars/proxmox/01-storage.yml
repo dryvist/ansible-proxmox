@@ -106,7 +106,7 @@ pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
 pve_backup_jobs_pbs_node: pve-w1700
 pve_backup_jobs_pbs_server: "{{ hostvars['localhost'].tofu_data.containers.pbs.fqdn }}"
 pve_backup_jobs_jobs:
-  - {id: guests-pve-r540, all: true, node: pve-r540, storage: guests, schedule: "06:30", enabled: false}
-  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:15", enabled: false}
-  - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:00", enabled: true, exclude_names: [splunk, prometheus]}
-  - {id: guests-pve-w5900-stop, names: [prometheus], node: pve-w5900, storage: guests, schedule: "06:45", enabled: true, mode: stop}
+  - {id: guests-pve-r540, all: true, node: pve-r540, storage: guests, schedule: "06:33", enabled: false}
+  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: false}
+  - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:01", enabled: true, exclude_names: [splunk, prometheus]}
+  - {id: guests-pve-w5900-stop, names: [prometheus], node: pve-w5900, storage: guests, schedule: "06:43", enabled: true, mode: stop}

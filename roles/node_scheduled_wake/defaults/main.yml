@@ -24,6 +24,7 @@ node_scheduled_wake_enabled: true
 node_scheduled_wake_on_calendar:
   - "*-*-* 03:00:00"
   - "*-*-* 15:00:00"
+node_scheduled_wake_randomized_delay_sec: 1800
 
 node_scheduled_wake_bmc_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
 node_scheduled_wake_bmc_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"

@@ -89,6 +89,38 @@
   tags:
     - sanoid
 
+- name: Ensure sanoid timer drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/sanoid.timer.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - sanoid_enabled
+    - sanoid_timer_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - sanoid
+
+- name: Configure sanoid timer random delay
+  ansible.builtin.template:
+    src: sanoid-timer.conf.j2
+    dest: /etc/systemd/system/sanoid.timer.d/10-randomized-delay.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - sanoid_enabled
+    - sanoid_timer_enabled
+    - ansible_virtualization_type != 'docker'
+  notify: Reload systemd daemon
+  tags:
+    - sanoid
+
+- name: Reload systemd before enabling the timer
+  ansible.builtin.meta: flush_handlers
+
 - name: Enable and start the sanoid timer
   ansible.builtin.systemd:
     name: sanoid.timer

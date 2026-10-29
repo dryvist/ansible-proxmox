@@ -5,6 +5,8 @@ Documentation=ansible role zfs_replication
 
 [Timer]
 OnCalendar={{ zfs_replication_vzdump_on_calendar }}
+RandomizedDelaySec={{ zfs_replication_vzdump_randomized_delay_sec }}
+FixedRandomDelay=true
 Persistent=true
 
 [Install]

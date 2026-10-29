@@ -24,6 +24,7 @@ sqlite_standby_log_dir: /var/log/sqlite-standby
 
 # Daily by design (a warm standby / queryable daily archive, not a hot replica).
 sqlite_standby_on_calendar: "*-*-* 03:30:00"
+sqlite_standby_randomized_delay_sec: 1800
 # Run a missed schedule on next boot (sensible for a backup job).
 sqlite_standby_persistent: true
 
