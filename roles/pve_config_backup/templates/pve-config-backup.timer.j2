@@ -5,6 +5,8 @@ Documentation=https://github.com/dryvist/ansible-proxmox/tree/main/roles/pve_con
 
 [Timer]
 OnCalendar={{ pve_config_backup_on_calendar }}
+RandomizedDelaySec={{ pve_config_backup_randomized_delay_sec }}
+FixedRandomDelay=true
 Persistent={{ pve_config_backup_persistent | ternary('true', 'false') }}
 
 [Install]

@@ -4,6 +4,7 @@ zfs_scrub_window_enabled: false
 zfs_scrub_window_pools: []
 zfs_scrub_window_resume_oncalendar: "*-*-* 04:00:00 UTC"
 zfs_scrub_window_pause_oncalendar: "*-*-* 10:00:00 UTC"
+zfs_scrub_window_randomized_delay_sec: 1800
 zfs_scrub_window_module_params:
   zfs_vdev_scrub_max_active: 1
   zfs_scan_vdev_limit: 4194304

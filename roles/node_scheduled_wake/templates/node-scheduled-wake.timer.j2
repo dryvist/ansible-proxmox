@@ -7,6 +7,8 @@ Documentation=ansible role node_scheduled_wake
 {% for cal in item.on_calendar | default(node_scheduled_wake_on_calendar) %}
 OnCalendar={{ cal }}
 {% endfor %}
+RandomizedDelaySec={{ node_scheduled_wake_randomized_delay_sec }}
+FixedRandomDelay=true
 # Persistent=false is deliberate: do NOT catch up a missed wake. If the
 # controller was down at the scheduled time, do not power the DR node on late —
 # wait for the next window.
