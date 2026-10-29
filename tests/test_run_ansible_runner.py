@@ -10,7 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "run-ansible.sh"
-SHARED_RUNNER = "github:dryvist/homelab-contracts/v5.30.0#run-ansible"
+SHARED_RUNNER = "github:dryvist/homelab-contracts/v5.31.0#run-ansible"
 
 
 class RunAnsibleShimContract(unittest.TestCase):
@@ -30,6 +30,7 @@ class RunAnsibleShimContract(unittest.TestCase):
                 printf '%s\\n' "$@" > "$NIX_ARGS_LOG"
                 printf '%s\\n' \
                   "$RUN_ANSIBLE_IDENTITIES" \
+                  "$RUN_ANSIBLE_FALLBACK_ON_ERROR" \
                   "$RUN_ANSIBLE_SSH_AGENT" \
                   "$RUN_ANSIBLE_LIMIT_LOCALHOST" \
                   "${NIX_SHELL-unset}" > "$NIX_ENV_LOG"
@@ -54,6 +55,7 @@ class RunAnsibleShimContract(unittest.TestCase):
             }
         )
         env.pop("RUN_ANSIBLE_IDENTITIES", None)
+        env.pop("RUN_ANSIBLE_FALLBACK_ON_ERROR", None)
         env.pop("RUN_ANSIBLE_SSH_AGENT", None)
         env.pop("RUN_ANSIBLE_LIMIT_LOCALHOST", None)
         env.pop("NIX_SHELL", None)
@@ -92,7 +94,7 @@ class RunAnsibleShimContract(unittest.TestCase):
         )
         self.assertEqual(
             self.env_log.read_text(encoding="utf-8").splitlines(),
-            ["semaphore?,ansible", "1", "1", "unset"],
+            ["semaphore?,ansible", "1", "1", "1", "unset"],
         )
 
     def test_preserves_environment_overrides_including_nix_shell(self):
@@ -101,6 +103,7 @@ class RunAnsibleShimContract(unittest.TestCase):
             "playbooks/site.yml",
             extra_env={
                 "RUN_ANSIBLE_IDENTITIES": "ansible",
+                "RUN_ANSIBLE_FALLBACK_ON_ERROR": "0",
                 "RUN_ANSIBLE_SSH_AGENT": "enabled",
                 "RUN_ANSIBLE_LIMIT_LOCALHOST": "1",
                 "NIX_SHELL": nix_shell,
@@ -114,7 +117,7 @@ class RunAnsibleShimContract(unittest.TestCase):
         )
         self.assertEqual(
             self.env_log.read_text(encoding="utf-8").splitlines(),
-            ["ansible", "enabled", "1", nix_shell],
+            ["ansible", "0", "enabled", "1", nix_shell],
         )
 
 
