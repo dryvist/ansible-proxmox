@@ -20,8 +20,9 @@ Ships in `ansible-proxmox`, applied via `playbooks/site.yml`. No separate instal
 
 Per job, daily (`systemd` timer, after the source's own backup window):
 
-1. **Mirror** — `rsync -a --delete` of `*.dump` from the source guest's backup
-   directory into the archive dataset. The mirror tracks the **source's**
+1. **Mirror** — `rsync -a --no-owner --no-group --delete` of `*.dump` from the
+   source guest's backup directory into the archive dataset, so the declared
+   archive owner stays put. The mirror tracks the **source's**
    retention window; pre-prune history is preserved by sanoid snapshots of the
    archive dataset (read a point-in-time view from `<dataset>/.zfs/snapshot/`).
 2. **Tier-2 upload** — the newest dump per database (`<db>-<utc-stamp>.dump`)
