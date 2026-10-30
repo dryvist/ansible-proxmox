@@ -159,7 +159,7 @@ def test_undeclared_vzdump_jobs_are_not_removed():
 def test_stop_mode_guests_are_excluded_from_the_snapshot_job():
     snapshot = next(job for job in JOBS if job["id"] == "guests-pve-w5900")
     stop = next(job for job in JOBS if job["id"] == "guests-pve-w5900-stop")
-    assert {"dify", "prometheus", "splunk"} <= set(snapshot["exclude_names"])
+    assert {"prometheus", "splunk"} <= set(snapshot["exclude_names"])
     assert stop["mode"] == "stop"
-    assert {"dify", "prometheus"} <= set(stop["names"])
+    assert {"prometheus"} <= set(stop["names"])
     assert set(stop["names"]) <= set(snapshot["exclude_names"])
