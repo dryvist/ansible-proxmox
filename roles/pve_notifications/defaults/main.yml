@@ -26,7 +26,7 @@ pve_notifications_ntfy_method: post
 # block keeps Ansible from templating them first. ntfy takes the request body
 # as the message and the Title header as the title. The API stores both
 # base64-encoded.
-pve_notifications_ntfy_title_template: "{% raw %}{{ title }}{% endraw %}"
+pve_notifications_ntfy_title_template: "{% raw %}{{ fields.type }} ({{ fields.hostname }}) — {{ title }}{% endraw %}"
 pve_notifications_ntfy_body_template: "{% raw %}{{ message }}{% endraw %}"
 # Optional hub publish-token. Empty by default (auth is not enforced on the
 # hub yet). Not currently wired into the webhook target: PVE's webhook
