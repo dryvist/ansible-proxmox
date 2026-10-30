@@ -144,13 +144,22 @@ def test_each_job_selects_one_scope_on_one_non_backup_node():
     assert all(job.get("all") is True for job in JOBS if "names" not in job)
     assert all(job.get("all") is not True for job in JOBS if "names" in job)
     assert {job["id"]: job["schedule"] for job in JOBS} == {
-        "guests-pve-r540": "06:30",
-        "guests-pve-r710": "06:15",
-        "guests-pve-w5900": "06:00",
-        "guests-pve-w5900-stop": "06:45",
+        "guests-pve-r540": "06:33",
+        "guests-pve-r710": "06:31",
+        "guests-pve-w5900": "06:01",
+        "guests-pve-w5900-stop": "06:43",
     }
 
 
 def test_undeclared_vzdump_jobs_are_not_removed():
     assert INVENTORY["pve_backup_jobs_prune_unmanaged"] is False
     assert INVENTORY["pve_backup_jobs_manage"] is True
+
+
+def test_stop_mode_guests_are_excluded_from_the_snapshot_job():
+    snapshot = next(job for job in JOBS if job["id"] == "guests-pve-w5900")
+    stop = next(job for job in JOBS if job["id"] == "guests-pve-w5900-stop")
+    assert {"prometheus", "splunk"} <= set(snapshot["exclude_names"])
+    assert stop["mode"] == "stop"
+    assert {"prometheus"} <= set(stop["names"])
+    assert set(stop["names"]) <= set(snapshot["exclude_names"])

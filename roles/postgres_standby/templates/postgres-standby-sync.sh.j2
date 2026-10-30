@@ -34,7 +34,7 @@ sync_job() {
   local name="$1" src_host="$2" src_dir="$3" archive="$4"
   say "job $name: ${src_host}:${src_dir}/ -> ${archive}/"
   mkdir -p "$archive"
-  if ! rsync -a --delete --include='*.dump' --exclude='*' \
+  if ! rsync -a --no-owner --no-group --delete --include='*.dump' --exclude='*' \
       -e 'ssh -i "{{ postgres_standby_ssh_key }}" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new' \
       "${src_host}:${src_dir}/" "${archive}/" >>"$log" 2>&1; then
     say "  FAILED: rsync mirror"
