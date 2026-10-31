@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.39.0](https://github.com/dryvist/ansible-proxmox/compare/v2.38.1...v2.39.0) (2026-10-31)
+
+
+### Features
+
+* **zfs_pools:** require an explicit quota on every declared dataset ([#1208](https://github.com/dryvist/ansible-proxmox/issues/1208)) ([8beac97](https://github.com/dryvist/ansible-proxmox/commit/8beac978a251b57d325a71aa6d535f25ebfe29a4))
+
+
+### Bug Fixes
+
+* **postgres_standby:** keep the declared archive directory owner when syncing ([#1236](https://github.com/dryvist/ansible-proxmox/issues/1236)) ([24b300e](https://github.com/dryvist/ansible-proxmox/commit/24b300e5ad681f52964137da0a3412fbabe49b2c))
+* **pve_backup_jobs:** back up dify in stop mode with prometheus ([#1237](https://github.com/dryvist/ansible-proxmox/issues/1237)) ([997a2ea](https://github.com/dryvist/ansible-proxmox/commit/997a2ea1546bf26b7a23161c623688aa9a4571f3))
+* **pve_backup_jobs:** back up dify in the snapshot job ([#1238](https://github.com/dryvist/ansible-proxmox/issues/1238)) ([c948d05](https://github.com/dryvist/ansible-proxmox/commit/c948d05ab878378af003e6c3720193678035bd5f))
+* **pve_notifications:** split the ntfy title into a stable name and detail ([#1239](https://github.com/dryvist/ansible-proxmox/issues/1239)) ([50410f3](https://github.com/dryvist/ansible-proxmox/commit/50410f397ddd17600821f18370dabcccd2dcf477))
+
 ## [2.38.1](https://github.com/dryvist/ansible-proxmox/compare/v2.38.0...v2.38.1) (2026-10-29)
 
 
