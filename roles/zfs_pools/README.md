@@ -66,6 +66,11 @@ zfs_pools_map:
           "com.sun:auto-snapshot": "false"
 ```
 
+Every declared dataset must set `quota` to a size or the explicit string
+`none` for an uncapped dataset; the role fails before any host change if the
+key is missing, null, or empty. `none` reconciles to an unset quota
+(`zfs set quota=none`).
+
 ### Root dataset headroom
 
 The role derives `zfs_pools_root_dataset` from `findmnt`, unless a dataset is

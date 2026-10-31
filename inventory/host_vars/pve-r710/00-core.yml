@@ -38,6 +38,10 @@ syncoid_trigger: cron
 syncoid_cron_hour: "*/4"
 syncoid_boot_poweroff_on_complete: false
 
+zfs_pools_vm_disk_properties_node:
+  bulk/replica:
+    quota: "2T"
+
 # The Splunk configuration disk is ~4 GB of text that changes whenever anything
 # is reconfigured, and its incrementals are kilobytes — so a 4 h RPO on it buys
 # nothing and costs a day's worth of config edits in a restore. It gets its own
