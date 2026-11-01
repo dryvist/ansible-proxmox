@@ -107,6 +107,13 @@ jobs:
             ansible-playbook "$playbook" -i localhost, -c local
           done
 
+      - name: Verify vendor-aware HA VM drain planning
+        env:
+          ANSIBLE_LOCAL_TEMP: /tmp/ansible-tmp
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ansible-playbook tests/pve_upgrade_cross_vendor/verify_plan.yml -i localhost, -c local
+
       # datacenter.cfg is cluster-wide and holds keys pve_ha does not own, so
       # the role merges one key instead of templating the file. This runs that
       # task file against a temp copy and proves the unmanaged keys survive.
