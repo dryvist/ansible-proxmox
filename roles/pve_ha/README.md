@@ -49,7 +49,10 @@ When enabled it:
    per-guest attribute in the tofu desired state, alongside `node` — so
    ha-manager has a replica to relocate onto.
 
-Never live-migrate a VM across CPU vendors. `pve_upgrade` moves VMs with cross-vendor affinity cold during a maintenance drain. Set `pve_node_cpu_vendor` in inventory by PVE node name (`amd` or `intel`); available processor facts are a fallback.
+Never live-migrate a VM across CPU vendors. `pve_upgrade` moves VMs with
+cross-vendor affinity cold during a maintenance drain. Set `pve_node_cpu_vendor`
+in inventory by PVE node name (`amd` or `intel`); available processor facts are
+a fallback.
 
 Guests under HA come from `pve_ha_ct_hostnames` (containers) and
 `pve_ha_vm_names` (VMs). Anti-affinity pairs (`pve_ha_anti_affinity_groups`):
