@@ -103,7 +103,7 @@ jobs:
           ANSIBLE_LOCAL_TEMP: /tmp/ansible-tmp
         run: |
           mkdir -p /tmp/ansible-tmp
-          for playbook in tests/pve_ha_replication/verify_*.yml tests/pve_backup_mount_flags/verify_*.yml; do
+          for playbook in tests/pve_ha_replication/verify_*.yml tests/pve_backup_mount_flags/verify_*.yml tests/pve_upgrade_cross_vendor/verify_plan.yml; do
             ansible-playbook "$playbook" -i localhost, -c local
           done
 

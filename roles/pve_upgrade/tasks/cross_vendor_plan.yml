@@ -1,0 +1,59 @@
+---
+# Pure planning over current cluster resources and HA rules.
+- name: Build vendor-aware HA VM drain plan
+  ansible.builtin.set_fact:
+    pve_upgrade_vm_drain_plan: >-
+      {%- set result = namespace(items=[]) -%}
+      {%- for vm in pve_upgrade_cluster_resources
+            if vm.type == 'qemu' and vm.node == pve_upgrade_node_name
+            and vm.status == 'running' and ('vm:' ~ vm.vmid | string) in pve_upgrade_ha_sids -%}
+        {%- set sid = 'vm:' ~ vm.vmid | string -%}
+        {%- set ns = namespace(allowed=none, invalid=[]) -%}
+        {%- for rule in pve_upgrade_ha_rules
+              if rule.type == 'node-affinity' and not (rule.disable | default(0) | bool)
+              and sid in (rule.resources | default('') | split(','))
+              and (rule.strict | default(0) | int == 1) -%}
+          {%- if rule.affinity | default('positive') != 'positive' or rule.nodes is not defined
+                or rule.nodes is not string or not rule.nodes -%}
+            {%- set ns.invalid = ns.invalid + [rule.rule | default('unknown')] -%}
+          {%- else -%}
+            {%- set nodes = rule.nodes | split(',') | map('regex_replace', ':.*$', '') | list -%}
+            {%- set ns.allowed = nodes if ns.allowed is none else ns.allowed | intersect(nodes) -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- set allowed = ns.allowed | default([], true) -%}
+        {%- set unknown = ([pve_upgrade_node_name] + allowed) | unique
+              | reject('in', pve_upgrade_cpu_vendors.keys() | list) | list -%}
+        {%- set invalid_vendors = ([pve_upgrade_node_name] + allowed) | unique
+              | select('in', pve_upgrade_cpu_vendors.keys() | list)
+              | map('extract', pve_upgrade_cpu_vendors) | reject('in', ['amd', 'intel']) | list -%}
+        {%- set peers = allowed | reject('equalto', pve_upgrade_node_name) | list -%}
+        {%- set same = peers | select('in', pve_upgrade_online_nodes)
+              | select('in', pve_upgrade_cpu_vendors.keys() | list)
+              | select('in', pve_upgrade_cpu_vendors | dict2items
+                   | selectattr('value', 'equalto', pve_upgrade_cpu_vendors.get(pve_upgrade_node_name))
+                   | map(attribute='key') | list) | list -%}
+        {%- set different = peers | select('in', pve_upgrade_cpu_vendors.keys() | list)
+              | reject('in', pve_upgrade_cpu_vendors | dict2items
+                   | selectattr('value', 'equalto', pve_upgrade_cpu_vendors.get(pve_upgrade_node_name))
+                   | map(attribute='key') | list) | list -%}
+        {%- set result.items = result.items + [{'sid': sid, 'allowed': allowed, 'unknown': unknown,
+              'invalid_vendors': invalid_vendors, 'invalid_rules': ns.invalid,
+              'has_rule': ns.allowed is not none, 'cross_vendor': different | length > 0,
+              'target': same | first | default('')}] -%}
+      {%- endfor -%}
+      {{ result.items }}
+
+- name: Require complete vendor and strict affinity data before draining VMs
+  ansible.builtin.assert:
+    that:
+      - item.has_rule
+      - item.invalid_rules | length == 0
+      - pve_upgrade_node_name in item.allowed
+      - item.unknown | length == 0
+      - item.invalid_vendors | length == 0
+    fail_msg: "Cannot safely drain {{ item.sid }}: {{ item }}"
+    quiet: true
+  loop: "{{ pve_upgrade_vm_drain_plan }}"
+  loop_control:
+    label: "{{ item.sid }}"

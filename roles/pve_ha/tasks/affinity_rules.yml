@@ -94,6 +94,49 @@
           | map(attribute='nodes') | first | default('', true))
          | split(',') | reject('equalto', '') | sort | join(',') }}
 
+- name: Resolve CPU vendors from available PVE facts
+  ansible.builtin.set_fact:
+    pve_ha_cpu_vendors: >-
+      {%- set ns = namespace(vendors={}) -%}
+      {%- for host in groups['proxmox'] | default([]) -%}
+        {%- set processor = hostvars[host].ansible_facts.processor | default([]) | join(' ') | lower -%}
+        {%- set vendor = 'amd' if 'amd' in processor else ('intel' if 'intel' in processor else '') -%}
+        {%- if vendor -%}
+          {%- set node = hostvars[host].proxmox_node_name | default(host) -%}
+          {%- set ns.vendors = ns.vendors | combine({node: vendor}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.vendors | combine(pve_node_cpu_vendor | default({})) }}
+
+- name: Require known vendors for each VM replication pair
+  ansible.builtin.assert:
+    that:
+      - pve_ha_cpu_vendors.get(item.node) in ['amd', 'intel']
+      - pve_ha_cpu_vendors.get(item.target) in ['amd', 'intel']
+    fail_msg: "CPU vendor is unknown for {{ item.sid }} replication pair {{ item.pair }}."
+    quiet: true
+  loop: "{{ pve_ha_replication_guests | default([]) }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when:
+    - item.kind == 'vm'
+    - item.viable
+
+- name: Warn when a VM replication pair crosses CPU vendors
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ item.sid }} spans CPU vendors ({{ item.node }}, {{ item.target }}).
+      Never live-migrate across CPU vendors; pve_upgrade drains it cold.
+  loop: "{{ pve_ha_replication_guests | default([]) }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when:
+    - item.kind == 'vm'
+    - item.viable
+    - pve_ha_cpu_vendors.get(item.node) in ['amd', 'intel']
+    - pve_ha_cpu_vendors.get(item.target) in ['amd', 'intel']
+    - pve_ha_cpu_vendors[item.node] != pve_ha_cpu_vendors[item.target]
+
 - name: Group viable replication guests by their [node, target] pair
   ansible.builtin.set_fact:
     pve_ha_replication_pair_groups: >-

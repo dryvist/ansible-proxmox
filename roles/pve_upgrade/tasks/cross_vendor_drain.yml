@@ -1,0 +1,119 @@
+---
+# upgrade.yml runs serial: 1, so peer nodes have no facts in this batch.
+- name: Gather processor facts for every PVE node
+  ansible.builtin.setup:
+    gather_subset: [hardware]
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  ignore_unreachable: true
+  loop: "{{ groups['proxmox'] | default([]) }}"
+  when: hostvars[item].ansible_facts.processor is not defined
+
+- name: Read current HA rules for the drain
+  ansible.builtin.command: pvesh get /cluster/ha/rules --output-format json
+  register: pve_upgrade_rules_raw
+  changed_when: false
+  check_mode: false
+
+- name: Read current HA resources for the drain
+  ansible.builtin.command: pvesh get /cluster/ha/resources --output-format json
+  register: pve_upgrade_ha_resources_raw
+  changed_when: false
+  check_mode: false
+
+- name: Read current cluster resources for the drain
+  ansible.builtin.command: pvesh get /cluster/resources --output-format json
+  register: pve_upgrade_cluster_resources_raw
+  changed_when: false
+  check_mode: false
+
+- name: Resolve available CPU vendor facts
+  ansible.builtin.set_fact:
+    pve_upgrade_cpu_vendors: >-
+      {%- set ns = namespace(vendors={}) -%}
+      {%- for host in groups['proxmox'] | default([]) -%}
+        {%- set facts = hostvars[host].ansible_facts | default({}) -%}
+        {%- set processor = facts.processor | default([]) | join(' ') | lower -%}
+        {%- set vendor = 'amd' if 'amd' in processor else ('intel' if 'intel' in processor else '') -%}
+        {%- if vendor -%}
+          {%- set node = hostvars[host].proxmox_node_name | default(host) -%}
+          {%- set ns.vendors = ns.vendors | combine({node: vendor}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.vendors | combine(pve_node_cpu_vendor | default({})) }}
+    pve_upgrade_ha_rules: "{{ pve_upgrade_rules_raw.stdout | from_json }}"
+    pve_upgrade_cluster_resources: "{{ pve_upgrade_cluster_resources_raw.stdout | from_json }}"
+    pve_upgrade_ha_sids: "{{ pve_upgrade_ha_resources_raw.stdout | from_json | map(attribute='sid') | list }}"
+    pve_upgrade_online_nodes: >-
+      {{ pve_upgrade_cluster_resources_raw.stdout | from_json
+         | selectattr('type', 'equalto', 'node') | selectattr('status', 'equalto', 'online')
+         | map(attribute='node') | list }}
+
+- name: Plan the HA VM drain
+  ansible.builtin.include_tasks: cross_vendor_plan.yml
+
+- name: Cold relocate VMs to an allowed same-vendor node
+  ansible.builtin.command:
+    argv: [ha-manager, relocate, "{{ item.sid }}", "{{ item.target }}"]
+  loop: "{{ pve_upgrade_vm_drain_plan }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when:
+    - item.cross_vendor
+    - item.target | length > 0
+    - not ansible_check_mode
+  changed_when: true
+
+- name: Wait for cold relocations to leave this node
+  ansible.builtin.command: ha-manager status
+  register: pve_upgrade_cold_status
+  until: pve_upgrade_cold_status.stdout is not search('(?m)^service ' ~ (item.sid | regex_escape) ~ ' \\(' ~ (pve_upgrade_node_name | regex_escape) ~ ',')
+  retries: "{{ pve_upgrade_ha_drain_retries | int }}"
+  delay: "{{ pve_upgrade_ha_drain_delay | int }}"
+  changed_when: false
+  check_mode: false
+  loop: "{{ pve_upgrade_vm_drain_plan }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when:
+    - item.cross_vendor
+    - item.target | length > 0
+    - not ansible_check_mode
+
+- name: Stop VMs without a same-vendor target for HA cold restart
+  ansible.builtin.command:
+    argv: [ha-manager, set, "{{ item.sid }}", --state, stopped]
+  loop: "{{ pve_upgrade_vm_drain_plan }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when:
+    - item.cross_vendor
+    - item.target | length == 0
+    - not ansible_check_mode
+  changed_when: true
+
+- name: Wait until VMs without a same-vendor target are stopped
+  ansible.builtin.command: ha-manager status
+  register: pve_upgrade_stopped_status
+  until: pve_upgrade_stopped_status.stdout is search('(?m)^service ' ~ (item.sid | regex_escape) ~ ' \\([^,]+, stopped\\)')
+  retries: "{{ pve_upgrade_ha_drain_retries | int }}"
+  delay: "{{ pve_upgrade_ha_drain_delay | int }}"
+  changed_when: false
+  check_mode: false
+  loop: "{{ pve_upgrade_vm_drain_plan }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when:
+    - item.cross_vendor
+    - item.target | length == 0
+    - not ansible_check_mode
+
+- name: Report VMs awaiting HA cold restart
+  ansible.builtin.debug:
+    msg: "{{ item.sid }} has no available same-vendor target; HA will restart it cold after maintenance begins."
+  loop: "{{ pve_upgrade_vm_drain_plan }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when:
+    - item.cross_vendor
+    - item.target | length == 0
