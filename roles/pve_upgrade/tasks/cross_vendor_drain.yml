@@ -1,4 +1,14 @@
 ---
+# upgrade.yml runs serial: 1, so peer nodes have no facts in this batch.
+- name: Gather processor facts for every PVE node
+  ansible.builtin.setup:
+    gather_subset: [hardware]
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  ignore_unreachable: true
+  loop: "{{ groups['proxmox'] | default([]) }}"
+  when: hostvars[item].ansible_facts.processor is not defined
+
 - name: Read current HA rules for the drain
   ansible.builtin.command: pvesh get /cluster/ha/rules --output-format json
   register: pve_upgrade_rules_raw
