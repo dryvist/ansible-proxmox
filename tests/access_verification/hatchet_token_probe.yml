@@ -1,41 +1,40 @@
 ---
-# Live probe of the hatchet-killtest PVE token boundary. Every request except
-# /version and the VMID check must be refused. Nothing here can change guest
-# state: the power check targets UNUSED_VMID, which /cluster/nextid (open to
-# every authenticated principal) must confirm no guest holds before any check.
+# Live probe of the hatchet-killtest PVE token boundary. It only reads: the
+# token's own effective permissions (/access/permissions, open to every token
+# for itself) prove VM.PowerMgmt sits on exactly the two Hatchet guests, and a
+# set of reads must be refused. No request can change guest state.
 - name: Verify the Hatchet PVE API token boundary
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
     pve_probe_url: "{{ lookup('ansible.builtin.env', 'PVE_API_URL') | regex_replace('/+$', '') }}"
+    pve_probe_ca_file: "{{ lookup('ansible.builtin.env', 'PVE_CA_FILE') }}"
     pve_probe_token_id: "{{ lookup('ansible.builtin.env', 'PVE_API_TOKEN_ID') }}"
     pve_probe_token_secret: "{{ lookup('ansible.builtin.env', 'PVE_API_TOKEN_SECRET') }}"
     pve_probe_node: "{{ lookup('ansible.builtin.env', 'PVE_NODE') }}"
     pve_probe_hatchet_vmids: "{{ lookup('ansible.builtin.env', 'HATCHET_VMIDS') | split(',') | map('trim') | list }}"
     pve_probe_other_vmid: "{{ lookup('ansible.builtin.env', 'OTHER_VMID') }}"
     pve_probe_other_type: "{{ lookup('ansible.builtin.env', 'OTHER_GUEST_TYPE') }}"
-    pve_probe_unused_vmid: "{{ lookup('ansible.builtin.env', 'UNUSED_VMID') }}"
     pve_probe_authorization: >-
       PVEAPIToken={{ pve_probe_token_id }}={{ pve_probe_token_secret }}
-    pve_probe_node_api: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}"
+    pve_probe_api: "{{ pve_probe_url }}/api2/json"
+    pve_probe_node_api: "{{ pve_probe_api }}/nodes/{{ pve_probe_node }}"
     pve_probe_hatchet_api: "{{ pve_probe_node_api }}/lxc/{{ pve_probe_hatchet_vmids[0] }}"
     pve_probe_other_api: "{{ pve_probe_node_api }}/{{ pve_probe_other_type }}/{{ pve_probe_other_vmid }}"
+    pve_probe_hatchet_paths: "{{ pve_probe_hatchet_vmids | map('regex_replace', '^', '/vms/') | sort }}"
     pve_probe_denied:
-      - {name: Hatchet guest config read, method: GET, url: "{{ pve_probe_hatchet_api }}/config"}
-      - {name: Hatchet guest config write, method: PUT, url: "{{ pve_probe_hatchet_api }}/config"}
-      - {name: Hatchet guest console, method: POST, url: "{{ pve_probe_hatchet_api }}/termproxy"}
-      - {name: Other guest status read, method: GET, url: "{{ pve_probe_other_api }}/status/current"}
-      - {name: Power start on an unused VMID, method: POST, url: "{{ pve_probe_node_api }}/lxc/{{ pve_probe_unused_vmid }}/status/start"}
-      - {name: Node config read, method: GET, url: "{{ pve_probe_node_api }}/config"}
-      - {name: Node storage list, method: GET, url: "{{ pve_probe_node_api }}/storage"}
-      - {name: Cluster storage config, method: GET, url: "{{ pve_probe_url }}/api2/json/storage"}
-      - {name: ACL read, method: GET, url: "{{ pve_probe_url }}/api2/json/access/acl"}
+      - {name: Hatchet guest config read, url: "{{ pve_probe_hatchet_api }}/config"}
+      - {name: Other guest status read, url: "{{ pve_probe_other_api }}/status/current"}
+      - {name: Node config read, url: "{{ pve_probe_node_api }}/config"}
+      - {name: Node storage list, url: "{{ pve_probe_node_api }}/storage"}
+      - {name: Cluster storage config, url: "{{ pve_probe_api }}/storage"}
+      - {name: ACL read, url: "{{ pve_probe_api }}/access/acl"}
   tasks:
-    - name: Require explicit PVE probe inputs
+    - name: Require explicit PVE probe inputs and an https API URL
       ansible.builtin.assert:
         that:
-          - pve_probe_url | length > 0
+          - pve_probe_url is match('^https://[^/]+')
           - pve_probe_token_id | length > 0
           - pve_probe_token_secret | length > 0
           - pve_probe_node | length > 0
@@ -43,48 +42,75 @@
           - pve_probe_hatchet_vmids | unique | length == 2
           - pve_probe_other_type in ['qemu', 'lxc']
           - >-
-            (pve_probe_hatchet_vmids + [pve_probe_other_vmid, pve_probe_unused_vmid])
+            (pve_probe_hatchet_vmids + [pve_probe_other_vmid])
             | reject('match', '^[0-9]+$') | list | length == 0
           - pve_probe_other_vmid not in pve_probe_hatchet_vmids
-          - pve_probe_unused_vmid not in pve_probe_hatchet_vmids + [pve_probe_other_vmid]
         fail_msg: >-
-          Set the PVE API URL, token pair, node, both Hatchet VMIDs (HATCHET_VMIDS,
-          comma-separated), another guest type and VMID, and an unused VMID, all
+          Set an https:// PVE API URL, the token pair, the node, both Hatchet VMIDs
+          (HATCHET_VMIDS, comma-separated), and another guest's type and VMID, all
           VMIDs numeric and distinct, before running this live probe.
         quiet: true
       no_log: true
 
     - name: Require the token to authenticate (positive control)
       ansible.builtin.uri:
-        url: "{{ pve_probe_url }}/api2/json/version"
+        url: "{{ pve_probe_api }}/version"
         method: GET
         headers:
           Authorization: "{{ pve_probe_authorization }}"
+        validate_certs: true
+        ca_path: "{{ pve_probe_ca_file | default(omit, true) }}"
         status_code: 200
         return_content: false
       no_log: true
 
-    # nextid returns the VMID when no guest holds it and 400 when one does.
-    - name: Require UNUSED_VMID to be free across the cluster
+    - name: Read the token's effective permissions
       ansible.builtin.uri:
-        url: "{{ pve_probe_url }}/api2/json/cluster/nextid?vmid={{ pve_probe_unused_vmid }}"
+        url: "{{ pve_probe_api }}/access/permissions{{ item }}"
         method: GET
         headers:
           Authorization: "{{ pve_probe_authorization }}"
+        validate_certs: true
+        ca_path: "{{ pve_probe_ca_file | default(omit, true) }}"
         status_code: 200
         return_content: true
-      register: pve_probe_nextid
-      failed_when: >-
-        pve_probe_nextid.status != 200
-        or (pve_probe_nextid.json.data | string) != pve_probe_unused_vmid
+      loop:
+        - ""
+        - "?path=/vms"
+        - "?path=/vms/{{ pve_probe_other_vmid }}"
+      register: pve_probe_permissions
       no_log: true
 
-    - name: Require each out-of-scope request to be denied
+    - name: Require VM.PowerMgmt on exactly the two Hatchet guests and nowhere else
+      vars:
+        pve_probe_tree: "{{ pve_probe_permissions.results[0].json.data }}"
+        pve_probe_vms: "{{ pve_probe_permissions.results[1].json.data }}"
+        pve_probe_other: "{{ pve_probe_permissions.results[2].json.data }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            pve_probe_tree | dict2items
+            | selectattr('value', 'contains', 'VM.PowerMgmt')
+            | map(attribute='key') | sort == pve_probe_hatchet_paths
+          - >-
+            pve_probe_hatchet_paths
+            | map('extract', pve_probe_tree) | map('list') | map('sort')
+            | unique | list == [['VM.PowerMgmt']]
+          - "'VM.PowerMgmt' not in pve_probe_vms.get('/vms', {})"
+          - "'VM.PowerMgmt' not in pve_probe_other.get('/vms/' ~ pve_probe_other_vmid, {})"
+        fail_msg: >-
+          The token's effective permissions are wider than VM.PowerMgmt on the two
+          Hatchet guests.
+        quiet: true
+
+    - name: Require each out-of-scope read to be denied
       ansible.builtin.uri:
         url: "{{ item.url }}"
-        method: "{{ item.method }}"
+        method: GET
         headers:
           Authorization: "{{ pve_probe_authorization }}"
+        validate_certs: true
+        ca_path: "{{ pve_probe_ca_file | default(omit, true) }}"
         status_code: 403
         return_content: false
       loop: "{{ pve_probe_denied }}"

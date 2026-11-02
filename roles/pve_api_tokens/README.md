@@ -77,22 +77,23 @@ for these tokens.
 The live probe is `tests/access_verification/hatchet_token_probe.yml`. It reads
 these inputs from the environment:
 
-- `PVE_API_URL`, `PVE_API_TOKEN_ID` and `PVE_API_TOKEN_SECRET`;
+- `PVE_API_URL`, which must be `https://`, and optionally `PVE_CA_FILE`, the
+  cluster CA; certificate validation is always on;
+- `PVE_API_TOKEN_ID` and `PVE_API_TOKEN_SECRET`;
 - `PVE_NODE`, and `HATCHET_VMIDS`, both Hatchet VMIDs comma-separated;
-- `OTHER_VMID` and `OTHER_GUEST_TYPE` (`qemu` or `lxc`), a guest outside the grant;
-- `UNUSED_VMID`, a VMID no guest holds.
+- `OTHER_VMID` and `OTHER_GUEST_TYPE` (`qemu` or `lxc`), a guest outside the grant.
 
-Every VMID must be numeric, and all four must differ. In order, the probe then:
+Every VMID must be numeric, and all three must differ. The probe sends only GET
+requests, so it cannot change guest state. In order, it:
 
 1. requires `/version` to return 200 (positive control);
-2. requires `/cluster/nextid?vmid=<UNUSED_VMID>` to return that VMID, which
-   proves no guest holds it (the endpoint is open to every authenticated
-   principal and answers 400 when the VMID is taken);
-3. requires 403 from each of: the first Hatchet guest's config read, config
-   write and console; the other guest's status read; a power start on
-   `UNUSED_VMID`; node config and node storage reads; cluster storage config and
-   ACL reads.
+2. reads the token's own effective permissions from `/access/permissions` for
+   the whole tree, for `/vms` and for `/vms/<OTHER_VMID>`, and requires
+   `VM.PowerMgmt` on exactly the two Hatchet paths, as their only privilege,
+   and not on `/vms` or the other guest;
+3. requires 403 from each of: the first Hatchet guest's config read; the other
+   guest's status read; node config and node storage reads; cluster storage
+   config and ACL reads.
 
-No request can change guest state: a too-broad grant fails the start on the
-free `UNUSED_VMID` with 500 instead of 403. Read the token secret from OpenBao
+Read the token secret from OpenBao
 at runtime; never put it in shell history or logs.
