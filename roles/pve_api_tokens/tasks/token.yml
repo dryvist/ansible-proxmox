@@ -9,8 +9,42 @@
     pve_api_tokens_user: "{{ pve_api_tokens_consumer.app }}@{{ pve_api_tokens_realm }}"
     pve_api_tokens_id: >-
       {{ pve_api_tokens_consumer.app }}@{{ pve_api_tokens_realm }}!{{ pve_api_tokens_token_name }}
+    pve_api_tokens_role_name: "{{ pve_api_tokens_consumer.role | default(pve_api_tokens_role) }}"
+    pve_api_tokens_privsep: "{{ pve_api_tokens_consumer.privsep | default(false) | bool }}"
     pve_api_tokens_id_field: "{{ pve_api_tokens_consumer.field_prefix }}_token_id"
     pve_api_tokens_secret_field: "{{ pve_api_tokens_consumer.field_prefix }}_token_secret"
+
+- name: Select ACL paths for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.set_fact:
+    pve_api_tokens_acl_paths: "{{ pve_api_tokens_consumer.acl_paths | default(['/']) }}"
+
+- name: Validate the role and ACL paths for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.assert:
+    that:
+      - pve_api_tokens_acl_paths is sequence
+      - pve_api_tokens_acl_paths is not string
+      - pve_api_tokens_acl_paths | length > 0
+      - pve_api_tokens_acl_paths | length == pve_api_tokens_acl_paths | unique | list | length
+      - >-
+        pve_api_tokens_consumer.privileges is not defined or
+        (pve_api_tokens_role_name != pve_api_tokens_role and
+         pve_api_tokens_role_name != 'PVEAuditor')
+      - >-
+        pve_api_tokens_consumer.privileges is not defined or
+        (pve_api_tokens_consumer.privileges is sequence and
+         pve_api_tokens_consumer.privileges is not string and
+         pve_api_tokens_consumer.privileges | length > 0)
+      # A custom-privilege entry is per-guest only: an empty guest set or a
+      # missing VMID fails here instead of granting nothing or a wider path.
+      - >-
+        pve_api_tokens_consumer.privileges is not defined or
+        (pve_api_tokens_acl_paths
+         | select('match', '^/vms/[0-9]+$') | list | length)
+        == pve_api_tokens_acl_paths | length
+    fail_msg: >-
+      Custom PVE token entries need a non-empty, unique list of exact
+      /vms/<vmid> ACL paths and a role distinct from the built-in PVEAuditor role.
+    quiet: true
 
 - name: Read the published credential for {{ pve_api_tokens_consumer.app }}
   community.hashi_vault.vault_kv2_get:
@@ -37,6 +71,38 @@
     quiet: true
     fail_msg: "OpenBao read of apps/{{ pve_api_tokens_consumer.app }} failed; check the publish grant."
 
+- name: Read existing roles for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv: [pvesh, get, /access/roles, --output-format, json]
+  register: pve_api_tokens_existing_roles
+  changed_when: false
+  check_mode: false
+  when: pve_api_tokens_consumer.privileges is defined
+
+- name: Select the custom role for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.set_fact:
+    pve_api_tokens_existing_role: >-
+      {{ pve_api_tokens_existing_roles.stdout | from_json
+         | selectattr('roleid', 'equalto', pve_api_tokens_role_name) | list }}
+  when: pve_api_tokens_consumer.privileges is defined
+
+- name: Reconcile the exact privileges for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv:
+      - pveum
+      - role
+      - "{{ 'add' if pve_api_tokens_existing_role | length == 0 else 'modify' }}"
+      - "{{ pve_api_tokens_role_name }}"
+      - --privs
+      - "{{ pve_api_tokens_consumer.privileges | join(' ') }}"
+  when:
+    - pve_api_tokens_consumer.privileges is defined
+    - >-
+      pve_api_tokens_existing_role | length == 0 or
+      (pve_api_tokens_existing_role[0].privs.split(',') | sort
+       != pve_api_tokens_consumer.privileges | sort)
+  changed_when: true
+
 - name: Ensure the dedicated user exists for {{ pve_api_tokens_consumer.app }}
   ansible.builtin.command:
     argv:
@@ -45,22 +111,67 @@
       - add
       - "{{ pve_api_tokens_user }}"
       - --comment
-      - "Read-only API identity for {{ pve_api_tokens_consumer.app }} (ansible-proxmox pve_api_tokens)"
+      - "{{ 'Power-management' if pve_api_tokens_consumer.privileges is defined else 'Read-only' }} API identity for {{ pve_api_tokens_consumer.app }} (ansible-proxmox pve_api_tokens)"
   when: >-
     pve_api_tokens_user not in
     (pve_api_tokens_users.stdout | from_json | map(attribute='userid') | list)
   changed_when: true
 
-- name: Grant the read-only role at the root for {{ pve_api_tokens_consumer.app }}
+- name: Grant the default role at the root for {{ pve_api_tokens_consumer.app }}
   ansible.builtin.command:
-    argv: [pveum, acl, modify, /, --users, "{{ pve_api_tokens_user }}", --roles, "{{ pve_api_tokens_role }}"]
+    argv: [pveum, acl, modify, /, --users, "{{ pve_api_tokens_user }}", --roles, "{{ pve_api_tokens_role_name }}"]
   when: >-
+    pve_api_tokens_consumer.privileges is not defined and
     pve_api_tokens_acls.stdout | from_json
     | selectattr('path', 'equalto', '/')
     | selectattr('type', 'equalto', 'user')
     | selectattr('ugid', 'equalto', pve_api_tokens_user)
-    | selectattr('roleid', 'equalto', pve_api_tokens_role)
+    | selectattr('roleid', 'equalto', pve_api_tokens_role_name)
     | list | length == 0
+  changed_when: true
+
+- name: Remove stale user ACLs for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv: [pveum, acl, delete, "{{ item.path }}", --users, "{{ pve_api_tokens_user }}", --roles, "{{ item.roleid }}"]
+  loop: >-
+    {{ pve_api_tokens_acls.stdout | from_json
+       | selectattr('type', 'equalto', 'user')
+       | selectattr('ugid', 'equalto', pve_api_tokens_user) | list }}
+  loop_control:
+    label: "{{ item.path }} {{ item.roleid }}"
+  when:
+    - pve_api_tokens_consumer.privileges is defined
+    - item.path not in pve_api_tokens_acl_paths or item.roleid != pve_api_tokens_role_name
+  changed_when: true
+
+- name: Grant the custom role on each declared path for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv: [pveum, acl, modify, "{{ item }}", --users, "{{ pve_api_tokens_user }}", --roles, "{{ pve_api_tokens_role_name }}", --propagate, '0']
+  loop: "{{ pve_api_tokens_acl_paths }}"
+  when:
+    - pve_api_tokens_consumer.privileges is defined
+    - >-
+      pve_api_tokens_acls.stdout | from_json
+      | selectattr('path', 'equalto', item)
+      | selectattr('type', 'equalto', 'user')
+      | selectattr('ugid', 'equalto', pve_api_tokens_user)
+      | selectattr('roleid', 'equalto', pve_api_tokens_role_name)
+      | selectattr('propagate', 'equalto', 0)
+      | list | length == 0
+  changed_when: true
+
+- name: Remove stale token ACLs for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv: [pveum, acl, delete, "{{ item.path }}", --tokens, "{{ pve_api_tokens_id }}", --roles, "{{ item.roleid }}"]
+  loop: >-
+    {{ pve_api_tokens_acls.stdout | from_json
+       | selectattr('type', 'equalto', 'token')
+       | selectattr('ugid', 'equalto', pve_api_tokens_id) | list }}
+  loop_control:
+    label: "{{ item.path }} {{ item.roleid }}"
+  when:
+    - pve_api_tokens_consumer.privileges is defined
+    - item.path not in pve_api_tokens_acl_paths or item.roleid != pve_api_tokens_role_name
   changed_when: true
 
 - name: Read the user's tokens for {{ pve_api_tokens_consumer.app }}
@@ -107,7 +218,7 @@
           - "{{ pve_api_tokens_user }}"
           - "{{ pve_api_tokens_token_name }}"
           - --privsep
-          - "0"
+          - "{{ '1' if pve_api_tokens_privsep | bool else '0' }}"
           - --comment
           - "Published to OpenBao apps/{{ pve_api_tokens_consumer.app }}"
           - --output-format
@@ -133,6 +244,25 @@
       delegate_to: localhost
       become: false
       no_log: true
+
+- name: Grant the custom role to a privsep token on each declared path for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv: [pveum, acl, modify, "{{ item }}", --tokens, "{{ pve_api_tokens_id }}", --roles, "{{ pve_api_tokens_role_name }}", --propagate, '0']
+  loop: "{{ pve_api_tokens_acl_paths }}"
+  when:
+    - pve_api_tokens_consumer.privileges is defined
+    - pve_api_tokens_privsep | bool
+    # A re-minted token loses its ACLs, and the ACL list read above predates the mint.
+    - >-
+      pve_api_tokens_mint | bool or
+      pve_api_tokens_acls.stdout | from_json
+      | selectattr('path', 'equalto', item)
+      | selectattr('type', 'equalto', 'token')
+      | selectattr('ugid', 'equalto', pve_api_tokens_id)
+      | selectattr('roleid', 'equalto', pve_api_tokens_role_name)
+      | selectattr('propagate', 'equalto', 0)
+      | list | length == 0
+  changed_when: true
 
 - name: Read the latest credential for {{ pve_api_tokens_consumer.app }}
   community.hashi_vault.vault_kv2_get:

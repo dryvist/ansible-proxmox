@@ -22,6 +22,21 @@ pve_api_tokens_consumers:
   - app: nautobot
     field_prefix: nautobot_proxmox
     certificate_field: nautobot_proxmox_ca
+  - app: hatchet-killtest
+    field_prefix: hatchet_killtest_pve
+    role: HatchetKillTestPower
+    privileges: [VM.PowerMgmt, VM.Audit]
+    acl_paths: "{{ pve_api_tokens_hatchet_acl_paths }}"
+    privsep: true
+
+pve_api_tokens_hatchet_docker_ai_guests: >-
+  {{ (containers_from_tofu | default({}) | dict2items)
+     | selectattr('value.tags', 'defined')
+     | selectattr('value.tags', 'contains', 'docker-ai') | list }}
+pve_api_tokens_hatchet_acl_paths: >-
+  {{ pve_api_tokens_hatchet_docker_ai_guests
+     | map(attribute='value.ansible_pct_vmid') | map('string')
+     | map('regex_replace', '^', '/vms/') | list }}
 
 pve_api_tokens_role: PVEAuditor
 pve_api_tokens_realm: pve

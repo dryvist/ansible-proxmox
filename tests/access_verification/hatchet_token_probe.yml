@@ -1,0 +1,74 @@
+---
+- name: Verify the Hatchet PVE API token boundary
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    pve_probe_url: "{{ lookup('ansible.builtin.env', 'PVE_API_URL') | regex_replace('/+$', '') }}"
+    pve_probe_token_id: "{{ lookup('ansible.builtin.env', 'PVE_API_TOKEN_ID') }}"
+    pve_probe_token_secret: "{{ lookup('ansible.builtin.env', 'PVE_API_TOKEN_SECRET') }}"
+    pve_probe_node: "{{ lookup('ansible.builtin.env', 'PVE_NODE') }}"
+    pve_probe_hatchet_vmid: "{{ lookup('ansible.builtin.env', 'HATCHET_VMID') }}"
+    pve_probe_other_vmid: "{{ lookup('ansible.builtin.env', 'OTHER_VMID') }}"
+    pve_probe_other_type: "{{ lookup('ansible.builtin.env', 'OTHER_GUEST_TYPE') }}"
+    pve_probe_authorization: >-
+      PVEAPIToken={{ pve_probe_token_id }}={{ pve_probe_token_secret }}
+  tasks:
+    - name: Require explicit PVE probe inputs
+      ansible.builtin.assert:
+        that:
+          - pve_probe_url | length > 0
+          - pve_probe_token_id | length > 0
+          - pve_probe_token_secret | length > 0
+          - pve_probe_node | length > 0
+          - pve_probe_hatchet_vmid | length > 0
+          - pve_probe_other_vmid | length > 0
+          - pve_probe_other_type in ['qemu', 'lxc']
+          - pve_probe_other_vmid != pve_probe_hatchet_vmid
+        fail_msg: >-
+          Set the PVE API URL, token pair, node, Hatchet VMID, and a distinct
+          other guest type and VMID before running this live probe.
+        quiet: true
+      no_log: true
+
+    - name: Require status read on a Hatchet guest
+      ansible.builtin.uri:
+        url: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}/lxc/{{ pve_probe_hatchet_vmid }}/status/current"
+        method: GET
+        headers:
+          Authorization: "{{ pve_probe_authorization }}"
+        status_code: 200
+        return_content: false
+      no_log: true
+
+    - name: Require node configuration read to be denied
+      ansible.builtin.uri:
+        url: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}/config"
+        method: GET
+        headers:
+          Authorization: "{{ pve_probe_authorization }}"
+        status_code: 403
+        return_content: false
+      no_log: true
+
+    # OTHER_VMID must be a running guest, so a too-broad grant cannot change its state.
+    - name: Require power start on another guest to be denied
+      ansible.builtin.uri:
+        url: >-
+          {{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}/{{ pve_probe_other_type }}/{{ pve_probe_other_vmid }}/status/start
+        method: POST
+        headers:
+          Authorization: "{{ pve_probe_authorization }}"
+        status_code: 403
+        return_content: false
+      no_log: true
+
+    - name: Require Hatchet guest configuration writes to be denied
+      ansible.builtin.uri:
+        url: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}/lxc/{{ pve_probe_hatchet_vmid }}/config"
+        method: PUT
+        headers:
+          Authorization: "{{ pve_probe_authorization }}"
+        status_code: 403
+        return_content: false
+      no_log: true
