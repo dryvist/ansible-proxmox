@@ -13,6 +13,7 @@
     pve_api_tokens_privsep: "{{ pve_api_tokens_consumer.privsep | default(false) | bool }}"
     pve_api_tokens_id_field: "{{ pve_api_tokens_consumer.field_prefix }}_token_id"
     pve_api_tokens_secret_field: "{{ pve_api_tokens_consumer.field_prefix }}_token_secret"
+    pve_api_tokens_kv_path: "{{ pve_api_tokens_consumer.kv_path | default('apps/' ~ pve_api_tokens_consumer.app) }}"
 
 - name: Select ACL paths for {{ pve_api_tokens_consumer.app }}
   ansible.builtin.set_fact:
@@ -57,7 +58,7 @@
     url: "{{ pve_api_tokens_bao_addr }}"
     token: "{{ pve_api_tokens_bao_token }}"
     engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
-    path: "apps/{{ pve_api_tokens_consumer.app }}"
+    path: "{{ pve_api_tokens_kv_path }}"
   register: pve_api_tokens_stored
   # Read-only; a check run needs stored token data to preview reconciliation.
   check_mode: false
@@ -75,7 +76,7 @@
         pve_api_tokens_stored.msg is not defined or
         pve_api_tokens_stored.msg is match('^Invalid or missing path')
     quiet: true
-    fail_msg: "OpenBao read of apps/{{ pve_api_tokens_consumer.app }} failed; check the publish grant."
+    fail_msg: "OpenBao read of {{ pve_api_tokens_kv_path }} failed; check the publish grant."
 
 - name: Reconcile the custom role for {{ pve_api_tokens_consumer.app }}
   ansible.builtin.include_tasks: custom_role.yml
@@ -166,8 +167,8 @@
     pve_api_tokens_existing: >-
       {{ (pve_api_tokens_tokens.stdout | from_json | map(attribute='tokenid') | list)
          if pve_api_tokens_tokens.rc == 0 else [] }}
-    # A token whose privsep differs from the entry would keep the user's full rights; re-mint it.
-    pve_api_tokens_privsep_drift: >-
+    # A token whose privsep differs from the entry would keep the user's full rights.
+    pve_api_tokens_drift: >-
       {{ ((pve_api_tokens_tokens.stdout | from_json
            | selectattr('tokenid', 'equalto', pve_api_tokens_token_name)
            | map(attribute='privsep', default=0) | map('int') | list)
@@ -175,12 +176,30 @@
          | reject('equalto', (1 if pve_api_tokens_privsep | bool else 0)) | list | length > 0 }}
   ansible.builtin.set_fact:
     pve_api_tokens_token_exists: "{{ pve_api_tokens_existing is contains(pve_api_tokens_token_name) }}"
+    pve_api_tokens_privsep_drift: "{{ pve_api_tokens_drift | bool }}"
     pve_api_tokens_mint: >-
       {{ pve_api_tokens_bucket.get(pve_api_tokens_id_field, '') != pve_api_tokens_id
          or pve_api_tokens_bucket.get(pve_api_tokens_secret_field, '') | length == 0
-         or pve_api_tokens_existing is not contains(pve_api_tokens_token_name)
-         or pve_api_tokens_privsep_drift | bool }}
+         or pve_api_tokens_existing is not contains(pve_api_tokens_token_name) }}
   no_log: true
+
+# In place: the published secret stays valid, and the grant below adds the
+# token ACLs that privilege separation needs.
+- name: Align privilege separation on the existing token for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv:
+      - pveum
+      - user
+      - token
+      - modify
+      - "{{ pve_api_tokens_user }}"
+      - "{{ pve_api_tokens_token_name }}"
+      - --privsep
+      - "{{ '1' if pve_api_tokens_privsep | bool else '0' }}"
+  when:
+    - pve_api_tokens_privsep_drift | bool
+    - not pve_api_tokens_mint | bool
+  changed_when: true
 
 - name: Mint and publish a fresh token for {{ pve_api_tokens_consumer.app }}
   when:
@@ -206,7 +225,7 @@
           - --privsep
           - "{{ '1' if pve_api_tokens_privsep | bool else '0' }}"
           - --comment
-          - "Published to OpenBao apps/{{ pve_api_tokens_consumer.app }}"
+          - "Published to OpenBao {{ pve_api_tokens_kv_path }}"
           - --output-format
           - json
       register: pve_api_tokens_created
@@ -216,12 +235,12 @@
     # Read-merge-write with check-and-set on the version just read, so the
     # bucket's other fields survive and a concurrent writer fails this run
     # instead of being overwritten.
-    - name: Publish the token to apps/{{ pve_api_tokens_consumer.app }}
+    - name: Publish the token to {{ pve_api_tokens_kv_path }}
       community.hashi_vault.vault_kv2_write:
         url: "{{ pve_api_tokens_bao_addr }}"
         token: "{{ pve_api_tokens_bao_token }}"
         engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
-        path: "apps/{{ pve_api_tokens_consumer.app }}"
+        path: "{{ pve_api_tokens_kv_path }}"
         cas: "{{ pve_api_tokens_stored.metadata.version | default(0) }}"
         data: >-
           {{ pve_api_tokens_stored.secret | default({})
@@ -255,7 +274,7 @@
     url: "{{ pve_api_tokens_bao_addr }}"
     token: "{{ pve_api_tokens_bao_token }}"
     engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
-    path: "apps/{{ pve_api_tokens_consumer.app }}"
+    path: "{{ pve_api_tokens_kv_path }}"
   register: pve_api_tokens_certificate_stored
   # Read-only; a check run needs stored certificate data to preview publication.
   check_mode: false
@@ -272,7 +291,7 @@
         pve_api_tokens_certificate_stored.msg is not defined or
         pve_api_tokens_certificate_stored.msg is match('^Invalid or missing path')
     quiet: true
-    fail_msg: "OpenBao read of apps/{{ pve_api_tokens_consumer.app }} failed; check the publish grant."
+    fail_msg: "OpenBao read of {{ pve_api_tokens_kv_path }} failed; check the publish grant."
   when: pve_api_tokens_consumer.certificate_field is defined
 
 - name: Publish the cluster CA for {{ pve_api_tokens_consumer.app }}
@@ -280,7 +299,7 @@
     url: "{{ pve_api_tokens_bao_addr }}"
     token: "{{ pve_api_tokens_bao_token }}"
     engine_mount_point: "{{ pve_api_tokens_kv_mount }}"
-    path: "apps/{{ pve_api_tokens_consumer.app }}"
+    path: "{{ pve_api_tokens_kv_path }}"
     cas: "{{ pve_api_tokens_certificate_stored.metadata.version | default(0) }}"
     data: >-
       {{ pve_api_tokens_certificate_stored.secret | default({})

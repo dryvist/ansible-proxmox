@@ -3,9 +3,13 @@
 import json
 import unittest
 
+import yaml
+
 from test_pve_api_tokens import (
-    DEFAULTS, evaluate, evaluate_conditions, hatchet_paths, identity_variables, render, task,
+    DEFAULTS, ROOT, evaluate, evaluate_conditions, hatchet_paths, identity_variables, render, task,
 )
+
+PROBE = yaml.safe_load((ROOT / "tests/access_verification/hatchet_token_probe.yml").read_text())[0]
 
 
 class HatchetPowerScope(unittest.TestCase):
@@ -124,6 +128,19 @@ class HatchetPowerScope(unittest.TestCase):
             with self.subTest(paths=wrong_count):
                 self.assertFalse(self._validates(wrong_count))
 
+    def test_a_tagged_guest_without_a_vmid_drops_out_so_the_count_check_fires(self):
+        _, paths = hatchet_paths({**self.containers, "no-vmid": {"tags": ["hatchet-killtest"]}})
+        self.assertEqual(paths, self.paths)
+        _, paths = hatchet_paths({"guest-a": self.containers["guest-a"],
+                                       "no-vmid": {"tags": ["hatchet-killtest"]}})
+        self.assertFalse(self._validates(paths))
+
+    def test_only_the_killtest_token_publishes_outside_apps(self):
+        for consumer in DEFAULTS["pve_api_tokens_consumers"]:
+            expected = "killtest/hatchet" if consumer["app"] == "hatchet-killtest" else f"apps/{consumer['app']}"
+            with self.subTest(app=consumer["app"]):
+                self.assertEqual(identity_variables(consumer)["pve_api_tokens_kv_path"], expected)
+
     def test_failure_names_the_tag_source_and_no_guest(self):
         assertion = task("Validate the role and ACL paths")
         # Ansible renders the loop item's nested acl_source template lazily; do it up front here.
@@ -167,6 +184,36 @@ class HatchetPowerScope(unittest.TestCase):
         self.assertFalse(evaluate_conditions(grant, {**variables, "pve_api_tokens_mint": False}))
         self.assertTrue(evaluate_conditions(grant, {**variables, "pve_api_tokens_mint": True}))
 
+
+
+class ProbeInputs(unittest.TestCase):
+    def _accepts(self, hatchet="900001,900002", other="900003", unused="999990"):
+        inputs = {"pve_probe_url": "https://pve.example.test", "pve_probe_token_id": "t",
+                  "pve_probe_token_secret": "s", "pve_probe_node": "pve-a",
+                  "pve_probe_hatchet_vmids": [v.strip() for v in hatchet.split(",")],
+                  "pve_probe_other_type": "lxc", "pve_probe_other_vmid": other,
+                  "pve_probe_unused_vmid": unused}
+        gate = PROBE["tasks"][0]["ansible.builtin.assert"]["that"]
+        return all(evaluate("{{ " + condition + " }}", **inputs) for condition in gate)
+
+    def test_vmids_must_be_numeric_distinct_and_cover_both_hatchet_guests(self):
+        self.assertTrue(self._accepts())
+        for label, kwargs in [
+            ("one hatchet guest", {"hatchet": "900001"}),
+            ("duplicate hatchet guest", {"hatchet": "900001,900001"}),
+            ("non-numeric", {"unused": "9999/../x"}),
+            ("unused is the second hatchet guest", {"unused": "900002"}),
+            ("unused is the other guest", {"unused": "900003"}),
+            ("other is a hatchet guest", {"other": "900002"}),
+        ]:
+            with self.subTest(label):
+                self.assertFalse(self._accepts(**kwargs))
+
+    def test_unused_vmid_is_proven_free_before_any_denied_request(self):
+        names = [t["name"] for t in PROBE["tasks"]]
+        check = names.index("Require UNUSED_VMID to be free across the cluster")
+        self.assertLess(check, names.index("Require each out-of-scope request to be denied"))
+        self.assertIn("cluster/nextid?vmid=", PROBE["tasks"][check]["ansible.builtin.uri"]["url"])
 
 
 if __name__ == "__main__":

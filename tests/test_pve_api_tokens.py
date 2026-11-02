@@ -74,7 +74,7 @@ def hatchet_paths(containers):
     return guests, paths
 
 
-def mint(bucket, existing, privsep=False, existing_privsep=0):
+def mint(bucket, existing, privsep=False, existing_privsep=0, fact="pve_api_tokens_mint"):
     decide = task("Decide whether")
     variables = {
         "pve_api_tokens_stored": {"secret": bucket} if bucket is not None else {"msg": "Invalid or missing path"},
@@ -88,7 +88,7 @@ def mint(bucket, existing, privsep=False, existing_privsep=0):
     }
     for name, expression in decide["vars"].items():
         variables[name] = evaluate(expression, **variables)
-    return evaluate(decide["ansible.builtin.set_fact"]["pve_api_tokens_mint"], **variables)
+    return evaluate(decide["ansible.builtin.set_fact"][fact], **variables)
 
 
 class MintDecision(unittest.TestCase):
@@ -108,11 +108,15 @@ class MintDecision(unittest.TestCase):
             with self.subTest(label):
                 self.assertTrue(mint(bucket, existing))
 
-    def test_a_published_token_with_the_wrong_privsep_is_reminted(self):
+    def test_a_published_token_with_the_wrong_privsep_is_modified_in_place(self):
         published = {"homarr_proxmox_token_id": TOKEN_ID, "homarr_proxmox_token_secret": "s"}
-        self.assertTrue(mint(published, ["ro"], privsep=True, existing_privsep=0))
-        self.assertTrue(mint(published, ["ro"], privsep=False, existing_privsep=1))
-        self.assertFalse(mint(published, ["ro"], privsep=True, existing_privsep=1))
+        for privsep, existing, drift in [(True, 0, True), (False, 1, True), (True, 1, False), (False, 0, False)]:
+            with self.subTest(privsep=privsep, existing=existing):
+                self.assertFalse(mint(published, ["ro"], privsep=privsep, existing_privsep=existing))
+                self.assertEqual(mint(published, ["ro"], privsep, existing, "pve_api_tokens_privsep_drift"), drift)
+        align = task("Align privilege separation")
+        self.assertEqual(align["ansible.builtin.command"]["argv"][:4], ["pveum", "user", "token", "modify"])
+        self.assertIn("not pve_api_tokens_mint | bool", align["when"])
 
 
 class ReadGate(unittest.TestCase):

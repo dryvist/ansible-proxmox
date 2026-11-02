@@ -1,12 +1,12 @@
 ---
 # Read-only PVE API tokens, one per consumer app, stored in that app's own
-# OpenBao bucket (secret/apps/<app>). OpenBao has no Proxmox secrets engine,
+# OpenBao bucket (secret/apps/<app>, or the entry's kv_path). OpenBao has no Proxmox secrets engine,
 # so the token is minted here, on the cluster, and published from the
 # controller.
 #
 # Each consumer gets a dedicated <app>@pve user (no password, so it cannot log
 # in) holding pve_api_tokens_role at `/`, and one token that shares exactly the
-# user's privileges (privsep 0). Two fields are written into secret/apps/<app>:
+# user's privileges (privsep 0). Two fields are written into that bucket:
 #   <field_prefix>_token_id      full identity, user@realm!token
 #   <field_prefix>_token_secret  the token value
 #
@@ -31,13 +31,16 @@ pve_api_tokens_consumers:
     acl_path_count: 2
     acl_source: tofu containers tagged {{ pve_api_tokens_hatchet_tag }}
     privsep: true
+    # Outside secret/apps/*, which standing readers cover.
+    kv_path: killtest/hatchet
 
 # Only guests carrying this dedicated tofu tag get the power grant.
 pve_api_tokens_hatchet_tag: hatchet-killtest
 pve_api_tokens_hatchet_guests: >-
   {{ (containers_from_tofu | default({}) | dict2items)
      | selectattr('value.tags', 'defined')
-     | selectattr('value.tags', 'contains', pve_api_tokens_hatchet_tag) | list }}
+     | selectattr('value.tags', 'contains', pve_api_tokens_hatchet_tag)
+     | selectattr('value.ansible_pct_vmid', 'defined') | list }}
 pve_api_tokens_hatchet_acl_paths: >-
   {{ pve_api_tokens_hatchet_guests
      | map(attribute='value.ansible_pct_vmid') | map('string')

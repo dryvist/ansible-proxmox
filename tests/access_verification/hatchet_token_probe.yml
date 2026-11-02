@@ -1,7 +1,8 @@
 ---
 # Live probe of the hatchet-killtest PVE token boundary. Every request except
-# /version must be refused. Nothing here can change guest state: the power check
-# targets UNUSED_VMID (no such guest), so an over-grant returns 500, not 403.
+# /version and the VMID check must be refused. Nothing here can change guest
+# state: the power check targets UNUSED_VMID, which /cluster/nextid (open to
+# every authenticated principal) must confirm no guest holds before any check.
 - name: Verify the Hatchet PVE API token boundary
   hosts: localhost
   connection: local
@@ -11,14 +12,14 @@
     pve_probe_token_id: "{{ lookup('ansible.builtin.env', 'PVE_API_TOKEN_ID') }}"
     pve_probe_token_secret: "{{ lookup('ansible.builtin.env', 'PVE_API_TOKEN_SECRET') }}"
     pve_probe_node: "{{ lookup('ansible.builtin.env', 'PVE_NODE') }}"
-    pve_probe_hatchet_vmid: "{{ lookup('ansible.builtin.env', 'HATCHET_VMID') }}"
+    pve_probe_hatchet_vmids: "{{ lookup('ansible.builtin.env', 'HATCHET_VMIDS') | split(',') | map('trim') | list }}"
     pve_probe_other_vmid: "{{ lookup('ansible.builtin.env', 'OTHER_VMID') }}"
     pve_probe_other_type: "{{ lookup('ansible.builtin.env', 'OTHER_GUEST_TYPE') }}"
     pve_probe_unused_vmid: "{{ lookup('ansible.builtin.env', 'UNUSED_VMID') }}"
     pve_probe_authorization: >-
       PVEAPIToken={{ pve_probe_token_id }}={{ pve_probe_token_secret }}
     pve_probe_node_api: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}"
-    pve_probe_hatchet_api: "{{ pve_probe_node_api }}/lxc/{{ pve_probe_hatchet_vmid }}"
+    pve_probe_hatchet_api: "{{ pve_probe_node_api }}/lxc/{{ pve_probe_hatchet_vmids[0] }}"
     pve_probe_other_api: "{{ pve_probe_node_api }}/{{ pve_probe_other_type }}/{{ pve_probe_other_vmid }}"
     pve_probe_denied:
       - {name: Hatchet guest config read, method: GET, url: "{{ pve_probe_hatchet_api }}/config"}
@@ -38,15 +39,18 @@
           - pve_probe_token_id | length > 0
           - pve_probe_token_secret | length > 0
           - pve_probe_node | length > 0
-          - pve_probe_hatchet_vmid | length > 0
-          - pve_probe_other_vmid | length > 0
+          - pve_probe_hatchet_vmids | length == 2
+          - pve_probe_hatchet_vmids | unique | length == 2
           - pve_probe_other_type in ['qemu', 'lxc']
-          - pve_probe_other_vmid != pve_probe_hatchet_vmid
-          - pve_probe_unused_vmid | length > 0
-          - pve_probe_unused_vmid not in [pve_probe_hatchet_vmid, pve_probe_other_vmid]
+          - >-
+            (pve_probe_hatchet_vmids + [pve_probe_other_vmid, pve_probe_unused_vmid])
+            | reject('match', '^[0-9]+$') | list | length == 0
+          - pve_probe_other_vmid not in pve_probe_hatchet_vmids
+          - pve_probe_unused_vmid not in pve_probe_hatchet_vmids + [pve_probe_other_vmid]
         fail_msg: >-
-          Set the PVE API URL, token pair, node, Hatchet VMID, another guest
-          type and VMID, and an unused VMID before running this live probe.
+          Set the PVE API URL, token pair, node, both Hatchet VMIDs (HATCHET_VMIDS,
+          comma-separated), another guest type and VMID, and an unused VMID, all
+          VMIDs numeric and distinct, before running this live probe.
         quiet: true
       no_log: true
 
@@ -58,6 +62,21 @@
           Authorization: "{{ pve_probe_authorization }}"
         status_code: 200
         return_content: false
+      no_log: true
+
+    # nextid returns the VMID when no guest holds it and 400 when one does.
+    - name: Require UNUSED_VMID to be free across the cluster
+      ansible.builtin.uri:
+        url: "{{ pve_probe_url }}/api2/json/cluster/nextid?vmid={{ pve_probe_unused_vmid }}"
+        method: GET
+        headers:
+          Authorization: "{{ pve_probe_authorization }}"
+        status_code: 200
+        return_content: true
+      register: pve_probe_nextid
+      failed_when: >-
+        pve_probe_nextid.status != 200
+        or (pve_probe_nextid.json.data | string) != pve_probe_unused_vmid
       no_log: true
 
     - name: Require each out-of-scope request to be denied

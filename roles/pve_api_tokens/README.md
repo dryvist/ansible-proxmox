@@ -59,33 +59,38 @@ read gate.
 
 The `hatchet-killtest` entry uses `HatchetKillTestPower`, whose only privilege
 is `VM.PowerMgmt`. Its paths come from `containers_from_tofu` containers that
-carry the dedicated `hatchet-killtest` tag; each published VMID becomes
-`/vms/<vmid>`. The entry requires exactly two such paths
-(`acl_path_count: 2`). It fails, naming the tag source, if the count differs or
-a container lacks `ansible_pct_vmid`. It is the last consumer, so that failure
-comes after the read-only tokens. The user and its privsep token receive the
-role only on those paths, with `--propagate 0`; the token's effective rights are
-bounded by the intersection of both ACL sets. The token is published to
-`secret/apps/hatchet-killtest` as `hatchet_killtest_pve_token_id` and
+carry the dedicated `hatchet-killtest` tag and an `ansible_pct_vmid`; each VMID
+becomes `/vms/<vmid>`. The entry requires exactly two such paths
+(`acl_path_count: 2`) and fails, naming the tag source, if the count differs; a
+tagged container without a VMID drops out, so it fails the same way. It is the
+last consumer, so that failure comes after the read-only tokens. The user and
+its privsep token receive the role only on those paths, with `--propagate 0`;
+the token's effective rights are bounded by the intersection of both ACL sets.
+A live token whose privsep differs is modified in place, keeping its secret.
+The token is published to `secret/killtest/hatchet` (the entry's `kv_path`),
+outside `secret/apps/*`, as `hatchet_killtest_pve_token_id` and
 `hatchet_killtest_pve_token_secret`. It has no `--expire`, because no rotation
 job exists for these tokens.
 
-The live probe is `tests/access_verification/hatchet_token_probe.yml`. Its
-positive control is `/version`, which must return 200. Each of these must return
-403:
-
-- Hatchet guest config read, config write and console;
-- another guest's status read and power start;
-- node config and node storage reads;
-- cluster storage config and ACL reads.
-
-Its inputs come from the environment:
+The live probe is `tests/access_verification/hatchet_token_probe.yml`. It reads
+these inputs from the environment:
 
 - `PVE_API_URL`, `PVE_API_TOKEN_ID` and `PVE_API_TOKEN_SECRET`;
-- `PVE_NODE` and `HATCHET_VMID`;
-- `OTHER_VMID` and `OTHER_GUEST_TYPE` (`qemu` or `lxc`).
+- `PVE_NODE`, and `HATCHET_VMIDS`, both Hatchet VMIDs comma-separated;
+- `OTHER_VMID` and `OTHER_GUEST_TYPE` (`qemu` or `lxc`), a guest outside the grant;
+- `UNUSED_VMID`, a VMID no guest holds.
 
-Choose an `OTHER_VMID` guest that is already running. A too-broad grant then
-fails the start as "already running" instead of changing the guest's state.
-Read the token secret from OpenBao at runtime; never put it in shell history or
-logs.
+Every VMID must be numeric, and all four must differ. In order, the probe then:
+
+1. requires `/version` to return 200 (positive control);
+2. requires `/cluster/nextid?vmid=<UNUSED_VMID>` to return that VMID, which
+   proves no guest holds it (the endpoint is open to every authenticated
+   principal and answers 400 when the VMID is taken);
+3. requires 403 from each of: the first Hatchet guest's config read, config
+   write and console; the other guest's status read; a power start on
+   `UNUSED_VMID`; node config and node storage reads; cluster storage config and
+   ACL reads.
+
+No request can change guest state: a too-broad grant fails the start on the
+free `UNUSED_VMID` with 500 instead of 403. Read the token secret from OpenBao
+at runtime; never put it in shell history or logs.
