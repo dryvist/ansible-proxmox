@@ -29,6 +29,7 @@ class HatchetPowerScope(unittest.TestCase):
         self.variables["pve_api_tokens_acl_paths"] = self.paths
 
     def test_token_role_and_acl_argv_are_power_only_and_guest_scoped(self):
+        self.assertEqual(self.consumer["certificate_field"], "hatchet_killtest_pve_ca")
         self.assertEqual(self.consumer["privileges"], ["VM.PowerMgmt"])
         self.assertTrue(self.consumer["privsep"])
         self.assertEqual(self.paths, ["/vms/900001", "/vms/900002"])

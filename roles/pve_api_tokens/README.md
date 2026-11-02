@@ -69,8 +69,9 @@ the token's effective rights are bounded by the intersection of both ACL sets.
 A live token whose privsep differs is modified in place, keeping its secret.
 The token is published to `secret/killtest/hatchet` (the entry's `kv_path`),
 outside `secret/apps/*`, as `hatchet_killtest_pve_token_id` and
-`hatchet_killtest_pve_token_secret`. It has no `--expire`, because no rotation
-job exists for these tokens.
+`hatchet_killtest_pve_token_secret`, with the cluster CA as
+`hatchet_killtest_pve_ca`. It has no `--expire`, because no rotation job exists
+for these tokens.
 
 The live probe is `tests/access_verification/hatchet_token_probe.yml`. It reads
 these inputs from the environment:

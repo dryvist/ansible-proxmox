@@ -33,6 +33,8 @@ pve_api_tokens_consumers:
     privsep: true
     # Outside secret/apps/*, which standing readers cover.
     kv_path: killtest/hatchet
+    # The kill-test playbook verifies the PVE API against this CA.
+    certificate_field: hatchet_killtest_pve_ca
 
 # Only guests carrying this dedicated tofu tag get the power grant.
 pve_api_tokens_hatchet_tag: hatchet-killtest
