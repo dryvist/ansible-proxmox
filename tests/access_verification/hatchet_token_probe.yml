@@ -1,4 +1,7 @@
 ---
+# Live probe of the hatchet-killtest PVE token boundary. Every request except
+# /version must be refused. OTHER_VMID must be a running guest, so a too-broad
+# grant fails the start as "already running" instead of changing its state.
 - name: Verify the Hatchet PVE API token boundary
   hosts: localhost
   connection: local
@@ -13,6 +16,19 @@
     pve_probe_other_type: "{{ lookup('ansible.builtin.env', 'OTHER_GUEST_TYPE') }}"
     pve_probe_authorization: >-
       PVEAPIToken={{ pve_probe_token_id }}={{ pve_probe_token_secret }}
+    pve_probe_node_api: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}"
+    pve_probe_hatchet_api: "{{ pve_probe_node_api }}/lxc/{{ pve_probe_hatchet_vmid }}"
+    pve_probe_other_api: "{{ pve_probe_node_api }}/{{ pve_probe_other_type }}/{{ pve_probe_other_vmid }}"
+    pve_probe_denied:
+      - {name: Hatchet guest config read, method: GET, url: "{{ pve_probe_hatchet_api }}/config"}
+      - {name: Hatchet guest config write, method: PUT, url: "{{ pve_probe_hatchet_api }}/config"}
+      - {name: Hatchet guest console, method: POST, url: "{{ pve_probe_hatchet_api }}/termproxy"}
+      - {name: Other guest status read, method: GET, url: "{{ pve_probe_other_api }}/status/current"}
+      - {name: Other guest power start, method: POST, url: "{{ pve_probe_other_api }}/status/start"}
+      - {name: Node config read, method: GET, url: "{{ pve_probe_node_api }}/config"}
+      - {name: Node storage list, method: GET, url: "{{ pve_probe_node_api }}/storage"}
+      - {name: Cluster storage config, method: GET, url: "{{ pve_probe_url }}/api2/json/storage"}
+      - {name: ACL read, method: GET, url: "{{ pve_probe_url }}/api2/json/access/acl"}
   tasks:
     - name: Require explicit PVE probe inputs
       ansible.builtin.assert:
@@ -27,13 +43,13 @@
           - pve_probe_other_vmid != pve_probe_hatchet_vmid
         fail_msg: >-
           Set the PVE API URL, token pair, node, Hatchet VMID, and a distinct
-          other guest type and VMID before running this live probe.
+          running other guest type and VMID before running this live probe.
         quiet: true
       no_log: true
 
-    - name: Require status read on a Hatchet guest
+    - name: Require the token to authenticate (positive control)
       ansible.builtin.uri:
-        url: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}/lxc/{{ pve_probe_hatchet_vmid }}/status/current"
+        url: "{{ pve_probe_url }}/api2/json/version"
         method: GET
         headers:
           Authorization: "{{ pve_probe_authorization }}"
@@ -41,34 +57,15 @@
         return_content: false
       no_log: true
 
-    - name: Require node configuration read to be denied
+    - name: Require each out-of-scope request to be denied
       ansible.builtin.uri:
-        url: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}/config"
-        method: GET
+        url: "{{ item.url }}"
+        method: "{{ item.method }}"
         headers:
           Authorization: "{{ pve_probe_authorization }}"
         status_code: 403
         return_content: false
-      no_log: true
-
-    # OTHER_VMID must be a running guest, so a too-broad grant cannot change its state.
-    - name: Require power start on another guest to be denied
-      ansible.builtin.uri:
-        url: >-
-          {{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}/{{ pve_probe_other_type }}/{{ pve_probe_other_vmid }}/status/start
-        method: POST
-        headers:
-          Authorization: "{{ pve_probe_authorization }}"
-        status_code: 403
-        return_content: false
-      no_log: true
-
-    - name: Require Hatchet guest configuration writes to be denied
-      ansible.builtin.uri:
-        url: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}/lxc/{{ pve_probe_hatchet_vmid }}/config"
-        method: PUT
-        headers:
-          Authorization: "{{ pve_probe_authorization }}"
-        status_code: 403
-        return_content: false
+      loop: "{{ pve_probe_denied }}"
+      loop_control:
+        label: "{{ item.name }}"
       no_log: true

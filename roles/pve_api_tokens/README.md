@@ -57,23 +57,27 @@ read gate.
 
 ## Hatchet kill-test token
 
-The `hatchet-killtest` entry uses `HatchetKillTestPower` with exactly
-`VM.PowerMgmt` and `VM.Audit`. Its paths come from `containers_from_tofu` for
-containers tagged `docker-ai`; each published VMID becomes `/vms/<vmid>`. The
-role fails if the tag set is empty or a matching container lacks
-`ansible_pct_vmid`. The user and its privsep token receive the role only on
-those paths, with `--propagate 0`; the token's effective rights are bounded by
-the intersection of both ACL sets. The token is published to
+The `hatchet-killtest` entry uses `HatchetKillTestPower`, whose only privilege
+is `VM.PowerMgmt`. Its paths come from `containers_from_tofu` containers that
+carry the dedicated `hatchet-killtest` tag; each published VMID becomes
+`/vms/<vmid>`. The entry requires exactly two such paths
+(`acl_path_count: 2`). It fails, naming the tag source, if the count differs or
+a container lacks `ansible_pct_vmid`. It is the last consumer, so that failure
+comes after the read-only tokens. The user and its privsep token receive the
+role only on those paths, with `--propagate 0`; the token's effective rights are
+bounded by the intersection of both ACL sets. The token is published to
 `secret/apps/hatchet-killtest` as `hatchet_killtest_pve_token_id` and
-`hatchet_killtest_pve_token_secret`.
+`hatchet_killtest_pve_token_secret`. It has no `--expire`, because no rotation
+job exists for these tokens.
 
-The live probe is `tests/access_verification/hatchet_token_probe.yml`. It
-expects the Hatchet status read to return 200 and three out-of-scope operations
-to return 403:
+The live probe is `tests/access_verification/hatchet_token_probe.yml`. Its
+positive control is `/version`, which must return 200. Each of these must return
+403:
 
-- a power start on another guest;
-- a node configuration read;
-- a Hatchet guest configuration write.
+- Hatchet guest config read, config write and console;
+- another guest's status read and power start;
+- node config and node storage reads;
+- cluster storage config and ACL reads.
 
 Its inputs come from the environment:
 

@@ -62,12 +62,13 @@ def evaluate_conditions(task_data, variables):
 
 def hatchet_paths(containers):
     guests = evaluate(
-        DEFAULTS["pve_api_tokens_hatchet_docker_ai_guests"],
+        DEFAULTS["pve_api_tokens_hatchet_guests"],
         containers_from_tofu=containers,
+        pve_api_tokens_hatchet_tag=DEFAULTS["pve_api_tokens_hatchet_tag"],
     )
     paths = evaluate(
         DEFAULTS["pve_api_tokens_hatchet_acl_paths"],
-        pve_api_tokens_hatchet_docker_ai_guests=guests,
+        pve_api_tokens_hatchet_guests=guests,
     )
     return guests, paths
 
@@ -175,6 +176,26 @@ class ConsumerCompatibility(unittest.TestCase):
                      "--output-format", "json"],
                 )
 
+    def test_existing_consumers_root_grant_condition_is_unchanged(self):
+        root_grant = task("Grant the default role at the root")
+        for app in ("homarr", "pve-exporter", "nautobot"):
+            consumer = next(e for e in DEFAULTS["pve_api_tokens_consumers"] if e["app"] == app)
+            variables = identity_variables(consumer)
+            variables["pve_api_tokens_role_name"] = "PVEAuditor"
+            user = variables["pve_api_tokens_user"]
+            granted = {"path": "/", "type": "user", "ugid": user, "roleid": "PVEAuditor"}
+            for label, acls, expected in (
+                ("no ACL yet", [], True),
+                ("root auditor already granted", [granted], False),
+                ("only another user's root ACL", [{**granted, "ugid": "other@pve"}], True),
+                ("own ACL on a narrower path", [{**granted, "path": "/vms/900001"}], True),
+            ):
+                with self.subTest(app=app, case=label):
+                    condition = root_grant["when"]
+                    rendered = evaluate("{{ " + condition + " }}",
+                                        **{**variables, "pve_api_tokens_acls": {"stdout": json.dumps(acls)}})
+                    self.assertEqual(rendered, expected)
+
 
 class HatchetPowerScope(unittest.TestCase):
     def setUp(self):
@@ -183,8 +204,9 @@ class HatchetPowerScope(unittest.TestCase):
             if entry["app"] == "hatchet-killtest"
         )
         self.containers = {
-            "hatchet-a": {"tags": ["docker-ai"], "ansible_pct_vmid": 900001},
-            "hatchet-b": {"tags": ["docker-ai"], "ansible_pct_vmid": 900002},
+            "guest-a": {"tags": ["docker-ai", "hatchet-killtest"], "ansible_pct_vmid": 900001},
+            "guest-b": {"tags": ["hatchet-killtest"], "ansible_pct_vmid": 900002},
+            "docker-ai-only": {"tags": ["docker-ai"], "ansible_pct_vmid": 900004},
             "unrelated": {"tags": ["other"], "ansible_pct_vmid": 900003},
         }
         self.guests, self.paths = hatchet_paths(self.containers)
@@ -192,7 +214,7 @@ class HatchetPowerScope(unittest.TestCase):
         self.variables["pve_api_tokens_acl_paths"] = self.paths
 
     def test_token_role_and_acl_argv_are_power_only_and_guest_scoped(self):
-        self.assertEqual(self.consumer["privileges"], ["VM.PowerMgmt", "VM.Audit"])
+        self.assertEqual(self.consumer["privileges"], ["VM.PowerMgmt"])
         self.assertTrue(self.consumer["privsep"])
         self.assertEqual(self.paths, ["/vms/900001", "/vms/900002"])
         for forbidden in ("/", "/nodes", "/pool", "/storage"):
@@ -203,14 +225,14 @@ class HatchetPowerScope(unittest.TestCase):
         self.assertEqual(
             render(role_task["ansible.builtin.command"]["argv"], self.variables),
             ["pveum", "role", "add", "HatchetKillTestPower", "--privs",
-             "VM.PowerMgmt VM.Audit"],
+             "VM.PowerMgmt"],
         )
         self.variables["pve_api_tokens_existing_role"] = [
-            {"privs": "VM.Audit,VM.PowerMgmt"}
+            {"privs": "VM.PowerMgmt"}
         ]
         self.assertFalse(evaluate_conditions(role_task, self.variables))
         self.variables["pve_api_tokens_existing_role"] = [
-            {"privs": "VM.Audit,VM.PowerMgmt,VM.Console"}
+            {"privs": "VM.PowerMgmt,VM.Audit"}
         ]
         self.assertTrue(evaluate_conditions(role_task, self.variables))
         self.assertEqual(
@@ -283,6 +305,29 @@ class HatchetPowerScope(unittest.TestCase):
         for wider in (["/"], ["/vms"], ["/pool/hatchet"], ["/vms/900001", "/nodes/pve-a"]):
             with self.subTest(paths=wider):
                 self.assertFalse(self._validates(wider))
+
+    def test_only_the_dedicated_tag_selects_guests_and_the_count_is_exact(self):
+        self.assertNotIn("/vms/900004", self.paths)
+        self.assertEqual(self.consumer["acl_path_count"], 2)
+        for wrong_count in (["/vms/900001"], [*self.paths, "/vms/900005"]):
+            with self.subTest(paths=wrong_count):
+                self.assertFalse(self._validates(wrong_count))
+
+    def test_failure_names_the_tag_source_and_no_guest(self):
+        assertion = task("Validate the role and ACL paths")
+        # Ansible renders the loop item's nested acl_source template lazily; do it up front here.
+        consumer = {**self.consumer, "acl_source": evaluate(
+            self.consumer["acl_source"], pve_api_tokens_hatchet_tag=DEFAULTS["pve_api_tokens_hatchet_tag"])}
+        message = render(assertion["ansible.builtin.assert"]["fail_msg"],
+                         {**self.variables, "pve_api_tokens_consumer": consumer,
+                          "pve_api_tokens_acl_paths": []})
+        self.assertIn("tofu containers tagged hatchet-killtest", message)
+        self.assertIn("found 0", message)
+        for guest in self.containers:
+            self.assertNotIn(guest, message)
+
+    def test_the_power_entry_runs_after_every_read_only_consumer(self):
+        self.assertEqual(DEFAULTS["pve_api_tokens_consumers"][-1]["app"], "hatchet-killtest")
 
     def test_a_reminted_token_is_granted_even_when_the_old_token_held_the_acl(self):
         grant = task("Grant the custom role to a privsep token")

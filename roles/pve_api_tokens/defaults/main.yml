@@ -22,19 +22,24 @@ pve_api_tokens_consumers:
   - app: nautobot
     field_prefix: nautobot_proxmox
     certificate_field: nautobot_proxmox_ca
+  # Kept last: its validation failure stops the loop only after the read-only tokens.
   - app: hatchet-killtest
     field_prefix: hatchet_killtest_pve
     role: HatchetKillTestPower
-    privileges: [VM.PowerMgmt, VM.Audit]
+    privileges: [VM.PowerMgmt]
     acl_paths: "{{ pve_api_tokens_hatchet_acl_paths }}"
+    acl_path_count: 2
+    acl_source: tofu containers tagged {{ pve_api_tokens_hatchet_tag }}
     privsep: true
 
-pve_api_tokens_hatchet_docker_ai_guests: >-
+# Only guests carrying this dedicated tofu tag get the power grant.
+pve_api_tokens_hatchet_tag: hatchet-killtest
+pve_api_tokens_hatchet_guests: >-
   {{ (containers_from_tofu | default({}) | dict2items)
      | selectattr('value.tags', 'defined')
-     | selectattr('value.tags', 'contains', 'docker-ai') | list }}
+     | selectattr('value.tags', 'contains', pve_api_tokens_hatchet_tag) | list }}
 pve_api_tokens_hatchet_acl_paths: >-
-  {{ pve_api_tokens_hatchet_docker_ai_guests
+  {{ pve_api_tokens_hatchet_guests
      | map(attribute='value.ansible_pct_vmid') | map('string')
      | map('regex_replace', '^', '/vms/') | list }}
 

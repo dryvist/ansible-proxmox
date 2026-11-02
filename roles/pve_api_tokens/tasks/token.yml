@@ -41,9 +41,15 @@
         (pve_api_tokens_acl_paths
          | select('match', '^/vms/[0-9]+$') | list | length)
         == pve_api_tokens_acl_paths | length
+      - >-
+        pve_api_tokens_consumer.acl_path_count is not defined or
+        pve_api_tokens_acl_paths | length == pve_api_tokens_consumer.acl_path_count | int
     fail_msg: >-
-      Custom PVE token entries need a non-empty, unique list of exact
-      /vms/<vmid> ACL paths and a role distinct from the built-in PVEAuditor role.
+      {{ pve_api_tokens_consumer.app }}: needs
+      {{ pve_api_tokens_consumer.acl_path_count | default('a non-empty set of') }} unique,
+      exact /vms/<vmid> ACL paths from
+      {{ pve_api_tokens_consumer.acl_source | default('acl_paths') }} (found
+      {{ pve_api_tokens_acl_paths | length }}) and a role other than PVEAuditor.
     quiet: true
 
 - name: Read the published credential for {{ pve_api_tokens_consumer.app }}
