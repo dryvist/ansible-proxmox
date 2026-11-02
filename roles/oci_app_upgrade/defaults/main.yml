@@ -1,0 +1,43 @@
+---
+# Dry run is the default: the role reads state and reports the planned actions,
+# and changes nothing. Applying needs an explicit oci_app_upgrade_dry_run=false.
+oci_app_upgrade_dry_run: true
+
+# Holder CT VMIDs are this base plus the request's index in oci_app_upgrades.
+# Preflight refuses a holder VMID that is already in use cluster-wide.
+oci_app_upgrade_holder_vmid_base: 990000
+
+# PBS storage id for the last-resort vzdump archive. Matches
+# pve_backup_jobs_storage_id in roles/pve_backup_jobs/defaults/main.yml.
+oci_app_upgrade_backup_storage: guests
+
+# Clean stop window for pct shutdown. --forceStop 0 means the CT is never killed:
+# a CT that does not stop cleanly fails the run and the rescue takes over.
+oci_app_upgrade_shutdown_timeout: 120
+
+# Health wait: 60 attempts ten seconds apart is the ten-minute window.
+oci_app_upgrade_health_retries: 60
+oci_app_upgrade_health_delay: 10
+
+# Failure notices go to the ntfy keystone topic, the same topic the apps
+# repository's ntfy_unit_failure role uses.
+oci_app_upgrade_ntfy_url: "https://ntfy.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}/keystone"
+
+# Recorded pct config keys carried into pct create. Every netN is carried too.
+# mpN volumes move back from the holder, and rootfs is rebuilt from its recorded
+# storage and size.
+oci_app_upgrade_create_keys:
+  - hostname
+  - cores
+  - memory
+  - swap
+  - unprivileged
+  - features
+  - env
+  - tags
+  - onboot
+  - startup
+  - nameserver
+  - searchdomain
+  - timezone
+  - ostype

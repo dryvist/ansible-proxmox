@@ -1,0 +1,279 @@
+---
+# Steps 3-8 for one CT, driven by live state. The forward swap runs it with the
+# new template as the target; the rescue rebuild runs it with the previous one.
+# Each step checks what exists before it acts. Volumes move only between the CT
+# and its holder, and the holder is destroyed only after it owns no mpN or
+# unusedN volume.
+
+- name: Read the live state before the swap
+  ansible.builtin.include_tasks: read_state.yml
+
+# Step 3: HA first, so HA cannot restart the CT while it is being replaced.
+- name: Note that this CT is being removed from HA (step 3)
+  ansible.builtin.set_fact:
+    oci_app_upgrade_ha_removed: true
+  when: oci_app_upgrade_ct_ha_managed | bool
+
+- name: Remove this CT from HA (step 3)
+  ansible.builtin.command: ha-manager remove ct:{{ oci_app_upgrade_vmid }}
+  when: oci_app_upgrade_ct_ha_managed | bool
+  changed_when: true
+
+- name: Note the replication jobs being deleted (step 3)
+  ansible.builtin.set_fact:
+    oci_app_upgrade_jobs_removed: "{{ oci_app_upgrade_repl_ids }}"
+  when: oci_app_upgrade_repl_ids | length > 0
+
+- name: Delete this CT's replication jobs with pvesr (step 3)
+  ansible.builtin.command: pvesr delete {{ item }}
+  loop: "{{ oci_app_upgrade_repl_ids }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: true
+
+# Step 4: stop cleanly, then record the configuration and its digest.
+- name: Shut the CT down cleanly, never forced (step 4)
+  ansible.builtin.command: pct shutdown {{ oci_app_upgrade_vmid }} --timeout {{ oci_app_upgrade_shutdown_timeout }} --forceStop 0
+  when: oci_app_upgrade_ct_status == 'running'
+  changed_when: true
+
+- name: Read the live state after the shutdown
+  ansible.builtin.include_tasks: read_state.yml
+
+- name: Require the CT stopped after the shutdown (step 4)
+  ansible.builtin.assert:
+    that:
+      - oci_app_upgrade_ct_status == 'stopped'
+    fail_msg: >-
+      CT {{ oci_app_upgrade_vmid }} did not stop within {{ oci_app_upgrade_shutdown_timeout }} s.
+      No volume has moved; the rescue restarts it.
+    quiet: true
+  when: oci_app_upgrade_ct_exists | bool
+
+- name: Record the pct configuration and its digest before any volume moves (step 4)
+  ansible.builtin.set_fact:
+    oci_app_upgrade_recorded_config: "{{ oci_app_upgrade_ct_config }}"
+    oci_app_upgrade_recorded_digest: "{{ oci_app_upgrade_ct_config.digest | default('') }}"
+  when:
+    - oci_app_upgrade_recorded_config | length == 0
+    - oci_app_upgrade_ct_exists | bool
+
+- name: Derive the recorded mpN keys and rootfs spec
+  ansible.builtin.set_fact:
+    oci_app_upgrade_recorded_mp_keys: >-
+      {{ oci_app_upgrade_recorded_config | dict2items
+         | selectattr('key', 'match', '^mp[0-9]+$') | map(attribute='key') | sort | list }}
+    oci_app_upgrade_rootfs_storage: "{{ (oci_app_upgrade_recorded_config.rootfs | default('')).split(':')[0] }}"
+    oci_app_upgrade_rootfs_size: >-
+      {{ ((oci_app_upgrade_recorded_config.rootfs | default('')).split('size=') | last).split('G') | first }}
+
+- name: Require every recorded mpN to be on the CT or the holder before any move
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((oci_app_upgrade_ct_mp_keys + oci_app_upgrade_holder_mp_keys) | sort | list)
+        == oci_app_upgrade_recorded_mp_keys
+      - oci_app_upgrade_ct_mp_keys | select('in', oci_app_upgrade_holder_mp_keys) | list | length == 0
+    fail_msg: >-
+      Recorded mpN volumes are not all accounted for on the CT and the holder.
+      Stopping before any move; investigate the holder and the CT by hand.
+    quiet: true
+
+# Step 5: lift protection (protected CTs refuse moves and destroy), create the
+# holder, and move every mpN volume from the CT to the holder.
+- name: Lift protection so the volumes can move and the CT can be destroyed (step 5)
+  ansible.builtin.command: pct set {{ oci_app_upgrade_vmid }} --protection 0
+  when:
+    - oci_app_upgrade_ct_exists | bool
+    - oci_app_upgrade_ct_config.protection | default(0) | string == '1'
+  changed_when: true
+
+- name: Note that protection was lifted (step 5)
+  ansible.builtin.set_fact:
+    oci_app_upgrade_protection_lifted: true
+  when:
+    - oci_app_upgrade_ct_exists | bool
+    - oci_app_upgrade_ct_config.protection | default(0) | string == '1'
+
+- name: Create the stopped holder CT that owns the mpN volumes during the swap (step 5)
+  ansible.builtin.command:
+    argv:
+      - pct
+      - create
+      - "{{ oci_app_upgrade_holder_vmid | string }}"
+      - "{{ oci_app_upgrade_swap_target }}"
+      - --ostype
+      - "{{ oci_app_upgrade_recorded_config.ostype | default('unmanaged') }}"
+      - --rootfs
+      - "{{ oci_app_upgrade_rootfs_storage }}:{{ oci_app_upgrade_rootfs_size }}"
+      - --unprivileged
+      - "{{ oci_app_upgrade_recorded_config.unprivileged | default(0) | string }}"
+  when:
+    - not (oci_app_upgrade_holder_exists | bool)
+    - oci_app_upgrade_ct_mp_keys | length > 0
+  changed_when: true
+
+- name: Move each mpN volume from the CT to the holder (step 5)
+  ansible.builtin.command:
+    argv:
+      - pct
+      - move-volume
+      - "{{ oci_app_upgrade_vmid | string }}"
+      - "{{ item }}"
+      - --target-vmid
+      - "{{ oci_app_upgrade_holder_vmid | string }}"
+      - --target-volume
+      - "{{ item }}"
+  loop: "{{ oci_app_upgrade_ct_mp_keys }}"
+  loop_control:
+    label: "{{ item }}"
+  when: oci_app_upgrade_ct_mp_keys | length > 0
+  changed_when: true
+
+- name: Read the live state after the move to the holder (step 5)
+  ansible.builtin.include_tasks: read_state.yml
+
+- name: Require the CT to hold no mpN and the holder to hold every recorded mpN (step 5)
+  ansible.builtin.assert:
+    that:
+      - oci_app_upgrade_ct_mp_keys | length == 0
+      - oci_app_upgrade_holder_mp_keys == oci_app_upgrade_recorded_mp_keys
+    fail_msg: >-
+      The mpN volumes did not all reach the holder. Stop; the holder keeps them.
+    quiet: true
+
+- name: Require each moved volume to keep its mount options on the holder (step 5)
+  ansible.builtin.assert:
+    that:
+      - >-
+        (oci_app_upgrade_holder_config[item] | regex_replace('^[^,]+', 'VOLUME'))
+        == (oci_app_upgrade_recorded_config[item] | regex_replace('^[^,]+', 'VOLUME'))
+    fail_msg: "{{ item }} changed its mount options during the move. Stop; the holder keeps the volume."
+    quiet: true
+  loop: "{{ oci_app_upgrade_recorded_mp_keys }}"
+  loop_control:
+    label: "{{ item }}"
+
+# Step 6: destroy the CT with --purge. Its volumes are on the holder, so the
+# destroy frees only its own rootfs. PVE refuses this destroy while HA, a
+# replication job, or protection remains, so each is cleared above.
+- name: Require the CT to be free of volumes, HA, replication and protection before the destroy (step 6)
+  ansible.builtin.assert:
+    that:
+      - oci_app_upgrade_ct_mp_keys | length == 0
+      - oci_app_upgrade_ct_unused_keys | length == 0
+      - not (oci_app_upgrade_ct_ha_managed | bool)
+      - oci_app_upgrade_repl_ids | length == 0
+      - oci_app_upgrade_ct_config.protection | default(0) | string != '1'
+      - oci_app_upgrade_ct_status == 'stopped'
+    fail_msg: CT {{ oci_app_upgrade_vmid }} is not clear for destroy. Nothing was destroyed.
+    quiet: true
+  when: oci_app_upgrade_ct_exists | bool
+
+- name: Note that the CT destroy has started (step 6)
+  ansible.builtin.set_fact:
+    oci_app_upgrade_destroy_started: true
+  when: oci_app_upgrade_ct_exists | bool
+
+- name: Destroy the CT with its configuration (step 6)
+  ansible.builtin.command: pct destroy {{ oci_app_upgrade_vmid }} --purge
+  when: oci_app_upgrade_ct_exists | bool
+  changed_when: true
+
+# Step 7: recreate the CT from the target template, move the volumes back into
+# the same slots, verify the mount options, and destroy the empty holder.
+- name: Read the live state after the destroy (step 7)
+  ansible.builtin.include_tasks: read_state.yml
+
+- name: Build the pct create arguments from the recorded configuration (step 7)
+  ansible.builtin.include_tasks: build_create_argv.yml
+  vars:
+    oci_app_upgrade_argv_vmid: "{{ oci_app_upgrade_vmid }}"
+    oci_app_upgrade_argv_template: "{{ oci_app_upgrade_swap_target }}"
+
+- name: Create the CT from the target template with the recorded configuration (step 7)
+  ansible.builtin.command:
+    argv: "{{ oci_app_upgrade_create_argv }}"
+  when: not (oci_app_upgrade_ct_exists | bool)
+  changed_when: true
+
+- name: Require the holder to hold every recorded mpN before the move back (step 7)
+  ansible.builtin.assert:
+    that:
+      - oci_app_upgrade_holder_mp_keys == oci_app_upgrade_recorded_mp_keys
+    fail_msg: The holder does not hold exactly the recorded mpN set. Nothing moved back.
+    quiet: true
+
+- name: Move each mpN volume from the holder back to the CT (step 7)
+  ansible.builtin.command:
+    argv:
+      - pct
+      - move-volume
+      - "{{ oci_app_upgrade_holder_vmid | string }}"
+      - "{{ item }}"
+      - --target-vmid
+      - "{{ oci_app_upgrade_vmid | string }}"
+      - --target-volume
+      - "{{ item }}"
+  loop: "{{ oci_app_upgrade_holder_mp_keys }}"
+  loop_control:
+    label: "{{ item }}"
+  when: oci_app_upgrade_holder_mp_keys | length > 0
+  changed_when: true
+
+- name: Read the live state after the move back (step 7)
+  ansible.builtin.include_tasks: read_state.yml
+
+- name: Require the CT to hold every recorded mpN and the holder to hold none (step 7)
+  ansible.builtin.assert:
+    that:
+      - oci_app_upgrade_ct_mp_keys == oci_app_upgrade_recorded_mp_keys
+      - oci_app_upgrade_holder_mp_keys | length == 0
+    fail_msg: The volumes did not all return to the CT. The holder keeps what is left.
+    quiet: true
+
+- name: Require each restored volume to keep its mount options on the CT (step 7)
+  ansible.builtin.assert:
+    that:
+      - >-
+        (oci_app_upgrade_ct_config[item] | regex_replace('^[^,]+', 'VOLUME'))
+        == (oci_app_upgrade_recorded_config[item] | regex_replace('^[^,]+', 'VOLUME'))
+    fail_msg: "{{ item }} changed its mount options during the move back. The holder keeps the volume."
+    quiet: true
+  loop: "{{ oci_app_upgrade_recorded_mp_keys }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Require the holder to own no mpN or unusedN volume before it is destroyed (step 7)
+  ansible.builtin.assert:
+    that:
+      - oci_app_upgrade_holder_mp_keys | length == 0
+      - oci_app_upgrade_holder_unused_keys | length == 0
+    fail_msg: The holder still owns a volume. It is kept.
+    quiet: true
+  when: oci_app_upgrade_holder_exists | bool
+
+- name: Destroy the empty holder CT (step 7)
+  ansible.builtin.command: pct destroy {{ oci_app_upgrade_holder_vmid | string }}
+  when: oci_app_upgrade_holder_exists | bool
+  changed_when: true
+
+- name: Restore the protection setting that was lifted (step 7)
+  ansible.builtin.command: pct set {{ oci_app_upgrade_vmid }} --protection 1
+  when:
+    - oci_app_upgrade_protection_lifted | bool
+    - oci_app_upgrade_recorded_config.protection | default(0) | string == '1'
+  changed_when: true
+
+# Step 8: start if it was running before the change, then re-apply HA and
+# replication from desired state. The start comes first: an HA entry added to a
+# stopped CT would start it itself.
+- name: Start the CT if it was running before the change (step 8)
+  ansible.builtin.command: pct start {{ oci_app_upgrade_vmid }}
+  when:
+    - oci_app_upgrade_was_running | bool
+    - oci_app_upgrade_ct_status != 'running'
+  changed_when: true
+
+- name: Re-apply HA and replication from desired state (step 8)
+  ansible.builtin.include_tasks: restore_ha.yml

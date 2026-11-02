@@ -1,0 +1,15 @@
+---
+# Step 9: the application health URL must return 200 within the retry window.
+# A failed attempt is retried, so the task fails only once the window is spent.
+
+- name: Wait for the application health URL to return 200 (step 9)
+  ansible.builtin.uri:
+    url: "{{ oci_app_upgrade_item.health_url }}"
+    method: GET
+    status_code: 200
+    timeout: 15
+  register: oci_app_upgrade_health
+  until: oci_app_upgrade_health.status | default(0) == 200
+  retries: "{{ oci_app_upgrade_health_retries }}"
+  delay: "{{ oci_app_upgrade_health_delay }}"
+  changed_when: false

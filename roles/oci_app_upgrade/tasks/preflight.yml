@@ -1,0 +1,114 @@
+---
+# Read-only checks for one CT that needs a new image. Every assertion here runs
+# before the first change (step 1). A failure stops this CT with nothing moved.
+
+- name: Read the live state of the CT and its holder
+  ansible.builtin.include_tasks: read_state.yml
+
+- name: Read the CT snapshots
+  ansible.builtin.command: pvesh get /nodes/{{ oci_app_upgrade_this_node }}/lxc/{{ oci_app_upgrade_vmid }}/snapshot --output-format json
+  register: oci_app_upgrade_snapshots_raw
+  changed_when: false
+  check_mode: false
+
+- name: Read the storage definitions
+  ansible.builtin.command: pvesh get /storage --output-format json
+  register: oci_app_upgrade_storage_raw
+  changed_when: false
+  check_mode: false
+
+- name: Read the template lists of the new and the current template storages
+  ansible.builtin.command: pveam list {{ item }}
+  loop: "{{ [oci_app_upgrade_item.template.split(':')[0], oci_app_upgrade_item.current_template.split(':')[0]] }}"
+  loop_control:
+    label: "{{ item }}"
+  register: oci_app_upgrade_templates_raw
+  changed_when: false
+  check_mode: false
+
+- name: Derive the rootfs storage and size from the live configuration
+  ansible.builtin.set_fact:
+    oci_app_upgrade_rootfs_storage: "{{ (oci_app_upgrade_ct_config.rootfs | default('')).split(':')[0] }}"
+    oci_app_upgrade_rootfs_size: >-
+      {{ ((oci_app_upgrade_ct_config.rootfs | default('')).split('size=') | last).split('G') | first }}
+
+- name: Require the CT to be present, unlocked, and free of unused volumes
+  ansible.builtin.assert:
+    that:
+      - oci_app_upgrade_ct_exists | bool
+      - oci_app_upgrade_ct_config.lock is not defined
+      - oci_app_upgrade_ct_unused_keys | length == 0
+      - oci_app_upgrade_ct_status in ['running', 'stopped']
+      - oci_app_upgrade_rootfs_storage | length > 0
+      - oci_app_upgrade_rootfs_size is match('^[0-9]+$')
+    fail_msg: >-
+      CT {{ oci_app_upgrade_vmid }} must exist on this node, be unlocked, have no
+      unusedN volume, and have a rootfs sized in whole GiB. Nothing was changed.
+    quiet: true
+
+- name: Require every mpN to be a storage volume flagged backup=1
+  ansible.builtin.assert:
+    that:
+      - item.value is match('^[A-Za-z0-9][A-Za-z0-9._-]*:[^,]+')
+      - "'backup=1' in (item.value.split(','))"
+    fail_msg: >-
+      {{ item.key }} must be a storage volume with backup=1. A bind mount cannot
+      move, and an unflagged volume is not in the archive. Nothing was changed.
+    quiet: true
+  loop: "{{ oci_app_upgrade_ct_config | dict2items | selectattr('key', 'match', '^mp[0-9]+$') | list }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Require no snapshot other than the live state
+  ansible.builtin.assert:
+    that:
+      - >-
+        (oci_app_upgrade_snapshots_raw.stdout | from_json | map(attribute='name')
+         | reject('equalto', 'current') | list | length) == 0
+    fail_msg: >-
+      CT {{ oci_app_upgrade_vmid }} has snapshots; a volume with a snapshot cannot
+      be moved. Nothing was changed.
+    quiet: true
+
+- name: Require the holder VMID to be free cluster-wide
+  ansible.builtin.assert:
+    that:
+      - not (oci_app_upgrade_holder_exists | bool)
+      - >-
+        oci_app_upgrade_holder_vmid not in
+        (oci_app_upgrade_placement | map(attribute='vmid') | map('int') | list)
+    fail_msg: >-
+      Holder VMID {{ oci_app_upgrade_holder_vmid }} is in use. Choose another
+      oci_app_upgrade_holder_vmid_base. Nothing was changed.
+    quiet: true
+
+- name: Require the PBS backup storage to be declared
+  ansible.builtin.assert:
+    that:
+      - >-
+        (oci_app_upgrade_storage_raw.stdout | from_json
+         | selectattr('storage', 'equalto', oci_app_upgrade_backup_storage)
+         | selectattr('type', 'equalto', 'pbs') | list | length) == 1
+    fail_msg: >-
+      Storage {{ oci_app_upgrade_backup_storage }} must exist as a PBS storage.
+      Nothing was changed.
+    quiet: true
+
+- name: Require both templates to be present on their storages
+  ansible.builtin.assert:
+    that:
+      - oci_app_upgrade_item.template in (oci_app_upgrade_templates_raw.results | map(attribute='stdout') | join(' '))
+      - oci_app_upgrade_item.current_template in (oci_app_upgrade_templates_raw.results | map(attribute='stdout') | join(' '))
+    fail_msg: >-
+      Template {{ oci_app_upgrade_item.template }} (or the current
+      {{ oci_app_upgrade_item.current_template }}) is not on its storage. This role
+      does not pull images; load the template first. Nothing was changed.
+    quiet: true
+
+- name: Require the ntfy environment for the failure notice when applying
+  ansible.builtin.assert:
+    that:
+      - lookup('env', 'PROXMOX_SUBDOMAIN') | length > 0
+    fail_msg: PROXMOX_SUBDOMAIN must be set so a failure notice can reach the ntfy topic.
+    quiet: true
+  when: not (oci_app_upgrade_dry_run | bool)

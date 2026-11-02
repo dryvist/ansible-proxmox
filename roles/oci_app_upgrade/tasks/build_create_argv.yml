@@ -1,0 +1,27 @@
+---
+# Builds oci_app_upgrade_create_argv for pct create from the recorded
+# configuration. It carries only the keys in oci_app_upgrade_create_keys and
+# every netN. mpN and unusedN volumes move back separately, and rootfs comes from
+# its recorded storage and size.
+# Inputs: oci_app_upgrade_argv_vmid, oci_app_upgrade_argv_template.
+
+- name: Start the pct create argument list
+  ansible.builtin.set_fact:
+    oci_app_upgrade_create_argv:
+      - pct
+      - create
+      - "{{ oci_app_upgrade_argv_vmid | string }}"
+      - "{{ oci_app_upgrade_argv_template }}"
+      - --rootfs
+      - "{{ oci_app_upgrade_rootfs_storage }}:{{ oci_app_upgrade_rootfs_size }}"
+
+- name: Append each recorded option as --key value
+  ansible.builtin.set_fact:
+    oci_app_upgrade_create_argv: "{{ oci_app_upgrade_create_argv + ['--' ~ item.key, item.value | string] }}"
+  loop: >-
+    {{ (oci_app_upgrade_recorded_config | dict2items
+        | selectattr('key', 'in', oci_app_upgrade_create_keys) | list)
+       + (oci_app_upgrade_recorded_config | dict2items
+          | selectattr('key', 'match', '^net[0-9]+$') | list) }}
+  loop_control:
+    label: "{{ item.key }}"

@@ -1,0 +1,29 @@
+---
+# Re-applies HA and replication from desired state with the existing pve_ha tasks.
+# Tier-0 HA is cluster-wide, so it runs on the config host (delegated through
+# apply). Replication jobs are node-local, so they run here, on the node that
+# hosts the CT now.
+
+- name: Re-apply the tier-0 HA resources from desired state on the config host
+  ansible.builtin.include_role:
+    name: pve_ha
+    tasks_from: tier0_resources
+    apply:
+      delegate_to: "{{ pve_ha_config_host }}"
+  when: pve_ha_enabled | bool
+
+- name: Resolve the replication jobs from desired state on this node
+  ansible.builtin.include_role:
+    name: pve_ha
+    tasks_from: replication_jobs
+  when:
+    - pve_ha_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+
+- name: Create or repair the replication jobs from desired state on this node
+  ansible.builtin.include_role:
+    name: pve_ha
+    tasks_from: replication_apply
+  when:
+    - pve_ha_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'

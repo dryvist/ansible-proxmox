@@ -1,0 +1,71 @@
+---
+# Read-only snapshot of the CT and its holder: configs, status, HA resources and
+# replication jobs, reduced to facts. Every step that acts includes this first,
+# so no step trusts an earlier snapshot. Safe in dry run and check mode.
+
+- name: Read the CT configuration
+  ansible.builtin.command: pvesh get /nodes/{{ oci_app_upgrade_this_node }}/lxc/{{ oci_app_upgrade_vmid }}/config --output-format json
+  register: oci_app_upgrade_ct_raw
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Read the CT status
+  ansible.builtin.command: pvesh get /nodes/{{ oci_app_upgrade_this_node }}/lxc/{{ oci_app_upgrade_vmid }}/status/current --output-format json
+  register: oci_app_upgrade_status_raw
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Read the holder configuration
+  ansible.builtin.command: pvesh get /nodes/{{ oci_app_upgrade_this_node }}/lxc/{{ oci_app_upgrade_holder_vmid }}/config --output-format json
+  register: oci_app_upgrade_holder_raw
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Read the HA resources
+  ansible.builtin.command: pvesh get /cluster/ha/resources --output-format json
+  register: oci_app_upgrade_ha_raw
+  changed_when: false
+  check_mode: false
+
+- name: Read the replication jobs
+  ansible.builtin.command: pvesh get /cluster/replication --output-format json
+  register: oci_app_upgrade_repl_raw
+  changed_when: false
+  check_mode: false
+
+# Facts within one set_fact are not visible to each other, so the configs come
+# first and the key lists that read them come in a second task.
+- name: Derive the existence, config, status and HA and replication facts
+  ansible.builtin.set_fact:
+    oci_app_upgrade_ct_exists: "{{ oci_app_upgrade_ct_raw.rc == 0 }}"
+    oci_app_upgrade_ct_config: >-
+      {{ oci_app_upgrade_ct_raw.stdout | from_json if oci_app_upgrade_ct_raw.rc == 0 else {} }}
+    oci_app_upgrade_ct_status: >-
+      {{ (oci_app_upgrade_status_raw.stdout | from_json).status if oci_app_upgrade_ct_raw.rc == 0 else 'absent' }}
+    oci_app_upgrade_holder_exists: "{{ oci_app_upgrade_holder_raw.rc == 0 }}"
+    oci_app_upgrade_holder_config: >-
+      {{ oci_app_upgrade_holder_raw.stdout | from_json if oci_app_upgrade_holder_raw.rc == 0 else {} }}
+    oci_app_upgrade_ct_ha_managed: >-
+      {{ ('ct:' ~ (oci_app_upgrade_vmid | string))
+         in (oci_app_upgrade_ha_raw.stdout | from_json | map(attribute='sid') | list) }}
+    oci_app_upgrade_repl_ids: >-
+      {{ (oci_app_upgrade_repl_raw.stdout | from_json) | map(attribute='id')
+         | select('match', '^' ~ (oci_app_upgrade_vmid | string) ~ '-[0-9]+$') | list }}
+
+- name: Derive the mpN and unusedN key lists from the configs
+  ansible.builtin.set_fact:
+    oci_app_upgrade_ct_mp_keys: >-
+      {{ oci_app_upgrade_ct_config | dict2items
+         | selectattr('key', 'match', '^mp[0-9]+$') | map(attribute='key') | sort | list }}
+    oci_app_upgrade_holder_mp_keys: >-
+      {{ oci_app_upgrade_holder_config | dict2items
+         | selectattr('key', 'match', '^mp[0-9]+$') | map(attribute='key') | sort | list }}
+    oci_app_upgrade_ct_unused_keys: >-
+      {{ oci_app_upgrade_ct_config | dict2items
+         | selectattr('key', 'match', '^unused[0-9]+$') | map(attribute='key') | list }}
+    oci_app_upgrade_holder_unused_keys: >-
+      {{ oci_app_upgrade_holder_config | dict2items
+         | selectattr('key', 'match', '^unused[0-9]+$') | map(attribute='key') | list }}
