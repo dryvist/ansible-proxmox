@@ -59,10 +59,11 @@ read gate.
 
 The `hatchet-killtest` entry uses `HatchetKillTestPower`, whose only privilege
 is `VM.PowerMgmt`. Its paths come from `containers_from_tofu` containers that
-carry the dedicated `hatchet-killtest` tag and an `ansible_pct_vmid`; each VMID
+carry the dedicated `hatchet-killtest` tag; each entry's `ansible_pct_vmid`
 becomes `/vms/<vmid>`. The entry requires exactly two such paths
-(`acl_path_count: 2`) and fails, naming the tag source, if the count differs; a
-tagged container without a VMID drops out, so it fails the same way. It is the
+(`acl_path_count: 2`) and fails, naming the tag source, if the count differs. A
+tagged container without a VMID still counts and renders as `/vms/`, which the
+per-guest path check refuses, so no ACL is granted. It is the
 last consumer, so that failure comes after the read-only tokens. The user and
 its privsep token receive the role only on those paths, with `--propagate 0`;
 the token's effective rights are bounded by the intersection of both ACL sets.

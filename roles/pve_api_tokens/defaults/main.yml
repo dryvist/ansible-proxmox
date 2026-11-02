@@ -41,11 +41,12 @@ pve_api_tokens_hatchet_tag: hatchet-killtest
 pve_api_tokens_hatchet_guests: >-
   {{ (containers_from_tofu | default({}) | dict2items)
      | selectattr('value.tags', 'defined')
-     | selectattr('value.tags', 'contains', pve_api_tokens_hatchet_tag)
-     | selectattr('value.ansible_pct_vmid', 'defined') | list }}
+     | selectattr('value.tags', 'contains', pve_api_tokens_hatchet_tag) | list }}
+# Every tagged entry yields a path, so the exact count covers the raw tagged set;
+# a missing VMID renders as /vms/, which the per-guest path check refuses.
 pve_api_tokens_hatchet_acl_paths: >-
   {{ pve_api_tokens_hatchet_guests
-     | map(attribute='value.ansible_pct_vmid') | map('string')
+     | map(attribute='value.ansible_pct_vmid', default='') | map('string')
      | map('regex_replace', '^', '/vms/') | list }}
 
 pve_api_tokens_role: PVEAuditor

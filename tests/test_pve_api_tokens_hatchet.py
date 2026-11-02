@@ -129,11 +129,14 @@ class HatchetPowerScope(unittest.TestCase):
             with self.subTest(paths=wrong_count):
                 self.assertFalse(self._validates(wrong_count))
 
-    def test_a_tagged_guest_without_a_vmid_drops_out_so_the_count_check_fires(self):
-        _, paths = hatchet_paths({**self.containers, "no-vmid": {"tags": ["hatchet-killtest"]}})
-        self.assertEqual(paths, self.paths)
-        _, paths = hatchet_paths({"guest-a": self.containers["guest-a"],
-                                       "no-vmid": {"tags": ["hatchet-killtest"]}})
+    def test_every_raw_tagged_entry_counts_and_a_missing_vmid_fails(self):
+        no_vmid = {"tags": ["hatchet-killtest"]}
+        guests, paths = hatchet_paths({**self.containers, "no-vmid": no_vmid})
+        self.assertEqual(len(guests), 3)
+        self.assertEqual(paths, ["/vms/900001", "/vms/900002", "/vms/"])
+        self.assertFalse(self._validates(paths))
+        _, paths = hatchet_paths({"guest-a": self.containers["guest-a"], "no-vmid": no_vmid})
+        self.assertEqual(paths, ["/vms/900001", "/vms/"])
         self.assertFalse(self._validates(paths))
 
     def test_only_the_killtest_token_publishes_outside_apps(self):
