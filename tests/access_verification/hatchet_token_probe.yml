@@ -1,7 +1,7 @@
 ---
 # Live probe of the hatchet-killtest PVE token boundary. Every request except
-# /version must be refused. OTHER_VMID must be a running guest, so a too-broad
-# grant fails the start as "already running" instead of changing its state.
+# /version must be refused. Nothing here can change guest state: the power check
+# targets UNUSED_VMID (no such guest), so an over-grant returns 500, not 403.
 - name: Verify the Hatchet PVE API token boundary
   hosts: localhost
   connection: local
@@ -14,6 +14,7 @@
     pve_probe_hatchet_vmid: "{{ lookup('ansible.builtin.env', 'HATCHET_VMID') }}"
     pve_probe_other_vmid: "{{ lookup('ansible.builtin.env', 'OTHER_VMID') }}"
     pve_probe_other_type: "{{ lookup('ansible.builtin.env', 'OTHER_GUEST_TYPE') }}"
+    pve_probe_unused_vmid: "{{ lookup('ansible.builtin.env', 'UNUSED_VMID') }}"
     pve_probe_authorization: >-
       PVEAPIToken={{ pve_probe_token_id }}={{ pve_probe_token_secret }}
     pve_probe_node_api: "{{ pve_probe_url }}/api2/json/nodes/{{ pve_probe_node }}"
@@ -24,7 +25,7 @@
       - {name: Hatchet guest config write, method: PUT, url: "{{ pve_probe_hatchet_api }}/config"}
       - {name: Hatchet guest console, method: POST, url: "{{ pve_probe_hatchet_api }}/termproxy"}
       - {name: Other guest status read, method: GET, url: "{{ pve_probe_other_api }}/status/current"}
-      - {name: Other guest power start, method: POST, url: "{{ pve_probe_other_api }}/status/start"}
+      - {name: Power start on an unused VMID, method: POST, url: "{{ pve_probe_node_api }}/lxc/{{ pve_probe_unused_vmid }}/status/start"}
       - {name: Node config read, method: GET, url: "{{ pve_probe_node_api }}/config"}
       - {name: Node storage list, method: GET, url: "{{ pve_probe_node_api }}/storage"}
       - {name: Cluster storage config, method: GET, url: "{{ pve_probe_url }}/api2/json/storage"}
@@ -41,9 +42,11 @@
           - pve_probe_other_vmid | length > 0
           - pve_probe_other_type in ['qemu', 'lxc']
           - pve_probe_other_vmid != pve_probe_hatchet_vmid
+          - pve_probe_unused_vmid | length > 0
+          - pve_probe_unused_vmid not in [pve_probe_hatchet_vmid, pve_probe_other_vmid]
         fail_msg: >-
-          Set the PVE API URL, token pair, node, Hatchet VMID, and a distinct
-          running other guest type and VMID before running this live probe.
+          Set the PVE API URL, token pair, node, Hatchet VMID, another guest
+          type and VMID, and an unused VMID before running this live probe.
         quiet: true
       no_log: true
 

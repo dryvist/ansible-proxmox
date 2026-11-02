@@ -1,0 +1,50 @@
+---
+# Custom-role consumers only (included when privileges is defined).
+- name: Read existing roles for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv: [pvesh, get, /access/roles, --output-format, json]
+  register: pve_api_tokens_existing_roles
+  changed_when: false
+  check_mode: false
+
+- name: Select the custom role for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.set_fact:
+    pve_api_tokens_existing_role: >-
+      {{ pve_api_tokens_existing_roles.stdout | from_json
+         | selectattr('roleid', 'equalto', pve_api_tokens_role_name) | list }}
+
+# Roles are cluster-wide, so modifying one held by another principal would widen
+# it; group membership would add group ACLs outside the declared paths.
+- name: Refuse a shared custom role or a grouped user for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        pve_api_tokens_acls.stdout | from_json
+        | selectattr('roleid', 'equalto', pve_api_tokens_role_name)
+        | rejectattr('ugid', 'in', [pve_api_tokens_user, pve_api_tokens_id])
+        | list | length == 0
+      - >-
+        pve_api_tokens_users.stdout | from_json
+        | selectattr('userid', 'equalto', pve_api_tokens_user)
+        | map(attribute='groups', default='') | reject('equalto', '') | reject('equalto', [])
+        | list | length == 0
+    fail_msg: >-
+      {{ pve_api_tokens_consumer.app }}: role {{ pve_api_tokens_role_name }} is
+      held by another principal, or {{ pve_api_tokens_user }} belongs to a group.
+    quiet: true
+
+- name: Reconcile the exact privileges for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.command:
+    argv:
+      - pveum
+      - role
+      - "{{ 'add' if pve_api_tokens_existing_role | length == 0 else 'modify' }}"
+      - "{{ pve_api_tokens_role_name }}"
+      - --privs
+      - "{{ pve_api_tokens_consumer.privileges | join(' ') }}"
+  when:
+    - >-
+      pve_api_tokens_existing_role | length == 0 or
+      (pve_api_tokens_existing_role[0].privs.split(',') | sort
+       != pve_api_tokens_consumer.privileges | sort)
+  changed_when: true

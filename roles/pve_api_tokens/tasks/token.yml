@@ -77,37 +77,9 @@
     quiet: true
     fail_msg: "OpenBao read of apps/{{ pve_api_tokens_consumer.app }} failed; check the publish grant."
 
-- name: Read existing roles for {{ pve_api_tokens_consumer.app }}
-  ansible.builtin.command:
-    argv: [pvesh, get, /access/roles, --output-format, json]
-  register: pve_api_tokens_existing_roles
-  changed_when: false
-  check_mode: false
+- name: Reconcile the custom role for {{ pve_api_tokens_consumer.app }}
+  ansible.builtin.include_tasks: custom_role.yml
   when: pve_api_tokens_consumer.privileges is defined
-
-- name: Select the custom role for {{ pve_api_tokens_consumer.app }}
-  ansible.builtin.set_fact:
-    pve_api_tokens_existing_role: >-
-      {{ pve_api_tokens_existing_roles.stdout | from_json
-         | selectattr('roleid', 'equalto', pve_api_tokens_role_name) | list }}
-  when: pve_api_tokens_consumer.privileges is defined
-
-- name: Reconcile the exact privileges for {{ pve_api_tokens_consumer.app }}
-  ansible.builtin.command:
-    argv:
-      - pveum
-      - role
-      - "{{ 'add' if pve_api_tokens_existing_role | length == 0 else 'modify' }}"
-      - "{{ pve_api_tokens_role_name }}"
-      - --privs
-      - "{{ pve_api_tokens_consumer.privileges | join(' ') }}"
-  when:
-    - pve_api_tokens_consumer.privileges is defined
-    - >-
-      pve_api_tokens_existing_role | length == 0 or
-      (pve_api_tokens_existing_role[0].privs.split(',') | sort
-       != pve_api_tokens_consumer.privileges | sort)
-  changed_when: true
 
 - name: Ensure the dedicated user exists for {{ pve_api_tokens_consumer.app }}
   ansible.builtin.command:
@@ -194,12 +166,20 @@
     pve_api_tokens_existing: >-
       {{ (pve_api_tokens_tokens.stdout | from_json | map(attribute='tokenid') | list)
          if pve_api_tokens_tokens.rc == 0 else [] }}
+    # A token whose privsep differs from the entry would keep the user's full rights; re-mint it.
+    pve_api_tokens_privsep_drift: >-
+      {{ ((pve_api_tokens_tokens.stdout | from_json
+           | selectattr('tokenid', 'equalto', pve_api_tokens_token_name)
+           | map(attribute='privsep', default=0) | map('int') | list)
+          if pve_api_tokens_tokens.rc == 0 else [])
+         | reject('equalto', (1 if pve_api_tokens_privsep | bool else 0)) | list | length > 0 }}
   ansible.builtin.set_fact:
     pve_api_tokens_token_exists: "{{ pve_api_tokens_existing is contains(pve_api_tokens_token_name) }}"
     pve_api_tokens_mint: >-
       {{ pve_api_tokens_bucket.get(pve_api_tokens_id_field, '') != pve_api_tokens_id
          or pve_api_tokens_bucket.get(pve_api_tokens_secret_field, '') | length == 0
-         or pve_api_tokens_existing is not contains(pve_api_tokens_token_name) }}
+         or pve_api_tokens_existing is not contains(pve_api_tokens_token_name)
+         or pve_api_tokens_privsep_drift | bool }}
   no_log: true
 
 - name: Mint and publish a fresh token for {{ pve_api_tokens_consumer.app }}
