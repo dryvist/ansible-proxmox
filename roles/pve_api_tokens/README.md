@@ -89,8 +89,9 @@ requests, so it cannot change guest state. In order, it:
 1. requires `/version` to return 200 (positive control);
 2. reads the token's own effective permissions from `/access/permissions` for
    the whole tree, for `/vms` and for `/vms/<OTHER_VMID>`, and requires
-   `VM.PowerMgmt` on exactly the two Hatchet paths, as their only privilege,
-   and not on `/vms` or the other guest;
+   that across the whole tree the token holds no privilege but `VM.PowerMgmt`,
+   which sits on exactly the two Hatchet paths and not on `/vms` or the other
+   guest;
 3. requires 403 from each of: the first Hatchet guest's config read; the other
    guest's status read; node config and node storage reads; cluster storage
    config and ACL reads.

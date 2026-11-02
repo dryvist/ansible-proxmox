@@ -69,6 +69,8 @@ class ProbePermissions(unittest.TestCase):
             ("one guest only", {"tree": {HATCHET[0]: power}}),
             ("extra guest", {"tree": {**exact, "/vms/900003": power}}),
             ("extra privilege", {"tree": {**exact, HATCHET[0]: {**power, "VM.Audit": 0}}}),
+            ("other privilege elsewhere", {"tree": {**exact, "/": {"Sys.Audit": 1}}}),
+            ("other privilege on a pool", {"tree": {**exact, "/pool/x": {"Datastore.Audit": 0}}}),
             ("power on /vms", {"tree": exact, "vms": {"/vms": power}}),
             ("power on the other guest", {"tree": exact, "other": {"/vms/900003": power}}),
         ]:

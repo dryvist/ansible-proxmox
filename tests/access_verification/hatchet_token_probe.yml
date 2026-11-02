@@ -92,10 +92,10 @@
             pve_probe_tree | dict2items
             | selectattr('value', 'contains', 'VM.PowerMgmt')
             | map(attribute='key') | sort == pve_probe_hatchet_paths
+          # Across the whole tree, VM.PowerMgmt is the only privilege held anywhere.
           - >-
-            pve_probe_hatchet_paths
-            | map('extract', pve_probe_tree) | map('list') | map('sort')
-            | unique | list == [['VM.PowerMgmt']]
+            pve_probe_tree | dict2items | map(attribute='value') | map('list')
+            | flatten | unique | list == ['VM.PowerMgmt']
           - "'VM.PowerMgmt' not in pve_probe_vms.get('/vms', {})"
           - "'VM.PowerMgmt' not in pve_probe_other.get('/vms/' ~ pve_probe_other_vmid, {})"
         fail_msg: >-
