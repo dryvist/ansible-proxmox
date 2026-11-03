@@ -156,6 +156,19 @@ def test_undeclared_vzdump_jobs_are_not_removed():
     assert INVENTORY["pve_backup_jobs_manage"] is True
 
 
+def test_r540_job_backs_up_its_data_guests():
+    job = next(job for job in JOBS if job["id"] == "guests-pve-r540")
+    assert job["enabled"] is True
+    assert job["all"] is True
+    excluded = set(job["exclude_names"])
+    assert {"sim-eval", "langflow-eval", "dify-eval", "ai-sandbox-01", "plex"} <= excluded
+    data_guests = {
+        "postgres-apps", "postgres-ai-2", "openbao-21", "openbao-02", "s3", "langfuse", "clickhouse",
+        "qdrant", "hindsight-2", "iac-platform", "technitium-dns-2", "llm-router-2",
+    }
+    assert not data_guests & excluded
+
+
 def test_stop_mode_guests_are_excluded_from_the_snapshot_job():
     snapshot = next(job for job in JOBS if job["id"] == "guests-pve-w5900")
     stop = next(job for job in JOBS if job["id"] == "guests-pve-w5900-stop")
