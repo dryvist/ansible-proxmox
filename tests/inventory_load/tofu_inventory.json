@@ -7,6 +7,10 @@
   "splunk_vm": {
     "splunk": {
       "ansible_connection": "ssh",
+      "disks": [
+        { "interface": "scsi0", "datastore": "local-zfs", "path": "vm-90200-disk-0" },
+        { "interface": "virtio1", "datastore": "local-zfs", "path": "vm-90200-disk-1" }
+      ],
       "hostname": "splunk-aio",
       "ip": "192.168.0.200",
       "node": "pve-w1700",
@@ -32,6 +36,11 @@
       "tags": ["container", "object-storage", "storage"],
       "vmid": 902000,
       "ansible_pct_vmid": 902000
+    }
+  },
+  "nodes": {
+    "pve-r540": {
+      "cluster_roles": ["storage"]
     }
   },
   "node_storage": {

@@ -1,0 +1,26 @@
+---
+# Included once per injected case by verify_inventory.yml. A case counts as
+# refused only when the media-pool assertion itself fails. Any other failure
+# stops the play instead of counting as a refusal. Input: media_no_backup_case
+# with label, sanoid and endpoints keys.
+- name: Run the media-pool assertion against the injected case
+  block:
+    - name: Include the media-pool assertion for the injected case
+      ansible.builtin.include_tasks: media_no_backup_assert.yml
+      vars:
+        media_no_backup_sanoid: "{{ media_no_backup_case.sanoid }}"
+        media_no_backup_endpoints: "{{ media_no_backup_case.endpoints }}"
+
+    - name: Record the injected case as accepted
+      ansible.builtin.set_fact:
+        media_no_backup_accepted: "{{ media_no_backup_accepted | default([]) + [media_no_backup_case.label] }}"
+  rescue:
+    - name: Assert the refusal came from the media-pool assertion
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == 'Assert no sanoid key and no syncoid endpoint names the media pool'
+        fail_msg: "Case {{ media_no_backup_case.label }} failed in an unrelated task: {{ ansible_failed_task.name }}"
+
+    - name: Record the injected case as refused
+      ansible.builtin.set_fact:
+        media_no_backup_refused: "{{ media_no_backup_refused | default([]) + [media_no_backup_case.label] }}"
