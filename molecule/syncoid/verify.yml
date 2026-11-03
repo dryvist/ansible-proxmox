@@ -48,6 +48,17 @@
           - "'flock -n' in syncoid_wrapper_text"
         fail_msg: "syncoid wrapper did not render the schedule-group contract"
 
+    - name: Assert wrapper reports each job and run result to syslog
+      ansible.builtin.assert:
+        that:
+          - "'logger -t syncoid-replicate' in syncoid_wrapper_text"
+          - "'job=$name group=$group result=ok' in syncoid_wrapper_text"
+          - "'job=$name group=$group result=failed rc=$rc' in syncoid_wrapper_text"
+          - "'run group=$group result=failed' in syncoid_wrapper_text"
+          - "'run group=$group result=ok' in syncoid_wrapper_text"
+          - "'run group=$group result=no_jobs' in syncoid_wrapper_text"
+        fail_msg: "syncoid wrapper does not report results to syslog"
+
     - name: Read the rendered on-boot replication service (boot trigger)
       ansible.builtin.slurp:
         src: /etc/systemd/system/syncoid-replicate-on-boot.service
