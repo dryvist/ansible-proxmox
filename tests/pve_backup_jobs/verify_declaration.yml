@@ -64,6 +64,19 @@
             schedule: "02:30"
             exclude_names: [fixture-splunk]
 
+    - name: Accept a tag exclusion on an all-node declaration
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs:
+          - id: fixture-tagged-exclusion
+            all: true
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+            exclude_tags: [media]
+
     - name: Refuse a declaration carrying a guest-id list
       block:
         - name: Run the guard against a guest-id declaration
@@ -273,13 +286,59 @@
 
     # Counting the refusals is what makes this test unable to pass vacuously: if
     # a rescue never ran, the list is short and this fails.
+    - name: Refuse a tag exclusion combined with names
+      block:
+        - name: Run the guard against names and exclude_tags
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-names-and-tags
+                names: [fixture-splunk]
+                exclude_tags: [media]
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because names and exclude_tags were both accepted
+          ansible.builtin.fail:
+            msg: "A declaration with names and exclude_tags was ACCEPTED."
+      rescue:
+        - name: Record the names-and-tags refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['names-tags'] }}"
+
+    - name: Refuse a tag exclusion that is a bare string
+      block:
+        - name: Run the guard against a string exclude_tags
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-string-tag
+                all: true
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+                exclude_tags: media
+
+        - name: Fail because a bare string exclude_tags was accepted
+          ansible.builtin.fail:
+            msg: "A bare string exclude_tags was ACCEPTED."
+      rescue:
+        - name: Record the tag-shape refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['tags-shape'] }}"
+
     - name: Assert every refusal actually fired
       ansible.builtin.assert:
         that:
           - (pve_backup_jobs_refusals | default([]) | sort)
-            == ['backup-node', 'both', 'duplicate', 'exclude-name', 'neither', 'node', 'node-list', 'storage', 'vmid']
+            == ['backup-node', 'both', 'duplicate', 'exclude-name', 'names-tags', 'neither', 'node', 'node-list', 'storage', 'tags-shape', 'vmid']
         fail_msg: >-
-          Expected nine refusals (vmid, exclude-name, both, neither, duplicate,
-          storage, node, node-list, backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
-        success_msg: "PASS: all nine declaration refusals fired"
+          Expected eleven refusals (vmid, exclude-name, names-tags, tags-shape,
+          both, neither, duplicate, storage, node, node-list, backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
+        success_msg: "PASS: all eleven declaration refusals fired"
         quiet: false

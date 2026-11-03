@@ -101,6 +101,31 @@
   tags:
     - pve_backup_jobs
 
+- name: Assert every tag exclusion is a list of tag names
+  # A tag selects guests the job does not name, so it cannot ride on a names
+  # selection. Without names the exactly-one rule above already requires pool or
+  # all, so only the shape and the pairing with names are checked here.
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.exclude_tags is not defined
+        or (
+          item.exclude_tags is sequence
+          and item.exclude_tags is not string
+          and item.exclude_tags is not mapping
+          and (item.exclude_tags | select('string') | list | length) == (item.exclude_tags | length)
+        )
+      - item.exclude_tags is not defined or item.names is not defined
+    fail_msg: >-
+      Backup job '{{ item.id | default('<no id>') }}' has exclude_tags that must
+      be a list of tag names, and cannot be combined with names.
+    quiet: true
+  loop: "{{ pve_backup_jobs_jobs }}"
+  loop_control:
+    label: "{{ item.id | default('<no id>') }}"
+  tags:
+    - pve_backup_jobs
+
 - name: Assert every named guest selection resolves to one desired-state VMID
   ansible.builtin.assert:
     that:
