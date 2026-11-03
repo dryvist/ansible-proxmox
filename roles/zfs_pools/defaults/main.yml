@@ -77,7 +77,9 @@ zfs_pools_devices: {}
 # `zpool import` happened to leave behind. The cachefile records which pools to
 # import; the units below read it during boot.
 zfs_pools_manage_import: true
-zfs_pools_cachefile: /etc/zfs/zpool.cache
+# The OpenZFS default cache path, which `zpool get cachefile` reports as "-".
+zfs_pools_cachefile_default: /etc/zfs/zpool.cache
+zfs_pools_cachefile: "{{ zfs_pools_cachefile_default }}"
 zfs_pools_import_units:
   - zfs-import-cache.service
   - zfs-import.target
