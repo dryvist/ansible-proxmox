@@ -121,9 +121,13 @@ postgres_standby_jobs: >-
 # config 915100`) until a guest's data disk is a first-class citizen of the
 # tofu contract. ponytail: literal vmid, re-derive from vms_from_tofu if a
 # second guest ever needs the same override.
+# bulk/appdata: the reservation holds space for app state so other datasets
+# on the pool cannot fill it. It is about twice the current use and well under
+# the quota.
 zfs_pools_vm_disk_properties_node:
   bulk/appdata:
     quota: "200G"
+    reservation: "64G"
   bulk/replica:
     quota: "2T"
   bulk/vm-915100-disk-1:
