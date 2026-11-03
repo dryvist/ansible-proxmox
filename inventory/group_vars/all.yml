@@ -8,3 +8,6 @@ container_start_services:
 # read on the controller and are never sent to application guests.
 idrac_admin_username: "{{ lookup('env', 'IDRAC_USERNAME') }}"
 idrac_admin_password: "{{ lookup('env', 'IDRAC_PASSWORD') }}"
+
+# CPU vendor by PVE node name; set values to amd or intel in inventory.
+pve_node_cpu_vendor: {}

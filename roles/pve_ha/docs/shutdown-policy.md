@@ -27,11 +27,12 @@ retry, cleared only by a manual `ha-manager set <sid> --state started`.
 `freeze` leaves guests where they are and brings them back with the node:
 predictable, and it cannot strand a guest whose storage exists nowhere else.
 
-`migrate` becomes correct once **every** HA-managed guest has a working
-relocation path. That is a precondition, not a default — the value is a role
-variable so a cluster can move to `migrate` once its replication coverage is
-complete. `failover` and `conditional` are the other accepted values; an empty
-string leaves the key unmanaged.
+Replica coverage alone does not make `migrate` safe. Never live-migrate a VM
+across CPU vendors; a cross-vendor move must be cold. The upgrade role handles
+its maintenance drain separately, but that safeguard does not apply to every
+shutdown or manual migration. Keep `freeze` unless all relocation paths and
+CPU compatibility are independently verified. `failover` and `conditional`
+are the other accepted values; an empty string leaves the key unmanaged.
 
 `tasks/datacenter_cfg.yml` reads `/cluster/options` via `pvesh get` and only
 calls `pvesh set /cluster/options -ha shutdown_policy=<value>` when the

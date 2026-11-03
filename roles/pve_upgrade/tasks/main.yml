@@ -103,10 +103,46 @@
           {{ pve_upgrade_vzdump_tasks.rc | default('unknown') }};
           {{ pve_upgrade_vzdump_tasks.stdout | default(pve_upgrade_vzdump_tasks.msg | default('no output')) }}
 
+- name: Plan and prepare vendor-safe HA VM moves
+  ansible.builtin.include_tasks: cross_vendor_drain.yml
+  when: pve_upgrade_ha_hosted | bool
+  tags:
+    - pve_upgrade
+
 - name: Drain HA guests to peer nodes before rebooting
   ansible.builtin.command:
     cmd: "ha-manager crm-command node-maintenance enable {{ pve_upgrade_node_name }}"
   when: pve_upgrade_ha_hosted | bool
+  changed_when: true
+  tags:
+    - pve_upgrade
+
+- name: Wait for maintenance mode before restarting cold VMs
+  ansible.builtin.command: ha-manager status
+  register: pve_upgrade_maintenance_status
+  until: pve_upgrade_maintenance_status.stdout is search('(?m)^lrm ' ~ (pve_upgrade_node_name | regex_escape) ~ ' \\(maintenance mode')
+  retries: "{{ pve_upgrade_ha_drain_retries | int }}"
+  delay: "{{ pve_upgrade_ha_drain_delay | int }}"
+  changed_when: false
+  check_mode: false
+  when:
+    - pve_upgrade_ha_hosted | bool
+    - not ansible_check_mode
+    - pve_upgrade_vm_drain_plan | selectattr('cross_vendor') | selectattr('target', 'equalto', '') | list | length > 0
+  tags:
+    - pve_upgrade
+
+- name: Allow HA to restart stopped VMs after the node enters maintenance
+  ansible.builtin.command:
+    argv: [ha-manager, set, "{{ item.sid }}", --state, started]
+  loop: "{{ pve_upgrade_vm_drain_plan | default([]) }}"
+  loop_control:
+    label: "{{ item.sid }}"
+  when:
+    - pve_upgrade_ha_hosted | bool
+    - item.cross_vendor
+    - item.target | length == 0
+    - not ansible_check_mode
   changed_when: true
   tags:
     - pve_upgrade

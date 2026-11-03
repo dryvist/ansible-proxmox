@@ -2,8 +2,10 @@
 # Manage datasets within a single pool.
 # Included per-pool from main.yml with loop_var `zfs_pool`
 # (a dict2items entry: { key: <pool>, value: { datasets: {...}, ... } }).
-# Quotas are compared in bytes (zfs -p) against human_to_bytes(desired) so the
-# tasks are idempotent regardless of unit formatting (1T vs 1024G).
+# Sized quotas are compared in bytes (zfs -p) against human_to_bytes(desired)
+# so the tasks are idempotent regardless of unit formatting (1T vs 1024G).
+# The explicit string `none` means uncapped: `zfs get -p` reports an unset quota
+# as 0, so `none` is compared to 0 and reconciled with `zfs set quota=none`.
 
 - name: "Check datasets exist in pool {{ zfs_pool.key }}"
   ansible.builtin.command:
@@ -64,12 +66,9 @@
   loop_control:
     label: "{{ zfs_pool.key }}/{{ item.key }}={{ item.value.quota | default('none') }}"
     index_var: zfs_pools_ds_idx
-  when:
-    # default('', true) coerces a null/absent quota (e.g. replica or scratch
-    # datasets) to '' so `length` doesn't choke on None; the second filter is
-    # only reached for datasets that actually declare a quota.
-    - item.value.quota | default('', true) | length > 0
-    - zfs_pools_ds_quota.results[zfs_pools_ds_idx].stdout | int != item.value.quota | human_to_bytes
+  when: >-
+    zfs_pools_ds_quota.results[zfs_pools_ds_idx].stdout | int
+    != (0 if item.value.quota | string | lower == 'none' else item.value.quota | human_to_bytes)
   register: zfs_pools_ds_quota_set
   changed_when: true
   failed_when: zfs_pools_ds_quota_set.rc != 0

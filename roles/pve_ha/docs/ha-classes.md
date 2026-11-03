@@ -91,6 +91,7 @@ place.
   that does not carry the guest's datastore, fails the converge. A strict rule
   naming a node that cannot start the guest is the exact shape of the outage
   this role exists to prevent.
+- Never live-migrate a VM across CPU vendors. A maintenance drain moves a VM with cross-vendor affinity cold; containers restart when moved.
 - On a **node loss**, ha-manager relocates the guest to the target and starts
   it from the replica. `max_relocate=1` is enough: one hop to the target.
 - A **strict `node-affinity` rule per distinct `[node, target]` pair** pins

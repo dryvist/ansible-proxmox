@@ -1,0 +1,67 @@
+---
+- name: Exercise HA VM drain plans with fixture data
+  hosts: localhost
+  gather_facts: false
+  vars:
+    pve_upgrade_node_name: node-a
+    pve_upgrade_cluster_resources:
+      - {type: qemu, node: node-a, vmid: 101, status: running}
+      - {type: lxc, node: node-a, vmid: 102, status: running}
+    pve_upgrade_ha_sids: ['vm:101', 'ct:102']
+    pve_upgrade_online_nodes: [node-a, node-b, node-c]
+    pve_upgrade_ha_rules:
+      - {rule: test, type: node-affinity, strict: 1, resources: 'vm:101', nodes: 'node-a,node-b,node-c'}
+    pve_upgrade_cpu_vendors: {node-a: amd, node-b: intel, node-c: amd}
+  tasks:
+    - name: Plan cross-vendor affinity
+      ansible.builtin.include_tasks: ../../roles/pve_upgrade/tasks/cross_vendor_plan.yml
+
+    - name: Check the cold plan chooses the same-vendor peer
+      ansible.builtin.assert:
+        that:
+          - pve_upgrade_vm_drain_plan | length == 1
+          - pve_upgrade_vm_drain_plan[0].cross_vendor
+          - pve_upgrade_vm_drain_plan[0].target == 'node-c'
+
+    - name: Restrict the available peers
+      ansible.builtin.set_fact:
+        pve_upgrade_online_nodes: [node-a, node-b]
+
+    - name: Plan cold restart without a same-vendor peer
+      ansible.builtin.include_tasks: ../../roles/pve_upgrade/tasks/cross_vendor_plan.yml
+
+    - name: Check the cold restart plan
+      ansible.builtin.assert:
+        that:
+          - pve_upgrade_vm_drain_plan[0].cross_vendor
+          - pve_upgrade_vm_drain_plan[0].target == ''
+
+    - name: Set same-vendor fixture
+      ansible.builtin.set_fact:
+        pve_upgrade_cpu_vendors: {node-a: amd, node-b: amd, node-c: amd}
+
+    - name: Plan same-vendor affinity
+      ansible.builtin.include_tasks: ../../roles/pve_upgrade/tasks/cross_vendor_plan.yml
+
+    - name: Check the live plan
+      ansible.builtin.assert:
+        that:
+          - not pve_upgrade_vm_drain_plan[0].cross_vendor
+
+    - name: Set incomplete vendor fixture
+      ansible.builtin.set_fact:
+        pve_upgrade_cpu_vendors: {node-a: amd, node-b: intel}
+        pve_upgrade_unknown_failed: false
+
+    - name: Require unknown vendor to fail closed
+      block:
+        - name: Plan with unknown vendor
+          ansible.builtin.include_tasks: ../../roles/pve_upgrade/tasks/cross_vendor_plan.yml
+      rescue:
+        - name: Record rejected unknown vendor
+          ansible.builtin.set_fact:
+            pve_upgrade_unknown_failed: true
+
+    - name: Check unknown vendor was rejected
+      ansible.builtin.assert:
+        that: pve_upgrade_unknown_failed

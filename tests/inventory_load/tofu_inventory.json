@@ -66,6 +66,7 @@
         "bulk": {
           "datasets": {
             "jdrive": {
+              "quota": "none",
               "mountpoint": "/bulk/jdrive",
               "smb": {
                 "share_name": "jdrive",
@@ -73,6 +74,7 @@
               }
             },
             "timemachine": {
+              "quota": "600G",
               "mountpoint": "/bulk/timemachine",
               "smb": {
                 "share_name": "timemachine",
