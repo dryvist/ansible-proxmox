@@ -39,17 +39,19 @@ log="$LOG_DIR/$(date +%Y-%m-%d).log"
 # run), and a partial second copy of a dataset is worse than a skipped cycle.
 # Serialize per group: the same group never overlaps itself, different groups
 # still run concurrently.
+# One syslog line per job and per run, so the result reaches the log pipeline
+# rather than only the local log file. The first argument is the syslog
+# priority. A logger failure never changes the run's result.
+slog() { local prio="$1"; shift; logger -t syncoid-replicate -p "$prio" -- "$*" >/dev/null 2>&1 || true; }
+
 exec 9>"$LOG_DIR/.${group}.lock"
 if ! flock -n 9; then
   echo "=== $(date +%H:%M:%S) skipped: $group already running ===" >>"$log"
+  slog daemon.warning "run group=$group result=skipped reason=lock_held"
   exit 0
 fi
 
 ping_hc() { [ -n "$HC" ] && curl -fsS -m 10 --retry 3 -o /dev/null "$1" >/dev/null 2>&1 || true; }
-
-# One syslog line per job and per run, so the result reaches the log pipeline
-# rather than only the local log file.
-slog() { logger -t syncoid-replicate -- "$*" || true; }
 
 replicate() {
   local name="$1"; shift
@@ -59,9 +61,9 @@ replicate() {
   if [ "$rc" -ne 0 ]; then
     echo "  FAILED (rc=$rc)" >>"$log"
     failed="$failed $name"
-    slog "job=$name group=$group result=failed rc=$rc duration_s=$((SECONDS - start))"
+    slog daemon.err "job=$name group=$group result=failed rc=$rc duration_s=$((SECONDS - start))"
   else
-    slog "job=$name group=$group result=ok rc=0 duration_s=$((SECONDS - start))"
+    slog daemon.info "job=$name group=$group result=ok rc=0 duration_s=$((SECONDS - start))"
   fi
 }
 
@@ -78,15 +80,16 @@ fi
 # jobs were removed — report it rather than pinging success for doing nothing.
 if [ "$ran" -eq 0 ]; then
   echo "=== $(date +%H:%M:%S) no jobs in group '$group' ===" >>"$log"
-  slog "run group=$group result=no_jobs jobs=0"
+  slog daemon.err "run group=$group result=no_jobs jobs=0"
   exit 1
 fi
 
+# Ping before logging, so a blocked syslog socket cannot delay the healthcheck.
 if [ -n "$failed" ]; then
   echo "=== $(date +%H:%M:%S) FAILED jobs:$failed ===" >>"$log"
-  slog "run group=$group result=failed jobs=$ran failed_jobs=${failed# }"
   ping_hc "${HC}/fail"
+  slog daemon.err "run group=$group result=failed jobs=$ran failed_jobs=${failed# }"
   exit 1
 fi
-slog "run group=$group result=ok jobs=$ran"
 ping_hc "${HC}"
+slog daemon.info "run group=$group result=ok jobs=$ran"
