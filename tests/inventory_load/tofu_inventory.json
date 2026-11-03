@@ -1,10 +1,7 @@
 {
   "domain": "example.com",
   "cache_proxy_urls": {
-    "apt_cache": [
-      "http://cache-a.example.com:3142",
-      "http://cache-b.example.com:3142"
-    ]
+    "apt_cache": ["http://cache-a.example.com:3142", "http://cache-b.example.com:3142"]
   },
   "proxmox_user": "root",
   "splunk_vm": {
@@ -22,10 +19,7 @@
       "hostname": "postgres-ai-1",
       "node": "pve-r710",
       "pool_id": "test-only",
-      "tags": [
-        "container",
-        "database"
-      ],
+      "tags": ["container", "database"],
       "vmid": 999998,
       "ansible_pct_vmid": 999998
     },
@@ -35,11 +29,7 @@
       "ip": "192.168.0.20",
       "node": "pve-w1700",
       "pool_id": "infrastructure",
-      "tags": [
-        "container",
-        "object-storage",
-        "storage"
-      ],
+      "tags": ["container", "object-storage", "storage"],
       "vmid": 902000,
       "ansible_pct_vmid": 902000
     }
@@ -53,9 +43,7 @@
         "managed_users": [
           {
             "name": "jevans",
-            "unix_groups": [
-              "nas"
-            ],
+            "unix_groups": ["nas"],
             "shell": "/usr/sbin/nologin",
             "create_home": false,
             "password_secret_env": "NAS_JEVANS_SMB_PASSWORD"

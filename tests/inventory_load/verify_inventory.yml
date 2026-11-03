@@ -20,12 +20,12 @@
           # Exactly the two datasets that declared `smb` -- the third has a
           # quota and no share, and must NOT appear.
           - (hostvars['pve-w1700'].nas_storage_from_tofu.shares
-             | map(attribute='name') | sort) == ['jdrive', 'timemachine']
+            | map(attribute='name') | sort) == ['jdrive', 'timemachine']
           # The share's path comes from the dataset's own mountpoint, which is
           # what makes it impossible to point a share at a dataset that does
           # not exist.
           - (hostvars['pve-w1700'].nas_storage_from_tofu.shares
-             | selectattr('name', 'eq', 'jdrive') | first).path == "/bulk/jdrive"
+            | selectattr('name', 'eq', 'jdrive') | first).path == "/bulk/jdrive"
         fail_msg: >-
           load_tofu.yml did not derive the NAS contract from
           node_storage.<node> for the share-serving node.
@@ -99,13 +99,13 @@
           - hostvars['pve-r540'].syncoid_trigger == 'cron'
           - hostvars['pve-r540'].syncoid_cron_hour == '*/4'
           - hostvars['pve-r540'].syncoid_jobs | map(attribute='source') | list == [
-              'root@pve-r710:rpool/data',
-              'root@pve-r710:bulk/backups',
-              'root@pve-r710:bulk/databases']
+            'root@pve-r710:rpool/data',
+            'root@pve-r710:bulk/backups',
+            'root@pve-r710:bulk/databases']
           - hostvars['pve-r540'].syncoid_jobs | map(attribute='target') | list == [
-              'bulk/replica/pve-r710/rpool/data',
-              'bulk/replica/pve-r710/backups',
-              'bulk/replica/pve-r710/databases']
+            'bulk/replica/pve-r710/rpool/data',
+            'bulk/replica/pve-r710/backups',
+            'bulk/replica/pve-r710/databases']
           - hostvars['pve-r540'].sanoid_replica_retention_enabled | bool
         fail_msg: >-
           pve-r540 must pull the selected pve-r710 datasets into its own replica
