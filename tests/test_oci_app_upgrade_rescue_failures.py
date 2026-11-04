@@ -101,3 +101,19 @@ def test_failure_with_volume_on_holder_moves_it_back(
     assert any(argv[:3] == ["pct", "destroy", "990000"] for argv in logged_argv), logged_argv
     assert any(argv[:3] == ["ha-manager", "add", "ct:123"] for argv in logged_argv), logged_argv
     assert_no_volume_destruction(oci_command_log, logged_argv)
+
+
+def test_failed_recovery_posts_a_second_notice_and_stops(
+    oci_command_log: Path,
+    oci_http: ThreadingHTTPServer,
+    run_oci_app_upgrade: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    result = run_oci_app_upgrade(dry_run=False, fail="pct create 990000", fail_also="pct start 123")
+    assert result.returncode != 0, result.stdout
+    assert "the recovery also failed" in " ".join(result.stdout.split()), result.stdout
+    posts = [body for method, path, body in oci_http.requests if (method, path) == ("POST", "/keystone")]
+    assert len(posts) == 2, oci_http.requests
+    assert b"Recovery starts now" in posts[0] and b"The recovery failed" in posts[1], posts
+    logged_argv = [shlex.split(line) for line in oci_command_log.read_text().splitlines()]
+    assert not any(argv[:3] == ["pct", "destroy", "123"] for argv in logged_argv), logged_argv
+    assert_no_volume_destruction(oci_command_log, logged_argv)

@@ -80,6 +80,17 @@ if [ "$should_fail" -eq 1 ]; then
         exit 1
     fi
 fi
+# OCI_STUB_FAIL_ALSO is a second, independent fail-once pattern, for a failure inside the rescue.
+if [ -n "${OCI_STUB_FAIL_ALSO-}" ]; then
+    case "$command_line" in
+        *"$OCI_STUB_FAIL_ALSO"*)
+            if ! grep -Fq -- "$OCI_STUB_FAIL_ALSO" "$OCI_STUB_FAIL_LOG"; then
+                printf '%s\\n' "$OCI_STUB_FAIL_ALSO" >> "$OCI_STUB_FAIL_LOG"
+                exit 1
+            fi
+            ;;
+    esac
+fi
 if [ "${0##*/}" = pct ] && [ "${1-}" = destroy ]; then
     volume_owner=$(awk '
         BEGIN { owner = "123" }
@@ -248,7 +259,7 @@ def run_oci_app_upgrade(
     tmp_path: Path, oci_command_log: Path, oci_http: ThreadingHTTPServer
 ) -> Callable[..., subprocess.CompletedProcess[str]]:
     def run(
-        *, dry_run: bool = True, fail: str = "", fail_owner: str = ""
+        *, dry_run: bool = True, fail: str = "", fail_owner: str = "", fail_also: str = ""
     ) -> subprocess.CompletedProcess[str]:
         home = tmp_path / "home"
         home.mkdir()
@@ -297,6 +308,8 @@ def run_oci_app_upgrade(
             environment["OCI_STUB_FAIL"] = fail
             if fail_owner:
                 environment["OCI_STUB_FAIL_OWNER"] = fail_owner
+        if fail_also:
+            environment["OCI_STUB_FAIL_ALSO"] = fail_also
         base_url = f"http://127.0.0.1:{oci_http.server_address[1]}"
         extra_vars = {
             "oci_app_upgrade_dry_run": dry_run,
