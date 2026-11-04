@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.42.0](https://github.com/dryvist/ansible-proxmox/compare/v2.41.0...v2.42.0) (2026-11-04)
+
+
+### Features
+
+* **oci_app_upgrade:** replace an OCI LXC image in place, keeping its volumes ([#1258](https://github.com/dryvist/ansible-proxmox/issues/1258)) ([e9cd235](https://github.com/dryvist/ansible-proxmox/commit/e9cd2357ab4a9f27b85f1857df30a97d97ff9c8d))
+* **syncoid:** report each replication job and run result to syslog ([#1246](https://github.com/dryvist/ansible-proxmox/issues/1246)) ([91a2c8a](https://github.com/dryvist/ansible-proxmox/commit/91a2c8a8380c2e44545e9d873677f6ba1ff0946d))
+
 ## [2.41.0](https://github.com/dryvist/ansible-proxmox/compare/v2.40.0...v2.41.0) (2026-11-04)
 
 
