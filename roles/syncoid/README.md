@@ -55,7 +55,7 @@ set up out of band. The role schedules replication; it does not distribute keys.
 | `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17`                           | Schedule for the `default` group                                       |
 | `syncoid_extra_schedules`                   | `{}`                                 | Extra cadence groups (see below)                                       |
 | `syncoid_user`                              | `root`                               | User that runs syncoid (needs SSH to sources)                          |
-| `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; `/fail` pinged if any job failed                  |
+| `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; pings on success, `/fail` if any job failed       |
 
 ## Usage
 
