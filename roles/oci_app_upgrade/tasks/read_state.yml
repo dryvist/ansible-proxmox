@@ -6,21 +6,24 @@
 - name: Read the CT configuration
   ansible.builtin.command: pvesh get /nodes/{{ oci_app_upgrade_this_node }}/lxc/{{ oci_app_upgrade_vmid }}/config --output-format json
   register: oci_app_upgrade_ct_raw
-  failed_when: false
+  # Only a missing guest is tolerated; any other read error must not read as absent.
+  failed_when: oci_app_upgrade_ct_raw.rc != 0 and 'does not exist' not in oci_app_upgrade_ct_raw.stderr
   changed_when: false
   check_mode: false
 
 - name: Read the CT status
   ansible.builtin.command: pvesh get /nodes/{{ oci_app_upgrade_this_node }}/lxc/{{ oci_app_upgrade_vmid }}/status/current --output-format json
   register: oci_app_upgrade_status_raw
-  failed_when: false
+  # Only a missing guest is tolerated; any other read error must not read as absent.
+  failed_when: oci_app_upgrade_status_raw.rc != 0 and 'does not exist' not in oci_app_upgrade_status_raw.stderr
   changed_when: false
   check_mode: false
 
 - name: Read the holder configuration
   ansible.builtin.command: pvesh get /nodes/{{ oci_app_upgrade_this_node }}/lxc/{{ oci_app_upgrade_holder_vmid }}/config --output-format json
   register: oci_app_upgrade_holder_raw
-  failed_when: false
+  # Only a missing guest is tolerated; any other read error must not read as absent.
+  failed_when: oci_app_upgrade_holder_raw.rc != 0 and 'does not exist' not in oci_app_upgrade_holder_raw.stderr
   changed_when: false
   check_mode: false
 
