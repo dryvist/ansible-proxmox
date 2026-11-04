@@ -41,8 +41,9 @@ log="$LOG_DIR/$(date +%Y-%m-%d).log"
 # still run concurrently.
 # One syslog line per job and per run, so the result reaches the log pipeline
 # rather than only the local log file. The first argument is the syslog
-# priority. A logger failure never changes the run's result.
-slog() { local prio="$1"; shift; logger -t syncoid-replicate -p "$prio" -- "$*" >/dev/null 2>&1 || true; }
+# priority. A logger failure never changes the run's result, and each call is
+# capped at five seconds so a stalled syslog socket cannot delay the healthcheck.
+slog() { local prio="$1"; shift; timeout 5 logger -t syncoid-replicate -p "$prio" -- "$*" >/dev/null 2>&1 || true; }
 
 exec 9>"$LOG_DIR/.${group}.lock"
 if ! flock -n 9; then
