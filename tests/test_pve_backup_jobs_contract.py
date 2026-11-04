@@ -161,7 +161,10 @@ def test_r540_job_backs_up_its_data_guests():
     assert job["enabled"] is True
     assert job["all"] is True
     excluded = set(job["exclude_names"])
-    assert {"sim-eval", "ai-sandbox-01", "plex"} <= excluded
+    assert {"sim-eval", "ai-sandbox-01"} <= excluded
+    # Media guests are excluded by tag, so their names are not listed.
+    assert job["exclude_tags"] == ["media"]
+    assert not {"plex", "sonarr", "radarr", "seerr", "sortarr", "download-vpn"} & excluded
     data_guests = {
         "postgres-apps", "postgres-ai-2", "openbao-21", "openbao-02", "s3", "langfuse", "clickhouse",
         "qdrant", "hindsight-2", "iac-platform", "technitium-dns-2", "llm-router-2",

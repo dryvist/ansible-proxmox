@@ -74,9 +74,20 @@
            | map('extract', pve_backup_jobs_tofu_guest_map)
            | map(attribute='vmid') | map('int') | unique | list | sort }}
       exclude: >-
-        {{ item.exclude_names | default([])
-           | map('extract', pve_backup_jobs_tofu_guest_map)
-           | map(attribute='vmid') | map('int') | unique | list | sort }}
+        {{ ((item.exclude_names | default([])
+             | map('extract', pve_backup_jobs_tofu_guest_map)
+             | map(attribute='vmid') | map('int') | list)
+            + pve_backup_jobs_tag_vmids)
+           | unique | list | sort }}
+    # Guests carrying an excluded tag, from the same map the names resolve
+    # against. subelements yields one (guest, tag) pair per tag a guest carries;
+    # keeping the pairs whose tag is declared selects the guests to exclude.
+    pve_backup_jobs_tag_vmids: >-
+      {{ query('ansible.builtin.subelements',
+                pve_backup_jobs_tofu_guest_map.values() | list,
+                'tags', {'skip_missing': true})
+         | selectattr('1', 'in', item.exclude_tags | default([]))
+         | map('first') | map(attribute='vmid') | map('int') | list }}
     # PVE can return numeric fields as numbers or strings. Normalize them here
     # (and below for retention/exclude lists) so JSON representation alone does
     # not cause an update on every converge.

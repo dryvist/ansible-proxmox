@@ -123,7 +123,7 @@ jobs:
       - name: Verify pve_backup_jobs declaration guards and reconcile commands
         run: |
           mkdir -p /tmp/ansible-tmp
-          for playbook in verify_declaration verify_declaration_names verify_reconcile verify_reconcile_names; do
+          for playbook in verify_declaration verify_declaration_names verify_reconcile verify_reconcile_names verify_reconcile_tags; do
             ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
             ansible-playbook "tests/pve_backup_jobs/$playbook.yml" -i localhost, -c local
           done
