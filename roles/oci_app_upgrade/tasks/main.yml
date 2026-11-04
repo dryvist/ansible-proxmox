@@ -1,0 +1,49 @@
+---
+# Reads cluster placement once per node, then runs each requested CT that lives
+# on this node through upgrade_one.yml. A CT that is not exactly one LXC
+# cluster-wide stops the run before any change is made.
+
+- name: Read cluster VM and container placement
+  ansible.builtin.command: pvesh get /cluster/resources --type vm --output-format json
+  register: oci_app_upgrade_resources_raw
+  changed_when: false
+  check_mode: false
+
+- name: Parse cluster placement and this node's name
+  ansible.builtin.set_fact:
+    oci_app_upgrade_placement: "{{ oci_app_upgrade_resources_raw.stdout | from_json }}"
+    oci_app_upgrade_this_node: "{{ proxmox_node_name | default(inventory_hostname) }}"
+
+- name: Require each requested CT to be exactly one LXC cluster-wide
+  ansible.builtin.assert:
+    that:
+      - >-
+        (oci_app_upgrade_placement
+         | selectattr('type', 'equalto', 'lxc')
+         | selectattr('vmid', 'equalto', oci_app_upgrade_item.vmid | int)
+         | list | length) == 1
+    fail_msg: >-
+      CT {{ oci_app_upgrade_item.vmid }} must exist exactly once cluster-wide as an LXC.
+      Nothing was changed.
+    quiet: true
+  loop: "{{ oci_app_upgrades }}"
+  loop_control:
+    loop_var: oci_app_upgrade_item
+    label: "{{ oci_app_upgrade_item.vmid }}"
+
+- name: Select the requested CTs that run on this node
+  ansible.builtin.set_fact:
+    oci_app_upgrade_local_vmids: >-
+      {{ oci_app_upgrade_placement
+         | selectattr('type', 'equalto', 'lxc')
+         | selectattr('node', 'equalto', oci_app_upgrade_this_node)
+         | map(attribute='vmid') | map('int') | list }}
+
+- name: Plan or apply each requested CT that runs on this node
+  ansible.builtin.include_tasks: upgrade_one.yml
+  loop: "{{ oci_app_upgrades }}"
+  loop_control:
+    loop_var: oci_app_upgrade_item
+    index_var: oci_app_upgrade_index
+    label: "{{ oci_app_upgrade_item.vmid }}"
+  when: oci_app_upgrade_item.vmid | int in oci_app_upgrade_local_vmids

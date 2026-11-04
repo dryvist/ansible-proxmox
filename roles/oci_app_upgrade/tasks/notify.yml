@@ -1,0 +1,33 @@
+---
+# Posts the failure to the ntfy keystone topic before any recovery step runs, so
+# the notice exists even if the recovery itself fails. A failed post is logged
+# and does not stop the rescue.
+
+- name: Post the failure notice to the ntfy keystone topic
+  ansible.builtin.uri:
+    url: "{{ oci_app_upgrade_ntfy_url }}"
+    method: POST
+    headers:
+      Title: >-
+        OCI app image {{ 'recovery' if oci_app_upgrade_notice_recovery_failed | default(false) else 'upgrade' }}
+        failed on CT {{ oci_app_upgrade_vmid }}
+      Priority: high
+      Tags: warning
+    body: >-
+      Node {{ oci_app_upgrade_this_node }}, CT {{ oci_app_upgrade_vmid }}, failed at
+      "{{ ansible_failed_task.name | default('an unnamed task') }}".
+      Error: {{ (ansible_failed_result.msg | default('none')) | string | truncate(400) }}.
+      {{ 'The recovery failed: HA and replication may still be removed, and manual action is needed.'
+         if oci_app_upgrade_notice_recovery_failed | default(false) else 'Recovery starts now.' }}
+      The pre-change vzdump archive is on storage {{ oci_app_upgrade_backup_storage }}.
+    body_format: raw
+    status_code: 200
+    timeout: 15
+  register: oci_app_upgrade_notice
+  failed_when: false
+  changed_when: true
+
+- name: Log a failed ntfy post
+  ansible.builtin.debug:
+    msg: "ntfy post failed with status {{ oci_app_upgrade_notice.status | default('none') }}; the rescue continues."
+  when: oci_app_upgrade_notice.status | default(0) != 200
