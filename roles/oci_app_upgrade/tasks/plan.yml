@@ -1,0 +1,52 @@
+---
+# Prints what an apply would do for this CT. Reads only: it never calls pct,
+# ha-manager, pvesr or vzdump.
+
+- name: Report that this CT already runs the requested template
+  ansible.builtin.debug:
+    msg: >-
+      CT {{ oci_app_upgrade_vmid }} on {{ oci_app_upgrade_this_node }} already uses
+      {{ oci_app_upgrade_item.template }}. No change.
+  when: not (oci_app_upgrade_needed | bool)
+
+- name: Build the planned action list
+  ansible.builtin.set_fact:
+    oci_app_upgrade_plan_lines:
+      - >-
+        CT {{ oci_app_upgrade_vmid }} on {{ oci_app_upgrade_this_node }}: replace
+        {{ oci_app_upgrade_item.current_template }} with {{ oci_app_upgrade_item.template }}.
+      - >-
+        1. Preflight passed. Holder VMID {{ oci_app_upgrade_holder_vmid }} is free.
+      - >-
+        2. vzdump CT {{ oci_app_upgrade_vmid }} to storage {{ oci_app_upgrade_backup_storage }}
+        (snapshot mode, last-resort archive).
+      - >-
+        3. Remove from HA: {{ 'yes' if oci_app_upgrade_ct_ha_managed | bool else 'no, not HA-managed' }}.
+        Delete replication jobs: {{ oci_app_upgrade_repl_ids | join(', ') if oci_app_upgrade_repl_ids | length > 0 else 'none' }}.
+      - >-
+        4. Shut down (current status: {{ oci_app_upgrade_ct_status }}, timeout
+        {{ oci_app_upgrade_shutdown_timeout }} s, no forced stop). Record the config and digest.
+      - >-
+        5. Create holder {{ oci_app_upgrade_holder_vmid }} from the new template and move
+        {{ oci_app_upgrade_ct_mp_keys | join(', ') | default('no mpN', true) }} to it. Lift protection if set.
+      - >-
+        6. Destroy CT {{ oci_app_upgrade_vmid }} with --purge (it owns no volume at that point).
+      - >-
+        7. Create CT {{ oci_app_upgrade_vmid }} from the new template with the recorded config,
+        move the mpN volumes back to the same slots, and destroy the empty holder.
+      - >-
+        8. Start (was running: {{ oci_app_upgrade_ct_status == 'running' }}), then re-apply HA and
+        replication from desired state.
+      - >-
+        9. Wait up to {{ (oci_app_upgrade_health_retries | int) * (oci_app_upgrade_health_delay | int) }} s
+        for {{ oci_app_upgrade_item.health_url }} to return 200.
+      - >-
+        Rescue: post the failure to the ntfy keystone topic first. If the CT was not destroyed,
+        move the volumes back and restart it. Otherwise rebuild it from
+        {{ oci_app_upgrade_item.current_template }}.
+  when: oci_app_upgrade_needed | bool
+
+- name: Show the planned actions for this CT
+  ansible.builtin.debug:
+    msg: "{{ oci_app_upgrade_plan_lines }}"
+  when: oci_app_upgrade_needed | bool

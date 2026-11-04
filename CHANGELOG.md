@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.41.0](https://github.com/dryvist/ansible-proxmox/compare/v2.40.0...v2.41.0) (2026-11-04)
+
+
+### Features
+
+* **pve_backup_jobs:** exclude guests by tofu tag ([#1254](https://github.com/dryvist/ansible-proxmox/issues/1254)) ([b70e979](https://github.com/dryvist/ansible-proxmox/commit/b70e97980016ea039ffca70f39010fae2952fa2e))
+
+
+### Bug Fixes
+
+* **inventory:** drop the bulk/appdata override on pve-r540 ([#1251](https://github.com/dryvist/ansible-proxmox/issues/1251)) ([e3e3d11](https://github.com/dryvist/ansible-proxmox/commit/e3e3d1151d2cc9d6548ea94f1fa00762a1318e46))
+* **pve_upgrade:** escape regex_search group reference ([#1256](https://github.com/dryvist/ansible-proxmox/issues/1256)) ([866c0b2](https://github.com/dryvist/ansible-proxmox/commit/866c0b24060a1e0d9a2e82ee95284a54c50d9af2))
+* **zfs_pools:** stop reporting changed on unchanged quotas and cachefile ([#1253](https://github.com/dryvist/ansible-proxmox/issues/1253)) ([49adfc2](https://github.com/dryvist/ansible-proxmox/commit/49adfc2f31832d08bcc0cbde4034fb353fabab5c))
+
 ## [2.40.0](https://github.com/dryvist/ansible-proxmox/compare/v2.39.0...v2.40.0) (2026-11-03)
 
 

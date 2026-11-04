@@ -39,9 +39,19 @@ log="$LOG_DIR/$(date +%Y-%m-%d).log"
 # run), and a partial second copy of a dataset is worse than a skipped cycle.
 # Serialize per group: the same group never overlaps itself, different groups
 # still run concurrently.
+# One syslog line per job and per run, so the result reaches the log pipeline
+# rather than only the local log file. The first argument is the syslog
+# priority. A logger failure never changes the run's result, and each call is
+# capped at five seconds. Per-job lines are queued and written after the
+# healthcheck ping, so a stalled syslog socket cannot delay the healthcheck.
+slog() { local prio="$1"; shift; timeout 5 logger -t syncoid-replicate -p "$prio" -- "$*" >/dev/null 2>&1 || true; }
+job_prio=()
+job_msg=()
+
 exec 9>"$LOG_DIR/.${group}.lock"
 if ! flock -n 9; then
   echo "=== $(date +%H:%M:%S) skipped: $group already running ===" >>"$log"
+  slog daemon.warning "run group=$group result=skipped reason=lock_held"
   exit 0
 fi
 
@@ -50,11 +60,16 @@ ping_hc() { [ -n "$HC" ] && curl -fsS -m 10 --retry 3 -o /dev/null "$1" >/dev/nu
 replicate() {
   local name="$1"; shift
   echo "=== $(date +%H:%M:%S) syncoid $* ===" >>"$log"
-  local rc=0
+  local rc=0 start=$SECONDS
   syncoid "$@" >>"$log" 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "  FAILED (rc=$rc)" >>"$log"
     failed="$failed $name"
+    job_prio+=(daemon.err)
+    job_msg+=("job=$name group=$group result=failed rc=$rc duration_s=$((SECONDS - start))")
+  else
+    job_prio+=(daemon.info)
+    job_msg+=("job=$name group=$group result=ok rc=0 duration_s=$((SECONDS - start))")
   fi
 }
 
@@ -71,12 +86,19 @@ fi
 # jobs were removed — report it rather than pinging success for doing nothing.
 if [ "$ran" -eq 0 ]; then
   echo "=== $(date +%H:%M:%S) no jobs in group '$group' ===" >>"$log"
+  slog daemon.err "run group=$group result=no_jobs jobs=0"
   exit 1
 fi
 
+# Ping before any syslog write, so a blocked syslog socket cannot delay the healthcheck.
+drain_job_logs() { local i; for i in "${!job_msg[@]}"; do slog "${job_prio[$i]}" "${job_msg[$i]}"; done; }
 if [ -n "$failed" ]; then
   echo "=== $(date +%H:%M:%S) FAILED jobs:$failed ===" >>"$log"
   ping_hc "${HC}/fail"
+  drain_job_logs
+  slog daemon.err "run group=$group result=failed jobs=$ran failed_jobs=${failed# }"
   exit 1
 fi
 ping_hc "${HC}"
+drain_job_logs
+slog daemon.info "run group=$group result=ok jobs=$ran"

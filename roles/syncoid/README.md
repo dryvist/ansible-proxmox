@@ -29,6 +29,17 @@ counted: any failed job makes the wrapper exit non-zero and ping
 `syncoid_healthcheck_url/fail` (if set), so a bad run is never silently
 exit-0.
 
+Each run also writes syslog lines with the tag `syncoid-replicate`, so the log
+pipeline can check every replica:
+
+- one line per job: `job=<name> group=<group> result=ok|failed rc=<rc> duration_s=<s>`;
+- one line per run: `run group=<group> result=ok|failed|no_jobs|skipped`, with the
+  job count and the failed job names.
+
+Failed and `no_jobs` lines use priority `daemon.err`, a skipped run (the group's
+lock is still held) uses `daemon.warning`, and successful lines use
+`daemon.info`.
+
 ## Prerequisite (apply-time)
 
 SSH trust from this node's `syncoid_user` (default `root`) to each source host,
@@ -36,15 +47,15 @@ set up out of band. The role schedules replication; it does not distribute keys.
 
 ## Variables
 
-| Variable                                    | Default                              | Description                                                               |
-| ------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------- |
-| `syncoid_enabled`                           | `true`                               | Master enable                                                             |
-| `syncoid_jobs`                              | `[]`                                 | List of `{ name, source, target, options?, schedule? }` — inert until set |
-| `syncoid_default_options`                   | `--recursive --no-sync-snap --quiet` | Applied when a job omits `options`                                        |
-| `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17`                           | Schedule for the `default` group                                          |
-| `syncoid_extra_schedules`                   | `{}`                                 | Extra cadence groups (see below)                                          |
-| `syncoid_user`                              | `root`                               | User that runs syncoid (needs SSH to sources)                             |
-| `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; pinged on success, `/fail` pinged if any job failed  |
+| Variable                                    | Default                              | Description                                                            |
+| ------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------- |
+| `syncoid_enabled`                           | `true`                               | Master enable                                                          |
+| `syncoid_jobs`                              | `[]`                                 | List of `{ name, source, target, options?, schedule? }`; empty = inert |
+| `syncoid_default_options`                   | `--recursive --no-sync-snap --quiet` | Applied when a job omits `options`                                     |
+| `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17`                           | Schedule for the `default` group                                       |
+| `syncoid_extra_schedules`                   | `{}`                                 | Extra cadence groups (see below)                                       |
+| `syncoid_user`                              | `root`                               | User that runs syncoid (needs SSH to sources)                          |
+| `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; `/fail` pinged if any job failed                  |
 
 ## Usage
 

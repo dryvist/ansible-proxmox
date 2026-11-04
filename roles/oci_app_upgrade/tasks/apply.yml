@@ -1,0 +1,77 @@
+---
+# Applies the image change to one CT (steps 2-9). A failure after the first task
+# runs the rescue: the failure notice is posted first, then recover.yml restores
+# the CT from live state, and the run stops. Nothing here deletes a volume; the
+# holder is destroyed only once it owns none.
+
+- name: Reset the per-CT change state
+  ansible.builtin.set_fact:
+    oci_app_upgrade_destroy_started: false
+    oci_app_upgrade_protection_lifted: false
+    oci_app_upgrade_ha_removed: false
+    oci_app_upgrade_jobs_removed: []
+    oci_app_upgrade_recorded_config: {}
+    oci_app_upgrade_recorded_digest: ""
+    oci_app_upgrade_recorded_mp_keys: []
+    oci_app_upgrade_was_running: false
+
+- name: Read the live state before the first change
+  ansible.builtin.include_tasks: read_state.yml
+
+- name: Record whether the CT was running before the change
+  ansible.builtin.set_fact:
+    oci_app_upgrade_was_running: "{{ oci_app_upgrade_ct_status == 'running' }}"
+
+- name: Replace the image with the rescue armed
+  block:
+    - name: Take the last-resort vzdump archive to the PBS storage (step 2)
+      ansible.builtin.command:
+        argv:
+          - vzdump
+          - "{{ oci_app_upgrade_vmid }}"
+          - --storage
+          - "{{ oci_app_upgrade_backup_storage }}"
+          - --mode
+          - snapshot
+          - --compress
+          - zstd
+      async: 7200
+      poll: 30
+      changed_when: true
+
+    - name: Replace the image (steps 3-8)
+      ansible.builtin.include_tasks: swap_template.yml
+      vars:
+        oci_app_upgrade_swap_target: "{{ oci_app_upgrade_item.template }}"
+
+    - name: Wait for the application health URL (step 9)
+      ansible.builtin.include_tasks: health.yml
+
+  rescue:
+    - name: Post the failure notice before any recovery step
+      ansible.builtin.include_tasks: notify.yml
+
+    - name: Restore the CT from live state
+      block:
+        - name: Run the recovery
+          ansible.builtin.include_tasks: recover.yml
+      rescue:
+        - name: Post that the recovery itself failed
+          ansible.builtin.include_tasks: notify.yml
+          vars:
+            oci_app_upgrade_notice_recovery_failed: true
+
+        - name: Stop with the recovery failure
+          ansible.builtin.fail:
+            msg: >-
+              CT {{ oci_app_upgrade_vmid }} failed the image change, and the recovery
+              also failed at "{{ ansible_failed_task.name | default('an unnamed task') }}".
+              HA and replication may still be removed. No volume was deleted; check the
+              CT and holder {{ oci_app_upgrade_holder_vmid }} by hand.
+
+    - name: Stop the rollout at this CT
+      ansible.builtin.fail:
+        msg: >-
+          CT {{ oci_app_upgrade_vmid }} failed the image change. The rescue ran and the
+          failure notice was posted. No volume was deleted; the holder is kept while it
+          owns a volume.

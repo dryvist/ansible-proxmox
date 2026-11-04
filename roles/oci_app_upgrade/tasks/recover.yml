@@ -1,0 +1,88 @@
+---
+# Rescue after a failure in apply.yml, run after notify.yml. Decisions come from
+# live state, not from how far the run got:
+#   - the CT still exists and was never destroyed: move the volumes back to it,
+#     remove the holder once it is empty, restore protection, start it if it was
+#     running, and re-apply HA and replication;
+#   - the CT is missing or its destroy had started: rebuild it from the previous
+#     template with swap_template.yml, which moves the volumes back and re-applies
+#     HA and replication.
+# The holder is never destroyed while it owns a volume.
+
+- name: Read the live state for the rescue
+  ansible.builtin.include_tasks: read_state.yml
+
+- name: Move the volumes back from the holder to the original CT (CT never destroyed)
+  ansible.builtin.command:
+    argv:
+      - pct
+      - move-volume
+      - "{{ oci_app_upgrade_holder_vmid | string }}"
+      - "{{ item }}"
+      - --target-vmid
+      - "{{ oci_app_upgrade_vmid | string }}"
+      - --target-volume
+      - "{{ item }}"
+  loop: "{{ oci_app_upgrade_holder_mp_keys }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - oci_app_upgrade_ct_exists | bool
+    - not (oci_app_upgrade_destroy_started | bool)
+    - oci_app_upgrade_holder_mp_keys | length > 0
+  changed_when: true
+
+- name: Read the live state after moving the volumes back
+  ansible.builtin.include_tasks: read_state.yml
+
+- name: Require the holder to own no volume before it is destroyed (rescue)
+  ansible.builtin.assert:
+    that:
+      - oci_app_upgrade_holder_mp_keys | length == 0
+      - oci_app_upgrade_holder_unused_keys | length == 0
+    fail_msg: The holder still owns a volume. It is kept.
+    quiet: true
+  when:
+    - oci_app_upgrade_ct_exists | bool
+    - not (oci_app_upgrade_destroy_started | bool)
+    - oci_app_upgrade_holder_exists | bool
+
+- name: Destroy the empty holder once the CT is back (rescue, CT never destroyed)
+  ansible.builtin.command: pct destroy {{ oci_app_upgrade_holder_vmid | string }}
+  when:
+    - oci_app_upgrade_ct_exists | bool
+    - not (oci_app_upgrade_destroy_started | bool)
+    - oci_app_upgrade_holder_exists | bool
+  changed_when: true
+
+- name: Decide whether the CT is rebuilt from the previous template
+  ansible.builtin.set_fact:
+    oci_app_upgrade_rebuild: "{{ not (oci_app_upgrade_ct_exists | bool) or (oci_app_upgrade_destroy_started | bool) }}"
+
+- name: Rebuild the CT from the previous template (CT destroyed or missing)
+  ansible.builtin.include_tasks: swap_template.yml
+  vars:
+    oci_app_upgrade_swap_target: "{{ oci_app_upgrade_item.current_template }}"
+  when: oci_app_upgrade_rebuild | bool
+
+- name: Restore the protection setting that was lifted (CT never destroyed)
+  ansible.builtin.command: pct set {{ oci_app_upgrade_vmid }} --protection 1
+  when:
+    - not (oci_app_upgrade_rebuild | bool)
+    - oci_app_upgrade_protection_lifted | bool
+    - oci_app_upgrade_recorded_config.protection | default(0) | string == '1'
+  changed_when: true
+
+- name: Start the CT if it was running before the change (CT never destroyed)
+  ansible.builtin.command: pct start {{ oci_app_upgrade_vmid }}
+  when:
+    - not (oci_app_upgrade_rebuild | bool)
+    - oci_app_upgrade_was_running | bool
+    - oci_app_upgrade_ct_status != 'running'
+  changed_when: true
+
+- name: Re-apply HA and replication from desired state (CT never destroyed)
+  ansible.builtin.include_tasks: restore_ha.yml
+  when:
+    - not (oci_app_upgrade_rebuild | bool)
+    - oci_app_upgrade_ha_removed | bool or oci_app_upgrade_jobs_removed | length > 0

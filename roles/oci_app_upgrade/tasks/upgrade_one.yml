@@ -1,0 +1,24 @@
+---
+# One requested CT on this node. The holder VMID is the base plus this request's
+# index, so each request in one run gets its own holder.
+
+- name: Set the per-request facts
+  ansible.builtin.set_fact:
+    oci_app_upgrade_vmid: "{{ oci_app_upgrade_item.vmid | int }}"
+    oci_app_upgrade_holder_vmid: "{{ oci_app_upgrade_holder_vmid_base | int + oci_app_upgrade_index | int }}"
+    oci_app_upgrade_needed: "{{ oci_app_upgrade_item.template != oci_app_upgrade_item.current_template }}"
+
+- name: Run the read-only preflight for a CT that needs a new image
+  ansible.builtin.include_tasks: preflight.yml
+  when: oci_app_upgrade_needed | bool
+
+- name: Report the planned actions (dry run or check mode)
+  ansible.builtin.include_tasks: plan.yml
+  when: oci_app_upgrade_dry_run | bool or ansible_check_mode
+
+- name: Replace the image (never reached in dry run or check mode)
+  ansible.builtin.include_tasks: apply.yml
+  when:
+    - oci_app_upgrade_needed | bool
+    - not (oci_app_upgrade_dry_run | bool)
+    - not ansible_check_mode
