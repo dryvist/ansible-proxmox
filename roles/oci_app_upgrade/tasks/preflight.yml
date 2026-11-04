@@ -97,8 +97,8 @@
 - name: Require both templates to be present on their storages
   ansible.builtin.assert:
     that:
-      - oci_app_upgrade_item.template in (oci_app_upgrade_templates_raw.results | map(attribute='stdout') | join(' '))
-      - oci_app_upgrade_item.current_template in (oci_app_upgrade_templates_raw.results | map(attribute='stdout') | join(' '))
+      - oci_app_upgrade_item.template in (oci_app_upgrade_templates_raw.results | map(attribute='stdout') | join(' ')).split()
+      - oci_app_upgrade_item.current_template in (oci_app_upgrade_templates_raw.results | map(attribute='stdout') | join(' ')).split()
     fail_msg: >-
       Template {{ oci_app_upgrade_item.template }} (or the current
       {{ oci_app_upgrade_item.current_template }}) is not on its storage. This role
