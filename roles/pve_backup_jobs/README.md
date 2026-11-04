@@ -62,6 +62,12 @@ with a check that the expected data is inside, is. That is out of scope here.
 validation when a name is missing or has no valid VMID; literal guest-id lists
 remain refused.
 
+`exclude_tags` omits every guest whose published tofu tags include one of the
+listed tags. The match is exact. The matched guests resolve to current VMIDs and
+merge with the `exclude_names` VMIDs into one sorted, de-duplicated `exclude`
+list. `exclude_tags` needs a `pool` or `all` selection and cannot be combined
+with `names`. A tag that matches no guest is not an error.
+
 It does not create the PBS prune job. Retention is PBS-side (see below), and
 that job lives on the PBS server.
 

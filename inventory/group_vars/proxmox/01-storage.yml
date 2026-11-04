@@ -106,7 +106,24 @@ pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
 pve_backup_jobs_pbs_node: pve-w1700
 pve_backup_jobs_pbs_server: "{{ hostvars['localhost'].tofu_data.containers.pbs.fqdn }}"
 pve_backup_jobs_jobs:
-  - {id: guests-pve-r540, all: true, node: pve-r540, storage: guests, schedule: "06:33", enabled: false}
+  - id: guests-pve-r540
+    all: true
+    node: pve-r540
+    storage: guests
+    schedule: "06:33"
+    enabled: true
+    # Evaluation, sandbox, stopped and media guests stay out of the PBS quota.
+    # Media guests are excluded by tag; the rest by name.
+    # langflow-eval and dify-eval stay in until they are destroyed.
+    exclude_names:
+      - sim-eval
+      - ai-sandbox-01
+      - nginx-proxy-manager
+      - win10-vdi
+      - win11-vdi
+      - win25-vdi
+    exclude_tags:
+      - media
   - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: false}
   - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:01", enabled: true, exclude_names: [splunk, prometheus]}
   - {id: guests-pve-w5900-stop, names: [prometheus], node: pve-w5900, storage: guests, schedule: "06:43", enabled: true, mode: stop}

@@ -121,9 +121,9 @@ postgres_standby_jobs: >-
 # config 915100`) until a guest's data disk is a first-class citizen of the
 # tofu contract. ponytail: literal vmid, re-derive from vms_from_tofu if a
 # second guest ever needs the same override.
+# bulk/appdata is declared in the tofu node_storage contract (quota and
+# properties), so it is not repeated here.
 zfs_pools_vm_disk_properties_node:
-  bulk/appdata:
-    quota: "200G"
   bulk/replica:
     quota: "2T"
   bulk/vm-915100-disk-1:

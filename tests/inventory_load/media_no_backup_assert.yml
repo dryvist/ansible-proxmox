@@ -1,0 +1,19 @@
+---
+# Included by verify_inventory.yml, once against the live inventory and once
+# against injected fixtures that must be refused. Inputs:
+#   media_no_backup_sanoid     sanoid_datasets-shaped mapping
+#   media_no_backup_endpoints  list of syncoid source and target strings
+#   media_no_backup_pattern    regex for a reference to the media pool
+- name: Assert no sanoid key and no syncoid endpoint names the media pool
+  ansible.builtin.assert:
+    that:
+      - >-
+        (media_no_backup_sanoid | dict2items | map(attribute='key')
+         | select('match', media_no_backup_pattern) | list) | length == 0
+      - >-
+        (media_no_backup_endpoints
+         | select('match', media_no_backup_pattern) | list) | length == 0
+    fail_msg: >-
+      A sanoid key or a syncoid source or target names the media pool
+      bulk-nobackup, which carries no snapshots and no replication.
+    success_msg: The media pool has no sanoid key and no syncoid endpoint.
