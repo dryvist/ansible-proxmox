@@ -82,3 +82,22 @@ def test_apply_failures_notify_and_restore_state(
         and replication_creates[-1] > replication_deletes[-1]
     ), logged_argv
     assert_no_volume_destruction(oci_command_log, logged_argv)
+
+
+def test_failure_with_volume_on_holder_moves_it_back(
+    oci_command_log: Path,
+    oci_http: ThreadingHTTPServer,
+    run_oci_app_upgrade: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    # The first read after the move-out fails, before the destroy starts.
+    result = run_oci_app_upgrade(
+        dry_run=False, fail="pvesh get /nodes/pve-w1700/lxc/123/config", fail_owner="990000"
+    )
+    assert result.returncode != 0, result.stdout
+    logged_argv = [shlex.split(line) for line in oci_command_log.read_text().splitlines()]
+    assert not any(argv[:3] == ["pct", "destroy", "123"] for argv in logged_argv), logged_argv
+    move_back = ["pct", "move-volume", "990000", "mp0", "--target-vmid", "123"]
+    assert any(argv[:6] == move_back for argv in logged_argv), logged_argv
+    assert any(argv[:3] == ["pct", "destroy", "990000"] for argv in logged_argv), logged_argv
+    assert any(argv[:3] == ["ha-manager", "add", "ct:123"] for argv in logged_argv), logged_argv
+    assert_no_volume_destruction(oci_command_log, logged_argv)

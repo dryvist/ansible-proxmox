@@ -72,6 +72,9 @@ def test_apply_happy_path_swaps_image_and_restores_membership(
             ("pvesr", "create-local-job", "123-0", "pve-w1701"),
         ],
     )
+    recreate = next(argv for argv in logged_argv if argv[:3] == ["pct", "create", "123"])
+    rootfs = recreate[recreate.index("--rootfs") + 1]
+    assert rootfs == "local-lvm:8,acl=1,mountoptions=noatime", recreate
     requests = [(method, path) for method, path, _ in oci_http.requests]
     assert ("GET", "/health") in requests, requests
     assert not any(method == "POST" for method, _ in requests), requests

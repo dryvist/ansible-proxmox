@@ -66,6 +66,11 @@ if [ -n "${OCI_STUB_FAIL-}" ]; then
         *"$OCI_STUB_FAIL"*) should_fail=1 ;;
     esac
 fi
+# OCI_STUB_FAIL_OWNER limits the failure to calls made while that vmid owns the volume.
+if [ "$should_fail" -eq 1 ] && [ -n "${OCI_STUB_FAIL_OWNER-}" ] \
+    && [ "$(state_value volume_owner)" != "$OCI_STUB_FAIL_OWNER" ]; then
+    should_fail=0
+fi
 if [ "$should_fail" -eq 1 ]; then
     case "$OCI_STUB_FAIL" in
         */health*) exit 1 ;;
@@ -102,25 +107,25 @@ case "${0##*/}" in
                 ;;
             /nodes/pve-w1700/lxc/123/config)
                 if [ "$(state_value ct_exists)" != 1 ]; then
-                    printf '%s\\n' '{}'
-                    exit 1
+                    printf '%s\\n' "Configuration file 'nodes/pve-w1700/lxc/123.conf' does not exist" >&2
+                    exit 2
                 elif [ "$(state_value volume_owner)" = 123 ]; then
-                    printf '%s\\n' '{"rootfs":"local-lvm:vm-123-disk-0,size=8G","mp0":"local-zfs:vm-123-disk-1,mp=/data,backup=1","hostname":"oci-app","ostype":"debian","unprivileged":1,"digest":"test"}'
+                    printf '%s\\n' '{"rootfs":"local-lvm:vm-123-disk-0,acl=1,size=8G,mountoptions=noatime","mp0":"local-zfs:vm-123-disk-1,mp=/data,backup=1","hostname":"oci-app","ostype":"debian","unprivileged":1,"digest":"test"}'
                 else
-                    printf '%s\\n' '{"rootfs":"local-lvm:vm-123-disk-0,size=8G","hostname":"oci-app","ostype":"debian","unprivileged":1,"digest":"test"}'
+                    printf '%s\\n' '{"rootfs":"local-lvm:vm-123-disk-0,acl=1,size=8G,mountoptions=noatime","hostname":"oci-app","ostype":"debian","unprivileged":1,"digest":"test"}'
                 fi
                 ;;
             /nodes/pve-w1700/lxc/123/status/current)
                 if [ "$(state_value ct_exists)" != 1 ]; then
-                    printf '%s\\n' '{}'
-                    exit 1
+                    printf '%s\\n' "Configuration file 'nodes/pve-w1700/lxc/123.conf' does not exist" >&2
+                    exit 2
                 fi
                 printf '{"status":"%s"}\\n' "$(state_value ct_status)"
                 ;;
             /nodes/pve-w1700/lxc/990000/config)
                 if [ "$(state_value holder_exists)" != 1 ]; then
-                    printf '%s\\n' '{}'
-                    exit 1
+                    printf '%s\\n' "Configuration file 'nodes/pve-w1700/lxc/990000.conf' does not exist" >&2
+                    exit 2
                 elif [ "$(state_value volume_owner)" = 990000 ]; then
                     printf '%s\\n' '{"rootfs":"local-lvm:vm-990000-disk-0,size=8G","mp0":"local-zfs:vm-123-disk-1,mp=/data,backup=1"}'
                 else
@@ -242,7 +247,9 @@ def oci_http() -> Iterator[ThreadingHTTPServer]:
 def run_oci_app_upgrade(
     tmp_path: Path, oci_command_log: Path, oci_http: ThreadingHTTPServer
 ) -> Callable[..., subprocess.CompletedProcess[str]]:
-    def run(*, dry_run: bool = True, fail: str = "") -> subprocess.CompletedProcess[str]:
+    def run(
+        *, dry_run: bool = True, fail: str = "", fail_owner: str = ""
+    ) -> subprocess.CompletedProcess[str]:
         home = tmp_path / "home"
         home.mkdir()
         local_tmp = tmp_path / "ansible-local"
@@ -288,6 +295,8 @@ def run_oci_app_upgrade(
             oci_http.fail_health = True
         elif fail:
             environment["OCI_STUB_FAIL"] = fail
+            if fail_owner:
+                environment["OCI_STUB_FAIL_OWNER"] = fail_owner
         base_url = f"http://127.0.0.1:{oci_http.server_address[1]}"
         extra_vars = {
             "oci_app_upgrade_dry_run": dry_run,
