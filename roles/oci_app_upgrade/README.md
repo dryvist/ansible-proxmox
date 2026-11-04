@@ -67,6 +67,9 @@ from live state:
 
 The run then stops at that CT. No volume is deleted by the rescue.
 
+If the recovery itself fails, a second ntfy notice says so, and the run stops
+for manual action. HA and replication may still be removed at that point.
+
 ## Variables
 
 | Variable | Default | Purpose |
