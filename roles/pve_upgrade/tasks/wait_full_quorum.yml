@@ -9,10 +9,10 @@
     - pve_upgrade_cluster_status.stdout is search('Quorate:\s+Yes')
     - >-
       (pve_upgrade_cluster_status.stdout
-       | regex_search('Total votes:\s+(\d+)', '\1') | default(['0'], true) | first | int)
+       | regex_search('Total votes:\s+(\d+)', '\\1') | default(['0'], true) | first | int)
       ==
       (pve_upgrade_cluster_status.stdout
-       | regex_search('Highest expected:\s+(\d+)', '\1') | default(['-1'], true) | first | int)
+       | regex_search('Highest expected:\s+(\d+)', '\\1') | default(['-1'], true) | first | int)
   retries: "{{ pve_upgrade_reboot_timeout | int // 10 }}"
   delay: 10
   changed_when: false
