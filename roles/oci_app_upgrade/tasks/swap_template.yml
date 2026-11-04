@@ -66,6 +66,9 @@
     oci_app_upgrade_rootfs_storage: "{{ (oci_app_upgrade_recorded_config.rootfs | default('')).split(':')[0] }}"
     oci_app_upgrade_rootfs_size: >-
       {{ ((oci_app_upgrade_recorded_config.rootfs | default('')).split('size=') | last).split('G') | first }}
+    oci_app_upgrade_rootfs_options: >-
+      {{ (oci_app_upgrade_recorded_config.rootfs | default('')).split(',')[1:]
+         | reject('match', '^size=') | list }}
 
 - name: Require every recorded mpN to be on the CT or the holder before any move
   ansible.builtin.assert:
