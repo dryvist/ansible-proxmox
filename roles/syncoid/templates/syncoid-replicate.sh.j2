@@ -42,8 +42,11 @@ log="$LOG_DIR/$(date +%Y-%m-%d).log"
 # One syslog line per job and per run, so the result reaches the log pipeline
 # rather than only the local log file. The first argument is the syslog
 # priority. A logger failure never changes the run's result, and each call is
-# capped at five seconds so a stalled syslog socket cannot delay the healthcheck.
+# capped at five seconds. Per-job lines are queued and written after the
+# healthcheck ping, so a stalled syslog socket cannot delay the healthcheck.
 slog() { local prio="$1"; shift; timeout 5 logger -t syncoid-replicate -p "$prio" -- "$*" >/dev/null 2>&1 || true; }
+job_prio=()
+job_msg=()
 
 exec 9>"$LOG_DIR/.${group}.lock"
 if ! flock -n 9; then
@@ -62,9 +65,11 @@ replicate() {
   if [ "$rc" -ne 0 ]; then
     echo "  FAILED (rc=$rc)" >>"$log"
     failed="$failed $name"
-    slog daemon.err "job=$name group=$group result=failed rc=$rc duration_s=$((SECONDS - start))"
+    job_prio+=(daemon.err)
+    job_msg+=("job=$name group=$group result=failed rc=$rc duration_s=$((SECONDS - start))")
   else
-    slog daemon.info "job=$name group=$group result=ok rc=0 duration_s=$((SECONDS - start))"
+    job_prio+=(daemon.info)
+    job_msg+=("job=$name group=$group result=ok rc=0 duration_s=$((SECONDS - start))")
   fi
 }
 
@@ -85,12 +90,15 @@ if [ "$ran" -eq 0 ]; then
   exit 1
 fi
 
-# Ping before logging, so a blocked syslog socket cannot delay the healthcheck.
+# Ping before any syslog write, so a blocked syslog socket cannot delay the healthcheck.
+drain_job_logs() { local i; for i in "${!job_msg[@]}"; do slog "${job_prio[$i]}" "${job_msg[$i]}"; done; }
 if [ -n "$failed" ]; then
   echo "=== $(date +%H:%M:%S) FAILED jobs:$failed ===" >>"$log"
   ping_hc "${HC}/fail"
+  drain_job_logs
   slog daemon.err "run group=$group result=failed jobs=$ran failed_jobs=${failed# }"
   exit 1
 fi
 ping_hc "${HC}"
+drain_job_logs
 slog daemon.info "run group=$group result=ok jobs=$ran"
