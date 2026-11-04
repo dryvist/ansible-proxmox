@@ -47,15 +47,15 @@ set up out of band. The role schedules replication; it does not distribute keys.
 
 ## Variables
 
-| Variable                                    | Default                              | Description                                                               |
-| ------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------- |
-| `syncoid_enabled`                           | `true`                               | Master enable                                                             |
-| `syncoid_jobs`                              | `[]`                                 | List of `{ name, source, target, options?, schedule? }` — inert until set |
-| `syncoid_default_options`                   | `--recursive --no-sync-snap --quiet` | Applied when a job omits `options`                                        |
-| `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17`                           | Schedule for the `default` group                                          |
-| `syncoid_extra_schedules`                   | `{}`                                 | Extra cadence groups (see below)                                          |
-| `syncoid_user`                              | `root`                               | User that runs syncoid (needs SSH to sources)                             |
-| `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; pinged on success, `/fail` pinged if any job failed  |
+| Variable                                    | Default                              | Description                                                            |
+| ------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------- |
+| `syncoid_enabled`                           | `true`                               | Master enable                                                          |
+| `syncoid_jobs`                              | `[]`                                 | List of `{ name, source, target, options?, schedule? }`; empty = inert |
+| `syncoid_default_options`                   | `--recursive --no-sync-snap --quiet` | Applied when a job omits `options`                                     |
+| `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17`                           | Schedule for the `default` group                                       |
+| `syncoid_extra_schedules`                   | `{}`                                 | Extra cadence groups (see below)                                       |
+| `syncoid_user`                              | `root`                               | User that runs syncoid (needs SSH to sources)                          |
+| `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; `/fail` pinged if any job failed                  |
 
 ## Usage
 
