@@ -56,8 +56,10 @@
           - >-
             'logger -t syncoid-replicate -p "$prio" -- "$*" >/dev/null 2>&1 || true'
             in syncoid_wrapper_text
-          - "'slog daemon.info \"job=$name group=$group result=ok' in syncoid_wrapper_text"
-          - "'slog daemon.err \"job=$name group=$group result=failed rc=$rc' in syncoid_wrapper_text"
+          - "'job_prio+=(daemon.info)' in syncoid_wrapper_text"
+          - "'job_msg+=(\"job=$name group=$group result=ok rc=0' in syncoid_wrapper_text"
+          - "'job_prio+=(daemon.err)' in syncoid_wrapper_text"
+          - "'job_msg+=(\"job=$name group=$group result=failed rc=$rc' in syncoid_wrapper_text"
           - "'slog daemon.err \"run group=$group result=failed' in syncoid_wrapper_text"
           - "'slog daemon.info \"run group=$group result=ok' in syncoid_wrapper_text"
           - "'slog daemon.err \"run group=$group result=no_jobs' in syncoid_wrapper_text"
