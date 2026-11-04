@@ -20,8 +20,8 @@
   check_mode: false
   failed_when: false
 
-# `zpool get cachefile` reports "-" while the property is at its default, so an
-# untouched pool compares unequal and gets set exactly once.
+# `zpool get cachefile` reports "-" while the property is at its default, and
+# the default is the OpenZFS cache path, so "-" already matches that path.
 - name: Set the cachefile property where it differs
   ansible.builtin.command:
     argv:
@@ -35,6 +35,8 @@
   when:
     - item.rc is defined and item.rc == 0
     - (item.stdout | default('') | trim) != zfs_pools_cachefile
+    - not ((item.stdout | default('') | trim) == '-'
+           and zfs_pools_cachefile == zfs_pools_cachefile_default)
   changed_when: true
 
 # Enabled, never started: the units run at boot and importing a pool mid-run on

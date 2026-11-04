@@ -22,6 +22,10 @@ pve_backup_jobs_config_host: ""
 #             them up onto themselves.
 #   exclude_names guest names from tofu_data; resolved to current VMIDs before
 #             the job is reconciled, so a renumber never changes the exclusion.
+#   exclude_tags tofu tags; every guest in tofu_data carrying one of them is
+#             excluded, resolved to VMIDs like exclude_names. Matched exactly.
+#             Requires pool or all; cannot be combined with names. A tag that
+#             matches no guest is not an error.
 #   storage   storage id to write to; pve_backup_jobs_storage_id
 #   schedule  PVE calendar event (on UTC nodes, HH:MM is daily)
 #   enabled   false ships the job present-but-off, so a first full run stays a

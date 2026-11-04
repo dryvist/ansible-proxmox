@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.40.0](https://github.com/dryvist/ansible-proxmox/compare/v2.39.0...v2.40.0) (2026-11-03)
+
+
+### Features
+
+* **inventory:** reserve 64G for bulk/appdata on pve-r540 ([#1249](https://github.com/dryvist/ansible-proxmox/issues/1249)) ([8326731](https://github.com/dryvist/ansible-proxmox/commit/8326731cf9ad68c865f0348ac5ca619cfb272dd9))
+
+
+### Bug Fixes
+
+* **deps:** move the dev shell nixpkgs to nixpkgs-26.05-darwin ([#1244](https://github.com/dryvist/ansible-proxmox/issues/1244)) ([9b4ad58](https://github.com/dryvist/ansible-proxmox/commit/9b4ad58ef6586771f5897adf36632d427d7b38a2))
+* **pve_backup_jobs:** enable guest backups on pve-r540 with name exclusions ([#1245](https://github.com/dryvist/ansible-proxmox/issues/1245)) ([241acbb](https://github.com/dryvist/ansible-proxmox/commit/241acbb31be4bd67d8642ac9bab67f84dfed495a))
+* **pve_upgrade:** drain cross-vendor HA VMs cold instead of live-migrating ([#1242](https://github.com/dryvist/ansible-proxmox/issues/1242)) ([541e266](https://github.com/dryvist/ansible-proxmox/commit/541e266b09f1fd31bdda35e4d30e23a08617fab3))
+
 ## [2.39.0](https://github.com/dryvist/ansible-proxmox/compare/v2.38.1...v2.39.0) (2026-10-31)
 
 
