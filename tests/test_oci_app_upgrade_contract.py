@@ -112,7 +112,8 @@ def test_rescue_posts_the_notice_before_recovering() -> None:
     apply_tasks = _tasks("apply.yml")
     block = next(t for t in apply_tasks if "block" in t)
     rescue = block["rescue"]
-    includes = [t["ansible.builtin.include_tasks"] for t in rescue if "ansible.builtin.include_tasks" in t]
+    tasks = [inner for t in rescue for inner in (t.get("block") or [t])]
+    includes = [t["ansible.builtin.include_tasks"] for t in tasks if "ansible.builtin.include_tasks" in t]
     assert includes.index("notify.yml") < includes.index("recover.yml")
 
 

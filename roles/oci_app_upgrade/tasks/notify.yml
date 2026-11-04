@@ -8,14 +8,18 @@
     url: "{{ oci_app_upgrade_ntfy_url }}"
     method: POST
     headers:
-      Title: "OCI app image upgrade failed on CT {{ oci_app_upgrade_vmid }}"
+      Title: >-
+        OCI app image {{ 'recovery' if oci_app_upgrade_notice_recovery_failed | default(false) else 'upgrade' }}
+        failed on CT {{ oci_app_upgrade_vmid }}
       Priority: high
       Tags: warning
     body: >-
       Node {{ oci_app_upgrade_this_node }}, CT {{ oci_app_upgrade_vmid }}, failed at
       "{{ ansible_failed_task.name | default('an unnamed task') }}".
       Error: {{ (ansible_failed_result.msg | default('none')) | string | truncate(400) }}.
-      Recovery starts now. The pre-change vzdump archive is on storage {{ oci_app_upgrade_backup_storage }}.
+      {{ 'The recovery failed: HA and replication may still be removed, and manual action is needed.'
+         if oci_app_upgrade_notice_recovery_failed | default(false) else 'Recovery starts now.' }}
+      The pre-change vzdump archive is on storage {{ oci_app_upgrade_backup_storage }}.
     body_format: raw
     status_code: 200
     timeout: 15

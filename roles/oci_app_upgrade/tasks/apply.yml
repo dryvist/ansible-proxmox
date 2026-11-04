@@ -52,7 +52,22 @@
       ansible.builtin.include_tasks: notify.yml
 
     - name: Restore the CT from live state
-      ansible.builtin.include_tasks: recover.yml
+      block:
+        - name: Run the recovery
+          ansible.builtin.include_tasks: recover.yml
+      rescue:
+        - name: Post that the recovery itself failed
+          ansible.builtin.include_tasks: notify.yml
+          vars:
+            oci_app_upgrade_notice_recovery_failed: true
+
+        - name: Stop with the recovery failure
+          ansible.builtin.fail:
+            msg: >-
+              CT {{ oci_app_upgrade_vmid }} failed the image change, and the recovery
+              also failed at "{{ ansible_failed_task.name | default('an unnamed task') }}".
+              HA and replication may still be removed. No volume was deleted; check the
+              CT and holder {{ oci_app_upgrade_holder_vmid }} by hand.
 
     - name: Stop the rollout at this CT
       ansible.builtin.fail:
