@@ -1,0 +1,52 @@
+[
+  {
+    "name": "pve_upgrade-only change runs no molecule scenario",
+    "changed_files": ["roles/pve_upgrade/tasks/wait_full_quorum.yml"],
+    "expected": "none"
+  },
+  {
+    "name": "oci_app_upgrade role and its test run no molecule scenario",
+    "changed_files": ["roles/oci_app_upgrade/tasks/main.yml", "tests/test_oci_app_upgrade_rescue.py"],
+    "expected": "none"
+  },
+  {
+    "name": "oci_app_upgrade rescue harness runs no molecule scenario",
+    "changed_files": ["tests/oci_app_upgrade_rescue_harness.py"],
+    "expected": "none"
+  },
+  {
+    "name": "a role-only change beside an unmapped role keeps the full profile",
+    "changed_files": ["roles/pve_upgrade/tasks/wait_full_quorum.yml", "roles/brand_new_role/tasks/main.yml"],
+    "expected": "full"
+  },
+  {
+    "name": "runner token test selects the default scenario",
+    "changed_files": ["tests/test_run_ansible_runner.py"],
+    "expected": ["default"]
+  },
+  {
+    "name": "zfs_pools role keeps its mapped scenarios",
+    "changed_files": ["roles/zfs_pools/tasks/datasets.yml"],
+    "expected": ["nas_storage", "zfs_pools"]
+  },
+  {
+    "name": "unmapped role keeps the full profile",
+    "changed_files": ["roles/brand_new_role/tasks/main.yml"],
+    "expected": "full"
+  },
+  {
+    "name": "unmapped test keeps the full profile",
+    "changed_files": ["tests/unclassified/test_new.py"],
+    "expected": "full"
+  },
+  {
+    "name": "policy test runs no molecule scenario",
+    "changed_files": ["tests/workflow_policy/test_ci_scope.py"],
+    "expected": "none"
+  },
+  {
+    "name": "container start contract imported by the default scenario selects default",
+    "changed_files": ["tests/container_start_contract.yml"],
+    "expected": ["default"]
+  }
+]
