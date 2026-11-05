@@ -165,5 +165,66 @@ class CiScopeContract(unittest.TestCase):
         self.assertTrue(fnmatch.fnmatchcase(path, "inventory/host_vars/**"))
 
 
+PROFILE_CASES = json.loads(
+    (ROOT / "tests/workflow_policy/fixtures/profile-selection.json").read_text()
+)
+
+
+def scenario_names(path):
+    return {
+        name
+        for name, patterns in SCENARIO_FILTERS.items()
+        if any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
+    }
+
+
+def contract_covered(path):
+    return any(fnmatch.fnmatchcase(path, pattern) for pattern in CONTRACT_FILTERS)
+
+
+def selected_profile(changed_files):
+    # Mirrors JacobPEvans/.github select-molecule-scenarios.js for repo-owned paths: a path that no
+    # scenario or contract covers runs the full profile, and .github/ paths select no scenario.
+    scenarios = set()
+    for path in changed_files:
+        found = scenario_names(path)
+        scenarios |= found
+        if not found and not contract_covered(path) and not path.startswith(".github/"):
+            return "full"
+    return sorted(scenarios) if scenarios else "none"
+
+
+def repo_role_and_test_files():
+    for top in ("roles", "tests"):
+        for path in sorted((ROOT / top).rglob("*")):
+            if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
+                yield path.relative_to(ROOT).as_posix()
+
+
+class ProfileSelectionContract(unittest.TestCase):
+    def test_fixture_paths_select_the_intended_profile(self):
+        for case in PROFILE_CASES:
+            with self.subTest(case["name"]):
+                expected = case["expected"]
+                if isinstance(expected, list):
+                    expected = sorted(expected)
+                self.assertEqual(selected_profile(case["changed_files"]), expected)
+
+    def test_every_role_and_tests_file_selects_a_profile(self):
+        unmapped = [
+            path
+            for path in repo_role_and_test_files()
+            if not scenario_names(path) and not contract_covered(path)
+        ]
+        self.assertEqual(
+            unmapped,
+            [],
+            "roles/ and tests/ files with no scenario or contract mapping run the full profile",
+        )
+
+    def test_static_contracts_are_not_gated_on_molecule(self):
+        self.assertNotIn("if", GATE["jobs"]["static-contracts"])
+
+
 if __name__ == "__main__":
     unittest.main()
