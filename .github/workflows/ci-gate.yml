@@ -228,9 +228,6 @@ jobs:
   static-contracts:
     name: Molecule Static Contracts
     needs: changes
-    if: >-
-      needs.changes.outputs.molecule == 'true' ||
-      github.event_name == 'push'
     uses: ./.github/workflows/_static-contracts.yml
 
   molecule:
