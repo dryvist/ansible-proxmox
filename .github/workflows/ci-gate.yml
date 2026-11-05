@@ -110,7 +110,6 @@ jobs:
           - 'tests/access_verification/**'
           - 'tests/apt_proxy_detect/**'
           - 'tests/cluster_ssh_trust/**'
-          - 'tests/container_start_check_mode_probe.yml'
           - 'tests/idrac_power/**'
           - 'tests/llm_model_store_seed/**'
           - 'tests/node_names/**'
@@ -160,6 +159,9 @@ jobs:
           - 'roles/ulimits/**'
           - 'roles/swap/**'
           - 'molecule/default/**'
+          - 'tests/container_start_check_mode_probe.yml'
+          - 'tests/container_start_contract.yml'
+          - 'tests/container_start_parse_case.yml'
           - 'tests/test_run_ansible_runner.py'
         docker_lxc_features:
           - 'roles/docker_lxc_features/**'
