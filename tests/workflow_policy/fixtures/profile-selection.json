@@ -40,8 +40,13 @@
     "expected": "full"
   },
   {
-    "name": "caller workflow path runs no molecule scenario",
-    "changed_files": [".github/workflows/ci-gate.yml"],
+    "name": "policy test runs no molecule scenario",
+    "changed_files": ["tests/workflow_policy/test_ci_scope.py"],
     "expected": "none"
+  },
+  {
+    "name": "container start contract imported by the default scenario selects default",
+    "changed_files": ["tests/container_start_contract.yml"],
+    "expected": ["default"]
   }
 ]
