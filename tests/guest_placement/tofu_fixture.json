@@ -216,10 +216,6 @@
    "node": "pve-w5900",
    "vmid": 110042
   },
-  "openproject": {
-   "node": "pve-w1700",
-   "vmid": 140
-  },
   "phoenix": {
    "node": "pve-r540",
    "vmid": 407000
