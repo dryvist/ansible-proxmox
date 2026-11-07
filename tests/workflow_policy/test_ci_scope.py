@@ -35,6 +35,33 @@ def mapping_value(node, key):
 
 
 class CiScopeContract(unittest.TestCase):
+    def test_ai_merge_gate_v2_caller_contract(self):
+        workflow = yaml.safe_load(
+            (ROOT / ".github/workflows/ai-merge-gate.yml").read_text()
+        )
+        self.assertEqual(workflow["permissions"], {})
+        gate = workflow["jobs"]["gate"]
+        self.assertEqual(
+            gate["uses"],
+            "JacobPEvans/.github-ai/.github/workflows/_ai-merge-gate.yml@v2",
+        )
+        self.assertEqual(
+            gate["permissions"],
+            {"checks": "read", "contents": "read", "pull-requests": "write"},
+        )
+        self.assertEqual(
+            set(gate["secrets"]),
+            {
+                "LLM_ROUTER_BASE_URL",
+                "LLM_ROUTER_API_KEY",
+                "NTFY_BASE_URL",
+                "GH_APP_CLAUDE_BOT_PRIVATE_KEY",
+                "GITLEAKS_LICENSE_KEY",
+            },
+        )
+        for name, value in gate["secrets"].items():
+            self.assertEqual(value, "${{ secrets." + name + " }}")
+
     def test_agent_platform_conformance_is_required(self):
         jobs = GATE["jobs"]
         conformance = jobs["agent-platform-conformance"]
