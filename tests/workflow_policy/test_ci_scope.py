@@ -35,6 +35,18 @@ def mapping_value(node, key):
 
 
 class CiScopeContract(unittest.TestCase):
+    def test_agent_platform_conformance_is_required(self):
+        jobs = GATE["jobs"]
+        conformance = jobs["agent-platform-conformance"]
+        self.assertEqual(
+            conformance["uses"],
+            "dryvist/.github/.github/workflows/agent-platform-conformance.yml"
+            "@198f25d695819a48e73f5a7723b47c5bd4839a7c",
+        )
+        self.assertEqual(conformance["permissions"], {"contents": "read"})
+        self.assertNotIn("if", conformance)
+        self.assertIn("agent-platform-conformance", jobs["gate"]["needs"])
+
     def test_develop_push_uses_shared_scenario_selection(self):
         molecule = GATE["jobs"]["molecule"]
         self.assertEqual(molecule["needs"], "changes")

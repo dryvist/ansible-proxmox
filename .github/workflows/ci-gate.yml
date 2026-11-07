@@ -28,6 +28,11 @@ permissions:
   pull-requests: read
 
 jobs:
+  agent-platform-conformance:
+    permissions:
+      contents: read
+    uses: dryvist/.github/.github/workflows/agent-platform-conformance.yml@198f25d695819a48e73f5a7723b47c5bd4839a7c
+
   ci:
     permissions:
       contents: read
@@ -342,7 +347,7 @@ jobs:
 
   gate:
     name: Merge Gate
-    needs: [ci, changes, data-contract, role-contracts, static-contracts, molecule]
+    needs: [ci, changes, data-contract, role-contracts, static-contracts, molecule, agent-platform-conformance]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
