@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import textwrap
@@ -10,7 +11,12 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "run-ansible.sh"
-SHARED_RUNNER = "github:dryvist/homelab-contracts/v5.31.0#run-ansible"
+SHARED_REF = re.search(
+    r"^HOMELAB_CONTRACTS_REF=(v\d+\.\d+\.\d+)$",
+    RUNNER.read_text(encoding="utf-8"),
+    re.MULTILINE,
+).group(1)
+SHARED_RUNNER = f"github:dryvist/homelab-contracts/{SHARED_REF}#run-ansible"
 
 
 class RunAnsibleShimContract(unittest.TestCase):
