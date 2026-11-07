@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.42.1](https://github.com/dryvist/ansible-proxmox/compare/v2.42.0...v2.42.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **ci:** require agent platform conformance ([86228b3](https://github.com/dryvist/ansible-proxmox/commit/86228b30f689d28f4e4b609a3cfb90f07bad5df9))
+
 ## [2.42.0](https://github.com/dryvist/ansible-proxmox/compare/v2.41.0...v2.42.0) (2026-11-04)
 
 
