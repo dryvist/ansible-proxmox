@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.42.2](https://github.com/dryvist/ansible-proxmox/compare/v2.42.1...v2.42.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* **ci:** run the AI merge gate reviews on the review runner ([#1278](https://github.com/dryvist/ansible-proxmox/issues/1278)) ([14feaaa](https://github.com/dryvist/ansible-proxmox/commit/14feaaaed62e11a8eff5b397ee1c59ad32cad957))
+
 ## [2.42.1](https://github.com/dryvist/ansible-proxmox/compare/v2.42.0...v2.42.1) (2026-11-07)
 
 
