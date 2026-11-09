@@ -1,0 +1,60 @@
+---
+# Install pdf/zfs_exporter the same way as node_exporter: the pinned tarball
+# and its unpacked tree are versioned under
+# {{ pve_node_exporter_zfs_exporter_install_dir }}, and
+# /usr/local/bin/zfs_exporter is only rewritten when the pin changes.
+
+- name: Create zfs_exporter install directory
+  ansible.builtin.file:
+    path: "{{ pve_node_exporter_zfs_exporter_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - pve_node_exporter
+
+- name: Download the pinned zfs_exporter release tarball
+  ansible.builtin.get_url:
+    url: "{{ pve_node_exporter_zfs_exporter_download_url }}"
+    dest: "{{ pve_node_exporter_zfs_exporter_install_dir }}/zfs_exporter-{{ pve_node_exporter_zfs_exporter_version }}.linux-{{ pve_node_exporter_arch }}.tar.gz"
+    checksum: "{{ pve_node_exporter_zfs_exporter_checksum }}"
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - pve_node_exporter
+
+- name: Unpack the zfs_exporter release
+  ansible.builtin.unarchive:
+    src: "{{ pve_node_exporter_zfs_exporter_install_dir }}/zfs_exporter-{{ pve_node_exporter_zfs_exporter_version }}.linux-{{ pve_node_exporter_arch }}.tar.gz"
+    dest: "{{ pve_node_exporter_zfs_exporter_install_dir }}"
+    remote_src: true
+    owner: root
+    group: root
+    creates: "{{ pve_node_exporter_zfs_exporter_install_dir }}/zfs_exporter-{{ pve_node_exporter_zfs_exporter_version }}.linux-{{ pve_node_exporter_arch }}/zfs_exporter"
+  tags:
+    - pve_node_exporter
+
+- name: Install the zfs_exporter binary
+  ansible.builtin.copy:
+    src: "{{ pve_node_exporter_zfs_exporter_install_dir }}/zfs_exporter-{{ pve_node_exporter_zfs_exporter_version }}.linux-{{ pve_node_exporter_arch }}/zfs_exporter"
+    dest: /usr/local/bin/zfs_exporter
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart zfs_exporter
+  tags:
+    - pve_node_exporter
+
+- name: Deploy the zfs_exporter systemd unit
+  ansible.builtin.template:
+    src: zfs_exporter.service.j2
+    dest: /etc/systemd/system/zfs_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart zfs_exporter
+  tags:
+    - pve_node_exporter
