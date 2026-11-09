@@ -12,7 +12,7 @@
     # A representative per-criticality assignment. Package install + timer are
     # skipped under Docker; this proves the role converges and sanoid.conf
     # renders the templates and dataset sections from the contract.
-    sanoid_datasets:
+    sanoid_datasets_node:
       "rpool/data/nas":
         use_template: critical
         recursive: "yes"
