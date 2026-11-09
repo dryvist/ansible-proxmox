@@ -54,9 +54,10 @@ datasets assigned to `critical` are unchanged.
 With `sanoid_replica_retention_enabled`, the role derives stanzas for
 `syncoid_jobs` targets, including descendants of recursive targets. Jobs may
 set `sanoid_replica_class`; other jobs use the group default. The `slow` class
-keeps 14 daily and 3 monthly snapshots, while `fast` keeps 7 daily and 1
-monthly snapshot. Replica templates disable new snapshots and prune `autosnap_*`
-names only. Sources need daily and monthly Sanoid snapshots for both retention
+keeps 1 hourly, 14 daily and 3 monthly snapshots, while `fast` keeps 1 hourly,
+7 daily and 1 monthly snapshot. Replica templates disable new snapshots and
+prune `autosnap_*` names only. Sources need daily and monthly Sanoid snapshots
+for both retention
 classes to have snapshots to retain.
 
 ## Usage
