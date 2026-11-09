@@ -39,9 +39,9 @@ ansible-galaxy install -r requirements.yml
 | `sanoid_rpool_guest_template_name`   | `rpool_guest`                                  | Template assigned to matching guest datasets       |
 | `sanoid_datasets`                    | `{}`                                           | Map of `dataset => { use_template, recursive, … }` |
 | `sanoid_replica_retention_enabled`   | `false`                                        | Add retention stanzas for live syncoid targets     |
-| `sanoid_replica_default_class`      | group default (`fast`)                         | Retention class used when a job has no override    |
-| `sanoid_replica_templates`          | group-defined                                  | `replica_fast` and `replica_slow` retention policies |
-| `sanoid_rpool_guest_monthly`        | `0`                                            | Monthly snapshots for recursive guest datasets    |
+| `sanoid_replica_default_class`       | group default (`fast`)                         | Retention class used when a job has no override    |
+| `sanoid_replica_templates`           | group-defined                                  | Defines `replica_fast` and `replica_slow`          |
+| `sanoid_rpool_guest_monthly`         | `0`                                            | Monthly snapshots for recursive guest datasets     |
 
 Quote `yes`/`no` values — sanoid wants literal `yes`/`no`, and unquoted YAML
 coerces them to booleans.
