@@ -91,17 +91,17 @@ The snapshot collector is off (`--no-collector.dataset-snapshot`), so no
 per-snapshot series exist and cardinality stays bounded by the dataset count.
 An unset quota reports `0`.
 
-| Variable                                               | Default                                             | Purpose                                             |
-| ------------------------------------------------------ | --------------------------------------------------- | --------------------------------------------------- |
-| `pve_node_exporter_zfs_exporter_enabled`               | `true`                                              | Install and run zfs_exporter.                       |
-| `pve_node_exporter_zfs_exporter_version`               | `2.5.1`                                             | Pinned upstream release.                            |
-| `pve_node_exporter_zfs_exporter_download_url`          | GitHub releases URL                                 | Override to a local mirror for offline converges.   |
-| `pve_node_exporter_zfs_exporter_checksum`              | SHA256 per architecture                             | Always verified; move it with the version.          |
-| `pve_node_exporter_zfs_exporter_port`                  | `9134`                                              | Listen port, on `pve_node_exporter_listen_address`. |
-| `pve_node_exporter_zfs_exporter_install_dir`           | `/opt/zfs_exporter`                                 | Versioned install root.                             |
-| `pve_node_exporter_zfs_exporter_filesystem_properties` | `available,quota,referenced,used,usedbysnapshots`   | Properties collected per filesystem.                |
-| `pve_node_exporter_zfs_exporter_volume_properties`     | `available,referenced,used,usedbysnapshots,volsize` | Properties collected per volume.                    |
-| `pve_node_exporter_zfs_exporter_extra_args`            | `[]`                                                | Extra CLI flags appended to `ExecStart`.            |
+| Variable                                               | Default                              | Purpose                                             |
+| ------------------------------------------------------ | ------------------------------------ | --------------------------------------------------- |
+| `pve_node_exporter_zfs_exporter_enabled`               | `true`                               | Install and run zfs_exporter.                       |
+| `pve_node_exporter_zfs_exporter_version`               | `2.5.1`                              | Pinned upstream release.                            |
+| `pve_node_exporter_zfs_exporter_download_url`          | GitHub releases URL                  | Override to a local mirror for offline converges.   |
+| `pve_node_exporter_zfs_exporter_checksum`              | SHA256 per architecture              | Always verified; move it with the version.          |
+| `pve_node_exporter_zfs_exporter_port`                  | `9134`                               | Listen port, on `pve_node_exporter_listen_address`. |
+| `pve_node_exporter_zfs_exporter_install_dir`           | `/opt/zfs_exporter`                  | Versioned install root.                             |
+| `pve_node_exporter_zfs_exporter_filesystem_properties` | Filesystem rows of the metrics table | Properties collected per filesystem.                |
+| `pve_node_exporter_zfs_exporter_volume_properties`     | Volume rows of the metrics table     | Properties collected per volume.                    |
+| `pve_node_exporter_zfs_exporter_extra_args`            | `[]`                                 | Extra CLI flags appended to `ExecStart`.            |
 
 #### Scrape target
 
