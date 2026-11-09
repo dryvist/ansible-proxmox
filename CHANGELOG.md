@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.43.0](https://github.com/dryvist/ansible-proxmox/compare/v2.42.4...v2.43.0) (2026-11-09)
+
+
+### Features
+
+* **monitoring:** export per-dataset ZFS usage from the Proxmox nodes ([#1290](https://github.com/dryvist/ansible-proxmox/issues/1290)) ([ca78c46](https://github.com/dryvist/ansible-proxmox/commit/ca78c46d4ff180904c74a7c02962883d95c02aa5))
+
 ## [2.42.4](https://github.com/dryvist/ansible-proxmox/compare/v2.42.3...v2.42.4) (2026-11-09)
 
 
