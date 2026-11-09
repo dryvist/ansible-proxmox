@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.42.4](https://github.com/dryvist/ansible-proxmox/compare/v2.42.3...v2.42.4) (2026-11-09)
+
+
+### Bug Fixes
+
+* **sanoid:** keep the newest replicated snapshot on replica targets ([#1287](https://github.com/dryvist/ansible-proxmox/issues/1287)) ([4a7f76c](https://github.com/dryvist/ansible-proxmox/commit/4a7f76c7b7501b2345d29e888505d01f48ebace0))
+
 ## [2.42.3](https://github.com/dryvist/ansible-proxmox/compare/v2.42.2...v2.42.3) (2026-11-09)
 
 
