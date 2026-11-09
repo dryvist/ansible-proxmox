@@ -28,7 +28,7 @@ sanoid_templates:
     hourly: 6
     daily: 7
     weekly: 4
-    monthly: 0
+    monthly: "{{ sanoid_rpool_guest_monthly }}"
     yearly: 0
     autosnap: "yes"
     autoprune: "yes"
@@ -79,14 +79,6 @@ sanoid_rpool_guest_template_name: rpool_guest
 # Optional retention policy for live syncoid replica targets.
 sanoid_replica_retention_enabled: false
 sanoid_replica_datasets: {}
-sanoid_replica_templates:
-  replica:
-    autosnap: "no"
-    autoprune: "yes"
-    frequently: 0
-    # The newest hourly is the newest replicated instant.
-    hourly: 1
-    daily: 14
-    weekly: 0
-    monthly: 6
-    yearly: 0
+sanoid_rpool_guest_monthly: 0
+sanoid_replica_default_class: ""
+sanoid_replica_templates: {}

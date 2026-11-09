@@ -4,11 +4,15 @@
   become: false
   gather_facts: true
 
+  vars_files:
+    - ../../inventory/group_vars/proxmox/02-replica-retention.yml
+    - ../../inventory/group_vars/rack_servers.yml
+
   vars:
     # A representative per-criticality assignment. Package install + timer are
     # skipped under Docker; this proves the role converges and sanoid.conf
     # renders the templates and dataset sections from the contract.
-    sanoid_datasets:
+    sanoid_datasets_node:
       "rpool/data/nas":
         use_template: critical
         recursive: "yes"
@@ -24,6 +28,7 @@
     syncoid_default_options: "--recursive --no-sync-snap --quiet"
     syncoid_jobs:
       - name: replica-recursive
+        sanoid_replica_class: slow
         target: bulk/replica/source/recursive
       - name: replica-nonrecursive
         options: "--no-sync-snap --quiet"

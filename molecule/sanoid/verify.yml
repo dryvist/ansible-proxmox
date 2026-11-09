@@ -6,6 +6,8 @@
 
   vars_files:
     - ../../roles/sanoid/defaults/main.yml
+    - ../../inventory/group_vars/proxmox/02-replica-retention.yml
+    - ../../inventory/group_vars/rack_servers.yml
 
   tasks:
     - name: Read the rendered sanoid.conf
@@ -43,7 +45,7 @@
           - sanoid_templates.rpool_guest.hourly == 6
           - sanoid_templates.rpool_guest.daily == 7
           - sanoid_templates.rpool_guest.weekly == 4
-          - sanoid_templates.rpool_guest.monthly == 0
+          - sanoid_templates.rpool_guest.monthly | int == 1
           - >-
             sanoid_conf_block['[template_critical]'] == [
               'autoprune = yes', 'autosnap = yes', 'daily = 30',
@@ -53,17 +55,28 @@
           - >-
             sanoid_conf_block['[template_rpool_guest]'] == [
               'autoprune = yes', 'autosnap = yes', 'daily = 7',
-              'frequently = 0', 'hourly = 6', 'monthly = 0',
+              'frequently = 0', 'hourly = 6', 'monthly = 1',
               'weekly = 4', 'yearly = 0'
             ]
           - >-
-            sanoid_conf_block['[template_replica]'] == [
+            sanoid_conf_block['[template_replica_fast]'] == [
+              'autoprune = yes',
+              'autosnap = no',
+              'daily = 7',
+              'frequently = 0',
+              'hourly = 0',
+              'monthly = 1',
+              'weekly = 0',
+              'yearly = 0'
+            ]
+          - >-
+            sanoid_conf_block['[template_replica_slow]'] == [
               'autoprune = yes',
               'autosnap = no',
               'daily = 14',
               'frequently = 0',
-              'hourly = 1',
-              'monthly = 6',
+              'hourly = 0',
+              'monthly = 3',
               'weekly = 0',
               'yearly = 0'
             ]
@@ -75,7 +88,7 @@
           # scratch dataset opts out of snapshots
           - "'[nvme1/siem/cribl-pq]' in sanoid_conf_text"
           - "'[bulk/replica/source/recursive]' in sanoid_conf_text"
-          - sanoid_conf_block['[bulk/replica/source/recursive]'] == ['recursive = yes', 'use_template = replica']
-          - sanoid_conf_block['[bulk/replica/source/nonrecursive]'] == ['use_template = replica']
+          - sanoid_conf_block['[bulk/replica/source/recursive]'] == ['recursive = yes', 'use_template = replica_slow']
+          - sanoid_conf_block['[bulk/replica/source/nonrecursive]'] == ['use_template = replica_fast']
           - "'[bulk/replica/stale/hand-thinned]' not in sanoid_conf_text"
         fail_msg: "sanoid.conf did not render the expected templates/datasets"

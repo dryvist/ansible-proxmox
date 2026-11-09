@@ -15,12 +15,40 @@
   tags:
     - sanoid
 
+- name: Validate default replica retention class
+  ansible.builtin.assert:
+    that:
+      - sanoid_replica_default_class | length > 0
+      - "('replica_' ~ sanoid_replica_default_class) in sanoid_replica_templates"
+    fail_msg: "Replica retention requires a configured default class template."
+    quiet: true
+  when: sanoid_replica_retention_enabled
+  tags:
+    - sanoid
+
+- name: Validate replica retention classes
+  ansible.builtin.assert:
+    that:
+      - "('replica_' ~ sanoid_replica_job_class) in sanoid_replica_templates"
+    fail_msg: >-
+      Syncoid job {{ item.name | default(item.target) }} selects unknown replica
+      retention class {{ sanoid_replica_job_class }}.
+    quiet: true
+  vars:
+    sanoid_replica_job_class: "{{ item.sanoid_replica_class | default(sanoid_replica_default_class, true) }}"
+  loop: "{{ syncoid_jobs | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default(item.target) }}"
+  when: sanoid_replica_retention_enabled
+  tags:
+    - sanoid
+
 - name: Add live replica datasets to the retention policy
   ansible.builtin.set_fact:
     sanoid_replica_datasets: >-
       {{
         sanoid_replica_datasets | combine({
-          item.target: {'use_template': 'replica'} |
+          item.target: {'use_template': sanoid_replica_job_template} |
           combine(
             {'recursive': 'yes'}
             if '--recursive' in sanoid_replica_job_options.split() else {}
@@ -29,6 +57,7 @@
       }}
   vars:
     sanoid_replica_job_options: "{{ item.options | default(syncoid_default_options | default('')) }}"
+    sanoid_replica_job_template: "{{ 'replica_' ~ (item.sanoid_replica_class | default(sanoid_replica_default_class, true)) }}"
   loop: "{{ syncoid_jobs | default([]) }}"
   when: sanoid_replica_retention_enabled
   tags:

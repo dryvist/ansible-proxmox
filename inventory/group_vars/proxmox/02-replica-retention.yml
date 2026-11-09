@@ -1,0 +1,22 @@
+---
+# Cluster-wide retention defaults for replicated datasets.
+sanoid_replica_default_class: fast
+sanoid_replica_templates:
+  replica_slow:
+    autosnap: "no"
+    autoprune: "yes"
+    frequently: 0
+    hourly: 0
+    daily: 14
+    weekly: 0
+    monthly: 3
+    yearly: 0
+  replica_fast:
+    autosnap: "no"
+    autoprune: "yes"
+    frequently: 0
+    hourly: 0
+    daily: 7
+    weekly: 0
+    monthly: 1
+    yearly: 0
