@@ -4,7 +4,7 @@
 galaxy_info:
   role_name: pve_node_exporter
   author: ansible-proxmox
-  description: Install prometheus node_exporter as a pinned-version systemd service on PVE hosts
+  description: Install prometheus node_exporter and zfs_exporter as pinned-version systemd services on PVE hosts
   license: Apache-2.0
   min_ansible_version: "2.15"
 

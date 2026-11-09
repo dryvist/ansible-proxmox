@@ -2,7 +2,9 @@
 
 Install [prometheus node_exporter](https://github.com/prometheus/node_exporter)
 on each Proxmox VE host as a pinned-version native systemd service, exposing
-host metrics (CPU, memory, disk, ZFS, network) on port `9100`.
+host metrics (CPU, memory, disk, ZFS, network) on port `9100`. Beside it, the
+role installs [zfs_exporter](https://github.com/pdf/zfs_exporter) the same way,
+exposing per-dataset ZFS space accounting on port `9134`.
 
 ## What It Does
 
@@ -18,9 +20,15 @@ host metrics (CPU, memory, disk, ZFS, network) on port `9100`.
    timers. The service reads that directory as a second textfile-collector
    source.
 6. Deploys a hardened systemd unit and enables/starts the service.
+7. When `pve_node_exporter_zfs_exporter_enabled` (default), downloads the
+   **pinned** zfs_exporter release tarball to a versioned path under
+   `/opt/zfs_exporter/`, always verifies its SHA256 checksum, installs the
+   binary to `/usr/local/bin/zfs_exporter`, and runs it as a second hardened
+   systemd service (`zfs_exporter`) under the same service account.
 
 Re-runs are no-ops; bumping `pve_node_exporter_version` (plus checksum) rolls
-the fleet forward on the next converge.
+the fleet forward on the next converge, and the same holds for
+`pve_node_exporter_zfs_exporter_version`.
 
 ## Where It Runs
 
@@ -64,6 +72,45 @@ package starts its timers on install and the collector units write into that dir
 without the matching hardware. The service reads the directory through a second
 `--collector.textfile.directory` flag.
 
+### ZFS dataset exporter
+
+node_exporter's `zfs` collector reports pool and ARC statistics only.
+zfs_exporter adds one series per dataset (filesystem or volume) and property,
+labelled `name`, `pool` and `type`, plus its pool series:
+
+| Metric                               | ZFS property      | Collected for        |
+| ------------------------------------ | ----------------- | -------------------- |
+| `zfs_dataset_used_bytes`             | `used`            | filesystems, volumes |
+| `zfs_dataset_used_by_snapshot_bytes` | `usedbysnapshots` | filesystems, volumes |
+| `zfs_dataset_available_bytes`        | `available`       | filesystems, volumes |
+| `zfs_dataset_quota_bytes`            | `quota`           | filesystems          |
+| `zfs_dataset_referenced_bytes`       | `referenced`      | filesystems, volumes |
+| `zfs_dataset_volume_size_bytes`      | `volsize`         | volumes              |
+
+The snapshot collector is off (`--no-collector.dataset-snapshot`), so no
+per-snapshot series exist and cardinality stays bounded by the dataset count.
+An unset quota reports `0`.
+
+| Variable                                               | Default                              | Purpose                                             |
+| ------------------------------------------------------ | ------------------------------------ | --------------------------------------------------- |
+| `pve_node_exporter_zfs_exporter_enabled`               | `true`                               | Install and run zfs_exporter.                       |
+| `pve_node_exporter_zfs_exporter_version`               | `2.5.1`                              | Pinned upstream release.                            |
+| `pve_node_exporter_zfs_exporter_download_url`          | GitHub releases URL                  | Override to a local mirror for offline converges.   |
+| `pve_node_exporter_zfs_exporter_checksum`              | SHA256 per architecture              | Always verified; move it with the version.          |
+| `pve_node_exporter_zfs_exporter_port`                  | `9134`                               | Listen port, on `pve_node_exporter_listen_address`. |
+| `pve_node_exporter_zfs_exporter_install_dir`           | `/opt/zfs_exporter`                  | Versioned install root.                             |
+| `pve_node_exporter_zfs_exporter_filesystem_properties` | Filesystem rows of the metrics table | Properties collected per filesystem.                |
+| `pve_node_exporter_zfs_exporter_volume_properties`     | Volume rows of the metrics table     | Properties collected per volume.                    |
+| `pve_node_exporter_zfs_exporter_extra_args`            | `[]`                                 | Extra CLI flags appended to `ExecStart`.            |
+
+#### Scrape target
+
+Each node serves `http://<node-mgmt-ip>:9134/metrics`, on the same address as
+node_exporter's `:9100`. This repository declares no scrape jobs: the
+Prometheus job that scrapes the Proxmox nodes' `:9100` targets lives in
+`ansible-proxmox-apps`, and the node firewall rules for exporter ports live in
+`tofu-proxmox`. Add the `<node>:9134` target and allow TCP `9134` there.
+
 ## Verification
 
 ```bash
@@ -72,8 +119,13 @@ curl -s http://<node-mgmt-ip>:9100/metrics | head
 
 # Version actually running matches the pin
 /usr/local/bin/node_exporter --version
+
+systemctl is-active zfs_exporter
+curl -s http://<node-mgmt-ip>:9134/metrics | grep '^zfs_dataset_used_bytes'
+/usr/local/bin/zfs_exporter --version
 ```
 
 ## License
 
-Apache-2.0, matching the repository (node_exporter itself is Apache-2.0).
+Apache-2.0, matching the repository (node_exporter itself is Apache-2.0;
+zfs_exporter is MIT).

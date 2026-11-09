@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Prometheus zfs_exporter (v{{ pve_node_exporter_zfs_exporter_version }})
+Documentation=https://github.com/pdf/zfs_exporter
+After=network-online.target zfs.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ pve_node_exporter_user }}
+Group={{ pve_node_exporter_user }}
+ExecStart=/usr/local/bin/zfs_exporter \
+    --web.listen-address={{ pve_node_exporter_listen_address }}:{{ pve_node_exporter_zfs_exporter_port }} \
+    --collector.pool \
+    --collector.dataset-filesystem \
+    --properties.dataset-filesystem={{ pve_node_exporter_zfs_exporter_filesystem_properties | join(',') }} \
+    --collector.dataset-volume \
+    --properties.dataset-volume={{ pve_node_exporter_zfs_exporter_volume_properties | join(',') }} \
+    --no-collector.dataset-snapshot{% for arg in pve_node_exporter_zfs_exporter_extra_args %} \
+    {{ arg }}{% endfor %}
+
+Restart=on-failure
+RestartSec=5s
+
+# Read-only metrics daemon: lock it down. Keep /dev/zfs visible (no
+# PrivateDevices): the zfs and zpool commands it runs read through it.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

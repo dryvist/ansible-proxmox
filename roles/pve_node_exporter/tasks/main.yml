@@ -98,6 +98,12 @@
   tags:
     - pve_node_exporter
 
+- name: Install the ZFS dataset exporter
+  ansible.builtin.include_tasks: zfs_exporter.yml
+  when: pve_node_exporter_zfs_exporter_enabled
+  tags:
+    - pve_node_exporter
+
 - name: Flush handlers to apply systemd changes
   ansible.builtin.meta: flush_handlers
   tags:
@@ -109,5 +115,16 @@
     state: started
     enabled: true
   when: ansible_virtualization_type | default('') != 'docker'
+  tags:
+    - pve_node_exporter
+
+- name: Enable and start zfs_exporter
+  ansible.builtin.systemd:
+    name: zfs_exporter
+    state: started
+    enabled: true
+  when:
+    - pve_node_exporter_zfs_exporter_enabled
+    - ansible_virtualization_type | default('') != 'docker'
   tags:
     - pve_node_exporter
