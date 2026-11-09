@@ -64,7 +64,7 @@
               'autosnap = no',
               'daily = 7',
               'frequently = 0',
-              'hourly = 0',
+              'hourly = 1',
               'monthly = 1',
               'weekly = 0',
               'yearly = 0'
@@ -75,7 +75,7 @@
               'autosnap = no',
               'daily = 14',
               'frequently = 0',
-              'hourly = 0',
+              'hourly = 1',
               'monthly = 3',
               'weekly = 0',
               'yearly = 0'
