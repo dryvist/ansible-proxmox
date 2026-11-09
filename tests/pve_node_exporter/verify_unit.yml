@@ -17,6 +17,10 @@
       {{ playbook_dir }}/../../roles/pve_node_exporter/templates/node_exporter.service.j2
     pve_node_exporter_test_tasks_path: >-
       {{ playbook_dir }}/../../roles/pve_node_exporter/tasks/packaged_collectors.yml
+    pve_node_exporter_test_zfs_template_path: >-
+      {{ playbook_dir }}/../../roles/pve_node_exporter/templates/zfs_exporter.service.j2
+    pve_node_exporter_test_zfs_tasks_path: >-
+      {{ playbook_dir }}/../../roles/pve_node_exporter/tasks/zfs_exporter.yml
 
   tasks:
     - name: Render the unit with packaged collectors enabled
@@ -82,4 +86,90 @@
           - "'ansible.builtin.systemd:' in pve_node_exporter_packaged_collectors_task_source"
           - "'loop:' in pve_node_exporter_packaged_collectors_task_source"
           - "'pve_node_exporter_packaged_collectors_timers' in pve_node_exporter_packaged_collectors_task_source"
+        quiet: true
+
+    - name: Render the zfs_exporter unit from the role defaults
+      ansible.builtin.set_fact:
+        pve_node_exporter_test_zfs_unit: >-
+          {{ lookup('ansible.builtin.template', pve_node_exporter_test_zfs_template_path) }}
+      vars:
+        ansible_default_ipv4:
+          address: fixture
+
+    - name: Assert the zfs_exporter unit runs the pinned release on its own port
+      ansible.builtin.assert:
+        that:
+          - pve_node_exporter_zfs_exporter_version is match('^[0-9]+[.][0-9]+[.][0-9]+$')
+          - >-
+            ('Description=Prometheus zfs_exporter (v' ~ pve_node_exporter_zfs_exporter_version ~ ')')
+            in pve_node_exporter_test_zfs_unit
+          - "'ExecStart=/usr/local/bin/zfs_exporter ' in pve_node_exporter_test_zfs_unit"
+          - "'User=node-exporter' in pve_node_exporter_test_zfs_unit"
+          - pve_node_exporter_zfs_exporter_port == 9134
+          - "'--web.listen-address=fixture:9134' in pve_node_exporter_test_zfs_unit"
+        quiet: true
+
+    - name: Assert the zfs_exporter unit exports datasets and pools but no snapshots
+      ansible.builtin.assert:
+        that:
+          - >-
+            ['available', 'quota', 'referenced', 'used', 'usedbysnapshots']
+            | difference(pve_node_exporter_zfs_exporter_filesystem_properties) | length == 0
+          - >-
+            ('--properties.dataset-filesystem='
+            ~ (pve_node_exporter_zfs_exporter_filesystem_properties | join(',')))
+            in pve_node_exporter_test_zfs_unit
+          - >-
+            ('--properties.dataset-volume='
+            ~ (pve_node_exporter_zfs_exporter_volume_properties | join(',')))
+            in pve_node_exporter_test_zfs_unit
+          - "'--collector.pool' in pve_node_exporter_test_zfs_unit"
+          - "'--collector.dataset-filesystem' in pve_node_exporter_test_zfs_unit"
+          - "'--collector.dataset-volume' in pve_node_exporter_test_zfs_unit"
+          - "'--no-collector.dataset-snapshot' in pve_node_exporter_test_zfs_unit"
+          - "'--collector.dataset-snapshot' not in pve_node_exporter_test_zfs_unit"
+          - "'--properties.dataset-snapshot' not in pve_node_exporter_test_zfs_unit"
+        quiet: true
+
+    - name: Render the zfs_exporter download pin for amd64
+      ansible.builtin.set_fact:
+        pve_node_exporter_test_zfs_url_amd64: "{{ pve_node_exporter_zfs_exporter_download_url }}"
+        pve_node_exporter_test_zfs_checksum_amd64: "{{ pve_node_exporter_zfs_exporter_checksum }}"
+      vars:
+        ansible_architecture: x86_64
+
+    - name: Render the zfs_exporter download pin for arm64
+      ansible.builtin.set_fact:
+        pve_node_exporter_test_zfs_url_arm64: "{{ pve_node_exporter_zfs_exporter_download_url }}"
+        pve_node_exporter_test_zfs_checksum_arm64: "{{ pve_node_exporter_zfs_exporter_checksum }}"
+      vars:
+        ansible_architecture: aarch64
+
+    - name: Select the zfs_exporter download task
+      ansible.builtin.set_fact:
+        pve_node_exporter_test_zfs_download: >-
+          {{ (lookup('ansible.builtin.file', pve_node_exporter_test_zfs_tasks_path)
+          | from_yaml | select('contains', 'ansible.builtin.get_url')
+          | first)['ansible.builtin.get_url'] }}
+
+    - name: Assert the pinned zfs_exporter tarball checksum is always verified
+      ansible.builtin.assert:
+        that:
+          - >-
+            pve_node_exporter_test_zfs_url_amd64
+            == ('https://github.com/pdf/zfs_exporter/releases/download/v'
+            ~ pve_node_exporter_zfs_exporter_version ~ '/zfs_exporter-'
+            ~ pve_node_exporter_zfs_exporter_version ~ '.linux-amd64.tar.gz')
+          - >-
+            pve_node_exporter_test_zfs_url_arm64
+            == ('https://github.com/pdf/zfs_exporter/releases/download/v'
+            ~ pve_node_exporter_zfs_exporter_version ~ '/zfs_exporter-'
+            ~ pve_node_exporter_zfs_exporter_version ~ '.linux-arm64.tar.gz')
+          - pve_node_exporter_test_zfs_checksum_amd64 is match('^sha256:[0-9a-f]{64}$')
+          - pve_node_exporter_test_zfs_checksum_arm64 is match('^sha256:[0-9a-f]{64}$')
+          - pve_node_exporter_test_zfs_checksum_amd64 != pve_node_exporter_test_zfs_checksum_arm64
+          - "'pve_node_exporter_zfs_exporter_download_url' in pve_node_exporter_test_zfs_download.url"
+          - "'pve_node_exporter_zfs_exporter_checksum' in pve_node_exporter_test_zfs_download.checksum"
+          - "'omit' not in pve_node_exporter_test_zfs_download.checksum"
+          - "'default' not in pve_node_exporter_test_zfs_download.checksum"
         quiet: true

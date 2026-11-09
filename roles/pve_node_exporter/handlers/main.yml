@@ -8,3 +8,11 @@
     daemon_reload: true
   when: ansible_virtualization_type | default('') != 'docker'
   listen: Restart node_exporter
+
+- name: Restart zfs_exporter
+  ansible.builtin.systemd:
+    name: zfs_exporter
+    state: restarted
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'
+  listen: Restart zfs_exporter

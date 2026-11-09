@@ -65,3 +65,50 @@ pve_node_exporter_packaged_collectors_timers:
 # Extra CLI flags appended verbatim to the service ExecStart (e.g.
 # ["--no-collector.wifi"]).
 pve_node_exporter_extra_args: []
+
+# Per-dataset ZFS space accounting from pdf/zfs_exporter, installed beside
+# node_exporter as its own pinned systemd service on its own port. It runs as
+# pve_node_exporter_user and binds pve_node_exporter_listen_address.
+pve_node_exporter_zfs_exporter_enabled: true
+
+# Pinned upstream release; the checksums below must move with it.
+# renovate: datasource=github-releases depName=pdf/zfs_exporter
+pve_node_exporter_zfs_exporter_version: "2.5.1"
+
+pve_node_exporter_zfs_exporter_download_url: >-
+  https://github.com/pdf/zfs_exporter/releases/download/v{{ pve_node_exporter_zfs_exporter_version }}/zfs_exporter-{{ pve_node_exporter_zfs_exporter_version }}.linux-{{ pve_node_exporter_arch }}.tar.gz
+
+# Integrity pin for the tarball ("sha256:<hex>"), per-arch, equal to the
+# SHA256 digests GitHub publishes for the release assets. Always enforced:
+# refresh both hashes when bumping the version.
+pve_node_exporter_zfs_exporter_checksum: >-
+  sha256:{{ {
+    'amd64': '2caed451cfb0abbd0494b1200aa3bcc134921f12a2a21efe001a4ac9d79d0e32',
+    'arm64': '031d8dfd9aab29ac38c29e13b017f01203c0fc48a7f2e8465dd0b5c5bced995e',
+  }[pve_node_exporter_arch] }}
+
+# Standard zfs_exporter port.
+pve_node_exporter_zfs_exporter_port: 9134
+
+# Versioned install root; the active binary is /usr/local/bin/zfs_exporter.
+pve_node_exporter_zfs_exporter_install_dir: /opt/zfs_exporter
+
+# ZFS properties exported per filesystem and per volume: one series per
+# dataset and property. The pool collector stays on and the snapshot
+# collector stays off, so no per-snapshot series are exported.
+pve_node_exporter_zfs_exporter_filesystem_properties:
+  - available
+  - quota
+  - referenced
+  - used
+  - usedbysnapshots
+pve_node_exporter_zfs_exporter_volume_properties:
+  - available
+  - referenced
+  - used
+  - usedbysnapshots
+  - volsize
+
+# Extra CLI flags appended verbatim to the zfs_exporter ExecStart (e.g.
+# ["--exclude=^rpool/data/"]).
+pve_node_exporter_zfs_exporter_extra_args: []
