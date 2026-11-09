@@ -22,6 +22,8 @@ jobs:
     uses: JacobPEvans/.github-ai/.github/workflows/cc-ci-fix.yml@v2
     secrets: inherit
     with:
+      runner_label: ${{ (github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository) && 'review' || 'ubuntu-latest' }}
+      local_model: review-local
       repo_context: "Ansible playbooks and roles for configuring Proxmox VE host"
       ci_structure: >-
         CI Gate aggregates lint, syntax, contract, and Molecule checks. PRs into

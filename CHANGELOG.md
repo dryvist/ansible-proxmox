@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.42.3](https://github.com/dryvist/ansible-proxmox/compare/v2.42.2...v2.42.3) (2026-11-09)
+
+
+### Bug Fixes
+
+* **storage:** replica retention classes, quota input and no peer root-pool replication ([#1283](https://github.com/dryvist/ansible-proxmox/issues/1283)) ([789618e](https://github.com/dryvist/ansible-proxmox/commit/789618e7a89b11ba3289e3cf67b91910b1b5293e))
+
 ## [2.42.2](https://github.com/dryvist/ansible-proxmox/compare/v2.42.1...v2.42.2) (2026-11-07)
 
 

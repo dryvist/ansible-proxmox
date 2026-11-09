@@ -39,6 +39,9 @@ ansible-galaxy install -r requirements.yml
 | `sanoid_rpool_guest_template_name`   | `rpool_guest`                                  | Template assigned to matching guest datasets       |
 | `sanoid_datasets`                    | `{}`                                           | Map of `dataset => { use_template, recursive, … }` |
 | `sanoid_replica_retention_enabled`   | `false`                                        | Add retention stanzas for live syncoid targets     |
+| `sanoid_replica_default_class`       | group default (`fast`)                         | Retention class used when a job has no override    |
+| `sanoid_replica_templates`           | group-defined                                  | Defines `replica_fast` and `replica_slow`          |
+| `sanoid_rpool_guest_monthly`         | `0`                                            | Monthly snapshots for recursive guest datasets     |
 
 Quote `yes`/`no` values — sanoid wants literal `yes`/`no`, and unquoted YAML
 coerces them to booleans.
@@ -48,14 +51,14 @@ with monthly and yearly retention disabled. The existing `critical` template
 remains at 36 hourly, 30 daily, 8 weekly, and 6 monthly snapshots, so bulk
 datasets assigned to `critical` are unchanged.
 
-With `sanoid_replica_retention_enabled`, the role derives stanzas only for
-`syncoid_jobs` targets (all datasets under a recursive target included) and
-retains the newest hourly snapshot, 14 daily and 6 monthly snapshots; sanoid
-prunes `autosnap_*` names only. The newest hourly is the newest replicated
-instant, so a common snapshot normally survives each run. If replication
-stops for longer than the retention windows of source and target overlap, no
-common snapshot remains on both sides and incremental replication cannot
-resume from a shared snapshot.
+With `sanoid_replica_retention_enabled`, the role derives stanzas for
+`syncoid_jobs` targets, including descendants of recursive targets. Jobs may
+set `sanoid_replica_class`; other jobs use the group default. The `slow` class
+keeps 1 hourly, 14 daily and 3 monthly snapshots, while `fast` keeps 1 hourly,
+7 daily and 1 monthly snapshot. Replica templates disable new snapshots and
+prune `autosnap_*` names only. Sources need daily and monthly Sanoid snapshots
+for both retention
+classes to have snapshots to retain.
 
 ## Usage
 
