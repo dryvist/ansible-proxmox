@@ -67,7 +67,6 @@ jobs:
     uses: JacobPEvans/.github-ai/.github/workflows/issue-triage.yml@v2
     secrets: inherit
     with:
-      runner_label: review
       issue_number: ${{ inputs.issue_number }}
 
   resolve-issue:
@@ -79,7 +78,6 @@ jobs:
     uses: JacobPEvans/.github-ai/.github/workflows/cc-issue-resolver.yml@v2
     secrets: inherit
     with:
-      runner_label: review
       repo_context: "Ansible playbooks and roles for configuring Proxmox VE host"
       extra_tools: "Bash(ansible:*)"
       issue_number: ${{ inputs.issue_number }}

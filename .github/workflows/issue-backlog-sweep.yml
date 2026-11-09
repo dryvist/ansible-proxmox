@@ -36,6 +36,4 @@ permissions:
 jobs:
   sweep:
     uses: JacobPEvans/.github-ai/.github/workflows/issue-backlog-sweep.yml@v2
-    with:
-      runner_label: review
     secrets: inherit # zizmor: ignore[secrets-inherit]
