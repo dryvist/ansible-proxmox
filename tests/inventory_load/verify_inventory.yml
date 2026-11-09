@@ -112,12 +112,24 @@
           - hostvars['pve-r540'].sanoid_datasets['bulk'].recursive == 'yes'
           - hostvars['pve-r540'].sanoid_datasets['rpool/data'].use_template == 'rpool_guest'
           - hostvars['pve-r540'].sanoid_datasets['rpool/data'].recursive == 'yes'
-          - "'rpool-data' in hostvars['pve-r710'].syncoid_jobs | map(attribute='name') | list"
         fail_msg: >-
           The storage node holds live application state and the dump archive, so
           it must declare a sanoid policy for both. syncoid runs --no-sync-snap:
           with no snapshot here there is nothing for the DR leg to send, and the
           off-pool copy silently never happens.
+
+    - name: Assert no job pulls the peer's rpool/data root
+      ansible.builtin.assert:
+        that:
+          - "'rpool-data' not in hostvars['pve-r710'].syncoid_jobs | map(attribute='name') | list"
+          - >-
+            (hostvars['pve-r710'].syncoid_jobs
+            | map(attribute='source')
+            | select('search', ':rpool/data$')
+            | list | length) == 0
+        fail_msg: >-
+          The recursive root-pool source job must not be configured on this
+          replica node.
 
     - name: Assert pve-r540 pulls pve-r710 primary datasets
       ansible.builtin.assert:

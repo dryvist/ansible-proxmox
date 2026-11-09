@@ -99,11 +99,6 @@ syncoid_jobs:
     sanoid_replica_class: slow
     source: "root@{{ proxmox_node_names.storage }}:bulk/jdrive"
     target: "bulk/replica/{{ proxmox_node_names.storage }}/jdrive"
-  # Every guest disk on the storage node's rpool/data, recursive via default
-  # options: the mirror of that node's pull of this node's rpool/data.
-  - name: "rpool-data"
-    source: "root@{{ proxmox_node_names.storage }}:rpool/data"
-    target: "bulk/replica/{{ proxmox_node_names.storage }}/rpool/data"
   # Guest service-state volumes on the bulk node. These were replicated until
   # 2026-07-25 and then silently stopped: the guests were REBUILT with new
   # dataset suffixes (disk-0 became disk-1, and so on) and the job list still
