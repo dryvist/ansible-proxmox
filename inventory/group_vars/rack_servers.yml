@@ -28,10 +28,11 @@ ulimits_users:
 
 # Shared sanoid policy for both servers, plus each host's sanoid_datasets_node.
 # Conventions: https://docs.jacobpevans.com/infrastructure/repos/ansible-proxmox/#inventory-conventions
+sanoid_rpool_guest_monthly: 1
 sanoid_datasets_common:
   'rpool/data': {'use_template': 'rpool_guest', 'recursive': 'yes'}
   'bulk': {'use_template': 'rpool_guest', 'recursive': 'yes'}
-  'bulk/replica': {'use_template': 'replica', 'recursive': 'yes'}
+  'bulk/replica': {'use_template': "replica_{{ sanoid_replica_default_class }}", 'recursive': 'yes'}
   'bulk/databases': {'use_template': 'database', 'recursive': 'yes', 'hourly': 24}
   'bulk/backups': {'use_template': 'critical', 'recursive': 'yes'}
 sanoid_datasets: >-

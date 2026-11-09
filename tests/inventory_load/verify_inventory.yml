@@ -82,6 +82,23 @@
         fail_msg: >-
           The replica dataset must reach zfs_pools with its documented quota input.
 
+    - name: Assert cluster-wide replica retention defaults and job classes
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-r710'].sanoid_replica_default_class == 'fast'
+          - hostvars['pve-r710'].sanoid_replica_templates.replica_slow.daily == 14
+          - hostvars['pve-r710'].sanoid_replica_templates.replica_slow.monthly == 3
+          - hostvars['pve-r710'].sanoid_replica_templates.replica_fast.daily == 7
+          - hostvars['pve-r710'].sanoid_replica_templates.replica_fast.monthly == 1
+          - hostvars['pve-r710'].sanoid_datasets['bulk/replica'].use_template == 'replica_fast'
+          - hostvars['pve-r710'].sanoid_rpool_guest_monthly | int == 1
+          - >-
+            (hostvars['pve-r710'].syncoid_jobs
+            | selectattr('name', 'eq', 'photos') | first).sanoid_replica_class == 'slow'
+        fail_msg: >-
+          Replica retention defaults, source snapshots, or the job override did
+          not reach the inventory.
+
     - name: Assert the storage node declares a snapshot policy for the state it holds
       ansible.builtin.assert:
         that:
