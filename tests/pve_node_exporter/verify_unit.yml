@@ -21,6 +21,13 @@
       {{ playbook_dir }}/../../roles/pve_node_exporter/templates/zfs_exporter.service.j2
     pve_node_exporter_test_zfs_tasks_path: >-
       {{ playbook_dir }}/../../roles/pve_node_exporter/tasks/zfs_exporter.yml
+    pve_node_exporter_test_zfs_properties:
+      - available
+      - quota
+      - referenced
+      - refquota
+      - used
+      - usedbysnapshots
 
   tasks:
     - name: Render the unit with packaged collectors enabled
@@ -96,9 +103,19 @@
         ansible_default_ipv4:
           address: fixture
 
-    - name: Assert the zfs_exporter unit runs the pinned release on its own port
+    - name: Render the zfs_exporter unit with another declared port
+      ansible.builtin.set_fact:
+        pve_node_exporter_test_zfs_unit_other_port: >-
+          {{ lookup('ansible.builtin.template', pve_node_exporter_test_zfs_template_path,
+          template_vars={'pve_node_exporter_zfs_exporter_port': 19134}) }}
+      vars:
+        ansible_default_ipv4:
+          address: fixture
+
+    - name: Assert the zfs_exporter unit runs the pinned release on its own declared port
       ansible.builtin.assert:
         that:
+          - pve_node_exporter_zfs_exporter_enabled | bool
           - pve_node_exporter_zfs_exporter_version is match('^[0-9]+[.][0-9]+[.][0-9]+$')
           - >-
             ('Description=Prometheus zfs_exporter (v' ~ pve_node_exporter_zfs_exporter_version ~ ')')
@@ -106,29 +123,43 @@
           - "'ExecStart=/usr/local/bin/zfs_exporter ' in pve_node_exporter_test_zfs_unit"
           - "'User=node-exporter' in pve_node_exporter_test_zfs_unit"
           - pve_node_exporter_zfs_exporter_port == 9134
-          - "'--web.listen-address=fixture:9134' in pve_node_exporter_test_zfs_unit"
+          - pve_node_exporter_zfs_exporter_port != pve_node_exporter_port
+          - >-
+            (pve_node_exporter_test_zfs_unit | regex_findall('--web[.]listen-address=[^ ]+'))
+            == ['--web.listen-address=fixture:9134']
+          - >-
+            (pve_node_exporter_test_zfs_unit_other_port | regex_findall('--web[.]listen-address=[^ ]+'))
+            == ['--web.listen-address=fixture:19134']
         quiet: true
 
-    - name: Assert the zfs_exporter unit exports datasets and pools but no snapshots
+    - name: Assert the zfs_exporter unit collects only the per-dataset usage properties
       ansible.builtin.assert:
         that:
           - >-
-            ['available', 'quota', 'referenced', 'used', 'usedbysnapshots']
-            | difference(pve_node_exporter_zfs_exporter_filesystem_properties) | length == 0
+            (pve_node_exporter_zfs_exporter_filesystem_properties | sort)
+            == (pve_node_exporter_test_zfs_properties | sort)
           - >-
-            ('--properties.dataset-filesystem='
-            ~ (pve_node_exporter_zfs_exporter_filesystem_properties | join(',')))
-            in pve_node_exporter_test_zfs_unit
+            (pve_node_exporter_zfs_exporter_volume_properties | sort)
+            == (pve_node_exporter_test_zfs_properties | sort)
           - >-
-            ('--properties.dataset-volume='
-            ~ (pve_node_exporter_zfs_exporter_volume_properties | join(',')))
-            in pve_node_exporter_test_zfs_unit
-          - "'--collector.pool' in pve_node_exporter_test_zfs_unit"
-          - "'--collector.dataset-filesystem' in pve_node_exporter_test_zfs_unit"
-          - "'--collector.dataset-volume' in pve_node_exporter_test_zfs_unit"
-          - "'--no-collector.dataset-snapshot' in pve_node_exporter_test_zfs_unit"
-          - "'--collector.dataset-snapshot' not in pve_node_exporter_test_zfs_unit"
-          - "'--properties.dataset-snapshot' not in pve_node_exporter_test_zfs_unit"
+            (pve_node_exporter_test_zfs_unit | regex_findall('--collector[.]([a-z-]+)') | sort)
+            == ['dataset-filesystem', 'dataset-volume']
+          - >-
+            (pve_node_exporter_test_zfs_unit | regex_findall('--no-collector[.]([a-z-]+)') | sort)
+            == ['dataset-snapshot', 'pool']
+          - >-
+            (pve_node_exporter_test_zfs_unit | regex_findall('--properties[.]([a-z-]+)=') | sort)
+            == ['dataset-filesystem', 'dataset-volume']
+          - >-
+            (pve_node_exporter_test_zfs_unit
+            | regex_findall('--properties[.]dataset-filesystem=([a-z,]+)')
+            | join(',') | split(',') | sort)
+            == (pve_node_exporter_test_zfs_properties | sort)
+          - >-
+            (pve_node_exporter_test_zfs_unit
+            | regex_findall('--properties[.]dataset-volume=([a-z,]+)')
+            | join(',') | split(',') | sort)
+            == (pve_node_exporter_test_zfs_properties | sort)
         quiet: true
 
     - name: Render the zfs_exporter download pin for amd64

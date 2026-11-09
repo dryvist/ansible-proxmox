@@ -94,20 +94,23 @@ pve_node_exporter_zfs_exporter_port: 9134
 pve_node_exporter_zfs_exporter_install_dir: /opt/zfs_exporter
 
 # ZFS properties exported per filesystem and per volume: one series per
-# dataset and property. The pool collector stays on and the snapshot
-# collector stays off, so no per-snapshot series are exported.
+# dataset and property. The pool and snapshot collectors stay off, so no
+# pool or per-snapshot series are exported. ZFS defines quota and refquota
+# for filesystems only, so volumes report 0 for both.
 pve_node_exporter_zfs_exporter_filesystem_properties:
   - available
   - quota
   - referenced
+  - refquota
   - used
   - usedbysnapshots
 pve_node_exporter_zfs_exporter_volume_properties:
   - available
+  - quota
   - referenced
+  - refquota
   - used
   - usedbysnapshots
-  - volsize
 
 # Extra CLI flags appended verbatim to the zfs_exporter ExecStart (e.g.
 # ["--exclude=^rpool/data/"]).

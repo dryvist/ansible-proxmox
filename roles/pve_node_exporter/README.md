@@ -76,20 +76,23 @@ without the matching hardware. The service reads the directory through a second
 
 node_exporter's `zfs` collector reports pool and ARC statistics only.
 zfs_exporter adds one series per dataset (filesystem or volume) and property,
-labelled `name`, `pool` and `type`, plus its pool series:
+labelled `name`, `pool` and `type`:
 
-| Metric                               | ZFS property      | Collected for        |
-| ------------------------------------ | ----------------- | -------------------- |
-| `zfs_dataset_used_bytes`             | `used`            | filesystems, volumes |
-| `zfs_dataset_used_by_snapshot_bytes` | `usedbysnapshots` | filesystems, volumes |
-| `zfs_dataset_available_bytes`        | `available`       | filesystems, volumes |
-| `zfs_dataset_quota_bytes`            | `quota`           | filesystems          |
-| `zfs_dataset_referenced_bytes`       | `referenced`      | filesystems, volumes |
-| `zfs_dataset_volume_size_bytes`      | `volsize`         | volumes              |
+| Metric                               | ZFS property      |
+| ------------------------------------ | ----------------- |
+| `zfs_dataset_used_bytes`             | `used`            |
+| `zfs_dataset_used_by_snapshot_bytes` | `usedbysnapshots` |
+| `zfs_dataset_available_bytes`        | `available`       |
+| `zfs_dataset_referenced_bytes`       | `referenced`      |
+| `zfs_dataset_quota_bytes`            | `quota`           |
+| `zfs_dataset_referenced_quota_bytes` | `refquota`        |
 
-The snapshot collector is off (`--no-collector.dataset-snapshot`), so no
-per-snapshot series exist and cardinality stays bounded by the dataset count.
-An unset quota reports `0`.
+The pool and snapshot collectors are off (`--no-collector.pool`,
+`--no-collector.dataset-snapshot`), so the exporter emits no pool or
+per-snapshot series and cardinality stays bounded by the dataset count. Pool
+fill and health come from `pve_textfile_collectors`. An unset quota or
+refquota reports `0`; ZFS defines both for filesystems only, so volumes always
+report `0`.
 
 | Variable                                               | Default                              | Purpose                                             |
 | ------------------------------------------------------ | ------------------------------------ | --------------------------------------------------- |
@@ -99,8 +102,8 @@ An unset quota reports `0`.
 | `pve_node_exporter_zfs_exporter_checksum`              | SHA256 per architecture              | Always verified; move it with the version.          |
 | `pve_node_exporter_zfs_exporter_port`                  | `9134`                               | Listen port, on `pve_node_exporter_listen_address`. |
 | `pve_node_exporter_zfs_exporter_install_dir`           | `/opt/zfs_exporter`                  | Versioned install root.                             |
-| `pve_node_exporter_zfs_exporter_filesystem_properties` | Filesystem rows of the metrics table | Properties collected per filesystem.                |
-| `pve_node_exporter_zfs_exporter_volume_properties`     | Volume rows of the metrics table     | Properties collected per volume.                    |
+| `pve_node_exporter_zfs_exporter_filesystem_properties` | The metrics table properties         | Properties collected per filesystem.                |
+| `pve_node_exporter_zfs_exporter_volume_properties`     | The metrics table properties         | Properties collected per volume.                    |
 | `pve_node_exporter_zfs_exporter_extra_args`            | `[]`                                 | Extra CLI flags appended to `ExecStart`.            |
 
 #### Scrape target

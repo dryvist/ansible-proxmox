@@ -11,7 +11,7 @@ User={{ pve_node_exporter_user }}
 Group={{ pve_node_exporter_user }}
 ExecStart=/usr/local/bin/zfs_exporter \
     --web.listen-address={{ pve_node_exporter_listen_address }}:{{ pve_node_exporter_zfs_exporter_port }} \
-    --collector.pool \
+    --no-collector.pool \
     --collector.dataset-filesystem \
     --properties.dataset-filesystem={{ pve_node_exporter_zfs_exporter_filesystem_properties | join(',') }} \
     --collector.dataset-volume \
