@@ -118,19 +118,6 @@
           with no snapshot here there is nothing for the DR leg to send, and the
           off-pool copy silently never happens.
 
-    - name: Assert no job pulls the peer's rpool/data root
-      ansible.builtin.assert:
-        that:
-          - "'rpool-data' not in hostvars['pve-r710'].syncoid_jobs | map(attribute='name') | list"
-          - >-
-            (hostvars['pve-r710'].syncoid_jobs
-            | map(attribute='source')
-            | select('search', ':rpool/data$')
-            | list | length) == 0
-        fail_msg: >-
-          The recursive root-pool source job must not be configured on this
-          replica node.
-
     - name: Assert pve-r540 pulls pve-r710 primary datasets
       ansible.builtin.assert:
         that:
@@ -174,6 +161,20 @@
         media_no_backup_host_endpoints: >-
           {{ ((syncoid_jobs | default([])) | map(attribute='source') | list)
              + ((syncoid_jobs | default([])) | map(attribute='target') | list) }}
+
+    - name: Assert no job pulls the peer's rpool/data root
+      ansible.builtin.assert:
+        that:
+          - "'rpool-data' not in syncoid_jobs | map(attribute='name') | list"
+          - >-
+            (syncoid_jobs
+            | map(attribute='source')
+            | select('search', ':rpool/data$')
+            | list | length) == 0
+        fail_msg: >-
+          The recursive root-pool source job must not be configured on this
+          replica node.
+      when: inventory_hostname == 'pve-r710'
 
 - name: Verify the media pool has no sanoid key and no syncoid endpoint
   hosts: localhost
