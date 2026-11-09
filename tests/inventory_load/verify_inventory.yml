@@ -72,6 +72,16 @@
           group_vars/proxmox/ did not propagate the shared APT cache URL
           list from the published inventory.
 
+    - name: Assert the replica dataset declares its configured quota
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-r710'].pve_r710_bulk_replica_quota == '2T'
+          - "'bulk/replica' in hostvars['pve-r710'].zfs_pools_vm_disk_properties"
+          - hostvars['pve-r710'].zfs_pools_vm_disk_properties['bulk/replica'].quota
+            == hostvars['pve-r710'].pve_r710_bulk_replica_quota
+        fail_msg: >-
+          The replica dataset must reach zfs_pools with its documented quota input.
+
     - name: Assert the storage node declares a snapshot policy for the state it holds
       ansible.builtin.assert:
         that:
