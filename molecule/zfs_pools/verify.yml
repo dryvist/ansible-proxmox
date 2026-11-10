@@ -171,3 +171,218 @@
         fail_msg: >-
           Import-policy tasks ran in the container — the Docker skip guard on
           import_policy.yml may be broken.
+
+    # Ad-hoc property overrides cannot touch real ZFS in the container, so a
+    # stub `zfs` answers reads from fixture files and records every invocation
+    # — the same pattern the syncoid scenario uses for its retired-replica
+    # guard. vm_disk_properties.yml is included directly because main.yml
+    # gates it behind the Docker skip; the file itself has no ZFS of its own
+    # and runs against the stub.
+    - name: Install the zfs stub the ad-hoc property tasks run against
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          # Record every invocation verbatim; serve `zfs list` and `zfs get`
+          # reads from the fixture files and let everything else succeed.
+          printf '%s\n' "$*" >> /tmp/zfs-pools-vmprop.log
+          if [ "$1" = list ]; then
+            for p do :; done
+            if grep -Fxq "$p" /tmp/zfs-pools-present.txt 2>/dev/null; then
+              printf '%s\n' "$p"
+              exit 0
+            fi
+            printf "cannot open '%s': dataset does not exist\n" "$p" >&2
+            exit 1
+          fi
+          if [ "$1" = get ]; then
+            # zfs get [-Hp] -o value <prop> <dataset>: property at position
+            # 5, dataset at 6 — the only two get forms the task file runs.
+            while read -r ds prop value; do
+              if [ "$ds" = "$6" ] && [ "$prop" = "$5" ]; then
+                printf '%s\n' "$value"
+                exit 0
+              fi
+            done < /tmp/zfs-pools-get.txt
+            printf "cannot open '%s': dataset does not exist\n" "$6" >&2
+            exit 1
+          fi
+          exit 0
+        dest: /usr/local/bin/zfs
+        mode: "0755"
+
+    - name: Reset the recorded skips and deferred reservations
+      ansible.builtin.set_fact:
+        zfs_pools_vmdisk_missing: []
+        zfs_pools_reservation_deferred: []
+
+    # Branch 1 — the reservation fits the parent's available (needed 800G
+    # against 900G free): the set runs after the full read path.
+    - name: Seed the fits-case zfs fixtures
+      ansible.builtin.copy:
+        content: |
+          bulk/replica/nodex/subvol-902000-disk-1 reservation 0
+          bulk/replica/nodex/subvol-902000-disk-1 used 107374182400
+          bulk/replica/nodex available 966367641600
+        dest: /tmp/zfs-pools-get.txt
+        mode: "0644"
+
+    - name: Seed the fits-case present datasets
+      ansible.builtin.copy:
+        content: "bulk/replica/nodex/subvol-902000-disk-1\n"
+        dest: /tmp/zfs-pools-present.txt
+        mode: "0644"
+
+    - name: Reset the zfs stub log for the fits case
+      ansible.builtin.copy:
+        content: ""
+        dest: /tmp/zfs-pools-vmprop.log
+        mode: "0644"
+
+    - name: Apply ad-hoc properties where the reservation fits
+      ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/vm_disk_properties.yml
+      vars:
+        zfs_pools_vmdisk:
+          key: bulk/replica/nodex/subvol-902000-disk-1
+          value:
+            reservation: "900G"
+
+    - name: Read the zfs stub log for the fits case
+      ansible.builtin.slurp:
+        src: /tmp/zfs-pools-vmprop.log
+      register: zfs_pools_fits_log
+
+    - name: Assert the fitting reservation was set through the full read path
+      ansible.builtin.assert:
+        that:
+          - >-
+            (zfs_pools_fits_log.content | b64decode).splitlines()
+            == ['list -H -o name bulk/replica/nodex/subvol-902000-disk-1',
+                'get -H -o value reservation bulk/replica/nodex/subvol-902000-disk-1',
+                'get -Hp -o value used bulk/replica/nodex/subvol-902000-disk-1',
+                'get -Hp -o value available bulk/replica/nodex',
+                'set reservation=900G bulk/replica/nodex/subvol-902000-disk-1']
+          - zfs_pools_reservation_deferred == []
+          - zfs_pools_vmdisk_missing == []
+        fail_msg: >-
+          The fitting reservation did not run the expected command sequence.
+          Stub log: {{ zfs_pools_fits_log.content | b64decode }}
+
+    # Branch 2 — the reservation exceeds the parent's available (needed 800G
+    # against 700G free): the quota on the same dataset still sets (quotas are
+    # not gated), the reservation does not, and the shortfall in bytes is
+    # recorded with the dataset named.
+    - name: Seed the short-case zfs fixtures
+      ansible.builtin.copy:
+        content: |
+          bulk/replica/nodey/subvol-902000-disk-1 reservation 0
+          bulk/replica/nodey/subvol-902000-disk-1 quota 0
+          bulk/replica/nodey/subvol-902000-disk-1 used 107374182400
+          bulk/replica/nodey available 751619276800
+        dest: /tmp/zfs-pools-get.txt
+        mode: "0644"
+
+    - name: Seed the short-case present datasets
+      ansible.builtin.copy:
+        content: "bulk/replica/nodey/subvol-902000-disk-1\n"
+        dest: /tmp/zfs-pools-present.txt
+        mode: "0644"
+
+    - name: Reset the zfs stub log for the short case
+      ansible.builtin.copy:
+        content: ""
+        dest: /tmp/zfs-pools-vmprop.log
+        mode: "0644"
+
+    - name: Reset the recorded skips and deferred reservations for the short case
+      ansible.builtin.set_fact:
+        zfs_pools_vmdisk_missing: []
+        zfs_pools_reservation_deferred: []
+
+    - name: Apply ad-hoc properties where the reservation is short
+      ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/vm_disk_properties.yml
+      vars:
+        zfs_pools_vmdisk:
+          key: bulk/replica/nodey/subvol-902000-disk-1
+          value:
+            reservation: "900G"
+            quota: "500G"
+
+    - name: Read the zfs stub log for the short case
+      ansible.builtin.slurp:
+        src: /tmp/zfs-pools-vmprop.log
+      register: zfs_pools_short_log
+
+    - name: Assert a short reservation is skipped, quota applied, shortfall recorded
+      ansible.builtin.assert:
+        that:
+          - >-
+            'set quota=500G bulk/replica/nodey/subvol-902000-disk-1'
+            in (zfs_pools_short_log.content | b64decode)
+          - >-
+            'set reservation=900G bulk/replica/nodey/subvol-902000-disk-1'
+            not in (zfs_pools_short_log.content | b64decode)
+          - >-
+            'get -Hp -o value available bulk/replica/nodey'
+            in (zfs_pools_short_log.content | b64decode)
+          - >-
+            zfs_pools_reservation_deferred
+            == [{'dataset': 'bulk/replica/nodey/subvol-902000-disk-1',
+            'reservation': '900G', 'needed_bytes': 858993459200,
+            'available_bytes': 751619276800, 'shortfall_bytes': 107374182400}]
+          - zfs_pools_vmdisk_missing == []
+        fail_msg: >-
+          The short reservation did not warn-and-continue as declared.
+          Stub log: {{ zfs_pools_short_log.content | b64decode }}
+          Deferred: {{ zfs_pools_reservation_deferred }}
+
+    # Branch 3 — the leaf does not exist yet (the first pull has not run):
+    # only the existence check runs, the properties are skipped with a
+    # warning, and the converge continues.
+    - name: Seed the missing-case zfs fixtures
+      ansible.builtin.copy:
+        content: |
+          bulk/replica/nodez/subvol-902000-disk-1 reservation 0
+        dest: /tmp/zfs-pools-get.txt
+        mode: "0644"
+
+    - name: Seed the missing-case present datasets as empty
+      ansible.builtin.copy:
+        content: ""
+        dest: /tmp/zfs-pools-present.txt
+        mode: "0644"
+
+    - name: Reset the zfs stub log for the missing case
+      ansible.builtin.copy:
+        content: ""
+        dest: /tmp/zfs-pools-vmprop.log
+        mode: "0644"
+
+    - name: Reset the recorded skips and deferred reservations for the missing case
+      ansible.builtin.set_fact:
+        zfs_pools_vmdisk_missing: []
+        zfs_pools_reservation_deferred: []
+
+    - name: Apply ad-hoc properties for a missing leaf dataset
+      ansible.builtin.include_tasks: ../../roles/zfs_pools/tasks/vm_disk_properties.yml
+      vars:
+        zfs_pools_vmdisk:
+          key: bulk/replica/nodez/subvol-902000-disk-1
+          value:
+            reservation: "900G"
+
+    - name: Read the zfs stub log for the missing case
+      ansible.builtin.slurp:
+        src: /tmp/zfs-pools-vmprop.log
+      register: zfs_pools_missing_log
+
+    - name: Assert the missing leaf is a warning skip and not a failure
+      ansible.builtin.assert:
+        that:
+          - >-
+            (zfs_pools_missing_log.content | b64decode).splitlines()
+            == ['list -H -o name bulk/replica/nodez/subvol-902000-disk-1']
+          - zfs_pools_vmdisk_missing == ['bulk/replica/nodez/subvol-902000-disk-1']
+          - zfs_pools_reservation_deferred == []
+        fail_msg: >-
+          The missing leaf did not skip cleanly. Stub log:
+          {{ zfs_pools_missing_log.content | b64decode }}

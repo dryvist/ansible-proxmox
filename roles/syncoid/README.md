@@ -51,6 +51,7 @@ set up out of band. The role schedules replication; it does not distribute keys.
 | ------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------- |
 | `syncoid_enabled`                           | `true`                               | Master enable                                                          |
 | `syncoid_jobs`                              | `[]`                                 | List of `{ name, source, target, options?, schedule? }`; empty = inert |
+| `syncoid_retired_replica_datasets`          | `[]`                                 | Literal `bulk/replica/…` paths destroyed once their pull job is gone   |
 | `syncoid_default_options`                   | `--recursive --no-sync-snap --quiet` | Applied when a job omits `options`                                     |
 | `syncoid_cron_hour` / `syncoid_cron_minute` | `2` / `17`                           | Schedule for the `default` group                                       |
 | `syncoid_extra_schedules`                   | `{}`                                 | Extra cadence groups (see below)                                       |
@@ -96,6 +97,20 @@ tofu inventory injected by `playbooks/load_tofu.yml` — `splunk_vm_from_tofu` a
 `containers_from_tofu` (see the replicating node's file under
 `inventory/host_vars/`) — never
 hard-coded, so a VMID renumber flows through with no edit.
+
+### Retired replica datasets
+
+Removing a job from `syncoid_jobs` stops the pull, not the storage: the replica
+it left behind keeps consuming quota on the target pool. List the exact paths
+under `syncoid_retired_replica_datasets` to destroy them once. Every entry must
+be a literal `bulk/replica/...` path — a wildcard, a snapshot marker (`@`),
+`..`, or whitespace fails the converge before anything runs — and a path that
+still has child filesystems or volumes (a namespace such as
+`bulk/replica/<node>` or its `.../rpool/data`) fails the converge too: declare
+the leaves. Only a literal "dataset does not exist" reads as absent and is
+skipped, so the converge after a successful destroy is a clean no-op; any
+other `zfs list` error fails the task. `zfs destroy -r` removes the dataset
+and its own snapshots; it never touches a parent.
 
 ```bash
 ./scripts/run-ansible.sh playbooks/site.yml --tags syncoid
