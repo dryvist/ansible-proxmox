@@ -35,9 +35,13 @@ wake, or sleep step anywhere in this procedure.
 | -------------------------------------------------- | ----------------------- | -------------------- | ------------------------------------------------- |
 | `bulk/replica/<source-node>/vm-<id>-disk-0`        | SIEM VM OS disk         | P0                   | Whole-disk zvol                                   |
 | `bulk/replica/<source-node>/vm-<id>-disk-2`        | SIEM VM `/opt/splunk`   | P0 config / P3 index | Config **and** indexes share this disk — see note |
-| `bulk/replica/<source-node>/subvol-<id>-disk-1`    | object-storage (RustFS) | P0                   | The app-tarball store                             |
+| `bulk/replica/<source-node>/subvol-<id>-disk-1`    | object-storage (RustFS) | P0                   | The app-tarball store; carries a 900G reservation |
 | `bulk/replica/<source-node>/databases` (recursive) | `bulk/databases`        | P0                   | Postgres/SQLite archive namespace                 |
 | `bulk/replica/<source-node>/appdata` (recursive)   | `bulk/appdata`          | P1                   | App config/state (incl. media app identity)       |
+
+Replica capacity is capped on the target node: the replica namespace and the
+source `bulk/backups` namespace carry quotas, so no replica consumer can fill
+the pool.
 
 **Not replicated to `proxmox-3`** (by design — see
 [`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md) for the full
@@ -54,6 +58,9 @@ class-assignment table):
   config is what must survive; the indexes ride along on the same disk-2
   replica but are volatile and re-acquirable. Expect index recovery/fsck on
   first boot after a restore; do not block a cutover on index integrity.
+- **Ephemeral agent-sandbox guests** — replication refuses any guest carrying
+  the `agent-sandbox` tag in the published inventory, and a retired replica of
+  one is destroyed, not kept.
 
 ## 3. Checking replication freshness
 

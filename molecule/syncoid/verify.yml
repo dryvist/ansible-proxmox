@@ -4,6 +4,24 @@
   become: false
   gather_facts: false
 
+  vars:
+    # The stub replaces `zfs` for the retired-replica guard cases at the end
+    # of this play. The role Docker-skips real zfs work, so the gathered
+    # virtualization fact has to be pinned off docker for those cases only —
+    # a play var outranks the fact, and nothing else here reads it.
+    ansible_virtualization_type: debian
+    # The dataset the stub `zfs` reports present: the one path the guard may
+    # destroy. Anything else must come back skipped (absent) or refused.
+    syncoid_retired_present_fixture: "bulk/replica/pve-r540/rpool/data/vm-515100-disk-0"
+    # One refusal reason per entry, in order: wrong prefix, wildcard, snapshot
+    # marker, '..' traversal, whitespace.
+    syncoid_retired_bad_paths:
+      - "bulk/vm-515100-disk-0"
+      - "bulk/replica/pve-r540/*"
+      - "bulk/replica/pve-r540/rpool/data/vm-515100-disk-0@snap"
+      - "bulk/replica/../bulk"
+      - "bulk/replica/pve-r540/vm-515100-disk-0 with space"
+
   tasks:
     - name: Read the rendered syncoid wrapper
       ansible.builtin.slurp:
@@ -81,3 +99,111 @@
           - "'OnFailure=node-auto-poweroff.service' in (syncoid_boot_service.content | b64decode)"
           - "'WantedBy=multi-user.target' in (syncoid_boot_service.content | b64decode)"
         fail_msg: "syncoid on-boot service did not render the expected contract"
+
+    # The retired-replica guard runs the role's OWN task file, so it cannot
+    # drift from what a converge executes. The container has no ZFS, so a stub
+    # `zfs` answers `zfs list` from a fixture file and records every command it
+    # is asked to run — the stub replaces a binary that is never otherwise
+    # reached here, because the role Docker-skips all real zfs work.
+    - name: Install the zfs stub the retired-replica guard runs against
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          # Record every invocation verbatim; serve `zfs list` hits from the
+          # fixture file and let everything else succeed.
+          printf '%s\n' "$*" >> /tmp/syncoid-retired-zfs.log
+          if [ "$1" = list ] && [ "$4" = name ]; then
+            grep -Fxq "$5" /tmp/syncoid-retired-present.txt && exit 0
+            exit 1
+          fi
+          exit 0
+        dest: /usr/local/bin/zfs
+        mode: "0755"
+
+    - name: Seed the zfs stub with the dataset that exists
+      ansible.builtin.copy:
+        content: "{{ syncoid_retired_present_fixture }}\n"
+        dest: /tmp/syncoid-retired-present.txt
+        mode: "0644"
+
+    - name: Reset the zfs stub command log
+      ansible.builtin.copy:
+        content: ""
+        dest: /tmp/syncoid-retired-zfs.log
+        mode: "0644"
+
+    # ansible_virtualization_type is pinned off docker at play level so the
+    # role's real zfs task runs against the stub.
+    - name: Destroy the retired replica dataset the stub reports present
+      ansible.builtin.include_role:
+        name: syncoid
+        tasks_from: retired_datasets.yml
+      vars:
+        syncoid_enabled: true
+        syncoid_retired_replica_datasets: ["{{ syncoid_retired_present_fixture }}"]
+
+    - name: Read the zfs stub command log
+      ansible.builtin.slurp:
+        src: /tmp/syncoid-retired-zfs.log
+      register: syncoid_retired_stub_log
+
+    - name: Assert the present dataset was destroyed recursively and only that ran
+      ansible.builtin.assert:
+        that:
+          - syncoid_retired_destroy.changed
+          - >-
+            (syncoid_retired_stub_log.content | b64decode).splitlines()
+            == ['list -H -o name ' + syncoid_retired_present_fixture,
+                'destroy -r ' + syncoid_retired_present_fixture]
+        fail_msg: >-
+          The guard did not destroy exactly the declared dataset, recursively
+          and in order. Stub log: {{ syncoid_retired_stub_log.content | b64decode }}
+
+    - name: Reset the zfs stub command log for the absent-dataset case
+      ansible.builtin.copy:
+        content: ""
+        dest: /tmp/syncoid-retired-zfs.log
+        mode: "0644"
+
+    - name: Skip the retired replica dataset the stub reports absent
+      ansible.builtin.include_role:
+        name: syncoid
+        tasks_from: retired_datasets.yml
+      vars:
+        syncoid_enabled: true
+        syncoid_retired_replica_datasets:
+          - "bulk/replica/pve-r540/rpool/data/vm-515100-disk-1"
+
+    - name: Read the zfs stub command log for the absent-dataset case
+      ansible.builtin.slurp:
+        src: /tmp/syncoid-retired-zfs.log
+      register: syncoid_retired_stub_log_absent
+
+    - name: Assert the absent dataset is skipped without any destroy
+      ansible.builtin.assert:
+        that:
+          - not syncoid_retired_destroy.changed
+          - >-
+            (syncoid_retired_stub_log_absent.content | b64decode).splitlines()
+            == ['list -H -o name bulk/replica/pve-r540/rpool/data/vm-515100-disk-1']
+        fail_msg: >-
+          An absent dataset was not a clean skip. Stub log:
+          {{ syncoid_retired_stub_log_absent.content | b64decode }}
+
+    # Included once per malformed path; a case counts as refused only when the
+    # guard task itself failed.
+    - name: Refuse each malformed retired replica dataset path
+      ansible.builtin.include_tasks: tasks/verify_retired_refusal.yml
+      loop: "{{ syncoid_retired_bad_paths }}"
+      loop_control:
+        loop_var: syncoid_retired_bad_path
+
+    - name: Assert every malformed path was refused and none was accepted
+      ansible.builtin.assert:
+        that:
+          - (syncoid_retired_refused | default([]) | sort) == (syncoid_retired_bad_paths | sort)
+        fail_msg: >-
+          Expected every malformed path to be refused by the guard; refused:
+          {{ syncoid_retired_refused | default([]) }}
+        success_msg: "PASS: all retired-replica guard refusals fired"
+        quiet: false

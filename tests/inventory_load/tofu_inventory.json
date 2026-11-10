@@ -43,6 +43,19 @@
       "cluster_roles": ["storage"]
     }
   },
+  "vms": {
+    "agent-sandbox": {
+      "ansible_connection": "ssh",
+      "disks": [
+        { "interface": "scsi0", "datastore": "local-zfs", "path": "vm-515100-disk-0" },
+        { "interface": "scsi1", "datastore": "local-zfs", "path": "vm-515100-disk-1" }
+      ],
+      "hostname": "agent-sandbox",
+      "node": "pve-r540",
+      "tags": ["agent-sandbox"],
+      "vmid": 515100
+    }
+  },
   "node_storage": {
     "pve-w1700": {
       "smb": {
