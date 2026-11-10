@@ -190,3 +190,99 @@
   changed_when: true
   tags:
     - syncoid
+
+# --- Weekly restore check of the replica (default: the object-store replica) ---
+#
+# Freshness proves a copy was pulled; it does not prove the copy reads back.
+# When a replica dataset is declared (syncoid_restore_check_* defaults), a
+# weekly timer clones its newest snapshot read-only, verifies the object
+# store's bucket directory inside the clone, and always destroys it — the
+# script's EXIT trap owns the destroy, so failure paths cannot leave one
+# behind. Units always render (so molecule and the tests/ harness verify the
+# contract); enabling the timer is Docker-skipped, like every enable here.
+- name: Deploy the restore-check script
+  ansible.builtin.template:
+    src: syncoid-restore-check.sh.j2
+    dest: /usr/local/bin/syncoid-restore-check.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: syncoid_restore_check_wants | bool
+  tags:
+    - syncoid
+
+- name: Deploy the restore-check service unit
+  ansible.builtin.template:
+    src: syncoid-restore-check.service.j2
+    dest: /etc/systemd/system/syncoid-restore-check.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: syncoid_restore_check_wants | bool
+  tags:
+    - syncoid
+
+- name: Deploy the restore-check timer unit
+  ansible.builtin.template:
+    src: syncoid-restore-check.timer.j2
+    dest: /etc/systemd/system/syncoid-restore-check.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: syncoid_restore_check_wants | bool
+  notify: Reload systemd daemon
+  tags:
+    - syncoid
+
+# Apply any pending daemon-reload now so the enable below acts on the fresh unit.
+- name: Reload systemd before enabling the restore-check timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the restore-check timer
+  ansible.builtin.systemd:
+    name: syncoid-restore-check.timer
+    enabled: true
+    state: started
+  when:
+    - syncoid_restore_check_wants | bool
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
+# Declared state includes the absence: disabling the check (or un-declaring the
+# dataset) must unschedule the timer, not leave a weekly run nothing declares —
+# the same contract the cron/boot trigger handling above enforces. Gated on a
+# stat rather than blanket error suppression — a systemd failure on a unit that
+# IS there still needs to fail the run.
+- name: Check whether the restore-check timer is present
+  ansible.builtin.stat:
+    path: /etc/systemd/system/syncoid-restore-check.timer
+  register: syncoid_restore_check_installed
+  when: not (syncoid_restore_check_wants | bool)
+  tags:
+    - syncoid
+
+- name: Stop and disable the restore-check timer when not wanted
+  ansible.builtin.systemd:
+    name: syncoid-restore-check.timer
+    enabled: false
+    state: stopped
+  when:
+    - not (syncoid_restore_check_wants | bool)
+    - syncoid_restore_check_installed.stat.exists | default(false)
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
+- name: Remove the restore-check script and units when not wanted
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/syncoid-restore-check.sh
+    - /etc/systemd/system/syncoid-restore-check.service
+    - /etc/systemd/system/syncoid-restore-check.timer
+  when: not (syncoid_restore_check_wants | bool)
+  notify: Reload systemd daemon
+  tags:
+    - syncoid
