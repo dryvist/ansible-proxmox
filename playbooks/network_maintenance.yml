@@ -1,0 +1,33 @@
+---
+# Disarm Proxmox VE HA and pause vzdump backups around a network maintenance
+# window, then re-arm and resume. Run as two separate invocations with the
+# maintenance in between:
+#
+#   # Open the window: disarm HA (freeze), pause backups, wait for tasks to
+#   # drain. Check mode performs the reads and previews the writes only:
+#   ./scripts/run-ansible.sh playbooks/network_maintenance.yml \
+#     -e pve_network_maintenance_phase=pre --check
+#   ./scripts/run-ansible.sh playbooks/network_maintenance.yml \
+#     -e pve_network_maintenance_phase=pre
+#
+#   ... network maintenance ...
+#
+#   # Close the window: wait for quorum, re-arm HA, resume the paused backups.
+#   ./scripts/run-ansible.sh playbooks/network_maintenance.yml \
+#     -e pve_network_maintenance_phase=post
+#
+# While HA is disarmed it does not recover failed services; keep the window
+# short. See roles/pve_network_maintenance/README.md and the vendor HA docs
+# section "Disarming HA for Cluster Maintenance".
+
+- name: Load published Proxmox inventory
+  ansible.builtin.import_playbook: load_tofu.yml
+
+- name: Run the requested network maintenance phase
+  hosts: proxmox
+  become: true
+  gather_facts: false
+  roles:
+    - role: pve_network_maintenance
+      tags:
+        - pve_network_maintenance

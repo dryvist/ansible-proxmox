@@ -1,0 +1,22 @@
+---
+# Resolve cluster quorum and node health from a /cluster/status body. Pure
+# logic, no reads or commands, so the fixture test
+# (tests/pve_network_maintenance) includes it with
+# pve_network_maintenance_cluster_status_text set to the API JSON.
+
+- name: Resolve cluster quorum, node health, and membership
+  ansible.builtin.set_fact:
+    pve_network_maintenance_cluster_quorate: >-
+      {{ ((pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
+          | selectattr('type', 'equalto', 'cluster')
+          | selectattr('quorate', 'defined')
+          | map(attribute='quorate') | map('int') | list) == [1] }}
+    pve_network_maintenance_cluster_nodes_online: >-
+      {{ ((pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
+          | selectattr('type', 'equalto', 'node')
+          | map(attribute='online') | map('int') | reject('equalto', 1)
+          | list) == [] }}
+    pve_network_maintenance_cluster_nodes: >-
+      {{ (pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
+         | selectattr('type', 'equalto', 'node')
+         | map(attribute='name') | list }}

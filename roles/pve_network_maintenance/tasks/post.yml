@@ -1,0 +1,203 @@
+---
+# Close the maintenance window: wait for the cluster to be fully healthy,
+# re-arm HA, re-enable exactly the backup jobs the pre phase paused and
+# recorded, then confirm every replication job is healthy again. Check mode
+# performs the reads and previews the writes only.
+
+- name: Wait for a quorate cluster with every node online
+  ansible.builtin.command:
+    argv: [pvesh, get, /cluster/status, --output-format, json]
+  register: pve_network_maintenance_quorum_raw
+  until:
+    - >-
+      pve_network_maintenance_quorum_raw.stdout | default('', true) | length > 0
+      and (((pve_network_maintenance_quorum_raw.stdout | from_json)
+            | selectattr('type', 'equalto', 'cluster')
+            | selectattr('quorate', 'defined')
+            | map(attribute='quorate') | map('int') | list) == [1])
+      and (((pve_network_maintenance_quorum_raw.stdout | from_json)
+            | selectattr('type', 'equalto', 'node')
+            | map(attribute='online') | map('int') | reject('equalto', 1)
+            | list) == [])
+  retries: "{{ pve_network_maintenance_quorum_timeout | int // pve_network_maintenance_quorum_delay | int }}"
+  delay: "{{ pve_network_maintenance_quorum_delay }}"
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Read the cluster status for the check-mode preview
+  ansible.builtin.command:
+    argv: [pvesh, get, /cluster/status, --output-format, json]
+  register: pve_network_maintenance_quorum_check_raw
+  changed_when: false
+  check_mode: false
+  when: ansible_check_mode
+
+- name: Carry the waited cluster status into the classification input
+  ansible.builtin.set_fact:
+    pve_network_maintenance_cluster_status_text: >-
+      {{ pve_network_maintenance_quorum_raw.stdout
+         if pve_network_maintenance_quorum_raw.stdout is defined
+         else pve_network_maintenance_quorum_check_raw.stdout }}
+
+- name: Resolve cluster quorum, node health, and membership
+  ansible.builtin.include_tasks: cluster_state.yml
+
+- name: Refuse to re-arm unless the cluster is quorate with every node online
+  ansible.builtin.assert:
+    that:
+      - "pve_network_maintenance_cluster_quorate"
+      - "pve_network_maintenance_cluster_nodes_online"
+    fail_msg: >-
+      The cluster is not ready to close the maintenance window: quorate={{
+      pve_network_maintenance_cluster_quorate }}, every node online={{
+      pve_network_maintenance_cluster_nodes_online }}.
+    quiet: true
+
+- name: Read the HA manager status before arming
+  ansible.builtin.command:
+    argv: [ha-manager, status]
+  register: pve_network_maintenance_ha_status_raw
+  changed_when: false
+  check_mode: false
+
+- name: Classify the fencing and LRM state from HA manager status text
+  ansible.builtin.include_tasks: ha_status_state.yml
+  vars:
+    pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_ha_status_raw.stdout }}"
+
+- name: Arm HA again
+  ansible.builtin.command:
+    argv: [ha-manager, crm-command, arm-ha]
+  # Re-entry: a cluster that already reports armed needs no second command.
+  when:
+    - not ansible_check_mode
+    - not (pve_network_maintenance_ha_armed | bool)
+  changed_when: true
+
+- name: Wait until HA reports the fencing state armed
+  ansible.builtin.command:
+    argv: [ha-manager, status]
+  register: pve_network_maintenance_arm_status_raw
+  until:
+    - >-
+      pve_network_maintenance_arm_status_raw.stdout is search(pve_network_maintenance_fencing_armed_pattern)
+  retries: "{{ pve_network_maintenance_disarm_timeout | int // pve_network_maintenance_disarm_delay | int }}"
+  delay: "{{ pve_network_maintenance_disarm_delay }}"
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Confirm the armed fencing state after the wait
+  when: not ansible_check_mode
+  block:
+    - name: Classify the fencing state from the waited HA manager status
+      ansible.builtin.include_tasks: ha_status_state.yml
+      vars:
+        pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_arm_status_raw.stdout }}"
+
+    - name: Refuse to report a closed window on anything but an armed cluster
+      ansible.builtin.assert:
+        that:
+          - "pve_network_maintenance_ha_armed | bool"
+        fail_msg: >-
+          HA did not report an armed cluster within
+          {{ pve_network_maintenance_disarm_timeout }} seconds.
+        quiet: true
+
+- name: Re-enable the paused backup jobs
+  block:
+    - name: Look for the state file the pre phase wrote
+      ansible.builtin.stat:
+        path: "{{ pve_network_maintenance_state_file }}"
+      register: pve_network_maintenance_state_stat
+
+    - name: Start from an empty paused backup job list
+      ansible.builtin.set_fact:
+        pve_network_maintenance_pause_job_ids: []
+
+    - name: Read the paused backup jobs the pre phase recorded
+      ansible.builtin.slurp:
+        src: "{{ pve_network_maintenance_state_file }}"
+      register: pve_network_maintenance_state_raw
+      when: pve_network_maintenance_state_stat.stat.exists
+
+    - name: Carry the paused backup jobs recorded by the pre phase
+      ansible.builtin.set_fact:
+        pve_network_maintenance_pause_job_ids: >-
+          {{ (pve_network_maintenance_state_raw.content | b64decode | from_json)['enabled_job_ids'] }}
+      when:
+        - pve_network_maintenance_state_stat.stat.exists
+        - pve_network_maintenance_state_raw.content is defined
+
+    - name: Read the current backup jobs
+      ansible.builtin.command:
+        argv: [pvesh, get, /cluster/backup, --output-format, json]
+      register: pve_network_maintenance_backup_jobs_raw
+      changed_when: false
+      check_mode: false
+
+    - name: Report backup jobs that disappeared during the window
+      ansible.builtin.debug:
+        msg: >-
+          Backup jobs recorded at window open but no longer present, left
+          untouched: {{ pve_network_maintenance_missing_job_ids }}.
+      vars:
+        pve_network_maintenance_missing_job_ids: >-
+          {{ pve_network_maintenance_pause_job_ids
+             | reject('in', (pve_network_maintenance_backup_jobs_raw.stdout | default('[]', true) | from_json)
+                        | map(attribute='id') | list) | list }}
+      when: pve_network_maintenance_missing_job_ids | length > 0
+
+    - name: Select the recorded backup jobs that are still disabled
+      # A job the pre phase did not record was disabled before the window
+      # opened and stays disabled; only recorded and still-disabled jobs are
+      # re-enabled, which is what makes re-runs idempotent.
+      ansible.builtin.set_fact:
+        pve_network_maintenance_reenable_job_ids: >-
+          {%- set jobs = pve_network_maintenance_backup_jobs_raw.stdout | default('[]', true) | from_json -%}
+          {%- set out = [] -%}
+          {%- for job in jobs -%}
+            {%- if job.id in pve_network_maintenance_pause_job_ids
+                  and job.enabled is defined
+                  and (job.enabled | string | lower) in ['0', 'false', 'no'] -%}
+              {%- set _ = out.append(job.id) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ out | unique | sort }}
+
+    - name: Re-enable the paused backup jobs
+      ansible.builtin.command:
+        argv: [pvesh, set, "/cluster/backup/{{ item }}", --enabled, "1"]
+      loop: "{{ pve_network_maintenance_reenable_job_ids }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: true
+      when: not ansible_check_mode
+
+    - name: Remove the state file
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_state_file }}"
+        state: absent
+      when:
+        - pve_network_maintenance_state_stat.stat.exists
+        - not ansible_check_mode
+
+- name: Wait until every replication job reports a fail count of zero
+  ansible.builtin.command:
+    argv: [pvesh, get, "/nodes/{{ item }}/replication", --output-format, json]
+  register: pve_network_maintenance_replication_raw
+  until:
+    - >-
+      pve_network_maintenance_replication_raw.stdout | default('', true) | length > 0
+      and ((pve_network_maintenance_replication_raw.stdout | from_json
+            | map(attribute='failcount')
+            | map('int') | reject('equalto', 0) | list) == [])
+  retries: "{{ pve_network_maintenance_replication_timeout | int // pve_network_maintenance_replication_delay | int }}"
+  delay: "{{ pve_network_maintenance_replication_delay }}"
+  loop: "{{ pve_network_maintenance_cluster_nodes }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode

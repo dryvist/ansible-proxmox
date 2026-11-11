@@ -1,0 +1,43 @@
+---
+# pve_network_maintenance — open and close a network maintenance window on a
+# Proxmox VE cluster. The pre phase disarms HA (cluster-wide watchdog release
+# via `ha-manager crm-command disarm-ha freeze`) and pauses every enabled
+# vzdump backup job; the post phase re-arms HA (`ha-manager crm-command
+# arm-ha`) and re-enables exactly the jobs the pre phase paused. Run as two
+# separate invocations of playbooks/network_maintenance.yml with the
+# maintenance in between:
+#
+#   -e pve_network_maintenance_phase=pre
+#   ... maintenance ...
+#   -e pve_network_maintenance_phase=post
+#
+# HA and backup job state are CLUSTER-WIDE, so every command runs on exactly
+# one node (pve_network_maintenance_config_host, the pve_ha_config_host
+# selector) and the role is a no-op on the rest.
+
+- name: Require a declared maintenance phase
+  ansible.builtin.assert:
+    that:
+      - "pve_network_maintenance_phase in ['pre', 'post']"
+    fail_msg: >-
+      pve_network_maintenance_phase must be 'pre' or 'post'
+      (got '{{ pve_network_maintenance_phase | default('') }}').
+    quiet: true
+  tags:
+    - pve_network_maintenance
+
+- name: Run the pre phase on the single config host
+  ansible.builtin.include_tasks: pre.yml
+  when:
+    - pve_network_maintenance_phase == 'pre'
+    - inventory_hostname == pve_network_maintenance_config_host
+  tags:
+    - pve_network_maintenance
+
+- name: Run the post phase on the single config host
+  ansible.builtin.include_tasks: post.yml
+  when:
+    - pve_network_maintenance_phase == 'post'
+    - inventory_hostname == pve_network_maintenance_config_host
+  tags:
+    - pve_network_maintenance
