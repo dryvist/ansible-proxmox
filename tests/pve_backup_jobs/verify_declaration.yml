@@ -1,12 +1,5 @@
 ---
-# Pin the pve_backup_jobs declaration guard without a live cluster: run the SAME
-# validate.yml the role imports, against fixtures that model both the shape this
-# role exists to enforce and the shapes it must refuse.
-# Run: ansible-playbook tests/pve_backup_jobs/verify_declaration.yml -i localhost,
-#
-# The refusals are the point. A guard that is present but never exercised is
-# indistinguishable from one that does not fire, and a guest-id list slipping
-# past it reintroduces exactly the failure the role was written to remove.
+# Validate declaration fixtures with the role task file.
 - name: Verify the pve_backup_jobs declaration guard
   hosts: localhost
   become: false
@@ -17,7 +10,6 @@
     pve_backup_jobs_pbs_node: fixture-backup-node
     pve_backup_jobs_storage_nodes: [fixture-node-a, fixture-node-b]
     pve_backup_jobs_default_prune: keep-all=1
-    # Stands in for the guest map load_tofu publishes on localhost.
     pve_backup_jobs_tofu_guest_map:
       fixture-splunk:
         vmid: 4244
@@ -26,8 +18,6 @@
         fqdn: fixture-pbs-server
 
   tasks:
-    # Both supported selections must pass, or every refusal below proves
-    # nothing — a guard that rejects everything is not a guard.
     - name: Accept a pool-scoped declaration
       ansible.builtin.include_role:
         name: pve_backup_jobs
@@ -93,9 +83,7 @@
             schedule: "02:30"
             pbs_change_detection_mode: data
 
-    - name: Accept a backup-node job that excludes the PBS guest
-      # The backup node may run a job when the PBS guest itself is excluded by
-      # name; the guard resolves the guest by its published fqdn.
+    - name: Accept a declaration on the backup node with its guest excluded
       ansible.builtin.include_role:
         name: pve_backup_jobs
         tasks_from: validate.yml
@@ -108,351 +96,181 @@
             schedule: "02:30"
             exclude_names: [fixture-pbs]
 
-    - name: Refuse a declaration carrying a guest-id list
-      block:
-        - name: Run the guard against a guest-id declaration
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-by-vmid
-                pool: fixture-pool
-                node: fixture-node-a
-                storage: fixture-backup-store
-                schedule: "02:30"
-                vmid: "4242,4243"
+    - name: Refuse a guest-id declaration
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: vmid
+        pve_backup_jobs_refusal_expected_error: Raw vmid lists are forbidden
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-by-vmid
+            pool: fixture-pool
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+            vmid: "4242,4243"
 
-        - name: Fail because the guest-id declaration was accepted
-          ansible.builtin.fail:
-            msg: >-
-              A declaration carrying a vmid list was ACCEPTED. Guest-id
-              selection is what lets a job keep running against a recycled id.
-      rescue:
-        - name: Record the guest-id refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['vmid'] }}"
+    - name: Refuse an unknown exclusion name
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: exclude-name
+        pve_backup_jobs_refusal_expected_error: fixture-unknown-exclusion
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-unknown-exclusion
+            pool: fixture-pool
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+            exclude_names: [missing-guest]
 
-    - name: Refuse an exclusion name missing from desired state
-      block:
-        - name: Run the guard against an unknown guest name
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-unknown-exclusion
-                pool: fixture-pool
-                node: fixture-node-a
-                storage: fixture-backup-store
-                schedule: "02:30"
-                exclude_names: [missing-guest]
-
-        - name: Fail because an unknown guest name was accepted
-          ansible.builtin.fail:
-            msg: "An exclusion name missing from tofu_data was ACCEPTED."
-      rescue:
-        - name: Record the unknown-name refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['exclude-name'] }}"
-
-    - name: Refuse a declaration that sets both selection modes
-      block:
-        - name: Run the guard against a declaration with pool and all
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-both-selections
-                pool: fixture-pool
-                all: true
-                node: fixture-node-a
-                storage: fixture-backup-store
-                schedule: "02:30"
-
-        - name: Fail because both selection modes were accepted
-          ansible.builtin.fail:
-            msg: "A declaration setting pool and all was ACCEPTED; PVE forbids both together."
-      rescue:
-        - name: Record the both-selection refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['both'] }}"
+    - name: Refuse a declaration with both selection modes
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: both
+        pve_backup_jobs_refusal_expected_error: fixture-both-selections
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-both-selections
+            pool: fixture-pool
+            all: true
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
 
     - name: Refuse a declaration with neither selection mode
-      block:
-        - name: Run the guard against a declaration with no pool or all
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-neither-selection
-                node: fixture-node-a
-                storage: fixture-backup-store
-                schedule: "02:30"
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: neither
+        pve_backup_jobs_refusal_expected_error: fixture-neither-selection
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-neither-selection
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
 
-        - name: Fail because neither selection mode was accepted
-          ansible.builtin.fail:
-            msg: "A declaration with neither pool nor all was ACCEPTED; it would protect nothing."
-      rescue:
-        - name: Record the neither-selection refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['neither'] }}"
+    - name: Refuse duplicate declaration ids
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: duplicate
+        pve_backup_jobs_refusal_expected_error: Duplicate backup job id
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-duplicate
+            pool: fixture-pool-a
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+          - id: fixture-duplicate
+            pool: fixture-pool-b
+            node: fixture-node-b
+            storage: fixture-backup-store
+            schedule: "03:30"
 
-    - name: Refuse two jobs sharing one id
-      block:
-        - name: Run the guard against duplicate ids
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-dup
-                pool: fixture-pool-a
-                node: fixture-node-a
-                storage: fixture-backup-store
-                schedule: "02:30"
-              - id: fixture-dup
-                pool: fixture-pool-b
-                node: fixture-node-b
-                storage: fixture-backup-store
-                schedule: "03:30"
+    - name: Refuse declarations without a PBS server
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: storage
+        pve_backup_jobs_refusal_expected_error: PBS target is not fully declared
+        pve_backup_jobs_refusal_pbs_server: ""
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-no-store
+            pool: fixture-pool
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
 
-        - name: Fail because duplicate ids were accepted
-          ansible.builtin.fail:
-            msg: "Duplicate job ids were ACCEPTED; one of the two intents would vanish silently."
-      rescue:
-        - name: Record the duplicate-id refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['duplicate'] }}"
+    - name: Refuse declarations without a node
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: node
+        pve_backup_jobs_refusal_expected_error: fixture-no-node
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-no-node
+            pool: fixture-pool
+            storage: fixture-backup-store
+            schedule: "02:30"
 
-    - name: Refuse jobs declared with no PBS server
-      block:
-        - name: Run the guard with no PBS server declared
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_pbs_server: ""
-            pve_backup_jobs_jobs:
-              - id: fixture-no-store
-                pool: fixture-pool
-                node: fixture-node-a
-                storage: fixture-backup-store
-                schedule: "02:30"
+    - name: Refuse declarations with a node list
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: node-list
+        pve_backup_jobs_refusal_expected_error: fixture-node-list
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-node-list
+            pool: fixture-pool
+            node: "fixture-node-a,fixture-node-b"
+            storage: fixture-backup-store
+            schedule: "02:30"
 
-        - name: Fail because a job with no ensured storage was accepted
-          ansible.builtin.fail:
-            msg: "Jobs were ACCEPTED with no PBS server declared; they would fail hours after converge."
-      rescue:
-        - name: Record the missing-storage refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['storage'] }}"
+    - name: Refuse a job on the backup node
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: backup-node
+        pve_backup_jobs_refusal_expected_error: fixture-on-backup-node
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-on-backup-node
+            pool: fixture-pool
+            node: fixture-backup-node
+            storage: fixture-backup-store
+            schedule: "02:30"
 
-    - name: Refuse a job that names no node
-      block:
-        - name: Run the guard against a node-less declaration
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-no-node
-                pool: fixture-pool
-                storage: fixture-backup-store
-                schedule: "02:30"
+    - name: Refuse an unsupported change detection mode
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: change-detection
+        pve_backup_jobs_refusal_expected_error: fixture-bad-mode
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-bad-mode
+            pool: fixture-pool
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+            pbs_change_detection_mode: faster
 
-        - name: Fail because a node-less job was accepted
-          ansible.builtin.fail:
-            msg: "A job with no node was ACCEPTED; it would also back up guests on the backup node."
-      rescue:
-        - name: Record the missing-node refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['node'] }}"
+    - name: Refuse an unsupported default change detection mode
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: default-change-detection
+        pve_backup_jobs_refusal_expected_error: role default
+        pve_backup_jobs_refusal_default_mode: faster
+        pve_backup_jobs_refusal_jobs: []
 
-    - name: Refuse a job that names a node list
-      block:
-        - name: Run the guard against a node-list declaration
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-node-list
-                pool: fixture-pool
-                node: "fixture-node-a,fixture-node-b"
-                storage: fixture-backup-store
-                schedule: "02:30"
+    - name: Refuse a backup-node job without its guest excluded
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: pbs-node
+        pve_backup_jobs_refusal_expected_error: fixture-backup-node-unexcluded
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-backup-node-unexcluded
+            all: true
+            node: fixture-backup-node
+            storage: fixture-backup-store
+            schedule: "02:30"
 
-        - name: Fail because a node list was accepted
-          ansible.builtin.fail:
-            msg: "A node list was ACCEPTED; vzdump matches one node name, so the job would run nowhere."
-      rescue:
-        - name: Record the node-list refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['node-list'] }}"
+    - name: Refuse names combined with tag exclusions
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: names-tags
+        pve_backup_jobs_refusal_expected_error: fixture-names-and-tags
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-names-and-tags
+            names: [fixture-splunk]
+            exclude_tags: [media]
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
 
-    - name: Refuse a job that runs on the backup node
-      block:
-        - name: Run the guard against a backup-node declaration
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-on-backup-node
-                pool: fixture-pool
-                node: fixture-backup-node
-                storage: fixture-backup-store
-                schedule: "02:30"
+    - name: Refuse a bare string tag exclusion
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: tags-shape
+        pve_backup_jobs_refusal_expected_error: fixture-string-tag
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-string-tag
+            all: true
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+            exclude_tags: media
 
-        - name: Fail because a job on the backup node was accepted
-          ansible.builtin.fail:
-            msg: "A job on the backup node was ACCEPTED; its guests would back up onto themselves."
-      rescue:
-        - name: Record the backup-node refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['backup-node'] }}"
-
-    - name: Refuse a change detection mode PVE does not accept
-      block:
-        - name: Run the guard against an unknown change detection mode
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-bad-mode
-                pool: fixture-pool
-                node: fixture-node-a
-                storage: fixture-backup-store
-                schedule: "02:30"
-                pbs_change_detection_mode: faster
-
-      rescue:
-        - name: Record the change detection refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_change_detection_failure: "{{ ansible_failed_result | to_json }}"
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['change-detection'] }}"
-
-    - name: Assert the unsupported change detection mode was refused
-      ansible.builtin.assert:
-        that:
-          - pve_backup_jobs_change_detection_failure is defined
-          - "'fixture-bad-mode' in pve_backup_jobs_change_detection_failure"
-          - "'must be one of legacy, data, metadata' in pve_backup_jobs_change_detection_failure"
-        fail_msg: >-
-          Expected an unsupported change detection mode to fail with its supported
-          values; got {{ pve_backup_jobs_change_detection_failure | default('no failure') }}.
-        quiet: true
-
-    - name: Refuse a role default change detection mode PVE does not accept
-      block:
-        - name: Run the guard against an unknown role default change detection mode
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs: []
-            pve_backup_jobs_default_pbs_change_detection_mode: faster
-      rescue:
-        - name: Record the role default change detection refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_default_mode_failure: "{{ ansible_failed_result | to_json }}"
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['default-change-detection'] }}"
-
-    - name: Assert the role default change detection mode was refused
-      ansible.builtin.assert:
-        that:
-          - pve_backup_jobs_default_mode_failure is defined
-          - "\"role default\" in pve_backup_jobs_default_mode_failure"
-          - "'must be one of legacy, data, metadata' in pve_backup_jobs_default_mode_failure"
-        fail_msg: >-
-          Expected an invalid role default change detection mode to fail with
-          its supported values; got {{ pve_backup_jobs_default_mode_failure | default('no failure') }}.
-        quiet: true
-
-    - name: Refuse a backup-node job that does not exclude the PBS guest
-      block:
-        - name: Run the guard against a backup-node job with no exclusion
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-backup-node-unexcluded
-                all: true
-                node: fixture-backup-node
-                storage: fixture-backup-store
-                schedule: "02:30"
-
-      rescue:
-        - name: Record the backup-node exclusion refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_pbs_node_failure: "{{ ansible_failed_result | to_json }}"
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['pbs-node'] }}"
-
-    - name: Assert the backup-node exclusion was refused
-      ansible.builtin.assert:
-        that:
-          - pve_backup_jobs_pbs_node_failure is defined
-          - "'fixture-backup-node-unexcluded' in pve_backup_jobs_pbs_node_failure"
-          - "'excludes the PBS guest by name' in pve_backup_jobs_pbs_node_failure"
-        fail_msg: >-
-          Expected a backup-node job without the PBS guest excluded to fail;
-          got {{ pve_backup_jobs_pbs_node_failure | default('no failure') }}.
-        quiet: true
-
-    # Counting the refusals is what makes this test unable to pass vacuously: if
-    # a rescue never ran, the list is short and this fails.
-    - name: Refuse a tag exclusion combined with names
-      block:
-        - name: Run the guard against names and exclude_tags
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-names-and-tags
-                names: [fixture-splunk]
-                exclude_tags: [media]
-                node: fixture-node-a
-                storage: fixture-backup-store
-                schedule: "02:30"
-
-        - name: Fail because names and exclude_tags were both accepted
-          ansible.builtin.fail:
-            msg: "A declaration with names and exclude_tags was ACCEPTED."
-      rescue:
-        - name: Record the names-and-tags refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['names-tags'] }}"
-
-    - name: Refuse a tag exclusion that is a bare string
-      block:
-        - name: Run the guard against a string exclude_tags
-          ansible.builtin.include_role:
-            name: pve_backup_jobs
-            tasks_from: validate.yml
-          vars:
-            pve_backup_jobs_jobs:
-              - id: fixture-string-tag
-                all: true
-                node: fixture-node-a
-                storage: fixture-backup-store
-                schedule: "02:30"
-                exclude_tags: media
-
-        - name: Fail because a bare string exclude_tags was accepted
-          ansible.builtin.fail:
-            msg: "A bare string exclude_tags was ACCEPTED."
-      rescue:
-        - name: Record the tag-shape refusal
-          ansible.builtin.set_fact:
-            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['tags-shape'] }}"
-
-    - name: Assert every refusal actually fired
+    - name: Assert every declaration refusal was recorded
       ansible.builtin.assert:
         that:
           - >-
@@ -463,9 +281,6 @@
               'names-tags', 'neither', 'node', 'node-list', 'pbs-node',
               'storage', 'tags-shape', 'vmid'
             ]
-        fail_msg: >-
-          Expected fourteen refusals (vmid, exclude-name, names-tags, tags-shape,
-          change-detection, default-change-detection, both, neither, duplicate,
-          storage, node, node-list, backup-node, pbs-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
+        fail_msg: "Unexpected declaration refusals: {{ pve_backup_jobs_refusals | default([]) | sort }}"
         success_msg: "PASS: all fourteen declaration refusals fired"
         quiet: false

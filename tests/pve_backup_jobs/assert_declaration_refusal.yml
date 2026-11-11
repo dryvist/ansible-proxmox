@@ -1,0 +1,32 @@
+---
+- name: Clear the captured validation error
+  ansible.builtin.set_fact:
+    pve_backup_jobs_captured_validation_error: ""
+
+- name: Validate the declaration fixture
+  block:
+    - name: Run the declaration guard
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs: "{{ pve_backup_jobs_refusal_jobs }}"
+        pve_backup_jobs_pbs_server: "{{ pve_backup_jobs_refusal_pbs_server | default('fixture-pbs-server') }}"
+        pve_backup_jobs_default_pbs_change_detection_mode: "{{ pve_backup_jobs_refusal_default_mode | default('metadata') }}"
+  rescue:
+    - name: Capture the validation error
+      ansible.builtin.set_fact:
+        pve_backup_jobs_captured_validation_error: "{{ ansible_failed_result | to_json }}"
+
+- name: Assert the declaration was refused by validation
+  ansible.builtin.assert:
+    that:
+      - pve_backup_jobs_refusal_expected_error in pve_backup_jobs_captured_validation_error
+    fail_msg: >-
+      Expected a validation error containing '{{ pve_backup_jobs_refusal_expected_error }}';
+      got {{ pve_backup_jobs_captured_validation_error | default('no validation error') }}.
+    quiet: true
+
+- name: Record the validated refusal
+  ansible.builtin.set_fact:
+    pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + [pve_backup_jobs_refusal_id] }}"
