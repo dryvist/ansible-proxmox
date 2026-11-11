@@ -1,0 +1,116 @@
+---
+- name: Record the syncoid endpoints each Proxmox host declares
+  hosts: proxmox
+  connection: local
+  become: false
+  gather_facts: false
+
+  tasks:
+    # Each host's syncoid source and target strings, evaluated on that host.
+    - name: Record the source and target of each syncoid job
+      ansible.builtin.set_fact:
+        media_no_backup_host_endpoints: >-
+          {{ ((syncoid_jobs | default([])) | map(attribute='source') | list)
+             + ((syncoid_jobs | default([])) | map(attribute='target') | list) }}
+
+    # Per-fixture projections for the generated root-pool guest-disk jobs, so
+    # each expected case (one job / no job) is asserted on exactly the jobs its
+    # fixture guest produces. Evaluated ON pve-r710: the pinned jobs' sources
+    # resolve hostvars, which only exists in the host's own context.
+    - name: Extract the generated root-pool jobs for each fixture guest
+      ansible.builtin.set_fact:
+        rootpool_ct_job: >-
+          {{ syncoid_jobs
+             | selectattr('name', 'eq', 'rootpool-601100-disk-0') | list }}
+        rootpool_vm_jobs: >-
+          {{ syncoid_jobs
+             | selectattr('name', 'match', '^rootpool-601500-disk-[0-9]+$')
+             | sort(attribute='name') | list }}
+        rootpool_excluded_endpoints: >-
+          {{ ((syncoid_jobs | map(attribute='source') | list)
+              + (syncoid_jobs | map(attribute='target') | list))
+             | select('search', '601200|601300|601400') | list }}
+      when: inventory_hostname == 'pve-r710'
+
+    - name: Assert the generated root-pool jobs match the published guests
+      ansible.builtin.assert:
+        that:
+          # (a) A container on the storage node whose root disk sits on the
+          # root pool generates exactly one non-recursive job.
+          - rootpool_ct_job | length == 1
+          - rootpool_ct_job[0].source == 'root@pve-r540:rpool/data/subvol-601100-disk-0'
+          - rootpool_ct_job[0].target == 'bulk/replica/pve-r540/rpool/data/subvol-601100-disk-0'
+          - rootpool_ct_job[0].options == '--no-sync-snap --quiet'
+          - rootpool_ct_job[0].sanoid_replica_class == 'slow'
+          - rootpool_ct_job[0].schedule is not defined
+          # A VM on the root pool generates one job per published disk, named
+          # and addressed from the published volume names.
+          - rootpool_vm_jobs | map(attribute='name') | list
+            == ['rootpool-601500-disk-0', 'rootpool-601500-disk-1']
+          - rootpool_vm_jobs | map(attribute='source') | list
+            == ['root@pve-r540:rpool/data/vm-601500-disk-0',
+                'root@pve-r540:rpool/data/vm-601500-disk-1']
+          - rootpool_vm_jobs | map(attribute='target') | list
+            == ['bulk/replica/pve-r540/rpool/data/vm-601500-disk-0',
+                'bulk/replica/pve-r540/rpool/data/vm-601500-disk-1']
+          - (rootpool_vm_jobs | map(attribute='options') | list)
+            | unique | list == ['--no-sync-snap --quiet']
+          # (b) A guest with a declared ha_replication_target is pvesr's to
+          # replicate and generates no job.
+          # (c) A guest tagged agent-sandbox is ephemeral and generates no job.
+          # (d) A disk on a datastore that resolves to any other root
+          # generates no job.
+          - rootpool_excluded_endpoints | length == 0
+        fail_msg: >-
+          The generated root-pool guest-disk jobs did not match the published
+          guests: ct job {{ rootpool_ct_job }}, vm jobs {{ rootpool_vm_jobs }},
+          excluded endpoints {{ rootpool_excluded_endpoints }}.
+      when: inventory_hostname == 'pve-r710'
+
+    - name: Assert no job pulls the peer's rpool/data root
+      ansible.builtin.assert:
+        that:
+          - "'rpool-data' not in syncoid_jobs | map(attribute='name') | list"
+          - >-
+            (syncoid_jobs
+            | map(attribute='source')
+            | select('search', ':rpool/data$')
+            | list | length) == 0
+        fail_msg: >-
+          The recursive root-pool source job must not be configured on this
+          replica node.
+      when: inventory_hostname == 'pve-r710'
+
+    # The same protection, scoped to a guest class: guests the published
+    # inventory tags agent-sandbox are ephemeral, so nothing on this node may
+    # pull their disks. VMIDs resolve from the published tags, so a renumber
+    # stays covered. The non-empty derivation keeps the check from passing
+    # vacuously if the fixture guest disappears.
+    - name: Assert no job pulls an agent-sandbox guest's disks
+      ansible.builtin.assert:
+        that:
+          - agent_sandbox_vmids | length > 0
+          - >-
+            (((syncoid_jobs | default([])) | map(attribute='source') | list)
+             + ((syncoid_jobs | default([])) | map(attribute='target') | list))
+            | select('search', agent_sandbox_disk_pattern) | list | length == 0
+        fail_msg: >-
+          A syncoid endpoint names a disk of a guest tagged agent-sandbox.
+          Ephemeral sandbox guests are not replicated to this node.
+        success_msg: >-
+          No syncoid endpoint names an agent-sandbox guest disk
+          ({{ agent_sandbox_disk_pattern }}).
+      vars:
+        agent_sandbox_vmids: >-
+          {{ ((hostvars['localhost'].tofu_data.vms | default({}))
+              | combine(hostvars['localhost'].tofu_data.containers | default({}), recursive=True)
+              | dict2items
+              | selectattr('value.tags', 'defined')
+              | selectattr('value.tags', 'contains', 'agent-sandbox')
+              | map(attribute='value.vmid') | list) }}
+        agent_sandbox_disk_pattern: >-
+          {{ (agent_sandbox_vmids | map('string') | list
+              | map('regex_replace', '^', '(?:vm|subvol)-')
+              | map('regex_replace', '$', '-disk-') | list) | join('|') }}
+      when: inventory_hostname == 'pve-r710'
+

@@ -1,0 +1,69 @@
+---
+- name: Verify the media pool has no sanoid key and no syncoid endpoint
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars:
+    # Matches the media-pool dataset and its children, with an optional
+    # user@host: prefix, and the /bulk/data mount path. /bulk/databases does not
+    # match.
+    media_no_backup_pattern: "^(.*:)?(bulk-nobackup(/|$)|/bulk/data(/|$))"
+    # Each case injects one media-pool reference and leaves the rest clean, so
+    # each case is refused for one reason only.
+    media_no_backup_negative_cases:
+      - label: sanoid
+        sanoid:
+          "bulk-nobackup/data": { use_template: critical, recursive: "yes" }
+        endpoints: []
+      - label: syncoid-source
+        sanoid: {}
+        endpoints:
+          - "root@fixture-node:bulk-nobackup/data"
+          - "bulk/replica/fixture-node/data"
+      - label: syncoid-target
+        sanoid: {}
+        endpoints:
+          - "root@fixture-node:bulk/appdata"
+          - "bulk-nobackup/data"
+
+  tasks:
+    - name: Collect the syncoid endpoints recorded on every Proxmox host
+      ansible.builtin.set_fact:
+        media_no_backup_live_endpoints: "{{ groups['proxmox'] | map('extract', hostvars) | map(attribute='media_no_backup_host_endpoints') | list | flatten }}"
+
+    # The collected endpoints include one plain job and one job derived from
+    # another host.
+    - name: Assert the collected endpoints include a plain job and a derived job
+      ansible.builtin.assert:
+        that:
+          - "'root@pve-r540:bulk/databases' in media_no_backup_live_endpoints"
+          - "'root@pve-w1700:rpool/data/vm-90200-disk-0' in media_no_backup_live_endpoints"
+        fail_msg: >-
+          The collected syncoid endpoints do not cover every Proxmox host, so the
+          media-pool check would pass without reading them.
+
+    - name: Assert the live inventory keeps the media pool out of sanoid and syncoid
+      ansible.builtin.include_tasks: media_no_backup_assert.yml
+      vars:
+        media_no_backup_sanoid: "{{ hostvars['pve-r540'].sanoid_datasets }}"
+        media_no_backup_endpoints: "{{ media_no_backup_live_endpoints }}"
+
+    # Each negative case is loop-included and must be refused by the assertion
+    # itself, not by a task that failed for another reason.
+    - name: Refuse each injected media-pool reference
+      ansible.builtin.include_tasks: media_no_backup_refusal.yml
+      loop: "{{ media_no_backup_negative_cases }}"
+      loop_control:
+        loop_var: media_no_backup_case
+
+    - name: Assert every injected media-pool case was refused and none was accepted
+      ansible.builtin.assert:
+        that:
+          - (media_no_backup_refused | default([]) | sort) == (media_no_backup_negative_cases | map(attribute='label') | sort)
+          - (media_no_backup_accepted | default([])) | length == 0
+        fail_msg: >-
+          An injected media-pool reference was accepted, or a case failed in an
+          unrelated task. Accepted: {{ media_no_backup_accepted | default([]) }}.
+          Refused: {{ media_no_backup_refused | default([]) }}.
+

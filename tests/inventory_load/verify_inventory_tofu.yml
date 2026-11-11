@@ -1,0 +1,165 @@
+---
+- name: Verify OpenTofu inventory loading
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Assert the share-serving node received its NAS contract
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-w1700'] is defined
+          - hostvars['pve-w1700'].nas_storage_from_tofu is defined
+          - hostvars['pve-w1700'].nas_storage_from_tofu.group_name == "nas"
+          - hostvars['pve-w1700'].nas_storage_from_tofu.managed_users[0].name == "jevans"
+          - hostvars['pve-w1700'].nas_storage_from_tofu.managed_users[0].password_secret_env
+            == "NAS_JEVANS_SMB_PASSWORD"
+          # Exactly the two datasets that declared `smb` -- the third has a
+          # quota and no share, and must NOT appear.
+          - (hostvars['pve-w1700'].nas_storage_from_tofu.shares
+            | map(attribute='name') | sort) == ['jdrive', 'timemachine']
+          # The share's path comes from the dataset's own mountpoint, which is
+          # what makes it impossible to point a share at a dataset that does
+          # not exist.
+          - (hostvars['pve-w1700'].nas_storage_from_tofu.shares
+            | selectattr('name', 'eq', 'jdrive') | first).path == "/bulk/jdrive"
+        fail_msg: >-
+          load_tofu.yml did not derive the NAS contract from
+          node_storage.<node> for the share-serving node.
+
+    # The counterpart assertion, and the one the old global host_services.nas
+    # could not express: a node that declares no share gets nothing, so
+    # playbooks/site.yml skips nas_storage there instead of failing it.
+    - name: Assert a node with no declared share receives no NAS contract
+      ansible.builtin.assert:
+        that:
+          - (hostvars['pve-r540'].nas_storage_from_tofu | default({}, true)) == {}
+        fail_msg: >-
+          A node with no `smb` block still received a NAS contract. Every node
+          would build an identical NAS again, which is the exact shape the
+          per-dataset contract replaced.
+
+    - name: Assert pve-w1700 host received OpenTofu replication identity (containers + splunk_vm)
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-w1700'].containers_from_tofu is defined
+          - hostvars['pve-w1700'].containers_from_tofu['s3'].vmid == 902000
+          - hostvars['pve-w1700'].splunk_vm_from_tofu.splunk.vmid == 90200
+        fail_msg: >-
+          load_tofu.yml did not inject the container/splunk identity that
+          sanoid_datasets and syncoid_jobs derive VMIDs from.
+
+    - name: Assert pve-w1700 host received the OpenTofu-published Proxmox login user
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-w1700'].proxmox_user_from_tofu == "root"
+          - hostvars['pve-w1700'].proxmox_user == "root"
+        fail_msg: >-
+          load_tofu.yml did not inject tofu_data.proxmox_user, or group_vars
+          did not derive proxmox_user from it.
+
+    - name: Assert every Proxmox host receives the published APT cache list
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-w1700'].pve_repositories_apt_proxies | length == 2
+          - hostvars['pve-w1700'].pve_repositories_apt_proxies[0] == 'http://cache-a.example.com:3142'
+          - hostvars['pve-w1700'].pve_repositories_apt_proxies
+            == hostvars['localhost'].tofu_data.cache_proxy_urls.apt_cache
+        fail_msg: >-
+          group_vars/proxmox/ did not propagate the shared APT cache URL
+          list from the published inventory.
+
+    - name: Assert the replica dataset declares its configured quota
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-r710'].pve_r710_bulk_replica_quota == '2T'
+          - "'bulk/replica' in hostvars['pve-r710'].zfs_pools_vm_disk_properties"
+          - hostvars['pve-r710'].zfs_pools_vm_disk_properties['bulk/replica'].quota
+            == hostvars['pve-r710'].pve_r710_bulk_replica_quota
+        fail_msg: >-
+          The replica dataset must reach zfs_pools with its documented quota input.
+
+    # The reservation rides on the same derived key the object-store syncoid
+    # job pulls into, so it is asserted through that key rather than a literal
+    # path — a relocation or VMID renumber keeps both sides in step.
+    - name: Assert the object-store replica declares its reservation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hostvars['pve-r710'].zfs_pools_vm_disk_properties[
+              'bulk/replica/' ~ hostvars['pve-r710'].object_store_node
+              ~ '/subvol-' ~ hostvars['pve-r710'].object_store_vmid ~ '-disk-1'
+            ].reservation == '900G'
+          - hostvars['pve-r710'].zfs_pools_vm_disk_properties['bulk/backups'].quota == '600G'
+        fail_msg: >-
+          The object-store replica must reach zfs_pools with its reservation,
+          keyed by the same derived path its syncoid job pulls into, and the
+          backups namespace must reach zfs_pools with its quota.
+
+    - name: Assert cluster-wide replica retention defaults and job classes
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-r710'].sanoid_replica_default_class == 'fast'
+          - hostvars['pve-r710'].sanoid_replica_templates.replica_slow.daily == 14
+          - hostvars['pve-r710'].sanoid_replica_templates.replica_slow.monthly == 3
+          - hostvars['pve-r710'].sanoid_replica_templates.replica_fast.daily == 7
+          - hostvars['pve-r710'].sanoid_replica_templates.replica_fast.monthly == 1
+          - hostvars['pve-r710'].sanoid_datasets['bulk/replica'].use_template == 'replica_fast'
+          - hostvars['pve-r710'].sanoid_rpool_guest_monthly | int == 1
+          - >-
+            (hostvars['pve-r710'].syncoid_jobs
+            | selectattr('name', 'eq', 'photos') | first).sanoid_replica_class == 'slow'
+        fail_msg: >-
+          Replica retention defaults, source snapshots, or the job override did
+          not reach the inventory.
+
+    - name: Assert the storage node declares a snapshot policy for the state it holds
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-r540'].sanoid_timer_enabled | bool
+          - "'bulk/databases' in hostvars['pve-r540'].sanoid_datasets"
+          - "'bulk/appdata' in hostvars['pve-r540'].sanoid_datasets"
+          - hostvars['pve-r540'].sanoid_datasets['bulk/databases'].hourly | int > 0
+          - hostvars['pve-r540'].sanoid_datasets['bulk/appdata'].recursive == 'yes'
+          - "'bulk/home-videos' in hostvars['pve-r540'].sanoid_datasets"
+          - "'bulk/object/subvol-902000-disk-1' in hostvars['pve-r540'].sanoid_datasets"
+          - hostvars['pve-r540'].sanoid_datasets['bulk'].recursive == 'yes'
+          - hostvars['pve-r540'].sanoid_datasets['rpool/data'].use_template == 'rpool_guest'
+          - hostvars['pve-r540'].sanoid_datasets['rpool/data'].recursive == 'yes'
+        fail_msg: >-
+          The storage node holds live application state and the dump archive, so
+          it must declare a sanoid policy for both. syncoid runs --no-sync-snap:
+          with no snapshot here there is nothing for the DR leg to send, and the
+          off-pool copy silently never happens.
+
+
+    - name: Assert pve-r540 pulls pve-r710 primary datasets
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-r540'].syncoid_enabled | bool
+          - hostvars['pve-r540'].syncoid_trigger == 'cron'
+          - hostvars['pve-r540'].syncoid_cron_hour == '*/4'
+          - hostvars['pve-r540'].syncoid_jobs | map(attribute='source') | list == [
+            'root@pve-r710:rpool/data',
+            'root@pve-r710:bulk/backups',
+            'root@pve-r710:bulk/databases']
+          - hostvars['pve-r540'].syncoid_jobs | map(attribute='target') | list == [
+            'bulk/replica/pve-r710/rpool/data',
+            'bulk/replica/pve-r710/backups',
+            'bulk/replica/pve-r710/databases']
+          - hostvars['pve-r540'].sanoid_replica_retention_enabled | bool
+        fail_msg: >-
+          pve-r540 must pull the selected pve-r710 datasets into its own replica
+          tree on the same four-hour cadence as the existing server pulls.
+
+    - name: Assert pve-r710 snapshots every source dataset in the reverse pull
+      ansible.builtin.assert:
+        that:
+          - hostvars['pve-r710'].sanoid_datasets['rpool/data'].use_template == 'rpool_guest'
+          - hostvars['pve-r710'].sanoid_datasets['rpool/data'].recursive == 'yes'
+          - "'bulk/backups' in hostvars['pve-r710'].sanoid_datasets"
+          - "'bulk/databases' in hostvars['pve-r710'].sanoid_datasets"
+        fail_msg: >-
+          Every pve-r710 source dataset in the reverse pull needs a sanoid
+          policy because syncoid uses --no-sync-snap.
+
