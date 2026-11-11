@@ -10,18 +10,19 @@
 # memtest86+ available by placing the binary and menu entry on the boot
 # partition where GRUB can find them.
 #
-# UUID {{ crash_diagnostics_boot_partition_uuid }} is the boot partition
+# UUID {{ crash_diagnostics_esp_uuid }} is this ESP, one copy per ESP from
+# /etc/kernel/proxmox-boot-uuids
 
 menuentry "Memory Test (memtest86+)" --class memtest {
     insmod part_gpt
     insmod fat
-    search --no-floppy --fs-uuid --set=root {{ crash_diagnostics_boot_partition_uuid }}
+    search --no-floppy --fs-uuid --set=root {{ crash_diagnostics_esp_uuid }}
     linux16 /memtest86+x64.bin
 }
 
 menuentry "Memory Test (memtest86+, serial console)" --class memtest {
     insmod part_gpt
     insmod fat
-    search --no-floppy --fs-uuid --set=root {{ crash_diagnostics_boot_partition_uuid }}
+    search --no-floppy --fs-uuid --set=root {{ crash_diagnostics_esp_uuid }}
     linux16 /memtest86+x64.bin console=ttyS0,115200
 }

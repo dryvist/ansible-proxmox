@@ -49,10 +49,27 @@ installation does NOT work because:
 This role automatically:
 
 1. Detects proxmox-boot-tool managed systems via `/etc/kernel/proxmox-boot-uuids`
-2. Reads the boot partition UUID
-3. Mounts the boot partition temporarily
-4. Copies memtest86+x64.bin from `/boot/` to the boot partition
-5. Creates `/grub/custom.cfg` with proper menu entries
+2. Resolves every listed UUID with `blkid -U`. A UUID whose partition no longer
+   exists is a normal state after a boot disk replacement: it is reported once
+   per UUID with advice to run `proxmox-boot-tool clean` (never run by this
+   role), and the install skips it instead of failing the play
+3. Mounts each resolvable boot partition with `state: ephemeral`, so nothing is
+   ever written to `/etc/fstab`
+4. Copies memtest86+x64.bin from `/boot/` to **every** resolvable boot
+   partition, so a mirrored rpool gets the files on all of its ESPs
+5. Creates `/grub/custom.cfg` with proper menu entries on each ESP
+6. Unmounts each ESP and removes its mount point in an `always:` block, so a
+   failed copy never leaves the ESP mounted
+7. Removes the legacy `/tmp/ansible-boot-partition` fstab entry on every host
+   (older versions wrote a permanent, non-`nofail` line keyed by kernel device
+   name that systemd re-mounted at every boot), then unmounts and removes the
+   leftover mount point
+
+**UEFI systems**: the GRUB `custom.cfg` mechanism only applies where
+proxmox-boot-tool boots through GRUB (legacy BIOS). On UEFI hosts
+proxmox-boot-tool installs systemd-boot, which ignores `grub/custom.cfg`, and
+`linux16` is BIOS-only — the role skips the ESP install there and prints one
+line saying so. The fstab cleanup still runs on UEFI hosts.
 
 ## Important Notes
 

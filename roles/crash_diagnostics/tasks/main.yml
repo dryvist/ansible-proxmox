@@ -320,6 +320,67 @@
 # installed on the separate FAT32 boot partition, NOT in /boot/ on the ZFS root.
 # The standard memtest86+ package installs to /boot/ which is inaccessible
 # from the boot partition's GRUB configuration.
+#
+# Every UUID in /etc/kernel/proxmox-boot-uuids is handled, so a mirrored rpool
+# gets the memtest files on all of its ESPs. A UUID whose partition no longer
+# exists is a normal state after a boot disk replacement — proxmox-boot-tool
+# only warns about it — so the lookup reports it for the operator instead of
+# failing the play. Running 'proxmox-boot-tool clean' is the operator's call,
+# never done from this role.
+#
+# ESPs are mounted with state=ephemeral, so nothing is written to /etc/fstab.
+# The GRUB custom.cfg mechanism only applies where proxmox-boot-tool boots
+# through GRUB (legacy BIOS); UEFI hosts run systemd-boot, which ignores
+# grub/custom.cfg and cannot execute linux16, so the install is skipped there.
+
+# Earlier versions wrote a permanent fstab line for the temporary mount, keyed
+# by kernel device name and without nofail; systemd remounts it at every boot
+# and a renamed or missing device can stall boot. Cleanup runs on every host
+# regardless of firmware or proxmox-boot-tool state. absent_from_fstab only
+# edits fstab — it must not unmount whatever is mounted at the path now, which
+# the task after it handles.
+- name: Remove legacy fstab entry for the temporary boot mount
+  ansible.posix.mount:
+    path: /tmp/ansible-boot-partition
+    state: absent_from_fstab
+  tags:
+    - crash_diagnostics
+    - memtest
+
+- name: Unmount leftover temporary boot mount
+  ansible.posix.mount:
+    path: /tmp/ansible-boot-partition
+    state: unmounted
+  tags:
+    - crash_diagnostics
+    - memtest
+
+- name: Remove leftover temporary boot mount point
+  ansible.builtin.file:
+    path: /tmp/ansible-boot-partition
+    state: absent
+  tags:
+    - crash_diagnostics
+    - memtest
+
+- name: Check for UEFI boot
+  ansible.builtin.stat:
+    path: /sys/firmware/efi
+  register: crash_diagnostics_uefi_firmware
+  tags:
+    - crash_diagnostics
+    - memtest
+
+- name: Report memtest is not handled on UEFI systemd-boot systems
+  ansible.builtin.debug:
+    msg: >-
+      Boot firmware is UEFI, so proxmox-boot-tool installs systemd-boot, which
+      ignores grub/custom.cfg (and linux16 is BIOS-only). memtest86+ is not
+      installed on the ESP; configure it through systemd-boot instead.
+  when: crash_diagnostics_uefi_firmware.stat.exists
+  tags:
+    - crash_diagnostics
+    - memtest
 
 - name: Check if proxmox-boot-tool manages boot
   ansible.builtin.stat:
@@ -338,10 +399,10 @@
     - crash_diagnostics
     - memtest
 
-- name: Set boot partition UUID fact
+- name: List boot partition UUIDs from proxmox-boot-tool config
   ansible.builtin.set_fact:
-    crash_diagnostics_boot_partition_uuid: >-
-      {{ (crash_diagnostics_boot_uuids_content.content | b64decode).splitlines() | select | first }}
+    crash_diagnostics_boot_uuids: >-
+      {{ (crash_diagnostics_boot_uuids_content.content | b64decode).splitlines() | select | list }}
   when:
     - crash_diagnostics_proxmox_boot_uuids.stat.exists
     - crash_diagnostics_boot_uuids_content.content is defined
@@ -349,122 +410,50 @@
     - crash_diagnostics
     - memtest
 
-- name: Find boot partition device by UUID
+# proxmox-boot-tool only warns about entries whose partition is gone, so a
+# stale UUID here must not fail the play; the rc decides who is handled.
+- name: Resolve boot partition UUIDs to block devices
   ansible.builtin.command:
-    cmd: blkid -U {{ crash_diagnostics_boot_partition_uuid }}
-  register: crash_diagnostics_boot_device
+    cmd: "blkid -U {{ item }}"
+  loop: "{{ crash_diagnostics_boot_uuids | default([]) }}"
+  register: crash_diagnostics_boot_uuid_resolutions
   changed_when: false
-  # Read-only; a check run needs the device path to preview the boot-partition update.
+  failed_when: false
+  # Read-only; a check run needs the resolved devices to preview the install.
   check_mode: false
-  when:
-    - crash_diagnostics_boot_partition_uuid is defined
-    - crash_diagnostics_boot_partition_uuid | length > 0
+  loop_control:
+    label: "{{ item }}"
   tags:
     - crash_diagnostics
     - memtest
 
-- name: Create temporary mount point for boot partition
-  ansible.builtin.file:
-    path: /tmp/ansible-boot-partition
-    state: directory
-    mode: "0700"
-  when:
-    - crash_diagnostics_boot_device.stdout is defined
-    - crash_diagnostics_boot_device.stdout | length > 0
+- name: Report boot partition UUIDs that no longer resolve
+  ansible.builtin.debug:
+    msg: >-
+      Boot ESP UUID {{ item.item }} does not resolve to a block device, so the
+      memtest86+ install skips it. Run 'proxmox-boot-tool clean' on this host
+      to drop the stale entry from /etc/kernel/proxmox-boot-uuids.
+  loop: "{{ crash_diagnostics_boot_uuid_resolutions.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.rc != 0
   tags:
     - crash_diagnostics
     - memtest
 
-- name: Mount boot partition
-  ansible.posix.mount:
-    path: /tmp/ansible-boot-partition
-    src: "{{ crash_diagnostics_boot_device.stdout }}"
-    fstype: vfat
-    state: mounted
-  when:
-    - crash_diagnostics_boot_device.stdout is defined
-    - crash_diagnostics_boot_device.stdout | length > 0
-  tags:
-    - crash_diagnostics
-    - memtest
-
-- name: Check if memtest86+ binary exists in /boot
-  ansible.builtin.stat:
-    path: /boot/memtest86+x64.bin
-  register: crash_diagnostics_memtest_source
-  when:
-    - crash_diagnostics_boot_device.stdout is defined
-    - crash_diagnostics_boot_device.stdout | length > 0
-  tags:
-    - crash_diagnostics
-    - memtest
-
-- name: Copy memtest86+ to boot partition
-  ansible.builtin.copy:
-    src: /boot/memtest86+x64.bin
-    dest: /tmp/ansible-boot-partition/memtest86+x64.bin
-    remote_src: true
-    owner: root
-    group: root
-    mode: "0644"
-  # The temporary boot mount exists only on a real run.
-  when:
-    - not ansible_check_mode
-    - crash_diagnostics_memtest_source.stat is defined
-    - crash_diagnostics_memtest_source.stat.exists
-  tags:
-    - crash_diagnostics
-    - memtest
-
-- name: Ensure the GRUB directory exists on the boot partition
-  ansible.builtin.file:
-    path: /tmp/ansible-boot-partition/grub
-    state: directory
-    # Matches the ESP's vfat dmask, so this is a no-op rather than a change.
-    mode: "0700"
-  when:
-    - crash_diagnostics_boot_partition_uuid is defined
-    - crash_diagnostics_memtest_source.stat is defined
-    - crash_diagnostics_memtest_source.stat.exists
-  tags:
-    - crash_diagnostics
-    - memtest
-
-- name: Deploy custom GRUB config with memtest entry to boot partition
-  ansible.builtin.template:
-    src: memtest-custom.cfg.j2
-    dest: /tmp/ansible-boot-partition/grub/custom.cfg
-    owner: root
-    group: root
-    mode: "0644"
-  # The temporary boot mount exists only on a real run.
-  when:
-    - not ansible_check_mode
-    - crash_diagnostics_boot_partition_uuid is defined
-    - crash_diagnostics_memtest_source.stat is defined
-    - crash_diagnostics_memtest_source.stat.exists
-  tags:
-    - crash_diagnostics
-    - memtest
-
-- name: Unmount boot partition
-  ansible.posix.mount:
-    path: /tmp/ansible-boot-partition
-    state: unmounted
-  when:
-    - crash_diagnostics_boot_device.stdout is defined
-    - crash_diagnostics_boot_device.stdout | length > 0
-  tags:
-    - crash_diagnostics
-    - memtest
-
-- name: Remove temporary mount point
-  ansible.builtin.file:
-    path: /tmp/ansible-boot-partition
-    state: absent
-  when:
-    - crash_diagnostics_boot_device.stdout is defined
-    - crash_diagnostics_boot_device.stdout | length > 0
+- name: Install memtest86+ on every resolvable boot ESP
+  ansible.builtin.include_tasks: memtest_esp.yml
+  loop: >-
+    {{ crash_diagnostics_boot_uuid_resolutions.results | default([])
+       | selectattr('rc', 'equalto', 0) | list }}
+  loop_control:
+    loop_var: crash_diagnostics_esp_result
+    label: "{{ crash_diagnostics_esp_result.item }}"
+  vars:
+    crash_diagnostics_esp_uuid: "{{ crash_diagnostics_esp_result.item }}"
+    crash_diagnostics_esp_device: "{{ crash_diagnostics_esp_result.stdout }}"
+    crash_diagnostics_esp_mount: "/tmp/ansible-boot-esp-{{ crash_diagnostics_esp_result.item }}"
+  when: not crash_diagnostics_uefi_firmware.stat.exists
   tags:
     - crash_diagnostics
     - memtest
