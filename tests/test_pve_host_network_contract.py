@@ -33,6 +33,25 @@ class PveHostNetworkContractTest(unittest.TestCase):
                 self.assertRegex(values["pve_host_network_uplink"], NAME_PATTERN)
                 self.assertRegex(values["pve_host_network_uplink_mac"], MAC_PATTERN)
 
+    def test_extra_interfaces_declared_once_per_host(self):
+        # Ansible does not combine lists across host_vars files: a second file
+        # defining the same variable silently replaces the first, so the
+        # dropped entries render no interface and nothing warns.
+        host_vars_root = ROOT / "inventory/host_vars"
+        definitions = {}
+        for path in sorted(host_vars_root.rglob("*.yml")):
+            host = path.stem if path.parent == host_vars_root else path.parent.name
+            if "pve_host_network_extra_interfaces" in (read_yaml(path) or {}):
+                definitions.setdefault(host, []).append(path.relative_to(ROOT))
+
+        self.assertEqual(
+            sorted(definitions),
+            ["pve-r540", "pve-r710", "pve-w1700", "pve-w5900"],
+        )
+        for host, paths in definitions.items():
+            with self.subTest(host=host):
+                self.assertEqual(len(paths), 1, f"multiple definitions: {paths}")
+
     def test_bridge_port_uses_the_inventory_pinned_name(self):
         template = (ROLE / "templates/interfaces.j2").read_text()
         bridge_ports = re.search(r"^\s*bridge-ports\s+(.+)$", template, re.MULTILINE)
