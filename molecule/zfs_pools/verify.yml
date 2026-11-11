@@ -171,3 +171,51 @@
         fail_msg: >-
           Import-policy tasks ran in the container — the Docker skip guard on
           import_policy.yml may be broken.
+
+    # Ad-hoc property overrides cannot touch real ZFS in the container, so a
+    # stub `zfs` answers reads from fixture files and records every invocation
+    # — the same pattern the syncoid scenario uses for its retired-replica
+    # guard. vm_disk_properties.yml is included directly because main.yml
+    # gates it behind the Docker skip; the file itself has no ZFS of its own
+    # and runs against the stub.
+    - name: Install the zfs stub the ad-hoc property tasks run against
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          # Record every invocation verbatim; serve `zfs list` and `zfs get`
+          # reads from the fixture files and let everything else succeed.
+          printf '%s\n' "$*" >> /tmp/zfs-pools-vmprop.log
+          if [ "$1" = list ]; then
+            for p do :; done
+            if grep -Fxq "$p" /tmp/zfs-pools-present.txt 2>/dev/null; then
+              printf '%s\n' "$p"
+              exit 0
+            fi
+            printf "cannot open '%s': dataset does not exist\n" "$p" >&2
+            exit 1
+          fi
+          if [ "$1" = get ]; then
+            # zfs get [-Hp] -o value <prop> <dataset>: property at position
+            # 5, dataset at 6 — the only two get forms the task file runs.
+            while read -r ds prop value; do
+              if [ "$ds" = "$6" ] && [ "$prop" = "$5" ]; then
+                printf '%s\n' "$value"
+                exit 0
+              fi
+            done < /tmp/zfs-pools-get.txt
+            printf "cannot open '%s': dataset does not exist\n" "$6" >&2
+            exit 1
+          fi
+          exit 0
+        dest: /usr/local/bin/zfs
+        mode: "0755"
+
+    - name: Reset the recorded skips and deferred reservations
+      ansible.builtin.set_fact:
+        zfs_pools_vmdisk_missing: []
+        zfs_pools_reservation_deferred: []
+
+    # Included once, after the stub install; the included file runs the three
+    # ad-hoc property branch cases against the stub.
+    - name: Run the ad-hoc property branch cases against the zfs stub
+      ansible.builtin.include_tasks: tasks/verify_adhoc_properties.yml

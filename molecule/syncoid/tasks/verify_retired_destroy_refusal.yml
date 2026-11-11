@@ -1,0 +1,66 @@
+---
+# Included once per destroy-guard refusal case. A case counts as refused only
+# when the destroy task itself failed with the expected message and the zfs
+# stub log shows exactly the expected invocations (never a destroy); any other
+# failure stops the play. Input: syncoid_retired_case.{path, message, log}.
+- name: Refuse the retired replica destroy case
+  block:
+    - name: Reset the zfs stub command log for the case
+      ansible.builtin.copy:
+        content: ""
+        dest: /tmp/syncoid-retired-zfs.log
+        mode: "0644"
+
+    - name: Run the retired-replica guard over the case path
+      ansible.builtin.include_role:
+        name: syncoid
+        tasks_from: retired_datasets.yml
+      vars:
+        syncoid_enabled: true
+        syncoid_retired_replica_datasets: ["{{ syncoid_retired_case.path }}"]
+
+    - name: Fail because the case path was accepted
+      ansible.builtin.fail:
+        msg: >-
+          The path {{ syncoid_retired_case.path | quote }} was accepted for
+          destroy.
+  rescue:
+    - name: Assert the refusal came from the destroy guard with the case message
+      vars:
+        # The destroy task is looped, so its failure result nests the per-item
+        # stderr under results; a single failure would carry stderr directly.
+        # Either shape must carry the case message.
+        syncoid_retired_failure_stderr: >-
+          {{ ansible_failed_result.results | default([ansible_failed_result])
+             | map(attribute='stderr', default='') | join(' ') }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name == 'Destroy each present retired replica
+            dataset'
+          - >-
+            syncoid_retired_case.message in syncoid_retired_failure_stderr
+        fail_msg: >-
+          Case {{ syncoid_retired_case.path | quote }} failed in an unrelated
+          task ({{ ansible_failed_task.name }}) or without the expected
+          message. Captured stderr: {{ syncoid_retired_failure_stderr }}
+
+    - name: Read the zfs stub command log for the case
+      ansible.builtin.slurp:
+        src: /tmp/syncoid-retired-zfs.log
+      register: syncoid_retired_case_log
+
+    - name: Assert the case ran exactly the expected zfs invocations and no destroy
+      ansible.builtin.assert:
+        that:
+          - >-
+            (syncoid_retired_case_log.content | b64decode).splitlines()
+            == syncoid_retired_case.log
+        fail_msg: >-
+          The guard did not stop at the expected point. Stub log:
+          {{ syncoid_retired_case_log.content | b64decode }}
+
+    - name: Record the refused case
+      ansible.builtin.set_fact:
+        syncoid_retired_refused: >-
+          {{ syncoid_retired_refused | default([]) + [syncoid_retired_case.path] }}

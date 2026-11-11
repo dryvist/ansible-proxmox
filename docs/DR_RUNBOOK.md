@@ -35,9 +35,18 @@ wake, or sleep step anywhere in this procedure.
 | -------------------------------------------------- | ----------------------- | -------------------- | ------------------------------------------------- |
 | `bulk/replica/<source-node>/vm-<id>-disk-0`        | SIEM VM OS disk         | P0                   | Whole-disk zvol                                   |
 | `bulk/replica/<source-node>/vm-<id>-disk-2`        | SIEM VM `/opt/splunk`   | P0 config / P3 index | Config **and** indexes share this disk — see note |
-| `bulk/replica/<source-node>/subvol-<id>-disk-1`    | object-storage (RustFS) | P0                   | The app-tarball store                             |
+| `bulk/replica/<source-node>/subvol-<id>-disk-1`    | object-storage (RustFS) | P0                   | The app-tarball store; carries a 900G reservation |
 | `bulk/replica/<source-node>/databases` (recursive) | `bulk/databases`        | P0                   | Postgres/SQLite archive namespace                 |
 | `bulk/replica/<source-node>/appdata` (recursive)   | `bulk/appdata`          | P1                   | App config/state (incl. media app identity)       |
+
+Replica capacity is bounded per namespace, not per pool: the replica
+namespace and the source `bulk/backups` namespace carry quotas, so each
+namespace's consumption stops at its own ceiling — a quota caps a dataset
+tree, not the pool itself. Freeing space for the object-store replica's
+reservation: run the retired-replica destroy first with `--tags syncoid`
+(the backup-dr leg) — site.yml converges zfs_pools before backup-dr, and
+zfs_pools warns and skips a reservation that does not fit yet, so the next
+converge after the destroy applies it.
 
 **Not replicated to `proxmox-3`** (by design — see
 [`DATA_PROTECTION_STANDARD.md`](DATA_PROTECTION_STANDARD.md) for the full
@@ -54,6 +63,9 @@ class-assignment table):
   config is what must survive; the indexes ride along on the same disk-2
   replica but are volatile and re-acquirable. Expect index recovery/fsck on
   first boot after a restore; do not block a cutover on index integrity.
+- **Ephemeral agent-sandbox guests** — the CI inventory contract test
+  refuses any syncoid endpoint naming a guest the published inventory tags
+  `agent-sandbox`, and a retired replica of one is destroyed, not kept.
 
 ## 3. Checking replication freshness
 

@@ -54,7 +54,12 @@ zfs_pools_bulk_node_dataset_specs:
 # vm-<vmid>-disk-N), which are provisioned by the tofu VM resource, not by
 # zfs_pools_map above. Keyed by full dataset path (pool/dataset). Declare in
 # host_vars next to the reason a specific guest's disk needs a property this
-# role's shared tofu-sourced contract has no slot for.
+# role's shared tofu-sourced contract has no slot for. A `reservation` here is
+# headroom-gated: it is set only when the reservation minus the dataset's
+# current used fits the parent dataset's available space (which reflects the
+# parent quota); otherwise the converge warns with the shortfall in bytes and
+# continues, and a dataset that does not exist yet is a warning skip — neither
+# fails the play. Quotas apply regardless of free space.
 zfs_pools_vm_disk_properties: {}
 
 # SAFETY: creating a zpool from raw devices is a destructive commissioning step
