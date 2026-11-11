@@ -19,14 +19,56 @@ def read_yaml(path):
 
 
 class PveHostNetworkContractTest(unittest.TestCase):
-    def test_private_inventory_defaults_use_documentation_placeholders(self):
+    def test_private_inventory_defaults_are_empty_until_runtime_override(self):
         defaults = read_yaml(ROLE / "defaults/main.yml")
         expected = {
-            "pve_host_network_corosync_link1_interface": "example0",
-            "pve_host_network_corosync_link1_address": "192.0.2.1/30",
+            "pve_host_network_corosync_link1_interface": "",
+            "pve_host_network_corosync_link1_address": "",
             "pve_host_network_private_extra_interfaces": [],
         }
         self.assertEqual({key: defaults[key] for key in expected}, expected)
+        self.assertIn(
+            "# Private inventory supplies these values when the dedicated link is configured.",
+            (ROLE / "defaults/main.yml").read_text(),
+        )
+
+    def test_empty_private_values_skip_validation_and_rendering(self):
+        tasks = read_yaml(ROLE / "tasks/main.yml")
+        validation = next(
+            task
+            for task in tasks
+            if task["name"] == "Validate extra routed interface declarations"
+        )
+        render = next(task for task in tasks if task["name"] == "Render extra routed interfaces")
+        remove = next(
+            task for task in tasks
+            if task["name"] == "Remove extra routed interfaces file when none are declared"
+        )
+        handler = read_yaml(ROLE / "handlers/main.yml")[1]
+        template = (ROLE / "templates/extra-interfaces.j2").read_text()
+
+        self.assertEqual(
+            validation["when"],
+            "item is not mapping or "
+            "(item.name | default('', true) | trim | length > 0) or "
+            "(item.address | default('', true) | trim | length > 0)",
+        )
+        self.assertEqual(
+            render["when"],
+            "pve_host_network_extra_interfaces | selectattr('name', 'defined') | "
+            "selectattr('name') | list | length > 0",
+        )
+        self.assertEqual(
+            remove["when"],
+            "pve_host_network_extra_interfaces | selectattr('name', 'defined') | "
+            "selectattr('name') | list | length == 0",
+        )
+        self.assertIn(
+            "{% if (extra_interface.name | default('', true) | trim | length > 0)\n"
+            "      and (extra_interface.address | default('', true) | trim | length > 0) %}",
+            template,
+        )
+        self.assertIn("item.name | default('', true) | trim | length > 0", handler["when"])
 
     def test_inventory_supplies_mac_and_stable_name_for_each_pinned_node(self):
         host_vars = [
