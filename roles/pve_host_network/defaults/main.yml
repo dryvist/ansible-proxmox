@@ -36,3 +36,8 @@ pve_host_network_fail_on_drift: true
 
 # Additional routed interfaces to render under /etc/network/interfaces.d.
 pve_host_network_extra_interfaces: []
+
+# Private inventory overrides these documentation-only placeholders.
+pve_host_network_corosync_link1_interface: example0
+pve_host_network_corosync_link1_address: "192.0.2.1/30"
+pve_host_network_private_extra_interfaces: []

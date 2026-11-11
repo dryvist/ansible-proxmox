@@ -19,6 +19,15 @@ def read_yaml(path):
 
 
 class PveHostNetworkContractTest(unittest.TestCase):
+    def test_private_inventory_defaults_use_documentation_placeholders(self):
+        defaults = read_yaml(ROLE / "defaults/main.yml")
+        expected = {
+            "pve_host_network_corosync_link1_interface": "example0",
+            "pve_host_network_corosync_link1_address": "192.0.2.1/30",
+            "pve_host_network_private_extra_interfaces": [],
+        }
+        self.assertEqual({key: defaults[key] for key in expected}, expected)
+
     def test_inventory_supplies_mac_and_stable_name_for_each_pinned_node(self):
         host_vars = [
             ROOT / "inventory/host_vars/pve-r540.yml",
