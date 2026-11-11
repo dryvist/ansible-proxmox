@@ -14,9 +14,10 @@
 # That archive had NO snapshot of any kind. Verified 2026-08-10 on the live
 # node: `zfs list -t snapshot | grep -c <vmid>` returned 0 on every reachable
 # node, and the Sanoid policy listed only the Splunk disks. It is also the tier with the
-# only restore that has actually been proven to work (see int_homelab
-# docs/runbooks/nautobot-logical-restore.md), so losing the dataset would have
-# taken out the estate's one demonstrated recovery path.
+# only restore that has actually been proven to work (see the internal
+# homelab repository's docs/runbooks/nautobot-logical-restore.md), so losing
+# the dataset would have taken out the estate's one demonstrated recovery
+# path.
 #
 # `hourly: 24` rather than the template's daily-only cadence, for the reason
 # already recorded against `bulk/databases` on pve-r540: this is a DUMP ARCHIVE

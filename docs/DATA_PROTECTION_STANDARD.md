@@ -176,8 +176,8 @@ Two hard gates:
 - [`DATABASE_DR_STANDARD.md`](DATABASE_DR_STANDARD.md) — Postgres/SQLite backup
   and restore mechanics.
 - [`DR_RUNBOOK.md`](DR_RUNBOOK.md) — guest/node failover cutover procedure.
-- `int_homelab` ADR 0002 — the decision record behind this standard
-  (archive-node choice, what was cut and why).
+- the internal homelab repository's ADR 0002 — the decision record behind
+  this standard (archive-node choice, what was cut and why).
 - [Observability and alerting](https://docs.jacobpevans.com/d/conventions/observability-and-alerting/)
   — the collection/alerting path this contract feeds into.
 - [Data protection classes](https://docs.jacobpevans.com/d/conventions/data-protection-classes/)
