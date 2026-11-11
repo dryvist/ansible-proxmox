@@ -130,6 +130,7 @@ jobs:
           - 'tests/pve_health_ras/**'
           - 'tests/pve_lxc_datastore_mount/**'
           - 'tests/pve_node_exporter/**'
+          - 'tests/syncoid/**'
           - 'tests/pve_upgrade_cross_vendor/**'
           - 'tests/test_assert_conditionals.py'
           - 'tests/test_benchmark_client_image_contract.py'
