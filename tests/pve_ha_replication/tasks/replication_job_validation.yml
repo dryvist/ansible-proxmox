@@ -1,3 +1,4 @@
+---
 # --- pvesr target-storage validation (mirrors replication_jobs.yml, fed
 # from the pve_ha_storage_cfg_fixture / pve_ha_guest_configs_fixture vars
 # above instead of `pvesh get /storage` / `pvesh get .../lxc/<vmid>/config`) ---
