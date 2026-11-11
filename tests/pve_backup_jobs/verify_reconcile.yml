@@ -49,6 +49,16 @@
         storage: fixture-backup-store
         schedule: "04:30"
         enabled: false
+        mode: snapshot
+        prune: keep-daily=3
+        exclude_names: [fixture-splunk]
+      # The live job matches every field except mode.
+      - id: fixture-mode-change
+        pool: fixture-pool-f
+        storage: fixture-backup-store
+        schedule: "04:45"
+        enabled: false
+        mode: stop
         prune: keep-daily=3
         exclude_names: [fixture-splunk]
       # Exists with a node pin the declaration no longer carries — the clear case.
@@ -91,6 +101,19 @@
         all: "0"
         storage: fixture-backup-store
         schedule: "04:30"
+        enabled: "0"
+        exclude: "4244"
+        mode: snapshot
+        compress: zstd
+        pbs-change-detection-mode: metadata
+        comment: ""
+        prune-backups: {keep-daily: 3}
+      - id: fixture-mode-change
+        type: vzdump
+        pool: fixture-pool-f
+        all: "0"
+        storage: fixture-backup-store
+        schedule: "04:45"
         enabled: "0"
         exclude: "4244"
         mode: snapshot
@@ -155,6 +178,19 @@
         enabled: 0
         exclude: "4244"
         mode: snapshot
+        compress: zstd
+        pbs-change-detection-mode: metadata
+        comment: ""
+        prune-backups: {keep-daily: "3"}
+      - id: fixture-mode-change
+        type: vzdump
+        pool: fixture-pool-f
+        all: 0
+        storage: fixture-backup-store
+        schedule: "04:45"
+        enabled: 0
+        exclude: "4244"
+        mode: stop
         compress: zstd
         pbs-change-detection-mode: metadata
         comment: ""
@@ -262,6 +298,9 @@
           # role default.
           - "'create /cluster/backup --id fixture-cdm' in pve_backup_jobs_commands"
           - "'--pbs-change-detection-mode data' in pve_backup_jobs_cdm_create"
+          # A mode difference issues an update.
+          - "'--mode stop' in pve_backup_jobs_mode_change"
+          - "'fixture-mode-change' in pve_backup_jobs_commands"
           # Jobs ship disabled; a first full run is a deliberate act.
           - "'--enabled 1' not in pve_backup_jobs_commands"
           # The already-correct job must not be touched.
@@ -288,6 +327,10 @@
         pve_backup_jobs_cdm_create: >-
           {{ pve_backup_jobs_commands.splitlines()
              | select('search', 'create /cluster/backup --id fixture-cdm')
+             | first | default('') }}
+        pve_backup_jobs_mode_change: >-
+          {{ pve_backup_jobs_commands.splitlines()
+             | select('search', 'set /cluster/backup/fixture-mode-change')
              | first | default('') }}
 
     - name: Write back the jobs created by the first converge
