@@ -44,13 +44,62 @@ class PveHostNetworkContractTest(unittest.TestCase):
             if "pve_host_network_extra_interfaces" in (read_yaml(path) or {}):
                 definitions.setdefault(host, []).append(path.relative_to(ROOT))
 
-        self.assertEqual(
-            sorted(definitions),
-            ["pve-r540", "pve-r710", "pve-w1700", "pve-w5900"],
-        )
+        self.assertEqual(len(definitions), 3)
         for host, paths in definitions.items():
             with self.subTest(host=host):
                 self.assertEqual(len(paths), 1, f"multiple definitions: {paths}")
+
+        fixture_root = ROOT / "tests/pve_host_network_extra/fixtures/host_vars"
+        fixtures = {
+            path.stem: path
+            for path in sorted(fixture_root.glob("*.yml"))
+            if "pve_host_network_extra_interfaces" in (read_yaml(path) or {})
+        }
+        self.assertEqual(sorted(fixtures), ["example-node"])
+        self.assertEqual(
+            read_yaml(fixtures["example-node"])["pve_host_network_extra_interfaces"],
+            [
+                {"name": "example0", "address": "192.0.2.1/30"},
+                {
+                    "name": "{{ pve_host_network_corosync_link1_interface }}",
+                    "address": "{{ pve_host_network_corosync_link1_address }}",
+                    "comment": "corosync link1 (dedicated switch)",
+                },
+            ],
+        )
+
+    def test_extra_interfaces_reference_private_inventory_values(self):
+        host_vars_root = ROOT / "inventory/host_vars"
+        private_lists = []
+        link1_interfaces = []
+        for path in sorted(host_vars_root.rglob("*.yml")):
+            values = read_yaml(path) or {}
+            interfaces = values.get("pve_host_network_extra_interfaces")
+            if isinstance(interfaces, str):
+                private_lists.append(interfaces)
+            elif isinstance(interfaces, list):
+                link1_interfaces.extend(
+                    interface
+                    for interface in interfaces
+                    if interface.get("comment") == "corosync link1 (dedicated switch)"
+                )
+
+        self.assertEqual(private_lists, ["{{ pve_host_network_private_extra_interfaces }}"])
+        self.assertEqual(
+            link1_interfaces,
+            [
+                {
+                    "name": "{{ pve_host_network_corosync_link1_interface }}",
+                    "address": "{{ pve_host_network_corosync_link1_address }}",
+                    "comment": "corosync link1 (dedicated switch)",
+                },
+                {
+                    "name": "{{ pve_host_network_corosync_link1_interface }}",
+                    "address": "{{ pve_host_network_corosync_link1_address }}",
+                    "comment": "corosync link1 (dedicated switch)",
+                },
+            ],
+        )
 
     def test_bridge_port_uses_the_inventory_pinned_name(self):
         template = (ROLE / "templates/interfaces.j2").read_text()

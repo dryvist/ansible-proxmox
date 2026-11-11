@@ -1,0 +1,7 @@
+---
+pve_host_network_extra_interfaces:
+  - name: example0
+    address: 192.0.2.1/30
+  - name: "{{ pve_host_network_corosync_link1_interface }}"
+    address: "{{ pve_host_network_corosync_link1_address }}"
+    comment: corosync link1 (dedicated switch)

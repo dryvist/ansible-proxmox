@@ -1,5 +1,5 @@
 ---
-# Included once per node. The un-named include_vars loads this node's
+# Included once per fixture node. The un-named include_vars loads this node's
 # host_vars into the play scope the template lookup renders from, so load,
 # render, and assert must stay in this order before the next iteration's load
 # replaces the variables.

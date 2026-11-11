@@ -1,0 +1,2 @@
+---
+pve_host_network_extra_interfaces: "{{ pve_host_network_private_extra_interfaces }}"
