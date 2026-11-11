@@ -48,6 +48,10 @@ When enabled it:
    shipping each one's storage to its declared `ha_replication_target` — a
    per-guest attribute in the tofu desired state, alongside `node` — so
    ha-manager has a replica to relocate onto.
+5. Re-reads the live cluster after reconciliation and **fails** when an HA
+   resource with an enabled `pvesr` job is not covered by strict
+   `node-affinity` rules naming exactly its source node plus its replication
+   targets (`pve_ha_verify_replication_affinity`).
 
 Never live-migrate a VM across CPU vendors. `pve_upgrade` moves VMs with
 cross-vendor affinity cold during a maintenance drain. Set `pve_node_cpu_vendor`
@@ -196,6 +200,15 @@ No real service is touched.
 
   Default: `apps-replication-nodes`. Name kept for the strict node-affinity rule
   over the pair currently carrying it live.
+
+- `pve_ha_verify_replication_affinity`
+
+  Default: `true`. After the pvesr jobs and strict node-affinity rules
+  reconcile, re-read the live cluster and fail the play when an HA resource
+  with an enabled replication job is not covered by strict rules naming
+  exactly its source node plus its replication targets — no more and no
+  fewer. A rule naming a node with no replica lets ha-manager recover the
+  guest onto a node that cannot start it.
 
 - `pve_ha_cloudinit_orphan_cleanup_enabled`
 

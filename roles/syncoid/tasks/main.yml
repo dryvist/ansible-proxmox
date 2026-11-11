@@ -56,6 +56,14 @@
   tags:
     - syncoid
 
+# Destroy replicas whose pull job is gone (syncoid_retired_replica_datasets).
+# Runs after the wrapper renders, so a dataset is only destroyed once nothing
+# this role renders can pull it again.
+- name: Destroy retired replica datasets
+  ansible.builtin.import_tasks: retired_datasets.yml
+  tags:
+    - syncoid
+
 # Trigger == cron: the default for always-on nodes. A node that is powered off at
 # cron time never fires it — which is why a normally-off DR node uses trigger ==
 # boot below instead.

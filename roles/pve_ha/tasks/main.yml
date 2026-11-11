@@ -60,6 +60,82 @@
     - name: Clear permanently-broken jobs and create any that are absent
       ansible.builtin.include_tasks: replication_apply.yml
 
+    # Read-back (Part 3 of 3, with replication_jobs.yml and
+    # replication_apply.yml): the passes above reconciled the jobs and rules,
+    # so the LIVE cluster must now agree — every HA resource with an enabled
+    # pvesr job must be covered by strict node-affinity rules naming exactly
+    # its source node plus its replication targets, and must still run and
+    # report under --check. A rule naming a node with no replica lets
+    # ha-manager recover the guest onto a node that cannot start it. The
+    # reads are cluster-wide (pvesh/ha-manager proxy to any node), so
+    # run_once like replication_jobs.yml's; the logic itself lives in
+    # verify_replication_affinity.yml, pure over parsed inputs, so the
+    # offline test can feed it fixtures.
+    - name: Verify the live strict rules against the live replication placement
+      when: pve_ha_verify_replication_affinity | bool
+      block:
+        - name: Read live HA rules for the replication-affinity verification
+          ansible.builtin.command: ha-manager rules config --output-format json
+          register: pve_ha_verify_rules_raw
+          changed_when: false
+          # Read-only; a check run needs the live rules to verify them.
+          check_mode: false
+          run_once: true
+
+        - name: Read live replication jobs for the replication-affinity verification
+          ansible.builtin.command: pvesh get /cluster/replication --output-format json
+          register: pve_ha_verify_jobs_raw
+          changed_when: false
+          # Read-only; a check run needs the live jobs to verify against.
+          check_mode: false
+          run_once: true
+
+        - name: Read live HA resources for the replication-affinity verification
+          ansible.builtin.command: pvesh get /cluster/ha/resources --output-format json
+          register: pve_ha_verify_resources_raw
+          changed_when: false
+          # Read-only; a check run needs the live resources to verify against.
+          check_mode: false
+          run_once: true
+
+        - name: Read live guest placement for the replication-affinity node map
+          ansible.builtin.command: pvesh get /cluster/resources --type vm --output-format json
+          register: pve_ha_verify_placement_raw
+          changed_when: false
+          # Read-only; a check run needs live placement for the source fallback.
+          check_mode: false
+          run_once: true
+
+        - name: Parse the live HA rules for the replication-affinity verification
+          ansible.builtin.set_fact:
+            pve_ha_verify_rules: "{{ pve_ha_verify_rules_raw.stdout | from_json }}"
+          run_once: true
+
+        - name: Parse the live replication jobs for the replication-affinity verification
+          ansible.builtin.set_fact:
+            pve_ha_verify_jobs: "{{ pve_ha_verify_jobs_raw.stdout | from_json }}"
+          run_once: true
+
+        - name: Parse the live HA resources for the replication-affinity verification
+          ansible.builtin.set_fact:
+            pve_ha_verify_resources: "{{ pve_ha_verify_resources_raw.stdout | from_json }}"
+          run_once: true
+
+        - name: Map each guest's current node for the replication-affinity verification
+          ansible.builtin.set_fact:
+            pve_ha_verify_guest_nodes: >-
+              {{ pve_ha_verify_guest_nodes | default({}) | combine({
+                   item.vmid | string: item.node
+                 }) }}
+          loop: "{{ pve_ha_verify_placement_raw.stdout | from_json }}"
+          loop_control:
+            label: "{{ item.vmid }}"
+          run_once: true
+
+        - name: Fail on any replicated guest whose strict rules mismatch its replicas
+          ansible.builtin.include_tasks: verify_replication_affinity.yml
+          run_once: true
+
 - name: Remove guarded orphaned cloud-init volumes on each node
   when:
     - pve_ha_enabled | bool

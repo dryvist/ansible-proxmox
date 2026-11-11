@@ -40,9 +40,22 @@ syncoid_boot_poweroff_on_complete: false
 
 # Input default for the replica dataset quota; override to change its cap.
 pve_r710_bulk_replica_quota: "2T"
-zfs_pools_vm_disk_properties_node:
-  bulk/replica:
-    quota: "{{ pve_r710_bulk_replica_quota }}"
+
+# Ad-hoc ZFS properties for datasets this node's tofu contract has no slot for,
+# reconciled by zfs_pools with zfs get/set. Built as an expression because the
+# object-store key is derived — it is the same path the object-store syncoid
+# job pulls into (see 01-syncoid-jobs.yml), so a relocation or VMID renumber
+# flows through with no edit; dict keys are never templated in place. The
+# expression resolves containers_from_tofu, so like the syncoid jobs it fails
+# loudly instead of guessing when load_tofu has not run. The replica leaf is
+# created by the first pull, so the reservation lands from the converge after
+# the replica first exists.
+zfs_pools_vm_disk_properties_node: >-
+  {{ {
+       'bulk/replica': {'quota': pve_r710_bulk_replica_quota},
+       'bulk/replica/' ~ object_store_node ~ '/subvol-' ~ object_store_vmid ~ '-disk-1': {'reservation': '900G'},
+       'bulk/backups': {'quota': '600G'}
+     } }}
 
 # The Splunk configuration disk is ~4 GB of text that changes whenever anything
 # is reconfigured, and its incrementals are kilobytes — so a 4 h RPO on it buys

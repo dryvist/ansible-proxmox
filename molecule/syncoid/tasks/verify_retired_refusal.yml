@@ -1,0 +1,32 @@
+---
+# Included once per malformed path by verify.yml. A case counts as refused only
+# when the guard task itself failed; any other failure stops the play instead of
+# counting as a refusal. Input: syncoid_retired_bad_path.
+- name: Run the retired-replica guard against the malformed path
+  block:
+    - name: Run the guard over the malformed path
+      ansible.builtin.include_role:
+        name: syncoid
+        tasks_from: retired_datasets.yml
+      vars:
+        syncoid_enabled: true
+        syncoid_retired_replica_datasets: ["{{ syncoid_retired_bad_path }}"]
+
+    - name: Fail because the malformed path was accepted
+      ansible.builtin.fail:
+        msg: "The path {{ syncoid_retired_bad_path | quote }} was ACCEPTED."
+  rescue:
+    - name: Assert the refusal came from the path guard
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_failed_task.name == 'Refuse a retired replica dataset path
+            that is not a literal replica leaf'
+        fail_msg: >-
+          Case {{ syncoid_retired_bad_path | quote }} failed in an unrelated
+          task: {{ ansible_failed_task.name }}
+
+    - name: Record the malformed path refusal
+      ansible.builtin.set_fact:
+        syncoid_retired_refused: >-
+          {{ syncoid_retired_refused | default([]) + [syncoid_retired_bad_path] }}

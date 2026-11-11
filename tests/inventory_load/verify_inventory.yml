@@ -82,6 +82,23 @@
         fail_msg: >-
           The replica dataset must reach zfs_pools with its documented quota input.
 
+    # The reservation rides on the same derived key the object-store syncoid
+    # job pulls into, so it is asserted through that key rather than a literal
+    # path — a relocation or VMID renumber keeps both sides in step.
+    - name: Assert the object-store replica declares its reservation
+      ansible.builtin.assert:
+        that:
+          - >-
+            hostvars['pve-r710'].zfs_pools_vm_disk_properties[
+              'bulk/replica/' ~ hostvars['pve-r710'].object_store_node
+              ~ '/subvol-' ~ hostvars['pve-r710'].object_store_vmid ~ '-disk-1'
+            ].reservation == '900G'
+          - hostvars['pve-r710'].zfs_pools_vm_disk_properties['bulk/backups'].quota == '600G'
+        fail_msg: >-
+          The object-store replica must reach zfs_pools with its reservation,
+          keyed by the same derived path its syncoid job pulls into, and the
+          backups namespace must reach zfs_pools with its quota.
+
     - name: Assert cluster-wide replica retention defaults and job classes
       ansible.builtin.assert:
         that:
@@ -174,6 +191,39 @@
         fail_msg: >-
           The recursive root-pool source job must not be configured on this
           replica node.
+      when: inventory_hostname == 'pve-r710'
+
+    # The same protection, scoped to a guest class: guests the published
+    # inventory tags agent-sandbox are ephemeral, so nothing on this node may
+    # pull their disks. VMIDs resolve from the published tags, so a renumber
+    # stays covered. The non-empty derivation keeps the check from passing
+    # vacuously if the fixture guest disappears.
+    - name: Assert no job pulls an agent-sandbox guest's disks
+      ansible.builtin.assert:
+        that:
+          - agent_sandbox_vmids | length > 0
+          - >-
+            (((syncoid_jobs | default([])) | map(attribute='source') | list)
+             + ((syncoid_jobs | default([])) | map(attribute='target') | list))
+            | select('search', agent_sandbox_disk_pattern) | list | length == 0
+        fail_msg: >-
+          A syncoid endpoint names a disk of a guest tagged agent-sandbox.
+          Ephemeral sandbox guests are not replicated to this node.
+        success_msg: >-
+          No syncoid endpoint names an agent-sandbox guest disk
+          ({{ agent_sandbox_disk_pattern }}).
+      vars:
+        agent_sandbox_vmids: >-
+          {{ ((hostvars['localhost'].tofu_data.vms | default({}))
+              | combine(hostvars['localhost'].tofu_data.containers | default({}), recursive=True)
+              | dict2items
+              | selectattr('value.tags', 'defined')
+              | selectattr('value.tags', 'contains', 'agent-sandbox')
+              | map(attribute='value.vmid') | list) }}
+        agent_sandbox_disk_pattern: >-
+          {{ (agent_sandbox_vmids | map('string') | list
+              | map('regex_replace', '^', '(?:vm|subvol)-')
+              | map('regex_replace', '$', '-disk-') | list) | join('|') }}
       when: inventory_hostname == 'pve-r710'
 
 - name: Verify the media pool has no sanoid key and no syncoid endpoint

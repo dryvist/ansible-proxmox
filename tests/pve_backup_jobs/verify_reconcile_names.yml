@@ -12,6 +12,7 @@
     pve_backup_jobs_stub_dir: /tmp/pve-backup-jobs-fixture
     pve_backup_jobs_default_mode: snapshot
     pve_backup_jobs_default_compress: zstd
+    pve_backup_jobs_default_pbs_change_detection_mode: metadata
     pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
     pve_backup_jobs_prune_unmanaged: true
     pve_backup_jobs_tofu_guest_map:
@@ -63,6 +64,7 @@
         exclude: "4244"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
       - id: fixture-from-all-to-names
@@ -74,6 +76,7 @@
         enabled: "0"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
       - id: fixture-to-all
@@ -85,6 +88,7 @@
         enabled: "0"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
       - id: fixture-names-insync
@@ -96,6 +100,7 @@
         enabled: "0"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: 3}
     pve_backup_jobs_fixture_state_after_create:
@@ -108,6 +113,7 @@
         enabled: 0
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
       - id: fixture-from-all-to-names
@@ -119,6 +125,7 @@
         enabled: 0
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
       - id: fixture-to-all
@@ -130,6 +137,7 @@
         enabled: 0
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
       - id: fixture-names-insync
@@ -141,6 +149,7 @@
         enabled: 0
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: 3}
       - id: fixture-names-create
@@ -152,6 +161,7 @@
         enabled: 0
         mode: stop
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
 

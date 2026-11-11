@@ -143,3 +143,15 @@ syncoid_jobs:
   - name: "ct-5310010-disk1"  # technitium-dns-2
     source: "root@pve-r540:bulk/subvol-5310010-disk-1"
     target: "bulk/replica/pve-r540/subvol-5310010-disk-1"
+
+# Retired replicas: datasets stranded under bulk/replica/ by the recursive
+# peer rpool/data pull that used to sit in syncoid_jobs above. Removing a job
+# stops the pull, not the storage, so these two (an ephemeral sandbox guest's
+# disks, tagged agent-sandbox in the published inventory) are declared here
+# for the syncoid role to destroy once: every entry must be a literal path —
+# the role refuses wildcards, snapshot markers, '..' and whitespace — and a
+# path that is already gone is skipped, so the converge after a destroy is a
+# clean no-op. Dropping an entry once it reports absent is the cleanup.
+syncoid_retired_replica_datasets:
+  - "bulk/replica/pve-r540/rpool/data/vm-515100-disk-0"
+  - "bulk/replica/pve-r540/rpool/data/vm-515100-disk-1"

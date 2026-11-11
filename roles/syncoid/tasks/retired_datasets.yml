@@ -1,0 +1,86 @@
+---
+# Retired replica datasets (syncoid_retired_replica_datasets): destroy
+# replicas whose pull job is gone. Declared literally in host_vars, never
+# discovered, and validated before anything runs — an entry naming anything
+# outside bulk/replica/, or carrying a wildcard, a snapshot marker, '..' or
+# whitespace, fails the converge instead of reaching zfs.
+
+- name: Refuse a retired replica dataset path that is not a literal replica leaf
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item is match('^bulk/replica/')
+      - "'*' not in item"
+      - "'@' not in item"
+      - "'..' not in item"
+      - item is not search('\\s')
+    fail_msg: >-
+      syncoid_retired_replica_datasets entries must be literal dataset paths
+      under bulk/replica/ with no wildcard, no snapshot marker, no '..' and no
+      whitespace; refused: {{ item | quote }}
+    quiet: true
+  loop: "{{ syncoid_retired_replica_datasets }}"
+  when: syncoid_enabled
+  tags:
+    - syncoid
+
+# One pass per declared path, in the declared order. `-r` covers the dataset
+# and its own snapshots and children; `-R` (dependents outside the subtree) is
+# deliberately not used, and no parent is ever named. A path that is absent
+# reports no change, so the converge after a successful destroy is a no-op. A
+# destroy that fails (busy mid-receive, permission) fails the task rather than
+# reading as a skip.
+#
+# Two guards sit before the destroy, per declared path:
+#   - Only a literal "dataset does not exist" reads as ABSENT. Any other
+#     `zfs list` failure (permission, I/O) fails the task — an error that
+#     reads as absent would silently skip a destroy the declaration still
+#     asks for.
+#   - A path with child filesystems or volumes is a namespace, not a leaf
+#     (a node namespace such as bulk/replica/<node>, or its .../rpool/data);
+#     it passes the literal-path assert above, but `zfs destroy -r` would take
+#     the whole subtree in one step. The children listing must return exactly
+#     the path itself, or the converge fails naming the path.
+- name: Destroy each present retired replica dataset
+  ansible.builtin.shell:
+    cmd: |
+      zfs_list_err=$(zfs list -H -o name {{ item | quote }} 2>&1 >/dev/null) \
+        && zfs_list_rc=0 || zfs_list_rc=$?
+      case "$zfs_list_rc" in
+        0)
+          zfs_children=$(zfs list -H -o name -r -d 1 -t filesystem,volume {{ item | quote }}) \
+            || { echo "CHILD LIST FAILED: $zfs_children" >&2; exit 1; }
+          zfs_children_count=0
+          for zfs_child in $zfs_children; do
+            zfs_children_count=$((zfs_children_count + 1))
+          done
+          if [ "$zfs_children_count" -gt 1 ]; then
+            echo "REFUSED: {{ item | quote }} has child datasets; declare its leaves instead" >&2
+            exit 1
+          fi
+          zfs destroy -r {{ item | quote }} && echo DESTROYED
+          ;;
+        *)
+          # Not-found is the one absence the declaration accepts; any other
+          # list failure must fail the task, never read as ABSENT.
+          case "$zfs_list_err" in
+            *"dataset does not exist"*)
+              echo ABSENT
+              ;;
+            *)
+              echo "ZFS LIST FAILED: $zfs_list_err" >&2
+              exit 1
+              ;;
+          esac
+          ;;
+      esac
+  loop: "{{ syncoid_retired_replica_datasets }}"
+  loop_control:
+    label: "{{ item }}"
+  register: syncoid_retired_destroy
+  changed_when: "'DESTROYED' in syncoid_retired_destroy.stdout"
+  when:
+    - syncoid_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid

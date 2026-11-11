@@ -4,6 +4,53 @@
 # Same idempotent "read, set if drifted" shape as dataset_properties.yml,
 # just keyed by the full dataset path instead of a pool/dataset pair, since
 # these are not part of the committed tofu node_storage contract.
+#
+# `reservation` is headroom-gated. `zfs set reservation` fails the play when
+# the parent cannot grant it, and the replica leaf this exists for (the
+# object-store pull target) is created by the first syncoid pull — so the
+# converge that runs before space is free would otherwise wedge every later
+# converge behind one property. Needed bytes = reservation - the dataset's
+# current used; the reservation is set only when that fits the parent
+# dataset's `available` (which reflects the parent quota). Otherwise the
+# converge names the dataset and the shortfall in bytes and continues; the
+# next run after space is freed applies it. A missing leaf (the pull has not
+# run yet) is likewise a warning and a skip for the whole dataset — there is
+# nothing to read or set on it — never a failure. Quotas are not gated:
+# capping consumption needs no free space.
+
+- name: "Check the ad-hoc property dataset exists: {{ zfs_pools_vmdisk.key }}"
+  ansible.builtin.command:
+    cmd: "zfs list -H -o name {{ zfs_pools_vmdisk.key }}"
+  register: zfs_pools_vmdisk_exists
+  changed_when: false
+  check_mode: false
+  failed_when: >-
+    zfs_pools_vmdisk_exists.rc != 0
+    and 'dataset does not exist' not in zfs_pools_vmdisk_exists.stderr
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
+
+- name: "Warn and skip ad-hoc properties for the missing dataset: {{ zfs_pools_vmdisk.key }}"
+  ansible.builtin.debug:
+    msg: >-
+      Dataset {{ zfs_pools_vmdisk.key }} does not exist yet (it may be created
+      by its first replication pull); skipped its ad-hoc properties
+      ({{ zfs_pools_vmdisk.value | dict2items | map(attribute='key') | join(', ') }}).
+      They apply on the converge after it exists.
+  when: zfs_pools_vmdisk_exists.rc != 0
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
+
+- name: "Record the skipped ad-hoc properties for the missing dataset: {{ zfs_pools_vmdisk.key }}"
+  ansible.builtin.set_fact:
+    zfs_pools_vmdisk_missing: >-
+      {{ (zfs_pools_vmdisk_missing | default([])) + [zfs_pools_vmdisk.key] }}
+  when: zfs_pools_vmdisk_exists.rc != 0
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
 
 - name: "Read current ad-hoc properties for {{ zfs_pools_vmdisk.key }}"
   ansible.builtin.command:
@@ -11,9 +58,42 @@
   register: zfs_pools_vmdisk_current
   changed_when: false
   check_mode: false
+  failed_when: zfs_pools_vmdisk_current.rc != 0
   loop: "{{ zfs_pools_vmdisk.value | dict2items }}"
   loop_control:
     label: "{{ zfs_pools_vmdisk.key }} {{ item.key }}"
+  when: zfs_pools_vmdisk_exists.rc == 0
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
+
+# Headroom inputs, read only when a reservation is declared on an existing
+# dataset. `available` comes from the PARENT, which is where a quota caps the
+# space this reservation has to fit in.
+- name: "Read used bytes for the reservation on {{ zfs_pools_vmdisk.key }}"
+  ansible.builtin.command:
+    cmd: "zfs get -Hp -o value used {{ zfs_pools_vmdisk.key }}"
+  register: zfs_pools_vmdisk_used
+  changed_when: false
+  check_mode: false
+  failed_when: zfs_pools_vmdisk_used.rc != 0
+  when:
+    - zfs_pools_vmdisk_exists.rc == 0
+    - zfs_pools_vmdisk.value.reservation is defined
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
+
+- name: "Read the parent dataset's available bytes for the reservation on {{ zfs_pools_vmdisk.key }}"
+  ansible.builtin.command:
+    cmd: "zfs get -Hp -o value available {{ zfs_pools_vmdisk.key | dirname }}"
+  register: zfs_pools_vmdisk_parent_available
+  changed_when: false
+  check_mode: false
+  failed_when: zfs_pools_vmdisk_parent_available.rc != 0
+  when:
+    - zfs_pools_vmdisk_exists.rc == 0
+    - zfs_pools_vmdisk.value.reservation is defined
   tags:
     - zfs_pools
     - zfs_vm_disk_properties
@@ -25,8 +105,86 @@
   loop_control:
     label: "{{ zfs_pools_vmdisk.key }} {{ item.key }}={{ item.value }}"
     index_var: zfs_pools_vmdisk_idx
-  when: zfs_pools_vmdisk_current.results[zfs_pools_vmdisk_idx].stdout != (item.value | string)
+  vars:
+    # A reservation only has to cover the gap between what the dataset already
+    # holds and the reservation (negative when used exceeds it, which always
+    # fits); 0 for every other property, which skips the comparison below.
+    zfs_pools_vmdisk_needed_bytes: >-
+      {{ (item.value | human_to_bytes) - (zfs_pools_vmdisk_used.stdout | int)
+         if item.key == 'reservation' else 0 }}
+  when:
+    - zfs_pools_vmdisk_exists.rc == 0
+    - zfs_pools_vmdisk_current.results[zfs_pools_vmdisk_idx].stdout != (item.value | string)
+    - >-
+      item.key != 'reservation'
+      or (zfs_pools_vmdisk_needed_bytes | int)
+         <= (zfs_pools_vmdisk_parent_available.stdout | int)
   changed_when: true
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
+
+- name: "Warn: the declared reservation does not fit {{ zfs_pools_vmdisk.key }}"
+  ansible.builtin.debug:
+    msg: >-
+      Reservation {{ zfs_pools_vmdisk.value.reservation }} on
+      {{ zfs_pools_vmdisk.key }} needs {{ zfs_pools_vmdisk_needed_bytes }} more
+      bytes, but parent {{ zfs_pools_vmdisk.key | dirname }} has only
+      {{ zfs_pools_vmdisk_parent_available.stdout }} bytes available — a
+      shortfall of {{ zfs_pools_vmdisk_shortfall_bytes }} bytes. The
+      reservation is left unchanged and the converge continues; free space and
+      re-run the converge to apply it.
+  vars:
+    zfs_pools_vmdisk_needed_bytes: >-
+      {{ (zfs_pools_vmdisk.value.reservation | human_to_bytes)
+         - (zfs_pools_vmdisk_used.stdout | int) }}
+    zfs_pools_vmdisk_shortfall_bytes: >-
+      {{ zfs_pools_vmdisk_needed_bytes | int
+         - (zfs_pools_vmdisk_parent_available.stdout | int) }}
+  when:
+    - zfs_pools_vmdisk_exists.rc == 0
+    - zfs_pools_vmdisk.value.reservation is defined
+    - >-
+      zfs_pools_vmdisk_current.results
+      | selectattr('item.key', 'equalto', 'reservation')
+      | map(attribute='stdout') | list | first | default('')
+      != (zfs_pools_vmdisk.value.reservation | string)
+    - >-
+      zfs_pools_vmdisk_needed_bytes | int
+      > zfs_pools_vmdisk_parent_available.stdout | int
+  tags:
+    - zfs_pools
+    - zfs_vm_disk_properties
+
+- name: "Record the deferred reservation on {{ zfs_pools_vmdisk.key }}"
+  ansible.builtin.set_fact:
+    zfs_pools_reservation_deferred: >-
+      {{ (zfs_pools_reservation_deferred | default([]))
+         + [{
+             'dataset': zfs_pools_vmdisk.key,
+             'reservation': zfs_pools_vmdisk.value.reservation,
+             'needed_bytes': zfs_pools_vmdisk_needed_bytes | int,
+             'available_bytes': zfs_pools_vmdisk_parent_available.stdout | int,
+             'shortfall_bytes': zfs_pools_vmdisk_shortfall_bytes | int
+           }] }}
+  vars:
+    zfs_pools_vmdisk_needed_bytes: >-
+      {{ (zfs_pools_vmdisk.value.reservation | human_to_bytes)
+         - (zfs_pools_vmdisk_used.stdout | int) }}
+    zfs_pools_vmdisk_shortfall_bytes: >-
+      {{ zfs_pools_vmdisk_needed_bytes | int
+         - (zfs_pools_vmdisk_parent_available.stdout | int) }}
+  when:
+    - zfs_pools_vmdisk_exists.rc == 0
+    - zfs_pools_vmdisk.value.reservation is defined
+    - >-
+      zfs_pools_vmdisk_current.results
+      | selectattr('item.key', 'equalto', 'reservation')
+      | map(attribute='stdout') | list | first | default('')
+      != (zfs_pools_vmdisk.value.reservation | string)
+    - >-
+      zfs_pools_vmdisk_needed_bytes | int
+      > zfs_pools_vmdisk_parent_available.stdout | int
   tags:
     - zfs_pools
     - zfs_vm_disk_properties

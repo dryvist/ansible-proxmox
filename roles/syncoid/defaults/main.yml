@@ -122,3 +122,14 @@ syncoid_restore_check_logger: logger
 syncoid_restore_check_wants: "{{ syncoid_enabled | bool
   and syncoid_restore_check_enabled | bool
   and (syncoid_restore_check_dataset | default('') | length > 0) }}"
+
+# Replica datasets left behind by jobs syncoid_jobs no longer carries. Removing
+# a job stops the pull, not the storage: the replica it left behind keeps
+# consuming quota on the target pool forever. List literal `bulk/replica/...`
+# paths here to destroy them; each entry is validated (replica prefix, no
+# wildcard, snapshot marker, '..' or whitespace, no child datasets — declare
+# leaves, not namespaces) and skipped only when literally absent, so a converge
+# after the first destroy is a clean no-op. Any other `zfs list` error fails.
+# `zfs destroy -r` removes the dataset and its own snapshots and children,
+# never a parent.
+syncoid_retired_replica_datasets: []
