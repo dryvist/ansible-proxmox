@@ -81,18 +81,16 @@ syncoid_jobs: []
 # but cannot be restored is caught within a week instead of at the moment of a
 # disaster.
 syncoid_restore_check_enabled: false
-# The replica dataset to check. No default on purpose: the check names a
-# specific replica, and a guessed dataset is a check of nothing. The
-# replicating node derives it from the published inventory (see the
-# object-store job's host_vars) exactly like the syncoid job's target.
-syncoid_restore_check_dataset: ""
+# Placeholder replica dataset. Runtime inventory supplies the real value.
+syncoid_restore_check_dataset: "example/dataset"
 # Bucket directory the check must find inside the clone. HOW THE OBJECT STORE
 # LAYS OBJECTS OUT ON DISK IS NOT RESOLVABLE FROM THIS REPOSITORY (the store
 # guest is deployed by ansible-proxmox-apps), so the check verifies only that
 # this bucket directory exists and is non-empty — not that a named object is
 # present. When the store's on-disk layout is published upstream, tighten the
 # check to the known object (deployment.json) and delete this caveat.
-syncoid_restore_check_bucket: "iac-inventory"
+# Placeholder bucket directory. Runtime inventory supplies the real value.
+syncoid_restore_check_bucket: "example-bucket"
 # The bucket directory is located by a bounded search under the clone mount,
 # because the store's data directory inside the replicated volume is not
 # published here either. Depth 5 covers <mount>/<data-dir>/<bucket> with

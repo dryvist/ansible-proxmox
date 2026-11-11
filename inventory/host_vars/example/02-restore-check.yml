@@ -1,0 +1,6 @@
+---
+# Example host configuration only. Runtime inventory supplies the real dataset
+# and bucket through these variables; this file contains placeholders.
+syncoid_restore_check_enabled: true
+syncoid_restore_check_dataset: example/dataset
+syncoid_restore_check_bucket: example-bucket

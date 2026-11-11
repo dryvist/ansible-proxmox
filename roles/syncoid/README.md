@@ -58,8 +58,8 @@ set up out of band. The role schedules replication; it does not distribute keys.
 | `syncoid_user`                              | `root`                               | User that runs syncoid (needs SSH to sources)                          |
 | `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; pings on success, `/fail` if any job failed       |
 | `syncoid_restore_check_enabled`             | `false`                              | Weekly restore check (see below)                                       |
-| `syncoid_restore_check_dataset`             | `""`                                 | Replica dataset to check; no default on purpose                        |
-| `syncoid_restore_check_bucket`              | `iac-inventory`                      | Bucket directory the check must find non-empty inside the clone        |
+| `syncoid_restore_check_dataset`             | `example/dataset`                    | Replica dataset to check; runtime inventory supplies the real value   |
+| `syncoid_restore_check_bucket`              | `example-bucket`                     | Bucket directory the check must find non-empty inside the clone        |
 
 ## Restore check
 
@@ -90,10 +90,10 @@ check verifies only that the bucket directory exists and is non-empty. When
 the store's on-disk layout is published upstream, tighten the check to the
 named object.
 
-The dataset is derived from the published inventory on the replicating node
-(see `inventory/host_vars/`), never hard-coded — the same renumber-proof
-derivation the replication jobs use. Disabling the check removes the timer and
-units: the declared state includes the absence.
+Runtime inventory supplies the real dataset and bucket values through the
+variables above. The role defaults and tracked inventory example contain only
+placeholders. Disabling the check removes the timer and units: the declared
+state includes the absence.
 
 ## Usage
 

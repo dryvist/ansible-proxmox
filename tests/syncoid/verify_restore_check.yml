@@ -20,9 +20,10 @@
   gather_facts: false
 
   vars:
-    # Fixture identity mirroring the object-store replica shape; the role
-    # never sees a real dataset here, only its own template output.
-    restore_check_dataset: bulk/replica/node-a/subvol-100-disk-1
+    # Placeholder identity; the role never sees a real dataset here, only its
+    # own template output.
+    restore_check_dataset: example/replica/example-node/subvol-100-disk-1
+    restore_check_bucket: example-bucket
     restore_check_snapshot: "{{ restore_check_dataset }}@autosnap_2026-11-09_05:00:01_hourly"
     restore_check_template_dir: "{{ playbook_dir }}/../../roles/syncoid/templates"
 
@@ -54,6 +55,16 @@
         expect_rc: 1
         prio: err
         syslog: "result=failed reason=bucket_dir_empty snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
+      - name: cleanup-unmount-fails
+        fail_mode: unmount
+        expect_rc: 1
+        prio: err
+        syslog: "result=failed reason=cleanup_unmount_failed snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
+      - name: cleanup-destroy-fails
+        fail_mode: destroy
+        expect_rc: 1
+        prio: err
+        syslog: "result=failed reason=cleanup_destroy_failed snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
       - name: no-snapshots
         fail_mode: no_snapshots
         expect_rc: 1
@@ -73,6 +84,8 @@
       case "${FAKE_ZFS_FAIL:-}" in
         clone) [ "$1" = "clone" ] && exit 1 ;;
         mount) [ "$1" = "mount" ] && exit 1 ;;
+        unmount) [ "$1" = "unmount" ] && exit 1 ;;
+        destroy) [ "$1" = "destroy" ] && exit 1 ;;
       esac
       case "$1" in
         list)
@@ -120,59 +133,6 @@
       # Test stub for logger(1): records the syslog line to $FAKE_LOGGER_LOG.
       printf '%s\n' "$*" >>"${FAKE_LOGGER_LOG:?}"
 
-    # Test shim for find(1), covering exactly the two invocations the
-    # restore-check script makes (locate the bucket dir, prove it non-empty).
-    # Only reached where the pinned PATH has no real find — hosts and CI
-    # runners resolve /usr/bin/find first, so the real binary is what runs
-    # there. Unlike find(1) it skips dotfiles, which no scenario uses.
-    restore_check_stub_find: |
-      #!/bin/bash
-      set -u
-      dir="$1"
-      shift
-      mindepth=0
-      maxdepth=0
-      name=""
-      typed=false
-      while [ "$#" -gt 0 ]; do
-        case "$1" in
-          -mindepth) mindepth="$2"; shift 2 ;;
-          -maxdepth) maxdepth="$2"; shift 2 ;;
-          -type)
-            [ "$2" = "d" ] || {
-              printf 'find-stub: only -type d supported\n' >&2
-              exit 2
-            }
-            typed=true
-            shift 2
-            ;;
-          -name) name="$2"; shift 2 ;;
-          -print | -quit) shift ;;
-          *)
-            printf 'find-stub: unsupported argument %s\n' "$1" >&2
-            exit 2
-            ;;
-        esac
-      done
-      walk() {
-        local d="$1" depth="$2" entry at
-        for entry in "$d"/*; do
-          [ -e "$entry" ] || continue
-          at=$((depth + 1))
-          if [ "$at" -ge "$mindepth" ] && [ "$at" -le "$maxdepth" ]; then
-            if { [ -z "$name" ] || [ "${entry##*/}" = "$name" ]; } && { ! $typed || [ -d "$entry" ]; }; then
-              printf '%s\n' "$entry"
-              exit 0
-            fi
-          fi
-          if [ -d "$entry" ] && [ "$at" -lt "$maxdepth" ]; then
-            walk "$entry" "$at"
-          fi
-        done
-      }
-      walk "$dir" 0
-      exit 0
-
   tasks:
     - name: Load the syncoid role defaults
       ansible.builtin.include_vars:
@@ -180,10 +140,11 @@
 
     # set_fact, deliberately: include_vars outranks task vars, so a task-vars
     # override of a loaded default silently loses. set_fact outranks
-    # include_vars, so these two renders actually see the fixture values.
-    - name: Point the script renders at the fixture dataset
+    # include_vars, so the renders actually see the fixture values.
+    - name: Point the script renders at the fixture dataset and bucket
       ansible.builtin.set_fact:
         syncoid_restore_check_dataset: "{{ restore_check_dataset }}"
+        syncoid_restore_check_bucket: "{{ restore_check_bucket }}"
 
     # --- Layer 1: the rendered timer ---
     - name: Render the restore-check timer from the role template
@@ -245,6 +206,8 @@
           - "'zfs clone -o readonly=on -o canmount=noauto -o mountpoint=\"$MNT\"' in restore_check_script_text"
           - "'zfs mount \"$CLONE\"' in restore_check_script_text"
           - "'mktemp -d /run/syncoid-restore-check.XXXXXX' in restore_check_script_text"
+          - "'DATASET=\"{{ restore_check_dataset }}\"' in restore_check_script_text"
+          - "'BUCKET=\"{{ restore_check_bucket }}\"' in restore_check_script_text"
         quiet: true
 
     - name: Assert the script checks the bucket directory and not a named object
@@ -262,19 +225,26 @@
 
     - name: Assert the script always destroys the clone and logs one syslog line
       vars:
-        destroy_call: 'zfs destroy "$CLONE" >/dev/null 2>&1 || true'
+        cleanup_destroy_call: 'zfs destroy "$CLONE" >/dev/null 2>&1'
+        stale_destroy_call: 'zfs destroy -f "$CLONE" >/dev/null 2>&1 || fail "stale_clone_destroy_failed"'
       ansible.builtin.assert:
         that:
           # The destroy lives in the EXIT trap so every exit path runs it —
           # success, every fail() exit, and signals routed through exit.
           - "'trap cleanup EXIT' in restore_check_script_text"
           - "restore_check_script_text is search(\"trap 'exit 1' HUP INT TERM\")"
-          # Exactly two destroys: the stale-clone sweep and the trap. A
-          # refactor that drops the trap's destroy drops the count to one.
-          - "(restore_check_script_text | regex_findall(destroy_call | regex_escape)) | length == 2"
-          # One syslog line per run carrying result, snapshot and age.
+          # One checked destroy for a stale clone and one checked destroy in
+          # the EXIT trap; dropping either cleanup path fails this assertion.
+          - "(restore_check_script_text | regex_findall(cleanup_destroy_call | regex_escape)) | length == 1"
+          - "(restore_check_script_text | regex_findall(stale_destroy_call | regex_escape)) | length == 1"
+          - "'if ! zfs destroy \"$CLONE\" >/dev/null 2>&1; then' in restore_check_script_text"
+          - "'if [ -n \"$FAIL_REASON\" ] || [ \"$exit_status\" -ne 0 ]; then' in restore_check_script_text"
+          - "'record_failure cleanup_unmount_failed' in restore_check_script_text"
+          - "'record_failure cleanup_destroy_failed' in restore_check_script_text"
+          # One syslog line per run carrying result, snapshot and age, emitted
+          # after cleanup has determined whether success is truthful.
           - "'result=ok snapshot=$SNAP age_s=$AGE_S' in restore_check_script_text"
-          - "'result=failed reason=$1 snapshot=${SNAP:-none} age_s=${AGE_S:-na}' in restore_check_script_text"
+          - "'result=failed reason=$FAIL_REASON snapshot=${SNAP:-none} age_s=${AGE_S:-na}' in restore_check_script_text"
           - "'timeout 5 {{ syncoid_restore_check_logger }} -t syncoid-restore-check' in restore_check_script_text"
         quiet: true
 
@@ -303,12 +273,6 @@
         dest: "{{ restore_check_harness_dir.path }}/bin/logger"
         mode: "0755"
 
-    - name: Install the find shim
-      ansible.builtin.copy:
-        content: "{{ restore_check_stub_find }}"
-        dest: "{{ restore_check_harness_dir.path }}/bin/find"
-        mode: "0755"
-
     # set_fact again, for the same precedence reason as above: these must
     # beat the include_vars-loaded defaults or the harness copy would render
     # with /run and the production logger binary.
@@ -317,9 +281,8 @@
         syncoid_restore_check_tmp_dir: "{{ restore_check_harness_dir.path }}"
         syncoid_restore_check_logger: "{{ restore_check_harness_dir.path }}/bin/logger"
 
-    # The harness copy differs from the deployed script in exactly two
-    # rendered values: the mountpoint base (writable scratch, not /run) and
-    # the logger binary (the recording stub).
+    # The harness copy uses a placeholder dataset, a writable scratch
+    # mountpoint base (not /run), and the recording logger stub.
     - name: Render the restore-check script into the harness
       ansible.builtin.copy:
         content: >-

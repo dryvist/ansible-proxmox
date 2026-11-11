@@ -34,6 +34,10 @@ CLONE="$DATASET-restore-check"
 
 SNAP=""
 AGE_S=""
+MNT=""
+CLONE_ATTEMPTED=false
+CLONE_CREATED=false
+FAIL_REASON=""
 
 # One syslog line per run. Same guard as the replication wrapper: a logger
 # failure never changes the run's result, and the call is capped at five
@@ -41,7 +45,50 @@ AGE_S=""
 # pinned PATH (or the tests/ harness) can point it at a replacement.
 slog() { local prio="$1"; shift; timeout 5 {{ syncoid_restore_check_logger }} -t syncoid-restore-check -p "$prio" -- "$*" >/dev/null 2>&1 || true; }
 
-fail() { slog daemon.err "run dataset=$DATASET result=failed reason=$1 snapshot=${SNAP:-none} age_s=${AGE_S:-na}"; exit 1; }
+record_failure() {
+  if [ -n "$FAIL_REASON" ]; then
+    FAIL_REASON="$FAIL_REASON,$1"
+  else
+    FAIL_REASON="$1"
+  fi
+}
+
+fail() { record_failure "$1"; exit 1; }
+
+# Report success only after every cleanup step succeeds. Preserve the original
+# failure reason and append cleanup failures so a failed destroy cannot be
+# hidden by an earlier error (or by an otherwise successful read-back).
+cleanup() {
+  local exit_status=$?
+  trap - EXIT
+
+  if [ "$CLONE_ATTEMPTED" = true ]; then
+    # A failed mount can still leave a partial mount, so try to unmount every
+    # clone that was created. Always try destroy even when unmount fails.
+    if [ "$CLONE_CREATED" = true ] && ! zfs unmount "$CLONE" >/dev/null 2>&1; then
+      record_failure cleanup_unmount_failed
+    fi
+    if ! zfs destroy "$CLONE" >/dev/null 2>&1; then
+      record_failure cleanup_destroy_failed
+    fi
+  fi
+
+  if [ -n "$MNT" ] && ! rmdir "$MNT" >/dev/null 2>&1; then
+    record_failure cleanup_mountpoint_failed
+  fi
+
+  if [ -n "$FAIL_REASON" ] || [ "$exit_status" -ne 0 ]; then
+    [ -n "$FAIL_REASON" ] || FAIL_REASON=unexpected_exit
+    slog daemon.err "run dataset=$DATASET result=failed reason=$FAIL_REASON snapshot=${SNAP:-none} age_s=${AGE_S:-na}"
+    exit 1
+  fi
+
+  slog daemon.info "run dataset=$DATASET result=ok snapshot=$SNAP age_s=$AGE_S"
+  exit 0
+}
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
 # Newest snapshot = the replication high-water mark (same idiom as the DR
 # runbook's freshness check).
@@ -58,31 +105,24 @@ esac
 AGE_S=$(( $(date +%s) - CREATION ))
 
 # A leftover clone from a run killed before its trap ran must not block this
-# one: destroy any stale clone first, best-effort.
+# one. Force-unmount and destroy that exact clone; failure stops this run.
 if zfs list -H -o name "$CLONE" >/dev/null 2>&1; then
-  zfs unmount "$CLONE" >/dev/null 2>&1 || true
-  zfs destroy "$CLONE" >/dev/null 2>&1 || true
+  zfs destroy -f "$CLONE" >/dev/null 2>&1 || fail "stale_clone_destroy_failed"
 fi
 
 MNT="$(mktemp -d {{ syncoid_restore_check_tmp_dir }}/syncoid-restore-check.XXXXXX)" || fail "mktemp_failed"
-
-# ALWAYS path: every exit runs cleanup. Order matters — unmount before
-# destroy; every step best-effort so a partial teardown still tears down the
-# rest. INT/TERM route through exit so the EXIT trap fires for signals too.
-cleanup() {
-  zfs unmount "$CLONE" >/dev/null 2>&1 || true
-  zfs destroy "$CLONE" >/dev/null 2>&1 || true
-  rmdir "$MNT" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
 
 # Read-only clone: the check must be physically unable to write into (and so
 # corrupt) the replica it exists to verify. canmount=noauto keeps mount-all
 # from ever picking the clone up; it is mounted explicitly at the temporary
 # mountpoint (a clone inherits its origin's mountpoint otherwise, which
 # collides with the live replica mount).
-zfs clone -o readonly=on -o canmount=noauto -o mountpoint="$MNT" "$SNAP" "$CLONE" || fail "clone_failed"
+CLONE_ATTEMPTED=true
+if zfs clone -o readonly=on -o canmount=noauto -o mountpoint="$MNT" "$SNAP" "$CLONE"; then
+  CLONE_CREATED=true
+else
+  fail "clone_failed"
+fi
 zfs mount "$CLONE" || fail "mount_failed"
 
 # Bucket check (see header for why no named object is asserted). The bounded
@@ -94,5 +134,3 @@ BUCKET_DIR="$(find "$MNT" -maxdepth "$SEARCH_DEPTH" -type d -name "$BUCKET" -pri
 if [ -z "$(find "$BUCKET_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
   fail "bucket_dir_empty"
 fi
-
-slog daemon.info "run dataset=$DATASET result=ok snapshot=$SNAP age_s=$AGE_S"

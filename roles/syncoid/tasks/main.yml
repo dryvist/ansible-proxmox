@@ -227,6 +227,7 @@
     group: root
     mode: "0644"
   when: syncoid_restore_check_wants | bool
+  notify: Reload systemd daemon
   tags:
     - syncoid
 
