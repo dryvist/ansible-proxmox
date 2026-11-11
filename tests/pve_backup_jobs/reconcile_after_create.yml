@@ -1,0 +1,86 @@
+---
+pve_backup_jobs_fixture_state_after_create:
+  - id: fixture-convert
+    type: vzdump
+    pool: fixture-pool
+    storage: fixture-backup-store
+    schedule: "02:30"
+    enabled: 0
+    mode: snapshot
+    compress: zstd
+    pbs-change-detection-mode: metadata
+    comment: ""
+    prune-backups: {keep-daily: "7", keep-weekly: "4"}
+  - id: fixture-new
+    type: vzdump
+    pool: fixture-pool-b
+    node: fixture-node-b
+    storage: fixture-backup-store
+    schedule: "03:30"
+    enabled: 0
+    exclude: "4244"
+    mode: snapshot
+    compress: zstd
+    pbs-change-detection-mode: metadata
+    comment: ""
+    prune-backups: {keep-daily: "7", keep-weekly: "4"}
+  - id: fixture-insync
+    type: vzdump
+    pool: fixture-pool-c
+    all: 0
+    storage: fixture-backup-store
+    schedule: "04:30"
+    enabled: 0
+    exclude: "4244"
+    mode: snapshot
+    compress: zstd
+    pbs-change-detection-mode: metadata
+    comment: ""
+    prune-backups: {keep-daily: "3"}
+  - id: fixture-mode-change
+    type: vzdump
+    pool: fixture-pool-f
+    all: 0
+    storage: fixture-backup-store
+    schedule: "04:45"
+    enabled: 0
+    exclude: "4244"
+    mode: stop
+    compress: zstd
+    pbs-change-detection-mode: metadata
+    comment: ""
+    prune-backups: {keep-daily: "3"}
+  - id: fixture-unpin
+    type: vzdump
+    pool: fixture-pool-d
+    storage: fixture-backup-store
+    schedule: "06:30"
+    enabled: 0
+    mode: snapshot
+    compress: zstd
+    pbs-change-detection-mode: metadata
+    comment: ""
+    prune-backups: {keep-daily: "7", keep-weekly: "4"}
+  - id: fixture-all
+    type: vzdump
+    all: 1
+    node: fixture-node-all
+    storage: fixture-backup-store
+    schedule: "05:45"
+    enabled: 0
+    mode: snapshot
+    compress: zstd
+    pbs-change-detection-mode: metadata
+    comment: ""
+    prune-backups: {keep-daily: "7", keep-weekly: "4"}
+  - id: fixture-cdm
+    type: vzdump
+    pool: fixture-pool-e
+    storage: fixture-backup-store
+    schedule: "07:15"
+    enabled: 0
+    mode: snapshot
+    compress: zstd
+    pbs-change-detection-mode: data
+    comment: ""
+    prune-backups: {keep-daily: "7", keep-weekly: "4"}

@@ -1,0 +1,56 @@
+---
+pve_backup_jobs_stub_dir: /tmp/pve-backup-jobs-fixture
+pve_backup_jobs_default_mode: snapshot
+pve_backup_jobs_default_compress: zstd
+pve_backup_jobs_default_pbs_change_detection_mode: metadata
+pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
+pve_backup_jobs_prune_unmanaged: true
+pve_backup_jobs_tofu_guest_map:
+  fixture-splunk:
+    vmid: 4244
+pve_backup_jobs_jobs:
+  - id: fixture-convert
+    pool: fixture-pool
+    storage: fixture-backup-store
+    schedule: "02:30"
+    enabled: false
+  - id: fixture-new
+    pool: fixture-pool-b
+    node: fixture-node-b
+    storage: fixture-backup-store
+    schedule: "03:30"
+    enabled: false
+    exclude_names: [fixture-splunk]
+  - id: fixture-insync
+    pool: fixture-pool-c
+    storage: fixture-backup-store
+    schedule: "04:30"
+    enabled: false
+    mode: snapshot
+    prune: keep-daily=3
+    exclude_names: [fixture-splunk]
+  - id: fixture-mode-change
+    pool: fixture-pool-f
+    storage: fixture-backup-store
+    schedule: "04:45"
+    enabled: false
+    mode: stop
+    prune: keep-daily=3
+    exclude_names: [fixture-splunk]
+  - id: fixture-unpin
+    pool: fixture-pool-d
+    storage: fixture-backup-store
+    schedule: "06:30"
+    enabled: false
+  - id: fixture-all
+    all: true
+    node: fixture-node-all
+    storage: fixture-backup-store
+    schedule: "05:45"
+    enabled: false
+  - id: fixture-cdm
+    pool: fixture-pool-e
+    storage: fixture-backup-store
+    schedule: "07:15"
+    enabled: false
+    pbs_change_detection_mode: data
