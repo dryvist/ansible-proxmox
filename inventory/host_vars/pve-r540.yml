@@ -144,6 +144,14 @@ zfs_scrub_window_pools: [bulk, bulk-nobackup]
 # is always-on, and that flag drives site.yml's power-on/power-off bookends.
 idrac_power_bmc_host: "{{ lookup('env', 'PVE5_BMC_HOSTNAME') | default('', true) }}"
 
+# Corosync link1 on the dedicated unmanaged switch: interface address only,
+# no gateway. Link-local (169.254.98.0/24) never routes, so this is pure
+# point-to-point wiring for corosync's second ring. The cluster corosync.conf
+# change that consumes these addresses is separate and reviewed; declaring the
+# interfaces now makes it one edit when the switch and cabling exist.
 pve_host_network_extra_interfaces:
   - name: ens2f1
     address: 169.254.99.1/30
+  - name: eno1
+    address: 169.254.98.54/24
+    comment: corosync link1 (dedicated switch)
