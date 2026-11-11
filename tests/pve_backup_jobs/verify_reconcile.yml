@@ -20,6 +20,7 @@
     pve_backup_jobs_stub_dir: /tmp/pve-backup-jobs-fixture
     pve_backup_jobs_default_mode: snapshot
     pve_backup_jobs_default_compress: zstd
+    pve_backup_jobs_default_pbs_change_detection_mode: metadata
     pve_backup_jobs_default_prune: keep-daily=7,keep-weekly=4
     pve_backup_jobs_prune_unmanaged: true
     # Stands in for the guest map load_tofu publishes on localhost.
@@ -63,6 +64,13 @@
         storage: fixture-backup-store
         schedule: "05:45"
         enabled: false
+      # Does not exist yet — an explicit change detection mode.
+      - id: fixture-cdm
+        pool: fixture-pool-e
+        storage: fixture-backup-store
+        schedule: "07:15"
+        enabled: false
+        pbs_change_detection_mode: data
     # Serves as `pvesh get /cluster/backup`. `fixture-orphan` models the job
     # left behind after the node it named left the cluster.
     pve_backup_jobs_fixture_state:
@@ -87,6 +95,7 @@
         exclude: "4244"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: 3}
       - id: fixture-orphan
@@ -121,6 +130,7 @@
         enabled: 0
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
       - id: fixture-new
@@ -133,6 +143,7 @@
         exclude: "4244"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
       - id: fixture-insync
@@ -145,6 +156,7 @@
         exclude: "4244"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "3"}
       - id: fixture-unpin
@@ -155,6 +167,7 @@
         enabled: 0
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
       - id: fixture-all
@@ -166,6 +179,18 @@
         enabled: 0
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
+        comment: ""
+        prune-backups: {keep-daily: "7", keep-weekly: "4"}
+      - id: fixture-cdm
+        type: vzdump
+        pool: fixture-pool-e
+        storage: fixture-backup-store
+        schedule: "07:15"
+        enabled: 0
+        mode: snapshot
+        compress: zstd
+        pbs-change-detection-mode: data
         comment: ""
         prune-backups: {keep-daily: "7", keep-weekly: "4"}
 
@@ -231,6 +256,12 @@
           - "'--all 1' in pve_backup_jobs_all_create"
           - "'--pool' not in pve_backup_jobs_all_create"
           - "'--node fixture-node-all' in pve_backup_jobs_all_create"
+          # The role default change detection mode renders on create.
+          - "'--pbs-change-detection-mode metadata' in pve_backup_jobs_all_create"
+          # An explicit per-job change detection mode renders instead of the
+          # role default.
+          - "'create /cluster/backup --id fixture-cdm' in pve_backup_jobs_commands"
+          - "'--pbs-change-detection-mode data' in pve_backup_jobs_cdm_create"
           # Jobs ship disabled; a first full run is a deliberate act.
           - "'--enabled 1' not in pve_backup_jobs_commands"
           # The already-correct job must not be touched.
@@ -253,6 +284,10 @@
         pve_backup_jobs_all_create: >-
           {{ pve_backup_jobs_commands.splitlines()
              | select('search', 'create /cluster/backup --id fixture-all')
+             | first | default('') }}
+        pve_backup_jobs_cdm_create: >-
+          {{ pve_backup_jobs_commands.splitlines()
+             | select('search', 'create /cluster/backup --id fixture-cdm')
              | first | default('') }}
 
     - name: Write back the jobs created by the first converge

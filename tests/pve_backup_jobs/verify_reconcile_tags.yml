@@ -16,6 +16,7 @@
     pve_backup_jobs_stub_dir: /tmp/pve-backup-jobs-tags-fixture
     pve_backup_jobs_default_mode: snapshot
     pve_backup_jobs_default_compress: zstd
+    pve_backup_jobs_default_pbs_change_detection_mode: metadata
     pve_backup_jobs_default_prune: keep-all=1
     pve_backup_jobs_prune_unmanaged: true
     pve_backup_jobs_tags_tofu_fixture:
@@ -88,6 +89,7 @@
         exclude: "4302,4305"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: { keep-all: "1" }
       - id: fixture-no-tags
@@ -100,6 +102,7 @@
         exclude: "4305"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: { keep-all: "1" }
     # The state after the first converge: the union is applied to the existing
@@ -115,6 +118,7 @@
         exclude: "4301,4302,4305,4306"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: { keep-all: "1" }
       - id: fixture-tags-only
@@ -127,6 +131,7 @@
         exclude: "4301,4302,4306"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: { keep-all: "1" }
       - id: fixture-no-tags
@@ -139,6 +144,7 @@
         exclude: "4305"
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: { keep-all: "1" }
       - id: fixture-no-exclusions
@@ -150,6 +156,7 @@
         enabled: 0
         mode: snapshot
         compress: zstd
+        pbs-change-detection-mode: metadata
         comment: ""
         prune-backups: { keep-all: "1" }
 

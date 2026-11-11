@@ -21,6 +21,9 @@
     pve_backup_jobs_tofu_guest_map:
       fixture-splunk:
         vmid: 4244
+      fixture-pbs:
+        vmid: 4242
+        fqdn: fixture-pbs-server
 
   tasks:
     # Both supported selections must pass, or every refusal below proves
@@ -76,6 +79,34 @@
             storage: fixture-backup-store
             schedule: "02:30"
             exclude_tags: [media]
+
+    - name: Accept a declared change detection mode
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs:
+          - id: fixture-change-detection
+            pool: fixture-pool
+            node: fixture-node-a
+            storage: fixture-backup-store
+            schedule: "02:30"
+            pbs_change_detection_mode: data
+
+    - name: Accept a backup-node job that excludes the PBS guest
+      # The backup node may run a job when the PBS guest itself is excluded by
+      # name; the guard resolves the guest by its published fqdn.
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
+      vars:
+        pve_backup_jobs_jobs:
+          - id: fixture-backup-node-excluded
+            all: true
+            node: fixture-backup-node
+            storage: fixture-backup-store
+            schedule: "02:30"
+            exclude_names: [fixture-pbs]
 
     - name: Refuse a declaration carrying a guest-id list
       block:
@@ -284,6 +315,51 @@
           ansible.builtin.set_fact:
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['backup-node'] }}"
 
+    - name: Refuse a change detection mode PVE does not accept
+      block:
+        - name: Run the guard against an unknown change detection mode
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-bad-mode
+                pool: fixture-pool
+                node: fixture-node-a
+                storage: fixture-backup-store
+                schedule: "02:30"
+                pbs_change_detection_mode: faster
+
+        - name: Fail because an unknown change detection mode was accepted
+          ansible.builtin.fail:
+            msg: "A pbs_change_detection_mode outside legacy, data and metadata was ACCEPTED."
+      rescue:
+        - name: Record the change detection refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['change-detection'] }}"
+
+    - name: Refuse a backup-node job that does not exclude the PBS guest
+      block:
+        - name: Run the guard against a backup-node job with no exclusion
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs:
+              - id: fixture-backup-node-unexcluded
+                all: true
+                node: fixture-backup-node
+                storage: fixture-backup-store
+                schedule: "02:30"
+
+        - name: Fail because an unexcluded backup-node job was accepted
+          ansible.builtin.fail:
+            msg: "A job on the backup node without the PBS guest excluded was ACCEPTED."
+      rescue:
+        - name: Record the backup-node exclusion refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['pbs-node'] }}"
+
     # Counting the refusals is what makes this test unable to pass vacuously: if
     # a rescue never ran, the list is short and this fails.
     - name: Refuse a tag exclusion combined with names
@@ -336,9 +412,10 @@
       ansible.builtin.assert:
         that:
           - (pve_backup_jobs_refusals | default([]) | sort)
-            == ['backup-node', 'both', 'duplicate', 'exclude-name', 'names-tags', 'neither', 'node', 'node-list', 'storage', 'tags-shape', 'vmid']
+            == ['backup-node', 'both', 'change-detection', 'duplicate', 'exclude-name', 'names-tags', 'neither', 'node', 'node-list', 'pbs-node', 'storage', 'tags-shape', 'vmid']
         fail_msg: >-
-          Expected eleven refusals (vmid, exclude-name, names-tags, tags-shape,
-          both, neither, duplicate, storage, node, node-list, backup-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
-        success_msg: "PASS: all eleven declaration refusals fired"
+          Expected thirteen refusals (vmid, exclude-name, names-tags, tags-shape,
+          change-detection, both, neither, duplicate, storage, node, node-list,
+          backup-node, pbs-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
+        success_msg: "PASS: all thirteen declaration refusals fired"
         quiet: false
