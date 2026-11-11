@@ -33,6 +33,10 @@ pve_backup_jobs_config_host: ""
 #   prune     retention. Leave at keep-all=1: PBS owns retention (see below)
 #   mode      snapshot | suspend | stop
 #   compress  zstd | gzip | lzo | 0
+#   pbs_change_detection_mode
+#             legacy | data | metadata. Written to the job as the
+#             pbs-change-detection-mode option. Container backups to the PBS
+#             storage read it; VM backups ignore it
 #   comment   free text shown in the UI
 #
 # Empty here. The live list is environment data, declared in
@@ -79,6 +83,8 @@ pve_backup_jobs_this_pve_node: "{{ proxmox_node_name | default(inventory_hostnam
 
 pve_backup_jobs_default_mode: snapshot
 pve_backup_jobs_default_compress: zstd
+# Change detection for container backups to the PBS storage. VMs ignore it.
+pve_backup_jobs_default_pbs_change_detection_mode: metadata
 # Retention belongs to PBS. A datastore prune job removes snapshots for every
 # writer at once. vzdump pruning would apply per job and see only the snapshots
 # that one job wrote. keep-all=1 stops vzdump from pruning.
@@ -101,8 +107,9 @@ pve_backup_jobs_storage_id: guests
 # an address, so the server can move without a change here.
 pve_backup_jobs_pbs_server: ""
 
-# The node that hosts the PBS guest. Guests on this node stay uncovered until a
-# second target exists, so no job may run on it.
+# The node that hosts the PBS guest. A job on this node must exclude the PBS
+# guest (resolved by its published fqdn against the guest map) by name;
+# validation refuses one that does not.
 pve_backup_jobs_pbs_node: ""
 
 # Every PVE node may use the storage.

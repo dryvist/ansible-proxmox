@@ -99,7 +99,8 @@ sanoid_splunk_datasets_json: >-
   }
 sanoid_splunk_datasets: "{{ sanoid_splunk_datasets_json | from_json }}"
 
-# PBS guest backups, enabled one node at a time.
+# PBS guest backups, enabled one node at a time. Container backups use
+# metadata change detection (pbs_change_detection_mode).
 pve_backup_jobs_manage: true
 pve_backup_jobs_prune_unmanaged: false
 pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
@@ -125,5 +126,16 @@ pve_backup_jobs_jobs:
     exclude_tags:
       - media
   - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: false}
+  # Declared with the PBS guest and the guest also excluded on pve-r540 left
+  # out of the selection.
+  - id: guests-pve-w1700
+    all: true
+    node: pve-w1700
+    storage: guests
+    schedule: "06:37"
+    enabled: false
+    exclude_names:
+      - nginx-proxy-manager
+      - pbs
   - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:01", enabled: true, exclude_names: [splunk, prometheus]}
   - {id: guests-pve-w5900-stop, names: [prometheus], node: pve-w5900, storage: guests, schedule: "06:43", enabled: true, mode: stop}

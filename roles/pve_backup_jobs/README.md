@@ -68,6 +68,17 @@ merge with the `exclude_names` VMIDs into one sorted, de-duplicated `exclude`
 list. `exclude_tags` needs a `pool` or `all` selection and cannot be combined
 with `names`. A tag that matches no guest is not an error.
 
+## Change detection
+
+`pbs_change_detection_mode` sets the mode PVE stores on the job as its
+`pbs-change-detection-mode` option. It selects how vzdump reads container files
+when writing to the PBS storage; VM backups ignore the setting. Accepted values
+are `legacy`, `data` and `metadata`. Jobs that omit the field get
+`pve_backup_jobs_default_pbs_change_detection_mode` (default `metadata`).
+
+Validation refuses a value outside that set. The reconcile reads the live value
+and changes the job only when it differs from the declaration.
+
 It does not create the PBS prune job. Retention is PBS-side (see below), and
 that job lives on the PBS server.
 
@@ -111,9 +122,11 @@ Every job must name exactly one node (`node`, PVE format `pve-node`). An
 all-node job backs up every guest on that node; a pool job backs up guests in
 that pool on that node. A job that names two nodes matches nothing.
 
-Validation refuses a job that names no node, a list, or
-`pve_backup_jobs_pbs_node`. Jobs cannot target the backup node because that
-would store its guests' backups on the same host.
+Validation refuses a job that names no node or a list, and refuses a job on
+`pve_backup_jobs_pbs_node` unless it excludes the PBS guest by name. The PBS
+guest is the one whose published `fqdn` matches `pve_backup_jobs_pbs_server`.
+A PBS-node job that excludes that guest stores nothing of the backup server on
+the backup server.
 
 ## Usage
 

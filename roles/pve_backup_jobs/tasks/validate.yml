@@ -5,6 +5,19 @@
 # It reads no credential. The OpenBao read happens on the config host only, in
 # main.yml.
 
+- name: Resolve the PBS guest name from the published guest map
+  # The guest whose published fqdn matches the PBS server. A job on the PBS node
+  # is accepted only when this guest is in its exclude_names; with no matching
+  # guest published, no PBS-node job is accepted.
+  ansible.builtin.set_fact:
+    pve_backup_jobs_pbs_guest_name: >-
+      {{ pve_backup_jobs_tofu_guest_map | dict2items
+         | selectattr('value.fqdn', 'defined')
+         | selectattr('value.fqdn', 'equalto', pve_backup_jobs_pbs_server)
+         | map(attribute='key') | first | default('') }}
+  tags:
+    - pve_backup_jobs
+
 - name: Assert every declared job selects exactly one scope and names a storage
   # Raw guest-id lists keep selecting a number after that number is reused for a
   # different guest. Names are safe because the current id is resolved from the
@@ -48,6 +61,22 @@
       one of pool, all: true, or a non-empty unique string names list, storage
       and schedule. Raw vmid lists are forbidden; exclude_names requires pool
       or all and cannot be combined with names.
+    quiet: true
+  loop: "{{ pve_backup_jobs_jobs }}"
+  loop_control:
+    label: "{{ item.id | default('<no id>') }}"
+  tags:
+    - pve_backup_jobs
+
+- name: Assert every declared change detection mode is one PVE accepts
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.pbs_change_detection_mode is not defined
+        or (item.pbs_change_detection_mode in ['legacy', 'data', 'metadata'])
+    fail_msg: >-
+      Backup job '{{ item.id | default('<no id>') }}' has
+      pbs_change_detection_mode that must be one of legacy, data or metadata.
     quiet: true
   loop: "{{ pve_backup_jobs_jobs }}"
   loop_control:
@@ -173,18 +202,23 @@
   tags:
     - pve_backup_jobs
 
-- name: Assert each job runs on one node that is not the backup node
+- name: Assert each job runs on one node that is not the backup node unexcluded
   # vzdump matches one node name per job, so a list would select nothing. A job
   # with no node also covers the backup node's own guests, which would then be
-  # backed up onto the same host that holds them.
+  # backed up onto the same host that holds them. A job on the backup node is
+  # accepted only when it excludes the PBS guest by name.
   ansible.builtin.assert:
     that:
       - item.node | default('') | length > 0
       - item.node | default('') | regex_search(',') is none
-      - item.node | default('') != pve_backup_jobs_pbs_node
+      - >-
+        item.node | default('') != pve_backup_jobs_pbs_node
+        or (pve_backup_jobs_pbs_guest_name | length > 0
+            and pve_backup_jobs_pbs_guest_name in (item.exclude_names | default([], true)))
     fail_msg: >-
       Backup job '{{ item.id | default('<no id>') }}' must set node to exactly one
-      node name, and that node must not be pve_backup_jobs_pbs_node.
+      node name, and that node must not be pve_backup_jobs_pbs_node unless the
+      job excludes the PBS guest by name.
     quiet: true
   loop: "{{ pve_backup_jobs_jobs }}"
   loop_control:
