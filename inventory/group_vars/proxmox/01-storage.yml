@@ -127,16 +127,5 @@ pve_backup_jobs_jobs:
     exclude_tags:
       - media
   - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: false}
-  # Declared with the PBS guest and the guest also excluded on pve-r540 left
-  # out of the selection.
-  - id: guests-pve-w1700
-    all: true
-    node: pve-w1700
-    storage: guests
-    schedule: "06:37"
-    enabled: false
-    exclude_names:
-      - nginx-proxy-manager
-      - "{{ pve_backup_jobs_pbs_guest_key }}"
   - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:01", enabled: true, exclude_names: [splunk, prometheus]}
   - {id: guests-pve-w5900-stop, names: [prometheus], node: pve-w5900, storage: guests, schedule: "06:43", enabled: true, mode: stop}
