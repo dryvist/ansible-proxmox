@@ -178,7 +178,9 @@ No real service is touched.
 
 - `pve_ha_replication_rate`
 
-  Default: `""`. `pvesr` rate limit in MB/s; empty = unlimited.
+  Default: `50`. Per-job `pvesr` rate limit in MB/s, applied when the role
+  creates a replication job. Set it per environment in inventory; empty =
+  unlimited.
 
 - `pve_ha_replication_enabled_by_guest`
 

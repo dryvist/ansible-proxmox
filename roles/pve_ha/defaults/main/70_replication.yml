@@ -1,11 +1,12 @@
 ---
-# pvesr schedule (systemd-calendar subset) and optional rate limit (MB/s; empty
-# = unlimited). */5 matches the jobs already running; the app guests' real data-loss
+# pvesr schedule (systemd-calendar subset). */5 matches the jobs already running; the app guests' real data-loss
 # window is covered separately (postgres-apps by streaming replication + WAL
 # archiving, the others are near-stateless), so this is a relocation-enabler,
 # not the primary durability layer.
 pve_ha_replication_schedule: "*/5"
-pve_ha_replication_rate: ""
+# per-job pvesr rate limit in MB/s, applied when the role creates a replication job; set per environment in
+# inventory; empty means unlimited.
+pve_ha_replication_rate: 50
 
 # Per-job override keyed by the guest key in the published inventory.
 # Unlisted guests are enabled; false keeps the pvesr job present but inactive.
