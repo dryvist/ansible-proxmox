@@ -156,7 +156,9 @@ syncoid_pinned_jobs:
 # - the guest's published entry declares no ha_replication_target — those
 #   guests are replicated by pvesr;
 # - the guest is not tagged agent-sandbox (see
-#   syncoid_retired_replica_datasets below).
+#   syncoid_retired_replica_datasets below);
+# - the guest is not tagged shared-media-data; its rootfs is re-acquirable and
+#   its state already rides along in the appdata job.
 #
 # Each job is non-recursive per disk (options drops --recursive), stays in the
 # default schedule, and uses the slow replica retention template. A container
@@ -183,6 +185,7 @@ syncoid_rootpool_jobs_json: >-
     {%- set ct = ct_entry.value -%}
     {%- if ct.node | default('') == storage_node
           and 'agent-sandbox' not in (ct.tags | default([]))
+          and 'shared-media-data' not in (ct.tags | default([]))
           and (ct.ha_replication_target | default('')) | length == 0 -%}
       {%- set datastore = ct.datastore | mandatory(
             'container ' ~ ct_entry.key ~ ' publishes no .datastore, so its
@@ -205,6 +208,7 @@ syncoid_rootpool_jobs_json: >-
     {%- set vm = vm_entry.value -%}
     {%- if vm.node | default('') == storage_node
           and 'agent-sandbox' not in (vm.tags | default([]))
+          and 'shared-media-data' not in (vm.tags | default([]))
           and (vm.ha_replication_target | default('')) | length == 0 -%}
       {%- for disk in vm.disks | mandatory(
             'VM ' ~ vm_entry.key ~ ' publishes no .disks, so its dataset paths

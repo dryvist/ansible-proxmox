@@ -67,6 +67,49 @@
           excluded endpoints {{ rootpool_excluded_endpoints }}.
       when: inventory_hostname == 'pve-r710'
 
+    # Inject synthetic guests into both published lists so the assertion fails
+    # if either generated-job filter stops excluding this tag.
+    - name: Assert shared-media-data guests do not generate root-pool jobs
+      ansible.builtin.assert:
+        that:
+          - media_rootpool_jobs | length == 0
+        fail_msg: >-
+          A root-pool syncoid job was generated for a shared-media-data guest:
+          {{ media_rootpool_jobs }}.
+      vars:
+        media_rootpool_ct_vmid: 601600
+        media_rootpool_vm_vmid: 601700
+        containers_from_tofu: >-
+          {{ hostvars[inventory_hostname].containers_from_tofu
+             | combine({
+                 'fixture-media-ct': {
+                   'datastore': 'local-zfs',
+                   'node': proxmox_node_names.storage,
+                   'tags': ['shared-media-data'],
+                   'vmid': media_rootpool_ct_vmid
+                 }
+               }) }}
+        vms_from_tofu: >-
+          {{ hostvars[inventory_hostname].vms_from_tofu
+             | combine({
+                 'fixture-media-vm': {
+                   'disks': [{
+                     'datastore': 'local-zfs',
+                     'path': 'vm-' ~ (media_rootpool_vm_vmid | string) ~ '-disk-0'
+                   }],
+                   'node': proxmox_node_names.storage,
+                   'tags': ['shared-media-data'],
+                   'vmid': media_rootpool_vm_vmid
+                 }
+               }) }}
+        media_rootpool_jobs: >-
+          {{ syncoid_rootpool_jobs_json | from_json
+             | selectattr('name', 'in', [
+                 'rootpool-' ~ (media_rootpool_ct_vmid | string) ~ '-disk-0',
+                 'rootpool-' ~ (media_rootpool_vm_vmid | string) ~ '-disk-0'
+               ]) | list }}
+      when: syncoid_rootpool_jobs_json is defined
+
     - name: Assert no job pulls the peer's rpool/data root
       ansible.builtin.assert:
         that:
