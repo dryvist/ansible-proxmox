@@ -1,0 +1,126 @@
+# --- pvesr target-storage validation (mirrors replication_jobs.yml, fed
+# from the pve_ha_storage_cfg_fixture / pve_ha_guest_configs_fixture vars
+# above instead of `pvesh get /storage` / `pvesh get .../lxc/<vmid>/config`) ---
+- name: Parse storage-to-nodes availability (empty list = all nodes)
+  ansible.builtin.set_fact:
+    pve_ha_storage_nodes: >-
+      {{ pve_ha_storage_nodes | default({}) | combine({
+           item.storage: (item.nodes | default('') | split(',')
+                          | reject('equalto', '') | list)
+         }) }}
+  loop: "{{ pve_ha_storage_cfg_fixture }}"
+  loop_control:
+    label: "{{ item.storage }}"
+
+- name: Assert a storage with no `nodes` line resolves to "available everywhere"
+  ansible.builtin.assert:
+    that:
+      - pve_ha_storage_nodes['shared-nfs'] == []
+      - pve_ha_storage_nodes['local-zfs'] | sort == ['node-a', 'node-c']
+    fail_msg: >-
+      storage-to-nodes parsing is wrong: {{ pve_ha_storage_nodes }}
+    success_msg: >-
+      shared-nfs (no nodes line) resolves to [] (all nodes); local-zfs
+      resolves to exactly its listed nodes.
+
+- name: Resolve each CONTAINER job's required storage ids from its volumes
+  ansible.builtin.set_fact:
+    pve_ha_replication_job_storages: >-
+      {{ pve_ha_replication_job_storages | default([]) + [ {
+           'hostname': item.hostname,
+           'target': item.target,
+           'storages': (pve_ha_guest_configs_fixture[item.hostname] | dict2items
+             | selectattr('key', 'match', '^(rootfs|mp[0-9]+)$')
+             | rejectattr('value', 'match', '^/')
+             | map(attribute='value')
+             | map('regex_replace', '^([^:]+):.*$', '\1')
+             | unique | list)
+         } ] }}
+  loop: "{{ pve_ha_replication_guests | selectattr('viable') | selectattr('kind', 'equalto', 'ct') | list }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Resolve each VM job's required storage ids from its published disks
+  ansible.builtin.set_fact:
+    pve_ha_replication_job_storages: >-
+      {{ pve_ha_replication_job_storages | default([]) + [ {
+           'hostname': item.hostname,
+           'target': item.target,
+           'storages': (item.disks | default([]) | map(attribute='datastore') | unique | list)
+         } ] }}
+  loop: "{{ pve_ha_replication_guests | selectattr('viable') | selectattr('kind', 'equalto', 'vm') | list }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Resolve which jobs have a target that lacks a required storage
+  ansible.builtin.set_fact:
+    pve_ha_replication_job_violations: >-
+      {{ pve_ha_replication_job_violations | default([]) + (
+           [ {'hostname': job.hostname, 'target': job.target, 'storage': storage} ]
+           if (pve_ha_storage_nodes[storage] | default([]) | length > 0
+               and job.target not in pve_ha_storage_nodes[storage])
+           else []
+         ) }}
+  loop: "{{ pve_ha_replication_job_storages | subelements('storages') }}"
+  loop_control:
+    loop_var: pair
+    label: "{{ pair.0.hostname }} / {{ pair.1 }}"
+  vars:
+    job: "{{ pair.0 }}"
+    storage: "{{ pair.1 }}"
+
+- name: Assert the target-storage check detects both broken jobs and passes the rest
+  ansible.builtin.assert:
+    that:
+      # vikunja's target (node-b) lacks local-zfs -> DETECTED
+      - (pve_ha_replication_job_violations
+        | selectattr('hostname', 'eq', 'vikunja') | list | length) == 1
+      - (pve_ha_replication_job_violations
+        | selectattr('hostname', 'eq', 'vikunja') | first).storage == 'local-zfs'
+      # iac-platform's target (node-e) lacks local-zfs -> DETECTED (VM disk path)
+      - (pve_ha_replication_job_violations
+        | selectattr('hostname', 'eq', 'iac-platform') | list | length) == 1
+      - (pve_ha_replication_job_violations
+        | selectattr('hostname', 'eq', 'iac-platform') | first).storage == 'local-zfs'
+      # nautobot's target (node-a) HAS bulk -> passes, no violation
+      - (pve_ha_replication_job_violations
+        | selectattr('hostname', 'eq', 'nautobot') | list | length) == 0
+      # postgres-apps' target (node-d) HAS bulk -> passes, no violation
+      - (pve_ha_replication_job_violations
+        | selectattr('hostname', 'eq', 'postgres-apps') | list | length) == 0
+      # shared-app's storage has no nodes restriction -> available
+      # everywhere, including its target (node-b) -> passes, no violation
+      - (pve_ha_replication_job_violations
+        | selectattr('hostname', 'eq', 'shared-app') | list | length) == 0
+    fail_msg: >-
+      pvesr target-storage validation is wrong: {{ pve_ha_replication_job_violations }}
+    success_msg: >-
+      target-storage validation detects vikunja's broken node-b target and
+      iac-platform's broken node-e target (both missing local-zfs, the VM
+      case sourced from published disks rather than a live config read),
+      and passes nautobot/postgres-apps (bulk present) + shared-app (no
+      nodes restriction = available everywhere).
+
+# --- role-default + create-command wiring (defaults load last:
+# include_vars outranks play vars, and the fixture assertions above read
+# play vars) ---
+- name: Load the role's replication defaults
+  ansible.builtin.include_vars:
+    file: ../../roles/pve_ha/defaults/main/70_replication.yml
+
+# !unsafe: the needle is template source text, so the braces must reach
+# the comparison unrendered (assert pre-templates its conditions).
+- name: Assert the replication-rate default and its create-command guard wiring
+  vars:
+    pve_ha_rate_guard_needle: !unsafe "{% if pve_ha_replication_rate | string | length > 0 %}--rate {{ pve_ha_replication_rate }}{% endif %}"
+  ansible.builtin.assert:
+    that:
+      - pve_ha_replication_rate == 50
+      - pve_ha_rate_guard_needle in lookup('file', playbook_dir ~ '/../../roles/pve_ha/tasks/replication_apply.yml')
+    fail_msg: >-
+      replication-rate default or wiring is wrong:
+      pve_ha_replication_rate={{ pve_ha_replication_rate }}
+    success_msg: >-
+      the role-default replication rate is 50 and replication_apply.yml
+      emits --rate {{ pve_ha_replication_rate }} inside its non-empty
+      guard.
