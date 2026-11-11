@@ -27,3 +27,9 @@ pve_ha_replication_jobnum: 0
 # the listed nodes, so a relocation onto a replica-less node can't happen and
 # then start-fail/flap.
 pve_ha_replication_affinity_rule: apps-replication-nodes
+
+# Post-reconcile read-back (tasks/verify_replication_affinity.yml): after the
+# jobs and rules reconcile, re-read the live cluster and fail the play when an
+# HA resource with an enabled pvesr job is not covered by strict node-affinity
+# rules naming exactly its source node plus its replication targets.
+pve_ha_verify_replication_affinity: true

@@ -1,0 +1,112 @@
+---
+# Part 3 of 3 of the pvesr replication block (see main.yml). Pure logic over
+# parsed live reads — no pvesh/ha-manager calls here — so
+# tests/pve_ha_replication/verify_replication_affinity.yml can feed fixtures
+# shaped like real command output instead of needing a live cluster.
+#
+# A strict rule naming a node with NO replica lets ha-manager recover the
+# guest onto a node that cannot start it, and a rule missing the source node
+# or a replication target strands the guest where its replica is not. So every
+# HA resource with an enabled pvesr job must be covered by strict
+# node-affinity rules naming EXACTLY its source node plus its replication
+# targets, no more and no fewer. Disabled jobs maintain no replica and
+# disabled rules bind nothing, so both are skipped; resource-affinity rules
+# are negative placement constraints and say nothing about where a replica
+# lives.
+- name: Keep the enabled replication jobs, guest id normalized to a string
+  ansible.builtin.set_fact:
+    pve_ha_verify_enabled_jobs: >-
+      {%- set ns = namespace(jobs=[]) -%}
+      {%- for job in pve_ha_verify_jobs -%}
+        {%- if not (job.disable | default(0) | bool) -%}
+          {%- set ns.jobs = ns.jobs + [job | combine({'guest': job.guest | string})] -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.jobs }}
+
+- name: Keep the enabled strict node-affinity rules
+  ansible.builtin.set_fact:
+    pve_ha_verify_strict_rules: >-
+      {%- set ns = namespace(rules=[]) -%}
+      {%- for rule in pve_ha_verify_rules -%}
+        {%- if rule.type == 'node-affinity'
+               and rule.strict | default(0) | int == 1
+               and not (rule.disable | default(0) | bool) -%}
+          {%- set ns.rules = ns.rules + [rule] -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.rules }}
+
+# One pass over the HA resources. A job without a source falls back to the
+# guest's current node (HA may have moved it off its declared home); a rule's
+# node:priority entries are stripped the same way relocation_preflight.yml
+# reads that field.
+- name: Resolve expected and live node sets for each replicated HA resource
+  ansible.builtin.set_fact:
+    pve_ha_verify_mismatches: >-
+      {%- set ns = namespace(mismatches=[]) -%}
+      {%- for resource in pve_ha_verify_resources -%}
+        {%- set sid = resource.sid -%}
+        {%- set vmid = sid.split(':')[1] -%}
+        {%- set jobs = pve_ha_verify_enabled_jobs
+             | selectattr('guest', 'equalto', vmid) | list -%}
+        {%- if jobs | length > 0 -%}
+          {%- set rec = namespace(expected=[], actual=[], rules=0) -%}
+          {%- for job in jobs -%}
+            {%- set rec.expected = rec.expected | union(
+                 [job.source | default('', true),
+                  pve_ha_verify_guest_nodes.get(vmid, ''),
+                  job.target] | reject('equalto', '') | list) -%}
+          {%- endfor -%}
+          {%- for rule in pve_ha_verify_strict_rules -%}
+            {%- if sid in rule.resources | default('') | split(',') -%}
+              {%- set rec.rules = rec.rules + 1 -%}
+              {%- set rec.actual = rec.actual | union(
+                   rule.nodes | default('') | split(',')
+                   | map('regex_replace', ':.*$', '')
+                   | reject('equalto', '') | list) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if rec.rules == 0 -%}
+            {%- set ns.mismatches = ns.mismatches + [{
+                 'sid': sid,
+                 'reason': 'no enabled strict node-affinity rule names it',
+                 'expected': rec.expected | sort,
+                 'actual': [],
+               }] -%}
+          {%- elif rec.actual | sort != rec.expected | sort -%}
+            {%- set ns.mismatches = ns.mismatches + [{
+                 'sid': sid,
+                 'reason': 'its strict rule node set differs',
+                 'expected': rec.expected | sort,
+                 'actual': rec.actual | sort,
+               }] -%}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.mismatches }}
+
+- name: Report each replicated HA resource whose strict rules mismatch its replica placement
+  ansible.builtin.debug:
+    msg: >-
+      pve_ha: {{ item.sid }} {{ item.reason }}; expected nodes
+      {{ item.expected | join(',') }}, live strict-rule nodes
+      {{ item.actual | join(',') if item.actual | length > 0 else 'none' }}.
+  loop: "{{ pve_ha_verify_mismatches }}"
+  loop_control:
+    label: "{{ item.sid }}"
+
+- name: Fail when a replicated HA resource's strict rules mismatch its replica placement
+  ansible.builtin.fail:
+    msg: >-
+      pve_ha: strict node-affinity rules do not match the live pvesr
+      replication placement:
+      {% for item in pve_ha_verify_mismatches %}
+      - {{ item.sid }} {{ item.reason }}; expected nodes
+      {{ item.expected | join(',') }}, live strict-rule nodes
+      {{ item.actual | join(',') if item.actual | length > 0 else 'none' }};
+      {% endfor %}
+      a rule naming a node with no replica lets ha-manager recover the guest
+      onto a node that cannot start it. Re-run the converge to re-pin the
+      rules, or fix the guest's declared ha_replication_target.
+  when: pve_ha_verify_mismatches | length > 0

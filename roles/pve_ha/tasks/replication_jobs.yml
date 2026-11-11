@@ -1,6 +1,6 @@
 ---
 # Included from main.yml's pvesr replication block (inherits its when/tags).
-# Part 1 of 2: resolves each singleton app guest's (container AND VM)
+# Part 1 of 3: resolves each singleton app guest's (container AND VM)
 # replication job and fails fast if a job's target node lacks a required
 # storage id (see comment below — incident 2026-07-26, a job that silently
 # never replicates).
