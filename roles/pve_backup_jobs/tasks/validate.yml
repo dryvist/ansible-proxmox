@@ -68,17 +68,25 @@
   tags:
     - pve_backup_jobs
 
-- name: Assert every declared change detection mode is one PVE accepts
+- name: Assert every change detection mode is one PVE accepts
   ansible.builtin.assert:
     that:
-      - >-
-        item.pbs_change_detection_mode is not defined
-        or (item.pbs_change_detection_mode in ['legacy', 'data', 'metadata'])
+      - item.pbs_change_detection_mode in pve_backup_jobs_supported_change_detection_modes
     fail_msg: >-
       Backup job '{{ item.id | default('<no id>') }}' has
-      pbs_change_detection_mode that must be one of legacy, data or metadata.
+      pbs_change_detection_mode that must be one of
+      {{ pve_backup_jobs_supported_change_detection_modes | join(', ') }}.
     quiet: true
-  loop: "{{ pve_backup_jobs_jobs }}"
+  vars:
+    pve_backup_jobs_supported_change_detection_modes:
+      - legacy
+      - data
+      - metadata
+  loop: >-
+    {{ [{'id': 'role default',
+         'pbs_change_detection_mode': pve_backup_jobs_default_pbs_change_detection_mode}]
+       + (pve_backup_jobs_jobs
+          | selectattr('pbs_change_detection_mode', 'defined') | list) }}
   loop_control:
     label: "{{ item.id | default('<no id>') }}"
   tags:

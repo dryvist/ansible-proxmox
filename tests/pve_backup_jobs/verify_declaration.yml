@@ -338,6 +338,32 @@
           ansible.builtin.set_fact:
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['change-detection'] }}"
 
+    - name: Refuse a role default change detection mode PVE does not accept
+      block:
+        - name: Run the guard against an unknown role default change detection mode
+          ansible.builtin.include_role:
+            name: pve_backup_jobs
+            tasks_from: validate.yml
+          vars:
+            pve_backup_jobs_jobs: []
+            pve_backup_jobs_default_pbs_change_detection_mode: faster
+      rescue:
+        - name: Record the role default change detection refusal
+          ansible.builtin.set_fact:
+            pve_backup_jobs_default_mode_failure: "{{ ansible_failed_result.msg | default('') }}"
+            pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['default-change-detection'] }}"
+
+    - name: Assert the role default change detection mode was refused
+      ansible.builtin.assert:
+        that:
+          - pve_backup_jobs_default_mode_failure is defined
+          - "\"role default\" in pve_backup_jobs_default_mode_failure"
+          - "'must be one of legacy, data, metadata' in pve_backup_jobs_default_mode_failure"
+        fail_msg: >-
+          Expected an invalid role default change detection mode to fail with
+          its supported values; got {{ pve_backup_jobs_default_mode_failure | default('no failure') }}.
+        quiet: true
+
     - name: Refuse a backup-node job that does not exclude the PBS guest
       block:
         - name: Run the guard against a backup-node job with no exclusion
@@ -411,11 +437,17 @@
     - name: Assert every refusal actually fired
       ansible.builtin.assert:
         that:
-          - (pve_backup_jobs_refusals | default([]) | sort)
-            == ['backup-node', 'both', 'change-detection', 'duplicate', 'exclude-name', 'names-tags', 'neither', 'node', 'node-list', 'pbs-node', 'storage', 'tags-shape', 'vmid']
+          - >-
+            (pve_backup_jobs_refusals | default([]) | sort)
+            == [
+              'backup-node', 'both', 'change-detection',
+              'default-change-detection', 'duplicate', 'exclude-name',
+              'names-tags', 'neither', 'node', 'node-list', 'pbs-node',
+              'storage', 'tags-shape', 'vmid'
+            ]
         fail_msg: >-
-          Expected thirteen refusals (vmid, exclude-name, names-tags, tags-shape,
-          change-detection, both, neither, duplicate, storage, node, node-list,
-          backup-node, pbs-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
-        success_msg: "PASS: all thirteen declaration refusals fired"
+          Expected fourteen refusals (vmid, exclude-name, names-tags, tags-shape,
+          change-detection, default-change-detection, both, neither, duplicate,
+          storage, node, node-list, backup-node, pbs-node); got {{ pve_backup_jobs_refusals | default([]) | sort }}.
+        success_msg: "PASS: all fourteen declaration refusals fired"
         quiet: false
