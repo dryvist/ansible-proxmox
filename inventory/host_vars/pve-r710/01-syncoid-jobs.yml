@@ -6,7 +6,7 @@
 # loaded host_vars/<host>.yml, so nothing changed name, value or precedence.
 
 
-syncoid_jobs:
+syncoid_pinned_jobs:
   - name: "splunk-{{ splunk_vmid }}-disk0"
     sanoid_replica_class: fast
     source: >-
@@ -143,6 +143,93 @@ syncoid_jobs:
   - name: "ct-5310010-disk1"  # technitium-dns-2
     source: "root@pve-r540:bulk/subvol-5310010-disk-1"
     target: "bulk/replica/pve-r540/subvol-5310010-disk-1"
+
+# Root-pool guest-disk pulls, generated from the published inventory. The
+# recursive rpool/data peer pull that used to sit in the pinned list above
+# carried these, but it also swept in guests that pvesr already replicates
+# and the ephemeral agent-sandbox guests. One job per guest disk replaces it:
+#
+# - the guest runs on the storage node (proxmox_node_names.storage);
+# - the disk's datastore resolves through the storage node's
+#   pve_dataset_root_by_storage to the node's root pool (rpool/data) — disks
+#   on any other storage stay out, covered by their own jobs or policies;
+# - the guest's published entry declares no ha_replication_target — those
+#   guests are replicated by pvesr;
+# - the guest is not tagged agent-sandbox (see
+#   syncoid_retired_replica_datasets below).
+#
+# Each job is non-recursive per disk (options drops --recursive), stays in the
+# default schedule, and uses the slow replica retention template. A container
+# has exactly one rootfs, so its dataset is 'subvol-<vmid>-disk-0' (the same
+# derivation the sanoid per-node expressions use); a VM's disk names come from
+# the published per-disk `path`, never by counting.
+#
+# Built as JSON and decoded: a folded scalar whose template opens with
+# {% set %} renders as TEXT (see load_tofu.yml's NAS note), so the structure
+# goes through | to_json / | from_json. Like the object-store expressions in
+# the pinned list, every input resolves from the published inventory and the
+# expression fails loudly when load_tofu.yml has not run — a guessed dataset
+# path would render jobs whose source does not exist while the run reports
+# success.
+syncoid_rootpool_jobs_json: >-
+  {%- set jobs = [] -%}
+  {%- set storage_node = proxmox_node_names.storage -%}
+  {%- set dataset_roots = hostvars[storage_node].pve_dataset_root_by_storage -%}
+  {%- for ct_name, ct in (containers_from_tofu | mandatory(
+        'containers_from_tofu is unset, so the storage-node root-pool guest
+        disk jobs cannot be listed. Run playbooks/load_tofu.yml — it targets
+        localhost, so any --limit must include localhost. Refusing to guess
+        dataset paths.')) | dict2items -%}
+    {%- if ct.node | default('') == storage_node
+          and 'agent-sandbox' not in (ct.tags | default([]))
+          and (ct.ha_replication_target | default('')) | length == 0 -%}
+      {%- set datastore = ct.datastore | mandatory(
+            'container ' ~ ct_name ~ ' publishes no .datastore, so its
+            root-pool dataset path cannot be resolved. The published
+            inventory predates that field; apply tofu-proxmox first.') -%}
+      {%- if dataset_roots[datastore] | default('') == 'rpool/data' -%}
+        {%- set _ = jobs.append({
+              'name': 'rootpool-' ~ ct.vmid ~ '-disk-0',
+              'source': 'root@' ~ storage_node ~ ':rpool/data/subvol-' ~ ct.vmid ~ '-disk-0',
+              'target': 'bulk/replica/' ~ storage_node ~ '/rpool/data/subvol-' ~ ct.vmid ~ '-disk-0',
+              'options': '--no-sync-snap --quiet',
+              'sanoid_replica_class': 'slow'}) -%}
+      {%- endif -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- for vm_name, vm in (vms_from_tofu | mandatory(
+        'vms_from_tofu is unset, so the storage-node root-pool guest disk
+        jobs cannot be listed. Run playbooks/load_tofu.yml (see
+        containers_from_tofu above). Refusing to guess dataset paths.')) | dict2items -%}
+    {%- if vm.node | default('') == storage_node
+          and 'agent-sandbox' not in (vm.tags | default([]))
+          and (vm.ha_replication_target | default('')) | length == 0 -%}
+      {%- for disk in vm.disks | mandatory(
+            'VM ' ~ vm_name ~ ' publishes no .disks, so its dataset paths
+            cannot be resolved. The published inventory predates that field;
+            apply tofu-proxmox first.') -%}
+        {%- set datastore = disk.datastore | mandatory(
+              'VM ' ~ vm_name ~ ' has a disk publishing no .datastore, so
+              its root-pool dataset path cannot be resolved. The published
+              inventory predates that field; apply tofu-proxmox first.') -%}
+        {%- set path = disk.path | mandatory(
+              'VM ' ~ vm_name ~ ' has a disk publishing no .path, so its
+              dataset path cannot be resolved. Proxmox, not this repo,
+              assigns each volume name; never derive it by counting.') -%}
+        {%- if dataset_roots[datastore] | default('') == 'rpool/data' -%}
+          {%- set _ = jobs.append({
+                'name': 'rootpool-' ~ vm.vmid ~ '-' ~ (path | regex_replace('^.*-(disk-[0-9]+)$', '\\1')),
+                'source': 'root@' ~ storage_node ~ ':rpool/data/' ~ path,
+                'target': 'bulk/replica/' ~ storage_node ~ '/rpool/data/' ~ path,
+                'options': '--no-sync-snap --quiet',
+                'sanoid_replica_class': 'slow'}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {{ jobs | to_json }}
+
+syncoid_jobs: "{{ syncoid_pinned_jobs + (syncoid_rootpool_jobs_json | from_json) }}"
 
 # Retired replicas: datasets stranded under bulk/replica/ by the recursive
 # peer rpool/data pull that used to sit in syncoid_jobs above. Removing a job
