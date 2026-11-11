@@ -132,7 +132,6 @@
           with no snapshot here there is nothing for the DR leg to send, and the
           off-pool copy silently never happens.
 
-
     - name: Assert pve-r540 pulls pve-r710 primary datasets
       ansible.builtin.assert:
         that:
@@ -162,4 +161,3 @@
         fail_msg: >-
           Every pve-r710 source dataset in the reverse pull needs a sanoid
           policy because syncoid uses --no-sync-snap.
-

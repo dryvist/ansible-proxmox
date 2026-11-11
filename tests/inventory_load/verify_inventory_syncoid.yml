@@ -113,4 +113,3 @@
               | map('regex_replace', '^', '(?:vm|subvol)-')
               | map('regex_replace', '$', '-disk-') | list) | join('|') }}
       when: inventory_hostname == 'pve-r710'
-

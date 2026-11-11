@@ -66,4 +66,3 @@
           An injected media-pool reference was accepted, or a case failed in an
           unrelated task. Accepted: {{ media_no_backup_accepted | default([]) }}.
           Refused: {{ media_no_backup_refused | default([]) }}.
-
