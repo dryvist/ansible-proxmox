@@ -75,14 +75,15 @@
 
 # The schedule used to live in root's user crontab. Leaving that entry behind
 # after the move to /etc/cron.d would double every run, so remove it explicitly
-# regardless of trigger — this is migration cleanup, not trigger handling.
+# regardless of trigger — this is migration cleanup, not trigger handling. It
+# also runs when syncoid_enabled is false: disabling must not leave a firing
+# legacy entry behind.
 - name: Remove the legacy syncoid user-crontab entry
   ansible.builtin.cron:
     name: "syncoid-replicate"
     user: "{{ syncoid_user }}"
     state: absent
   when:
-    - syncoid_enabled
     - ansible_virtualization_type != 'docker'
   tags:
     - syncoid
@@ -92,14 +93,14 @@
 # (or emptying syncoid_jobs) leaves the previously-written file behind and the
 # node keeps a wall-clock run nothing declares. Observed live on the DR node,
 # which carried both a stale daily entry and the on-boot unit. Declared state
-# has to include the absence.
-- name: Remove the syncoid cron file when cron is not the trigger
+# has to include the absence — and that includes syncoid_enabled false, which
+# skips the render but must still take the schedule with it.
+- name: Remove the syncoid cron file when disabled or cron is not the trigger
   ansible.builtin.file:
     path: /etc/cron.d/syncoid
     state: absent
   when:
-    - syncoid_enabled
-    - syncoid_trigger != 'cron' or syncoid_jobs | length == 0
+    - not syncoid_enabled or syncoid_trigger != 'cron' or syncoid_jobs | length == 0
   tags:
     - syncoid
 
@@ -142,28 +143,29 @@
 # Mirror of the cron removal above, and the reason both matter: flipping a node
 # from boot to cron without this leaves the on-boot unit enabled alongside the
 # new cron entry, so replication fires twice — once at boot, once on schedule.
+# syncoid_enabled false lands in the same branch: the unit must not stay
+# enabled with no schedule declaring it.
 - name: Check whether the on-boot syncoid service is present
   ansible.builtin.stat:
     path: /etc/systemd/system/syncoid-replicate-on-boot.service
   register: syncoid_boot_unit
   when:
-    - syncoid_enabled
-    - syncoid_trigger != 'boot' or syncoid_jobs | length == 0
+    - not syncoid_enabled or syncoid_trigger != 'boot' or syncoid_jobs | length == 0
   tags:
     - syncoid
 
 # Stop as well as disable, so a flip mid-uptime does not leave the unit loaded
 # and ready to fire again before the next reboot. Gated on the stat above rather
 # than blanket error suppression — a systemd failure on a unit that IS there
-# still needs to fail the run.
-- name: Remove the on-boot syncoid service when boot is not the trigger
+# still needs to fail the run. The unit file itself is left in place (disabled),
+# matching the trigger-flip cleanup: a later resume re-enables it in place.
+- name: Remove the on-boot syncoid service when disabled or boot is not the trigger
   ansible.builtin.systemd:
     name: syncoid-replicate-on-boot.service
     enabled: false
     state: stopped
   when:
-    - syncoid_enabled
-    - syncoid_trigger != 'boot' or syncoid_jobs | length == 0
+    - not syncoid_enabled or syncoid_trigger != 'boot' or syncoid_jobs | length == 0
     - syncoid_boot_unit.stat.exists | default(false)
     - ansible_virtualization_type != 'docker'
   tags:

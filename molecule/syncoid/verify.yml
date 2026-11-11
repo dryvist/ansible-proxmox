@@ -1,6 +1,6 @@
 ---
-- name: Verify
-  hosts: all
+- name: Verify the enabled instance
+  hosts: syncoid-enabled
   become: false
   gather_facts: false
 
@@ -81,3 +81,61 @@
           - "'OnFailure=node-auto-poweroff.service' in (syncoid_boot_service.content | b64decode)"
           - "'WantedBy=multi-user.target' in (syncoid_boot_service.content | b64decode)"
         fail_msg: "syncoid on-boot service did not render the expected contract"
+
+- name: Verify the paused instance took its schedules with it
+  hosts: syncoid-disabled
+  become: false
+  gather_facts: false
+
+  tasks:
+    # prepare.yml seeded both schedules a previously-enabled host carries, so a
+    # surviving cron file here means the flag off does not disable the pulls —
+    # the exact failure this guards against.
+    - name: Stat the syncoid cron file on the paused instance
+      ansible.builtin.stat:
+        path: /etc/cron.d/syncoid
+      register: syncoid_paused_cron
+
+    - name: Assert the cron schedule is gone when replication is paused
+      ansible.builtin.assert:
+        that:
+          - not syncoid_paused_cron.stat.exists
+        fail_msg: >-
+          syncoid_enabled false left /etc/cron.d/syncoid in place, so the
+          wall-clock pulls keep firing on a host that is supposed to be paused.
+
+    # The unit file is deliberately asserted to REMAIN: the role stops and
+    # disables the unit (matching the trigger-flip cleanup) and leaves the file
+    # for a later resume to re-enable in place. The Docker molecule image runs
+    # no systemd, so only the file's presence is provable here; the
+    # stop-and-disable itself runs on real converges and is gated by the same
+    # disabled condition the cron file just proved fires.
+    - name: Stat the on-boot syncoid unit on the paused instance
+      ansible.builtin.stat:
+        path: /etc/systemd/system/syncoid-replicate-on-boot.service
+      register: syncoid_paused_boot_unit
+
+    - name: Assert the seeded on-boot unit is still tracked on the paused instance
+      ansible.builtin.assert:
+        that:
+          - syncoid_paused_boot_unit.stat.exists
+        fail_msg: >-
+          The seeded on-boot unit file vanished instead of being left disabled;
+          if the disable contract changed to deletion, update this assertion
+          together with the role.
+
+    # The deploy tasks are all gated on the flag, so a paused converge must not
+    # (re)install anything — the wrapper the enabled instance renders must not
+    # appear here.
+    - name: Stat the replication wrapper on the paused instance
+      ansible.builtin.stat:
+        path: /usr/local/bin/syncoid-replicate.sh
+      register: syncoid_paused_wrapper
+
+    - name: Assert a paused converge deploys no wrapper
+      ansible.builtin.assert:
+        that:
+          - not syncoid_paused_wrapper.stat.exists
+        fail_msg: >-
+          syncoid_enabled false still deployed the replication wrapper, so the
+          flag does not gate the role's installs.

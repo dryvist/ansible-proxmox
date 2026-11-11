@@ -1,6 +1,10 @@
 ---
-- name: Converge
-  hosts: all
+# The two plays are kept separate — and the paused flag is written as a native
+# YAML false — on purpose: a per-host `syncoid_enabled: "{{ group test }}"`
+# would render the string "False", which bare `when:` expressions treat as
+# truthy, and the paused instance would silently converge enabled.
+- name: Converge the enabled instance
+  hosts: syncoid-enabled
   become: false
   gather_facts: true
 
@@ -18,6 +22,27 @@
       - name: node-a-splunk-hot
         source: "root@node-a:nvme1/siem/splunk-hot"
         target: "tank/replica/node-a/splunk-hot"
+
+  roles:
+    - role: syncoid
+
+- name: Converge the paused instance
+  hosts: syncoid-disabled
+  become: false
+  gather_facts: true
+
+  vars:
+    # The master enable off with the schedules already seeded on disk
+    # (prepare.yml) is the transition the disabled assertions in verify.yml
+    # pin: the cron file is taken away and the on-boot unit is disabled. The
+    # cron trigger matches an always-on pull target, where the wall-clock
+    # schedule is the thing being paused.
+    syncoid_enabled: false
+    syncoid_trigger: cron
+    syncoid_jobs:
+      - name: node-a-nas
+        source: "root@node-a:rpool/data/nas"
+        target: "tank/replica/node-a/nas"
 
   roles:
     - role: syncoid

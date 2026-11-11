@@ -1,0 +1,41 @@
+---
+- name: Prepare
+  hosts: all
+  become: false
+  gather_facts: false
+
+  tasks:
+    # The paused instance simulates a host whose schedules were deployed while
+    # syncoid was enabled and that now converges with the flag off. It must
+    # already carry those schedules, or verify.yml would only prove the role
+    # never installed anything instead of proving the flag takes them away.
+    # Both seeds are the shapes the role itself renders.
+    - name: Seed the schedules a previously-enabled syncoid left behind
+      ansible.builtin.copy:
+        dest: "{{ item.dest }}"
+        content: "{{ item.content }}"
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - dest: /etc/cron.d/syncoid
+          mode: "0644"
+          content: |
+            # seeded by molecule: the cron file a prior enabled converge wrote
+            PATH=/usr/sbin:/sbin:/usr/bin:/bin
+            17 2 * * * root /usr/local/bin/syncoid-replicate.sh default
+            37 * * * * root /usr/local/bin/syncoid-replicate.sh hourly
+        - dest: /etc/systemd/system/syncoid-replicate-on-boot.service
+          mode: "0644"
+          content: |
+            # seeded by molecule: the on-boot unit a prior enabled converge wrote
+            [Unit]
+            Description=Pull ZFS replication on boot (offline-DR window)
+
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/local/bin/syncoid-replicate.sh
+
+            [Install]
+            WantedBy=multi-user.target
+      when: "'syncoid-disabled' in group_names"

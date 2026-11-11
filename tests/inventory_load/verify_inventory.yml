@@ -148,6 +148,18 @@
           Every pve-r710 source dataset in the reverse pull needs a sanoid
           policy because syncoid uses --no-sync-snap.
 
+    # The pulls into this node's replica tree are deliberately paused (the
+    # syncoid_enabled override in its host_vars, next to syncoid_extra_schedules).
+    # Pinned so a resume flips the flag and this line together.
+    - name: Assert the replication pulls into pve-r710 are paused
+      ansible.builtin.assert:
+        that:
+          - not (hostvars['pve-r710'].syncoid_enabled | bool)
+        fail_msg: >-
+          pve-r710's syncoid pulls are expected to be paused. If replication is
+          being resumed, flip syncoid_enabled in its host_vars back to true and
+          update this assertion in the same change.
+
 - name: Record the syncoid endpoints each Proxmox host declares
   hosts: proxmox
   connection: local

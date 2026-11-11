@@ -55,6 +55,9 @@ syncoid_extra_schedules:
     hour: "*"
     minute: "37"
 
+# Replication pulls into bulk/replica paused; set true to resume.
+syncoid_enabled: false
+
 # Per-minute healthchecks liveness ping stays off pending its own follow-up
 # (unrelated to the always-on change above).
 proxmox_monitoring_enable_healthchecks: false

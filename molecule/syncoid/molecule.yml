@@ -5,6 +5,21 @@ platforms:
     image: "${MOLECULE_IMAGE:-mirror.gcr.io/geerlingguy/docker-debian12-ansible:latest@sha256:43b3f59882ccc0ba5deb3b3ecac727084bb082a3230b5258c500395694b5497f}"
     pre_build_image: true
     privileged: true
+    groups:
+      - syncoid-enabled
+    tmpfs:
+      - /run
+      - /tmp
+  # Second instance for the paused path: prepare.yml seeds the schedules a
+  # previously-enabled host already carries, and converge.yml runs it with
+  # syncoid_enabled false, so verify.yml proves the schedules are taken away
+  # rather than merely never installed.
+  - name: proxmox-syncoid-disabled-test
+    image: "${MOLECULE_IMAGE:-mirror.gcr.io/geerlingguy/docker-debian12-ansible:latest@sha256:43b3f59882ccc0ba5deb3b3ecac727084bb082a3230b5258c500395694b5497f}"
+    pre_build_image: true
+    privileged: true
+    groups:
+      - syncoid-disabled
     tmpfs:
       - /run
       - /tmp
