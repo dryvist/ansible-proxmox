@@ -1,0 +1,29 @@
+---
+- name: Create the fixture directory
+  ansible.builtin.file:
+    path: "{{ pve_backup_jobs_stub_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Write the fixture job set
+  ansible.builtin.copy:
+    content: "{{ pve_backup_jobs_fixture_state | to_json }}"
+    dest: "{{ pve_backup_jobs_stub_dir }}/state.json"
+    mode: "0644"
+
+- name: Reset the recorded command log
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+    mode: "0644"
+
+- name: Install the pvesh stub
+  ansible.builtin.copy:
+    content: |
+      #!/bin/sh
+      # Serve fixture data on reads and record other commands.
+      printf '%s\n' "$*" >> {{ pve_backup_jobs_stub_dir }}/commands.log
+      [ "$1" = get ] && cat {{ pve_backup_jobs_stub_dir }}/state.json
+      exit 0
+    dest: "{{ pve_backup_jobs_stub_dir }}/pvesh"
+    mode: "0755"

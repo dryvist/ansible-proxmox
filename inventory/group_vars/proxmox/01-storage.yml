@@ -99,12 +99,14 @@ sanoid_splunk_datasets_json: >-
   }
 sanoid_splunk_datasets: "{{ sanoid_splunk_datasets_json | from_json }}"
 
-# PBS guest backups, enabled one node at a time.
+# PBS guest backups, enabled one node at a time. Container backups use
+# metadata change detection (pbs_change_detection_mode).
 pve_backup_jobs_manage: true
 pve_backup_jobs_prune_unmanaged: false
 pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
 pve_backup_jobs_pbs_node: pve-w1700
-pve_backup_jobs_pbs_server: "{{ hostvars['localhost'].tofu_data.containers.pbs.fqdn }}"
+pve_backup_jobs_pbs_guest_key: pbs
+pve_backup_jobs_pbs_server: "{{ hostvars['localhost'].tofu_data.containers[pve_backup_jobs_pbs_guest_key].fqdn }}"
 pve_backup_jobs_jobs:
   - id: guests-pve-r540
     all: true
