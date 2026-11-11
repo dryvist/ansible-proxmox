@@ -43,6 +43,9 @@
           - "'--pbs-change-detection-mode metadata' in pve_backup_jobs_all_create"
           - "'create /cluster/backup --id fixture-cdm' in pve_backup_jobs_commands"
           - "'--pbs-change-detection-mode data' in pve_backup_jobs_cdm_create"
+          - "(pve_backup_jobs_commands | regex_findall('set /cluster/backup/fixture-cdm-change') | length) == 1"
+          - "'--pbs-change-detection-mode data' in pve_backup_jobs_cdm_change"
+          - "'fixture-cdm-insync' not in pve_backup_jobs_commands"
           - "'--mode stop' in pve_backup_jobs_mode_change"
           - "'fixture-mode-change' in pve_backup_jobs_commands"
           - "'--enabled 1' not in pve_backup_jobs_commands"
@@ -67,6 +70,10 @@
         pve_backup_jobs_cdm_create: >-
           {{ pve_backup_jobs_commands.splitlines()
              | select('search', 'create /cluster/backup --id fixture-cdm')
+             | first | default('') }}
+        pve_backup_jobs_cdm_change: >-
+          {{ pve_backup_jobs_commands.splitlines()
+             | select('search', 'set /cluster/backup/fixture-cdm-change')
              | first | default('') }}
         pve_backup_jobs_mode_change: >-
           {{ pve_backup_jobs_commands.splitlines()

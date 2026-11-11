@@ -29,6 +29,24 @@ pve_backup_jobs_jobs:
     mode: snapshot
     prune: keep-daily=3
     exclude_names: [fixture-splunk]
+  - id: fixture-cdm-change
+    pool: fixture-pool-c
+    storage: fixture-backup-store
+    schedule: "04:30"
+    enabled: false
+    mode: snapshot
+    prune: keep-daily=3
+    exclude_names: [fixture-splunk]
+    pbs_change_detection_mode: data
+  - id: fixture-cdm-insync
+    pool: fixture-pool-c
+    storage: fixture-backup-store
+    schedule: "04:30"
+    enabled: false
+    mode: snapshot
+    prune: keep-daily=3
+    exclude_names: [fixture-splunk]
+    pbs_change_detection_mode: data
   - id: fixture-mode-change
     pool: fixture-pool-f
     storage: fixture-backup-store

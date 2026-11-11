@@ -37,6 +37,32 @@ pve_backup_jobs_fixture_state_after_create:
     pbs-change-detection-mode: metadata
     comment: ""
     prune-backups: {keep-daily: "3"}
+  - id: fixture-cdm-change
+    type: vzdump
+    pool: fixture-pool-c
+    all: 0
+    storage: fixture-backup-store
+    schedule: "04:30"
+    enabled: 0
+    exclude: "4244"
+    mode: snapshot
+    compress: zstd
+    pbs-change-detection-mode: data
+    comment: ""
+    prune-backups: {keep-daily: "3"}
+  - id: fixture-cdm-insync
+    type: vzdump
+    pool: fixture-pool-c
+    all: 0
+    storage: fixture-backup-store
+    schedule: "04:30"
+    enabled: 0
+    exclude: "4244"
+    mode: snapshot
+    compress: zstd
+    pbs-change-detection-mode: data
+    comment: ""
+    prune-backups: {keep-daily: "3"}
   - id: fixture-mode-change
     type: vzdump
     pool: fixture-pool-f
