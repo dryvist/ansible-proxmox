@@ -63,7 +63,7 @@ class-assignment table):
   config is what must survive; the indexes ride along on the same disk-2
   replica but are volatile and re-acquirable. Expect index recovery/fsck on
   first boot after a restore; do not block a cutover on index integrity.
-- **Ephemeral agent-sandbox guests** — the converge-time inventory test
+- **Ephemeral agent-sandbox guests** — the CI inventory contract test
   refuses any syncoid endpoint naming a guest the published inventory tags
   `agent-sandbox`, and a retired replica of one is destroyed, not kept.
 
