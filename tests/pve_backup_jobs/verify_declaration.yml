@@ -330,13 +330,22 @@
                 schedule: "02:30"
                 pbs_change_detection_mode: faster
 
-        - name: Fail because an unknown change detection mode was accepted
-          ansible.builtin.fail:
-            msg: "A pbs_change_detection_mode outside legacy, data and metadata was ACCEPTED."
       rescue:
         - name: Record the change detection refusal
           ansible.builtin.set_fact:
+            pve_backup_jobs_change_detection_failure: "{{ ansible_failed_result | to_json }}"
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['change-detection'] }}"
+
+    - name: Assert the unsupported change detection mode was refused
+      ansible.builtin.assert:
+        that:
+          - pve_backup_jobs_change_detection_failure is defined
+          - "'fixture-bad-mode' in pve_backup_jobs_change_detection_failure"
+          - "'must be one of legacy, data, metadata' in pve_backup_jobs_change_detection_failure"
+        fail_msg: >-
+          Expected an unsupported change detection mode to fail with its supported
+          values; got {{ pve_backup_jobs_change_detection_failure | default('no failure') }}.
+        quiet: true
 
     - name: Refuse a role default change detection mode PVE does not accept
       block:
@@ -350,7 +359,7 @@
       rescue:
         - name: Record the role default change detection refusal
           ansible.builtin.set_fact:
-            pve_backup_jobs_default_mode_failure: "{{ ansible_failed_result.msg | default('') }}"
+            pve_backup_jobs_default_mode_failure: "{{ ansible_failed_result | to_json }}"
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['default-change-detection'] }}"
 
     - name: Assert the role default change detection mode was refused
@@ -378,13 +387,22 @@
                 storage: fixture-backup-store
                 schedule: "02:30"
 
-        - name: Fail because an unexcluded backup-node job was accepted
-          ansible.builtin.fail:
-            msg: "A job on the backup node without the PBS guest excluded was ACCEPTED."
       rescue:
         - name: Record the backup-node exclusion refusal
           ansible.builtin.set_fact:
+            pve_backup_jobs_pbs_node_failure: "{{ ansible_failed_result | to_json }}"
             pve_backup_jobs_refusals: "{{ pve_backup_jobs_refusals | default([]) + ['pbs-node'] }}"
+
+    - name: Assert the backup-node exclusion was refused
+      ansible.builtin.assert:
+        that:
+          - pve_backup_jobs_pbs_node_failure is defined
+          - "'fixture-backup-node-unexcluded' in pve_backup_jobs_pbs_node_failure"
+          - "'excludes the PBS guest by name' in pve_backup_jobs_pbs_node_failure"
+        fail_msg: >-
+          Expected a backup-node job without the PBS guest excluded to fail;
+          got {{ pve_backup_jobs_pbs_node_failure | default('no failure') }}.
+        quiet: true
 
     # Counting the refusals is what makes this test unable to pass vacuously: if
     # a rescue never ran, the list is short and this fails.
