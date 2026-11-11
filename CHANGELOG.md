@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.45.0](https://github.com/dryvist/ansible-proxmox/compare/v2.44.0...v2.45.0) (2026-11-11)
+
+
+### Features
+
+* **agent:** zcode run j-ef69b7a659ec7a84 ([56bfba2](https://github.com/dryvist/ansible-proxmox/commit/56bfba2be4e844306ac05d10f03886aefcfe413f))
+
+
+### Bug Fixes
+
+* replace private names with role words ([#1297](https://github.com/dryvist/ansible-proxmox/issues/1297)) ([56bfba2](https://github.com/dryvist/ansible-proxmox/commit/56bfba2be4e844306ac05d10f03886aefcfe413f))
+
 ## [2.44.0](https://github.com/dryvist/ansible-proxmox/compare/v2.43.0...v2.44.0) (2026-11-11)
 
 
