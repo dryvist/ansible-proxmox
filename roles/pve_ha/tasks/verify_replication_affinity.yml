@@ -37,10 +37,11 @@
       {%- endfor -%}
       {{ ns.rules }}
 
-# One pass over the HA resources. A job without a source falls back to the
-# guest's current node (HA may have moved it off its declared home); a rule's
-# node:priority entries are stripped the same way relocation_preflight.yml
-# reads that field.
+# One pass over the HA resources. A job's source node is used as-is; the
+# guest's current node is only a fallback for a job without one, so a
+# transient difference between the two cannot add a false third node (HA may
+# have moved the guest off its declared home). A rule's node:priority entries
+# are stripped the same way relocation_preflight.yml reads that field.
 - name: Resolve expected and live node sets for each replicated HA resource
   ansible.builtin.set_fact:
     pve_ha_verify_mismatches: >-
@@ -53,10 +54,10 @@
         {%- if jobs | length > 0 -%}
           {%- set rec = namespace(expected=[], actual=[], rules=0) -%}
           {%- for job in jobs -%}
+            {%- set origin = job.source
+                 | default(pve_ha_verify_guest_nodes.get(vmid, ''), true) -%}
             {%- set rec.expected = rec.expected | union(
-                 [job.source | default('', true),
-                  pve_ha_verify_guest_nodes.get(vmid, ''),
-                  job.target] | reject('equalto', '') | list) -%}
+                 [origin, job.target] | reject('equalto', '') | list) -%}
           {%- endfor -%}
           {%- for rule in pve_ha_verify_strict_rules -%}
             {%- if sid in rule.resources | default('') | split(',') -%}

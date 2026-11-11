@@ -60,6 +60,41 @@
           exact source + target rules pass, and a job with a numeric guest id
           matches its resource sid.
 
+    # --- Good, divergent placement: the job names source node-b while the
+    # placement map still says node-c (HA moved the guest and the map is
+    # stale). The job's source wins, so the expected set stays
+    # {node-a,node-b} and a matching rule passes instead of failing on a
+    # false third node.
+    - name: Include the real verification where the job source differs from the placement map
+      vars:
+        pve_ha_verify_rules:
+          - rule: apps-replication-nodes
+            type: node-affinity
+            resources: "ct:605000"
+            nodes: "node-a,node-b"
+            strict: 1
+        pve_ha_verify_jobs:
+          - id: "605000-0"
+            guest: 605000
+            target: node-a
+            source: node-b
+        pve_ha_verify_resources:
+          - sid: "ct:605000"
+        pve_ha_verify_guest_nodes:
+          "605000": node-c
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/verify_replication_affinity.yml
+
+    - name: Assert the job source wins over a stale placement entry
+      ansible.builtin.assert:
+        that:
+          - pve_ha_verify_mismatches == []
+        fail_msg: >-
+          a job whose source disagrees with the placement map was reported
+          as mismatching: {{ pve_ha_verify_mismatches }}
+        success_msg: >-
+          the job's source is used and the stale placement entry adds no
+          third node.
+
     # --- Over-broad: ONE strict rule holds BOTH sids and names node-c, where
     # neither guest keeps a replica. Must fail naming both sids.
     - name: Catch a strict rule naming a node with no replica
