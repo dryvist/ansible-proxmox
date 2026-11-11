@@ -7,6 +7,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN_TASKS = yaml.safe_load((ROOT / "roles/crash_diagnostics/tasks/main.yml").read_text())
+MEMTEST_TASKS = yaml.safe_load((ROOT / "roles/crash_diagnostics/tasks/memtest.yml").read_text())
 ESP_TASKS = yaml.safe_load((ROOT / "roles/crash_diagnostics/tasks/memtest_esp.yml").read_text())
 WRITE_TASKS = (
     "Copy memtest86+ to boot partition",
@@ -26,12 +27,16 @@ def walk(task_list):
             yield task
 
 
-TASKS = {task.get("name"): task for task in list(walk(MAIN_TASKS)) + list(walk(ESP_TASKS))}
+TASKS = {
+    task.get("name"):
+    task
+    for task in list(walk(MAIN_TASKS)) + list(walk(MEMTEST_TASKS)) + list(walk(ESP_TASKS))
+}
 
 
 class MemtestCheckMode(unittest.TestCase):
     def test_boot_partition_writes_skip_check_mode(self):
-        all_tasks = list(walk(MAIN_TASKS)) + list(walk(ESP_TASKS))
+        all_tasks = list(walk(MAIN_TASKS)) + list(walk(MEMTEST_TASKS)) + list(walk(ESP_TASKS))
         guarded_tasks = [
             task["name"]
             for task in all_tasks
@@ -43,6 +48,16 @@ class MemtestCheckMode(unittest.TestCase):
 
 
 class MemtestEspResolution(unittest.TestCase):
+    def test_memtest_tasks_are_included_with_their_tags(self):
+        includes = [
+            task
+            for task in walk(MAIN_TASKS)
+            if task.get("ansible.builtin.include_tasks") == "memtest.yml"
+        ]
+
+        self.assertEqual(len(includes), 1)
+        self.assertEqual(includes[0]["tags"], ["crash_diagnostics", "memtest"])
+
     def test_unresolvable_uuid_does_not_fail_the_play(self):
         resolve = TASKS["Resolve boot partition UUIDs to block devices"]
         self.assertIs(resolve["failed_when"], False)
@@ -62,7 +77,7 @@ class MemtestEspResolution(unittest.TestCase):
         )
 
     def test_every_resolved_esp_is_handled_not_just_the_first(self):
-        dumped = yaml.safe_dump(MAIN_TASKS)
+        dumped = yaml.safe_dump(MEMTEST_TASKS)
         self.assertNotIn("select | first", dumped)
         install = TASKS["Install memtest86+ on every resolvable boot ESP"]
         self.assertIn("results", install["loop"])
@@ -80,7 +95,7 @@ class MemtestEspMount(unittest.TestCase):
         self.assertNotEqual(per_esp_mount, LEGACY_MOUNT_PATH)
 
     def test_no_task_mounts_with_a_permanent_fstab_entry(self):
-        for task in list(walk(MAIN_TASKS)) + list(walk(ESP_TASKS)):
+        for task in list(walk(MAIN_TASKS)) + list(walk(MEMTEST_TASKS)) + list(walk(ESP_TASKS)):
             spec = task.get("ansible.posix.mount", {})
             self.assertNotEqual(spec.get("state"), "mounted")
 
