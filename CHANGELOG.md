@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.44.0](https://github.com/dryvist/ansible-proxmox/compare/v2.43.0...v2.44.0) (2026-11-11)
+
+
+### Features
+
+* **agent:** autonomous zcode run j-d1857f4fc09a673e ([#1300](https://github.com/dryvist/ansible-proxmox/issues/1300)) ([8ef6e66](https://github.com/dryvist/ansible-proxmox/commit/8ef6e66f4d71b8083d0aa8ee0b5cfc364bbd656b))
+
 ## [2.43.0](https://github.com/dryvist/ansible-proxmox/compare/v2.42.4...v2.43.0) (2026-11-09)
 
 
