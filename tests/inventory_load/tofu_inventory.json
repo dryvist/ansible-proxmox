@@ -18,6 +18,37 @@
     }
   },
   "containers": {
+    "fixture-rootpool-ct": {
+      "ansible_connection": "community.proxmox.proxmox_pct_remote",
+      "datastore": "local-zfs",
+      "hostname": "fixture-rootpool-ct",
+      "node": "pve-r540",
+      "pool_id": "test-only",
+      "tags": ["container"],
+      "vmid": 601100,
+      "ansible_pct_vmid": 601100
+    },
+    "fixture-pvesr-ct": {
+      "ansible_connection": "community.proxmox.proxmox_pct_remote",
+      "datastore": "local-zfs",
+      "ha_replication_target": "pve-r710",
+      "hostname": "fixture-pvesr-ct",
+      "node": "pve-r540",
+      "pool_id": "test-only",
+      "tags": ["container"],
+      "vmid": 601200,
+      "ansible_pct_vmid": 601200
+    },
+    "fixture-sandbox-ct": {
+      "ansible_connection": "community.proxmox.proxmox_pct_remote",
+      "datastore": "local-zfs",
+      "hostname": "fixture-sandbox-ct",
+      "node": "pve-r540",
+      "pool_id": "test-only",
+      "tags": ["container", "agent-sandbox"],
+      "vmid": 601300,
+      "ansible_pct_vmid": 601300
+    },
     "postgres-ai-1": {
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "hostname": "postgres-ai-1",
@@ -54,9 +85,42 @@
       "node": "pve-r540",
       "tags": ["agent-sandbox"],
       "vmid": 515100
+    },
+    "fixture-bulkdisk-vm": {
+      "ansible_connection": "ssh",
+      "disks": [
+        { "interface": "scsi0", "datastore": "bulk-appdata", "path": "vm-601400-disk-0" }
+      ],
+      "hostname": "fixture-bulkdisk-vm",
+      "node": "pve-r540",
+      "tags": ["vm"],
+      "vmid": 601400
+    },
+    "fixture-rootpool-vm": {
+      "ansible_connection": "ssh",
+      "disks": [
+        { "interface": "scsi0", "datastore": "local-zfs", "path": "vm-601500-disk-0" },
+        { "interface": "scsi1", "datastore": "local-zfs", "path": "vm-601500-disk-1" }
+      ],
+      "hostname": "fixture-rootpool-vm",
+      "node": "pve-r540",
+      "tags": ["vm"],
+      "vmid": 601500
     }
   },
   "node_storage": {
+    "pve-r540": {
+      "pools": {
+        "bulk": {
+          "datasets": {
+            "appdata": {
+              "pvesm_id": "bulk-appdata",
+              "quota": "1T"
+            }
+          }
+        }
+      }
+    },
     "pve-w1700": {
       "smb": {
         "group_name": "nas",

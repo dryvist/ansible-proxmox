@@ -175,16 +175,17 @@ syncoid_rootpool_jobs_json: >-
   {%- set jobs = [] -%}
   {%- set storage_node = proxmox_node_names.storage -%}
   {%- set dataset_roots = hostvars[storage_node].pve_dataset_root_by_storage -%}
-  {%- for ct_name, ct in (containers_from_tofu | mandatory(
+  {%- for ct_entry in (containers_from_tofu | mandatory(
         'containers_from_tofu is unset, so the storage-node root-pool guest
         disk jobs cannot be listed. Run playbooks/load_tofu.yml — it targets
         localhost, so any --limit must include localhost. Refusing to guess
         dataset paths.')) | dict2items -%}
+    {%- set ct = ct_entry.value -%}
     {%- if ct.node | default('') == storage_node
           and 'agent-sandbox' not in (ct.tags | default([]))
           and (ct.ha_replication_target | default('')) | length == 0 -%}
       {%- set datastore = ct.datastore | mandatory(
-            'container ' ~ ct_name ~ ' publishes no .datastore, so its
+            'container ' ~ ct_entry.key ~ ' publishes no .datastore, so its
             root-pool dataset path cannot be resolved. The published
             inventory predates that field; apply tofu-proxmox first.') -%}
       {%- if dataset_roots[datastore] | default('') == 'rpool/data' -%}
@@ -197,23 +198,24 @@ syncoid_rootpool_jobs_json: >-
       {%- endif -%}
     {%- endif -%}
   {%- endfor -%}
-  {%- for vm_name, vm in (vms_from_tofu | mandatory(
+  {%- for vm_entry in (vms_from_tofu | mandatory(
         'vms_from_tofu is unset, so the storage-node root-pool guest disk
         jobs cannot be listed. Run playbooks/load_tofu.yml (see
         containers_from_tofu above). Refusing to guess dataset paths.')) | dict2items -%}
+    {%- set vm = vm_entry.value -%}
     {%- if vm.node | default('') == storage_node
           and 'agent-sandbox' not in (vm.tags | default([]))
           and (vm.ha_replication_target | default('')) | length == 0 -%}
       {%- for disk in vm.disks | mandatory(
-            'VM ' ~ vm_name ~ ' publishes no .disks, so its dataset paths
+            'VM ' ~ vm_entry.key ~ ' publishes no .disks, so its dataset paths
             cannot be resolved. The published inventory predates that field;
             apply tofu-proxmox first.') -%}
         {%- set datastore = disk.datastore | mandatory(
-              'VM ' ~ vm_name ~ ' has a disk publishing no .datastore, so
+              'VM ' ~ vm_entry.key ~ ' has a disk publishing no .datastore, so
               its root-pool dataset path cannot be resolved. The published
               inventory predates that field; apply tofu-proxmox first.') -%}
         {%- set path = disk.path | mandatory(
-              'VM ' ~ vm_name ~ ' has a disk publishing no .path, so its
+              'VM ' ~ vm_entry.key ~ ' has a disk publishing no .path, so its
               dataset path cannot be resolved. Proxmox, not this repo,
               assigns each volume name; never derive it by counting.') -%}
         {%- if dataset_roots[datastore] | default('') == 'rpool/data' -%}
