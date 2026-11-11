@@ -278,3 +278,27 @@
           case sourced from published disks rather than a live config read),
           and passes nautobot/postgres-apps (bulk present) + shared-app (no
           nodes restriction = available everywhere).
+
+    # --- role-default + create-command wiring (defaults load last:
+    # include_vars outranks play vars, and the fixture assertions above read
+    # play vars) ---
+    - name: Load the role's replication defaults
+      ansible.builtin.include_vars:
+        file: ../../roles/pve_ha/defaults/main/70_replication.yml
+
+    # !unsafe: the needle is template source text, so the braces must reach
+    # the comparison unrendered (assert pre-templates its conditions).
+    - name: Assert the replication-rate default and its create-command guard wiring
+      vars:
+        pve_ha_rate_guard_needle: !unsafe "{% if pve_ha_replication_rate | string | length > 0 %}--rate {{ pve_ha_replication_rate }}{% endif %}"
+      ansible.builtin.assert:
+        that:
+          - pve_ha_replication_rate == 50
+          - pve_ha_rate_guard_needle in lookup('file', playbook_dir ~ '/../../roles/pve_ha/tasks/replication_apply.yml')
+        fail_msg: >-
+          replication-rate default or wiring is wrong:
+          pve_ha_replication_rate={{ pve_ha_replication_rate }}
+        success_msg: >-
+          the role-default replication rate is 50 and replication_apply.yml
+          emits --rate {{ pve_ha_replication_rate }} inside its non-empty
+          guard.
