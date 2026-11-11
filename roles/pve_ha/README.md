@@ -174,7 +174,11 @@ No real service is touched.
 
 - `pve_ha_replication_rate`
 
-  Default: `""`. `pvesr` rate limit in MB/s; empty = unlimited.
+  Default: `50`. `pvesr` per-job rate limit in MB/s. Replication shares the
+  same single network bridge as the cluster's corosync traffic until a
+  dedicated corosync link exists, and a full first sync at line rate starves
+  corosync. Operators may raise or clear the value per environment through
+  inventory (empty = unlimited).
 
 - `pve_ha_replication_enabled_by_guest`
 

@@ -1,11 +1,16 @@
 ---
-# pvesr schedule (systemd-calendar subset) and optional rate limit (MB/s; empty
-# = unlimited). */5 matches the jobs already running; the app guests' real data-loss
+# pvesr schedule (systemd-calendar subset) and per-job rate limit (MB/s).
+# */5 matches the jobs already running; the app guests' real data-loss
 # window is covered separately (postgres-apps by streaming replication + WAL
 # archiving, the others are near-stateless), so this is a relocation-enabler,
 # not the primary durability layer.
+#
+# Replication shares the same single network bridge as the cluster's corosync
+# traffic until a dedicated corosync link exists, so a full first sync at line
+# rate starves corosync. Operators may raise or clear the value per
+# environment through inventory (empty = unlimited).
 pve_ha_replication_schedule: "*/5"
-pve_ha_replication_rate: ""
+pve_ha_replication_rate: 50
 
 # Per-job override keyed by the guest key in the published inventory.
 # Unlisted guests are enabled; false keeps the pvesr job present but inactive.

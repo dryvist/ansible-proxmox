@@ -98,3 +98,25 @@
           broken={{ pve_ha_broken_replication_ids }},
           enable={{ pve_ha_replication_enable_ids }},
           create={{ pve_ha_replication_create_jobs | map(attribute='id') | list }}
+
+    # Loads the role defaults AFTER the selection assertions above: include_vars
+    # outranks play vars, so the production default rate must not leak into them.
+    - name: Load the production replication defaults
+      ansible.builtin.include_vars: ../../roles/pve_ha/defaults/main/70_replication.yml
+
+    # Mirrors the rate fragment of the create-local-job command line in
+    # tasks/replication_apply.yml, rendered against the production default.
+    - name: Assert a rendered job carries the default rate
+      vars:
+        created_job: "{{ pve_ha_replication_create_jobs | first }}"
+        rendered_create_command: >-
+          pvesr create-local-job {{ created_job.id }} {{ created_job.target }}
+          --schedule '{{ pve_ha_replication_schedule }}'
+          {% if pve_ha_replication_rate | string | length > 0 %}--rate {{ pve_ha_replication_rate }}{% endif %}
+      ansible.builtin.assert:
+        that:
+          - "'--rate 50' in rendered_create_command"
+        fail_msg: >-
+          a rendered create-local-job did not carry the default rate:
+          {{ rendered_create_command }}
+        success_msg: a rendered job carries --rate 50 from the production default.
