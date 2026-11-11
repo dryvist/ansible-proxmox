@@ -153,8 +153,8 @@ syncoid_pinned_jobs:
 # - the disk's datastore resolves through the storage node's
 #   pve_dataset_root_by_storage to the node's root pool (rpool/data) — disks
 #   on any other storage stay out, covered by their own jobs or policies;
-# - the guest's published entry declares no ha_replication_target — those
-#   guests are replicated by pvesr;
+# - the guest has no ha_replication_target, or it names a node other than this
+#   syncoid target; guests pvesr sends to this node stay out;
 # - the guest is not tagged agent-sandbox (see
 #   syncoid_retired_replica_datasets below);
 # - the guest is not tagged shared-media-data; its rootfs is re-acquirable and
@@ -186,7 +186,7 @@ syncoid_rootpool_jobs_json: >-
     {%- if ct.node | default('') == storage_node
           and 'agent-sandbox' not in (ct.tags | default([]))
           and 'shared-media-data' not in (ct.tags | default([]))
-          and (ct.ha_replication_target | default('')) | length == 0 -%}
+          and (ct.ha_replication_target | default('', true)) != inventory_hostname -%}
       {%- set datastore = ct.datastore | mandatory(
             'container ' ~ ct_entry.key ~ ' publishes no .datastore, so its
             root-pool dataset path cannot be resolved. The published
@@ -209,7 +209,7 @@ syncoid_rootpool_jobs_json: >-
     {%- if vm.node | default('') == storage_node
           and 'agent-sandbox' not in (vm.tags | default([]))
           and 'shared-media-data' not in (vm.tags | default([]))
-          and (vm.ha_replication_target | default('')) | length == 0 -%}
+          and (vm.ha_replication_target | default('', true)) != inventory_hostname -%}
       {%- for disk in vm.disks | mandatory(
             'VM ' ~ vm_entry.key ~ ' publishes no .disks, so its dataset paths
             cannot be resolved. The published inventory predates that field;

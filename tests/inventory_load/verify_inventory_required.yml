@@ -1,6 +1,6 @@
 ---
 - name: Refuse to generate the root-pool jobs when the published inventory is not loaded
-  hosts: pve-r710
+  hosts: proxmox
   connection: local
   become: false
   gather_facts: false
@@ -37,3 +37,4 @@
               The generated expression failed in an unexpected way.
               Task: {{ ansible_failed_task.name }}.
               Result: {{ ansible_failed_result.msg | default(ansible_failed_result) }}
+      when: inventory_hostname == hostvars['localhost'].tofu_data.proxmox_node

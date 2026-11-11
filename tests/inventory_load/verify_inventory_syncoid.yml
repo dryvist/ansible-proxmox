@@ -15,22 +15,28 @@
 
     # Per-fixture projections for the generated root-pool guest-disk jobs, so
     # each expected case (one job / no job) is asserted on exactly the jobs its
-    # fixture guest produces. Evaluated ON pve-r710: the pinned jobs' sources
-    # resolve hostvars, which only exists in the host's own context.
+    # fixture guest produces. Evaluated on the syncoid target: the pinned jobs'
+    # sources resolve hostvars, which only exists in the host's own context.
     - name: Extract the generated root-pool jobs for each fixture guest
       ansible.builtin.set_fact:
         rootpool_ct_job: >-
           {{ syncoid_jobs
              | selectattr('name', 'eq', 'rootpool-601100-disk-0') | list }}
+        rootpool_other_target_ct_job: >-
+          {{ syncoid_jobs
+             | selectattr('name', 'eq', 'rootpool-601200-disk-0') | list }}
         rootpool_vm_jobs: >-
           {{ syncoid_jobs
              | selectattr('name', 'match', '^rootpool-601500-disk-[0-9]+$')
              | sort(attribute='name') | list }}
+        rootpool_other_target_vm_job: >-
+          {{ syncoid_jobs
+             | selectattr('name', 'eq', 'rootpool-601800-disk-0') | list }}
         rootpool_excluded_endpoints: >-
           {{ ((syncoid_jobs | map(attribute='source') | list)
               + (syncoid_jobs | map(attribute='target') | list))
-             | select('search', '601200|601300|601400') | list }}
-      when: inventory_hostname == 'pve-r710'
+             | select('search', '601300|601400') | list }}
+      when: syncoid_rootpool_jobs_json is defined
 
     - name: Assert the generated root-pool jobs match the published guests
       ansible.builtin.assert:
@@ -38,25 +44,33 @@
           # (a) A container on the storage node whose root disk sits on the
           # root pool generates exactly one non-recursive job.
           - rootpool_ct_job | length == 1
-          - rootpool_ct_job[0].source == 'root@pve-r540:rpool/data/subvol-601100-disk-0'
-          - rootpool_ct_job[0].target == 'bulk/replica/pve-r540/rpool/data/subvol-601100-disk-0'
+          - rootpool_ct_job[0].source == 'root@' ~ proxmox_node_names.storage ~ ':rpool/data/subvol-601100-disk-0'
+          - rootpool_ct_job[0].target == 'bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/subvol-601100-disk-0'
           - rootpool_ct_job[0].options == '--no-sync-snap --quiet'
           - rootpool_ct_job[0].sanoid_replica_class == 'slow'
           - rootpool_ct_job[0].schedule is not defined
+          # A pvesr target elsewhere does not suppress a syncoid replica here.
+          - rootpool_other_target_ct_job | length == 1
+          - rootpool_other_target_ct_job[0].source == 'root@' ~ proxmox_node_names.storage ~ ':rpool/data/subvol-601200-disk-0'
+          - rootpool_other_target_ct_job[0].target == 'bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/subvol-601200-disk-0'
           # A VM on the root pool generates one job per published disk, named
           # and addressed from the published volume names.
           - rootpool_vm_jobs | map(attribute='name') | list
             == ['rootpool-601500-disk-0', 'rootpool-601500-disk-1']
           - rootpool_vm_jobs | map(attribute='source') | list
-            == ['root@pve-r540:rpool/data/vm-601500-disk-0',
-                'root@pve-r540:rpool/data/vm-601500-disk-1']
+            == ['root@' ~ proxmox_node_names.storage ~ ':rpool/data/vm-601500-disk-0',
+                'root@' ~ proxmox_node_names.storage ~ ':rpool/data/vm-601500-disk-1']
           - rootpool_vm_jobs | map(attribute='target') | list
-            == ['bulk/replica/pve-r540/rpool/data/vm-601500-disk-0',
-                'bulk/replica/pve-r540/rpool/data/vm-601500-disk-1']
+            == ['bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/vm-601500-disk-0',
+                'bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/vm-601500-disk-1']
           - (rootpool_vm_jobs | map(attribute='options') | list)
             | unique | list == ['--no-sync-snap --quiet']
-          # (b) A guest with a declared ha_replication_target is pvesr's to
-          # replicate and generates no job.
+          # A VM whose pvesr target is elsewhere also keeps its syncoid jobs.
+          - rootpool_other_target_vm_job | length == 1
+          - rootpool_other_target_vm_job[0].source == 'root@' ~ proxmox_node_names.storage ~ ':rpool/data/vm-601800-disk-0'
+          - rootpool_other_target_vm_job[0].target == 'bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/vm-601800-disk-0'
+          # (b) A guest whose HA target is this syncoid target is excluded;
+          # the next assertion covers both guest types.
           # (c) A guest tagged agent-sandbox is ephemeral and generates no job.
           # (d) A disk on a datastore that resolves to any other root
           # generates no job.
@@ -65,7 +79,56 @@
           The generated root-pool guest-disk jobs did not match the published
           guests: ct job {{ rootpool_ct_job }}, vm jobs {{ rootpool_vm_jobs }},
           excluded endpoints {{ rootpool_excluded_endpoints }}.
-      when: inventory_hostname == 'pve-r710'
+      when: syncoid_rootpool_jobs_json is defined
+
+    - name: Assert guests replicated to this node do not get root-pool syncoid jobs
+      ansible.builtin.assert:
+        that:
+          - same_target_ct_jobs | length == 0
+          - same_target_vm_jobs | length == 0
+        fail_msg: >-
+          A guest whose HA replication target is this syncoid target also
+          received a root-pool syncoid job: CT {{ same_target_ct_jobs }},
+          VM {{ same_target_vm_jobs }}.
+      vars:
+        same_target_ct_vmid: 601900
+        same_target_vm_vmid: 602000
+        containers_from_tofu: >-
+          {{ hostvars[inventory_hostname].containers_from_tofu
+             | combine({
+                 'fixture-same-target-ct': {
+                   'datastore': 'local-zfs',
+                   'ha_replication_target': inventory_hostname,
+                   'node': proxmox_node_names.storage,
+                   'tags': ['container'],
+                   'vmid': same_target_ct_vmid
+                 }
+               }) }}
+        vms_from_tofu: >-
+          {{ hostvars[inventory_hostname].vms_from_tofu
+             | combine({
+                 'fixture-same-target-vm': {
+                   'disks': [{
+                     'datastore': 'local-zfs',
+                     'path': 'vm-' ~ (same_target_vm_vmid | string) ~ '-disk-0'
+                   }],
+                   'ha_replication_target': inventory_hostname,
+                   'node': proxmox_node_names.storage,
+                   'tags': ['vm'],
+                   'vmid': same_target_vm_vmid
+                 }
+               }) }}
+        same_target_ct_jobs: >-
+          {{ syncoid_rootpool_jobs_json | from_json
+             | selectattr('name', 'eq',
+                 'rootpool-' ~ (same_target_ct_vmid | string) ~ '-disk-0')
+             | list }}
+        same_target_vm_jobs: >-
+          {{ syncoid_rootpool_jobs_json | from_json
+             | selectattr('name', 'eq',
+                 'rootpool-' ~ (same_target_vm_vmid | string) ~ '-disk-0')
+             | list }}
+      when: syncoid_rootpool_jobs_json is defined
 
     # Inject synthetic guests into both published lists so the assertion fails
     # if either generated-job filter stops excluding this tag.
@@ -122,7 +185,7 @@
         fail_msg: >-
           The recursive root-pool source job must not be configured on this
           replica node.
-      when: inventory_hostname == 'pve-r710'
+      when: syncoid_rootpool_jobs_json is defined
 
     # The same protection, scoped to a guest class: guests the published
     # inventory tags agent-sandbox are ephemeral, so nothing on this node may
@@ -155,4 +218,4 @@
           {{ (agent_sandbox_vmids | map('string') | list
               | map('regex_replace', '^', '(?:vm|subvol)-')
               | map('regex_replace', '$', '-disk-') | list) | join('|') }}
-      when: inventory_hostname == 'pve-r710'
+      when: syncoid_rootpool_jobs_json is defined

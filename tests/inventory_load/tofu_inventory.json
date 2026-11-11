@@ -21,8 +21,9 @@
     "fixture-rootpool-ct": {
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "datastore": "local-zfs",
+      "ha_replication_target": null,
       "hostname": "fixture-rootpool-ct",
-      "node": "pve-r540",
+      "node": "example-node-a",
       "pool_id": "test-only",
       "tags": ["container"],
       "vmid": 601100,
@@ -31,9 +32,9 @@
     "fixture-pvesr-ct": {
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "datastore": "local-zfs",
-      "ha_replication_target": "pve-r710",
+      "ha_replication_target": "example-node-b",
       "hostname": "fixture-pvesr-ct",
-      "node": "pve-r540",
+      "node": "example-node-a",
       "pool_id": "test-only",
       "tags": ["container"],
       "vmid": 601200,
@@ -43,7 +44,7 @@
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "datastore": "local-zfs",
       "hostname": "fixture-sandbox-ct",
-      "node": "pve-r540",
+      "node": "example-node-a",
       "pool_id": "test-only",
       "tags": ["container", "agent-sandbox"],
       "vmid": 601300,
@@ -82,7 +83,7 @@
         { "interface": "scsi1", "datastore": "local-zfs", "path": "vm-515100-disk-1" }
       ],
       "hostname": "agent-sandbox",
-      "node": "pve-r540",
+      "node": "example-node-a",
       "tags": ["agent-sandbox"],
       "vmid": 515100
     },
@@ -92,7 +93,7 @@
         { "interface": "scsi0", "datastore": "bulk-appdata", "path": "vm-601400-disk-0" }
       ],
       "hostname": "fixture-bulkdisk-vm",
-      "node": "pve-r540",
+      "node": "example-node-a",
       "tags": ["vm"],
       "vmid": 601400
     },
@@ -102,14 +103,26 @@
         { "interface": "scsi0", "datastore": "local-zfs", "path": "vm-601500-disk-0" },
         { "interface": "scsi1", "datastore": "local-zfs", "path": "vm-601500-disk-1" }
       ],
+      "ha_replication_target": null,
       "hostname": "fixture-rootpool-vm",
-      "node": "pve-r540",
+      "node": "example-node-a",
       "tags": ["vm"],
       "vmid": 601500
+    },
+    "fixture-pvesr-vm": {
+      "ansible_connection": "ssh",
+      "disks": [
+        { "interface": "scsi0", "datastore": "local-zfs", "path": "vm-601800-disk-0" }
+      ],
+      "ha_replication_target": "example-node-b",
+      "hostname": "fixture-pvesr-vm",
+      "node": "example-node-a",
+      "tags": ["vm"],
+      "vmid": 601800
     }
   },
   "node_storage": {
-    "pve-r540": {
+    "example-node-a": {
       "pools": {
         "bulk": {
           "datasets": {
