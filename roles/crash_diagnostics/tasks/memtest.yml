@@ -125,7 +125,12 @@
     - memtest
 
 - name: Install memtest86+ on every resolvable boot ESP
-  ansible.builtin.include_tasks: memtest_esp.yml
+  ansible.builtin.include_tasks:
+    file: memtest_esp.yml
+    apply:
+      tags:
+        - crash_diagnostics
+        - memtest
   loop: >-
     {{ crash_diagnostics_boot_uuid_resolutions.results | default([])
        | selectattr('rc', 'equalto', 0) | list }}

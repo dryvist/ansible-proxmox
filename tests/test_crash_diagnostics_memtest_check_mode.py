@@ -58,6 +58,13 @@ class MemtestEspResolution(unittest.TestCase):
         self.assertEqual(len(includes), 1)
         self.assertEqual(includes[0]["tags"], ["crash_diagnostics", "memtest"])
 
+    def test_esp_tasks_inherit_memtest_tags(self):
+        install = TASKS["Install memtest86+ on every resolvable boot ESP"]
+        self.assertEqual(
+            install["ansible.builtin.include_tasks"]["apply"]["tags"],
+            ["crash_diagnostics", "memtest"],
+        )
+
     def test_unresolvable_uuid_does_not_fail_the_play(self):
         resolve = TASKS["Resolve boot partition UUIDs to block devices"]
         self.assertIs(resolve["failed_when"], False)
