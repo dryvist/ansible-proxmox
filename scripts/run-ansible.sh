@@ -7,5 +7,5 @@ export RUN_ANSIBLE_SSH_AGENT="${RUN_ANSIBLE_SSH_AGENT:-1}"
 export RUN_ANSIBLE_LIMIT_LOCALHOST="${RUN_ANSIBLE_LIMIT_LOCALHOST:-1}"
 
 # renovate: datasource=github-releases depName=dryvist/homelab-contracts
-HOMELAB_CONTRACTS_REF=v5.58.1
+HOMELAB_CONTRACTS_REF=v5.59.0
 exec nix run "github:dryvist/homelab-contracts/${HOMELAB_CONTRACTS_REF}#run-ansible" -- "$@"
