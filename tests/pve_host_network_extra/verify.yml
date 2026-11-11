@@ -1,0 +1,48 @@
+---
+# Pin the declared extra interfaces end to end without touching a host: load
+# each node's host_vars the way Ansible does and render the role's
+# extra-interfaces.j2 with them, so the corosync link1 addresses and the
+# pre-existing direct-link entries survive together. The per-node exact-match
+# assert is what catches the list-replacement hazard: Ansible does not merge
+# lists across host_vars files, so a second file defining the variable would
+# silently drop the earlier file's entries.
+# Run: ansible-playbook tests/pve_host_network_extra/verify.yml -i localhost,
+- name: Verify each node's extra-interface declarations render
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars:
+    pve_extra_host_vars_root: "{{ playbook_dir }}/../../inventory/host_vars"
+    pve_extra_template_path: >-
+      {{ playbook_dir }}/../../roles/pve_host_network/templates/extra-interfaces.j2
+    # One entry per interface each node must declare; w1700 carries both its
+    # direct-link pair and its corosync link1 in the single merged list.
+    pve_extra_expected:
+      pve-r540:
+        - name: ens2f1
+          address: 169.254.99.1/30
+        - name: eno1
+          address: 169.254.98.54/24
+          comment: corosync link1 (dedicated switch)
+      pve-r710:
+        - name: eno2
+          address: 169.254.98.12/24
+          comment: corosync link1 (dedicated switch)
+      pve-w1700:
+        - name: enp4s0f0
+          address: 169.254.99.2/30
+        - name: enp4s0f1
+          address: 169.254.98.10/24
+          comment: corosync link1 (dedicated switch)
+      pve-w5900:
+        - name: enp4s0f0
+          address: 169.254.98.14/24
+          comment: corosync link1 (dedicated switch)
+
+  tasks:
+    - name: Load, render, and assert one node per iteration
+      ansible.builtin.include_tasks: verify-node.yml
+      loop: "{{ pve_extra_expected | dict2items }}"
+      loop_control:
+        loop_var: pve_extra_node
