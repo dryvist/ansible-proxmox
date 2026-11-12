@@ -16,7 +16,7 @@
     PATH: "/tmp/pve-network-maintenance-fixture:{{ ansible_env.PATH | default('/usr/bin:/bin') }}"
   vars:
     pve_network_maintenance_stub_dir: /tmp/pve-network-maintenance-fixture
-    pve_network_maintenance_config_host: localhost
+    pve_cluster_primary_host: localhost
     pve_network_maintenance_phase: pre
     pve_network_maintenance_state_dir: /tmp/pve-network-maintenance-fixture/state
     pve_network_maintenance_state_owner: "{{ lookup('ansible.builtin.env', 'USER') }}"
@@ -29,6 +29,17 @@
     pve_network_maintenance_disarm_delay: 5
 
   tasks:
+    - name: Run only the prepared fixture in check mode
+      # The normal run prepares the fixtures before invoking this playbook
+      # again with --check, so ansible_check_mode reflects the real CLI mode.
+      ansible.builtin.include_role:
+        name: pve_network_maintenance
+      when: ansible_check_mode
+
+    - name: Finish the check-mode fixture run
+      ansible.builtin.meta: end_play
+      when: ansible_check_mode
+
     - name: Write the stubs and fixtures both window tests share
       ansible.builtin.include_tasks: stub_fixtures.yml
 
@@ -53,15 +64,25 @@
             name: pve_network_maintenance
             tasks_from: pre.yml
 
-        - name: Fail because the non-quorate cluster was accepted
-          ansible.builtin.fail:
-            msg: "The pre phase ACCEPTED a non-quorate cluster."
-
       rescue:
+        - name: Assert the quorum safety gate rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - "ansible_failed_result.assertion | default('') == 'pve_network_maintenance_cluster_quorate'"
+            fail_msg: "The non-quorate fixture failed outside the quorum safety gate."
+            quiet: true
+
         - name: Record the quorum refusal
           ansible.builtin.set_fact:
             pve_network_maintenance_refusals: >-
               {{ (pve_network_maintenance_refusals | default([])) + ['quorum'] }}
+
+    - name: Assert the non-quorate cluster was refused
+      ansible.builtin.assert:
+        that:
+          - "'quorum' in (pve_network_maintenance_refusals | default([]))"
+        fail_msg: "The pre phase accepted a non-quorate cluster."
+        quiet: true
 
     - name: Write the recovering-resource HA fixture
       ansible.builtin.copy:
@@ -89,15 +110,25 @@
             name: pve_network_maintenance
             tasks_from: pre.yml
 
-        - name: Fail because the recovering resource was accepted
-          ansible.builtin.fail:
-            msg: "The pre phase ACCEPTED a cluster with an HA resource in recover state."
-
       rescue:
+        - name: Assert the HA safety gate rejected the fixture
+          ansible.builtin.assert:
+            that:
+              - "ansible_failed_result.assertion | default('') == 'pve_network_maintenance_blocked_sids | length == 0'"
+            fail_msg: "The recovering-resource fixture failed outside the HA safety gate."
+            quiet: true
+
         - name: Record the blocked-state refusal
           ansible.builtin.set_fact:
             pve_network_maintenance_refusals: >-
               {{ (pve_network_maintenance_refusals | default([])) + ['blocked-state'] }}
+
+    - name: Assert the recovering-resource cluster was refused
+      ansible.builtin.assert:
+        that:
+          - "'blocked-state' in (pve_network_maintenance_refusals | default([]))"
+        fail_msg: "The pre phase accepted an HA resource in recover state."
+        quiet: true
 
     - name: Write the healthy HA fixture
       ansible.builtin.copy:
@@ -142,10 +173,46 @@
         dest: "{{ pve_network_maintenance_stub_dir }}/commands.log"
         content: ""
 
-    - name: Run the pre phase against the healthy fixture set
+    - name: Run the pre phase in check mode
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -m
+          - ansible.cli.playbook
+          - "{{ playbook_dir }}/verify_pre_window.yml"
+          - -i
+          - localhost,
+          - -c
+          - local
+          - --check
+        chdir: "{{ playbook_dir | dirname | dirname }}"
+      register: pve_network_maintenance_check_mode_run
+      changed_when: false
+
+    - name: Read back the check-mode command lines
+      ansible.builtin.slurp:
+        src: "{{ pve_network_maintenance_stub_dir }}/commands.log"
+      register: pve_network_maintenance_check_mode_log
+
+    - name: Assert check mode neither changes nor reports an open window
+      ansible.builtin.assert:
+        that:
+          - "'set /cluster/backup/' not in pve_network_maintenance_check_mode_commands"
+          - "'crm-command disarm-ha freeze' not in pve_network_maintenance_check_mode_commands"
+          - "'network maintenance window open:' not in pve_network_maintenance_check_mode_run.stdout"
+          - "'check mode only:' in pve_network_maintenance_check_mode_run.stdout"
+        fail_msg: |
+          Check mode issued a maintenance write or reported an open window:
+          {{ pve_network_maintenance_check_mode_commands }}
+          {{ pve_network_maintenance_check_mode_run.stdout }}
+        success_msg: "PASS: check mode applies no maintenance writes and reports only a preview"
+        quiet: false
+      vars:
+        pve_network_maintenance_check_mode_commands: "{{ pve_network_maintenance_check_mode_log.content | b64decode }}"
+
+    - name: Run the pre phase through the role's default host selector
       ansible.builtin.include_role:
         name: pve_network_maintenance
-        tasks_from: pre.yml
 
     - name: Read back the state file
       ansible.builtin.slurp:
@@ -288,11 +355,11 @@
             pve_network_maintenance_drain_timeout: 10
             pve_network_maintenance_drain_delay: 5
 
-        - name: Fail because the drain timeout did not fire
-          ansible.builtin.fail:
-            msg: "The pre phase finished although the backup tasks never drained."
-
       rescue:
+        - name: Record that the task drain timed out
+          ansible.builtin.set_fact:
+            pve_network_maintenance_drain_timed_out: true
+
         - name: Read back the timed-out run command lines
           ansible.builtin.slurp:
             src: "{{ pve_network_maintenance_stub_dir }}/commands.log"
@@ -306,6 +373,7 @@
     - name: Assert the timed-out re-run rolls back only its own pauses
       ansible.builtin.assert:
         that:
+          - "pve_network_maintenance_drain_timed_out | default(false) | bool"
           - "'set /cluster/backup/job-mid-window --enabled 0' in pve_network_maintenance_timeout_commands"
           - "'set /cluster/backup/job-mid-window --enabled 1' in pve_network_maintenance_timeout_commands"
           # The pauses recorded by the first pre phase stay disabled.
@@ -327,6 +395,71 @@
         quiet: false
       vars:
         pve_network_maintenance_timeout_commands: "{{ pve_network_maintenance_timeout_log.content | b64decode }}"
+
+    - name: Write an idle active-task fixture for the replication drain test
+      ansible.builtin.copy:
+        mode: "0644"
+        dest: "{{ pve_network_maintenance_stub_dir }}/tasks.json"
+        content: |
+          []
+
+    - name: Write a running replication status fixture
+      ansible.builtin.copy:
+        mode: "0644"
+        dest: "{{ pve_network_maintenance_stub_dir }}/replication.json"
+        content: |
+          [{"id": "100-0", "pid": 12345, "fail_count": 0}]
+
+    - name: Reset the recorded command log for the replication drain
+      ansible.builtin.copy:
+        mode: "0644"
+        dest: "{{ pve_network_maintenance_stub_dir }}/commands.log"
+        content: ""
+
+    - name: Run the pre phase into the replication drain timeout
+      block:
+        - name: Run the pre phase against the active replication fixture
+          ansible.builtin.include_role:
+            name: pve_network_maintenance
+            tasks_from: pre.yml
+          vars:
+            pve_network_maintenance_drain_timeout: 10
+            pve_network_maintenance_drain_delay: 5
+
+      rescue:
+        - name: Record that the replication drain timed out
+          ansible.builtin.set_fact:
+            pve_network_maintenance_replication_drain_timed_out: true
+
+        - name: Read back the replication timeout command lines
+          ansible.builtin.slurp:
+            src: "{{ pve_network_maintenance_stub_dir }}/commands.log"
+          register: pve_network_maintenance_replication_timeout_log
+
+        - name: Read back the state file after the replication drain timeout
+          ansible.builtin.slurp:
+            src: "{{ pve_network_maintenance_state_dir }}/state.json"
+          register: pve_network_maintenance_replication_timeout_state
+
+    - name: Assert the replication timeout keeps the window closed and rolls back its pause
+      ansible.builtin.assert:
+        that:
+          - "pve_network_maintenance_replication_drain_timed_out | default(false) | bool"
+          - "'set /cluster/backup/job-mid-window --enabled 0' in pve_network_maintenance_replication_timeout_commands"
+          - "'set /cluster/backup/job-mid-window --enabled 1' in pve_network_maintenance_replication_timeout_commands"
+          - "'crm-command disarm-ha freeze' not in pve_network_maintenance_replication_timeout_commands"
+          - >-
+            (pve_network_maintenance_replication_timeout_state.content | b64decode | from_json).enabled_job_ids
+            == ['job-enabled-int', 'job-enabled-str']
+        fail_msg: |
+          An active replication process did not keep the window closed, or
+          its pause rollback changed the previous record. Commands:
+          {{ pve_network_maintenance_replication_timeout_commands }}
+          State file: {{ pve_network_maintenance_replication_timeout_state.content | b64decode }}
+        success_msg: "PASS: active replication keeps the window closed and rolls back its pause"
+        quiet: false
+      vars:
+        pve_network_maintenance_replication_timeout_commands: "{{ pve_network_maintenance_replication_timeout_log.content | b64decode }}"
 
     - name: Remove the stub directory
       ansible.builtin.file:

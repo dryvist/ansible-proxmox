@@ -14,7 +14,7 @@
   vars_files:
     - ha_status_fixtures.yml
   vars:
-    pve_network_maintenance_config_host: localhost
+    pve_cluster_primary_host: localhost
 
   tasks:
     - name: Classify the disarmed fixture text

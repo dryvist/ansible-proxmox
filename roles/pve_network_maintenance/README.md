@@ -29,9 +29,12 @@ in between:
 ```
 
 HA and backup job state are cluster-wide, so every command runs on the single
-`pve_network_maintenance_config_host` (the same selector `pve_ha` uses,
-`pve_ha_config_host`). The role is a no-op on every other node. `--check`
-performs the reads and previews the writes; the waits are skipped.
+`pve_network_maintenance_config_host`. Its default selects the cluster primary
+from `pve_cluster_primary_host` or `proxmox_node_names.primary`, falling back
+to the first host in the `proxmox` group, without requiring the `pve_ha` role
+to be loaded. The role is a no-op on every other node. `--check` performs the
+reads and previews the writes; the waits are skipped and the existing window
+state is unchanged.
 
 ## Pre phase
 
@@ -45,9 +48,9 @@ performs the reads and previews the writes; the waits are skipped.
    `/var/lib/pve-network-maintenance/state.json` (mode `0600`, root), then
    disables each one (`pvesh set /cluster/backup/<id> --enabled 0`). Waits,
    bounded (`pve_network_maintenance_drain_timeout`, default 30 minutes),
-   until no vzdump or replication task is running on any node. If the wait
-   times out, the paused jobs are re-enabled and the run fails with the
-   window still closed.
+   until no vzdump task is running and no replication job reports an active
+   `pid` on any node. If either wait times out, the paused jobs are re-enabled
+   and the run fails with the window still closed.
 3. Runs `ha-manager crm-command disarm-ha freeze`, which releases all CRM and
    LRM watchdogs cluster-wide. Waits, bounded (default 10 minutes), until
    `ha-manager status` reports the fencing state `disarmed` and every LRM
@@ -79,8 +82,9 @@ jobs into the existing state file and skips the disarm command.
 
 - `pve_network_maintenance_config_host`
 
-  Default: `pve_ha_config_host`. The single node the cluster-wide commands
-  run on.
+  Default: the cluster primary from `pve_cluster_primary_host` or
+  `proxmox_node_names.primary`, falling back to the first host in the
+  `proxmox` group. The single node the cluster-wide commands run on.
 
 - `pve_network_maintenance_state_dir` / `pve_network_maintenance_state_file`
 

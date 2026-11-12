@@ -12,8 +12,8 @@
 #   -e pve_network_maintenance_phase=post
 #
 # HA and backup job state are CLUSTER-WIDE, so every command runs on exactly
-# one node (pve_network_maintenance_config_host, the pve_ha_config_host
-# selector) and the role is a no-op on the rest.
+# one node (pve_network_maintenance_config_host); the role is a no-op on the
+# rest.
 
 - name: Require a declared maintenance phase
   ansible.builtin.assert:

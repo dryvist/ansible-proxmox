@@ -16,7 +16,7 @@
     PATH: "/tmp/pve-network-maintenance-fixture:{{ ansible_env.PATH | default('/usr/bin:/bin') }}"
   vars:
     pve_network_maintenance_stub_dir: /tmp/pve-network-maintenance-fixture
-    pve_network_maintenance_config_host: localhost
+    pve_cluster_primary_host: localhost
     pve_network_maintenance_phase: post
     pve_network_maintenance_state_dir: /tmp/pve-network-maintenance-fixture/state
     pve_network_maintenance_state_owner: "{{ lookup('ansible.builtin.env', 'USER') }}"

@@ -139,6 +139,25 @@
       changed_when: false
       check_mode: false
       when: not ansible_check_mode
+
+    - name: Wait until no replication job reports an active process on each node
+      ansible.builtin.command:
+        argv: [pvesh, get, "/nodes/{{ item }}/replication", --output-format, json]
+      register: pve_network_maintenance_replication_drain_raw
+      until:
+        - >-
+          pve_network_maintenance_replication_drain_raw.stdout | default('', true) | length > 0
+          and ((pve_network_maintenance_replication_drain_raw.stdout | from_json
+                | selectattr('pid', 'defined') | rejectattr('pid', 'none')
+                | list) | length) == 0
+      retries: "{{ pve_network_maintenance_drain_timeout | int // pve_network_maintenance_drain_delay | int }}"
+      delay: "{{ pve_network_maintenance_drain_delay }}"
+      loop: "{{ pve_network_maintenance_cluster_nodes }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+      check_mode: false
+      when: not ansible_check_mode
   rescue:
     - name: Re-enable the backup jobs this run paused
       # The merged record may hold jobs an earlier pre phase paused; those
@@ -247,3 +266,9 @@
 - name: Report the open maintenance window
   ansible.builtin.debug:
     msg: "network maintenance window open: HA disarmed (freeze), backups paused"
+  when: not ansible_check_mode
+
+- name: Report the maintenance preview
+  ansible.builtin.debug:
+    msg: "check mode only: no maintenance changes applied; existing window state unchanged"
+  when: ansible_check_mode

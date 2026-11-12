@@ -5,8 +5,12 @@ pve_network_maintenance_phase: ""
 
 # Inventory hostname of the single node every cluster-wide command runs on. HA
 # state and backup job configuration are cluster-wide (/etc/pve, replicated by
-# pmxcfs), so one node is sufficient and correct. Reuses the pve_ha selector.
-pve_network_maintenance_config_host: "{{ pve_ha_config_host }}"
+# pmxcfs), so one node is sufficient and correct. Uses the cluster primary
+# directly so this role does not depend on pve_ha being loaded.
+pve_network_maintenance_config_host: >-
+  {{ pve_cluster_primary_host
+     | default((proxmox_node_names | default({})).primary
+       | default(groups.get('proxmox', ['localhost']) | first), true) }}
 
 # State file listing the enabled vzdump jobs paused by the pre phase, so the
 # post phase re-enables exactly those and nothing else. Root-readable only.
