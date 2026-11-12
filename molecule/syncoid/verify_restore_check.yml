@@ -205,7 +205,7 @@
     - name: Assert the script clones the newest snapshot read-only at a temporary mount
       ansible.builtin.assert:
         that:
-          # Newest snapshot = the replication high-water mark (the freshness-check idiom).
+          # Newest snapshot = the replication high-water mark (DR runbook idiom).
           - "'zfs list -H -t snapshot -o name -s creation' in restore_check_script_text"
           - "'tail -n 1' in restore_check_script_text"
           # Read-only, noauto, explicit temporary mountpoint — the check must

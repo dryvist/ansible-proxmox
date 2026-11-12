@@ -33,7 +33,7 @@
     syncoid_restore_check_logger: "{{ restore_check_harness_dir.path }}/bin/logger"
 
 # The harness copy uses a placeholder dataset, a writable scratch
-# mountpoint base (not /run), and the recording logger stub.
+# mountpoint base (not /run), and the syslog capture fake.
 - name: Render the restore-check script into the harness
   ansible.builtin.copy:
     content: >-

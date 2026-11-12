@@ -84,8 +84,8 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
-# Newest snapshot = the replication high-water mark (the same idiom the
-# freshness check uses).
+# Newest snapshot = the replication high-water mark (same idiom as the DR
+# runbook's freshness check).
 SNAP="$(zfs list -H -t snapshot -o name -s creation "$DATASET" 2>/dev/null | tail -n 1)"
 [ -n "$SNAP" ] || fail "no_snapshots"
 
