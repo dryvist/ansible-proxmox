@@ -349,7 +349,7 @@ jobs:
     name: Merge Gate
     needs: [ci, changes, data-contract, role-contracts, static-contracts, molecule, agent-platform-conformance]
     if: ${{ always() && !cancelled() }}
-    timeout-minutes: 15
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Check all results
