@@ -3,6 +3,7 @@
   "cache_proxy_urls": {
     "apt_cache": ["http://cache-a.example.com:3142", "http://cache-b.example.com:3142"]
   },
+  "proxmox_node": "pve-r710",
   "proxmox_user": "root",
   "splunk_vm": {
     "splunk": {
@@ -18,6 +19,38 @@
     }
   },
   "containers": {
+    "fixture-rootpool-ct": {
+      "ansible_connection": "community.proxmox.proxmox_pct_remote",
+      "datastore": "local-zfs",
+      "ha_replication_target": null,
+      "hostname": "fixture-rootpool-ct",
+      "node": "example-node-a",
+      "pool_id": "test-only",
+      "tags": ["container"],
+      "vmid": 601100,
+      "ansible_pct_vmid": 601100
+    },
+    "fixture-pvesr-ct": {
+      "ansible_connection": "community.proxmox.proxmox_pct_remote",
+      "datastore": "local-zfs",
+      "ha_replication_target": "example-node-b",
+      "hostname": "fixture-pvesr-ct",
+      "node": "example-node-a",
+      "pool_id": "test-only",
+      "tags": ["container"],
+      "vmid": 601200,
+      "ansible_pct_vmid": 601200
+    },
+    "fixture-sandbox-ct": {
+      "ansible_connection": "community.proxmox.proxmox_pct_remote",
+      "datastore": "local-zfs",
+      "hostname": "fixture-sandbox-ct",
+      "node": "example-node-a",
+      "pool_id": "test-only",
+      "tags": ["container", "agent-sandbox"],
+      "vmid": 601300,
+      "ansible_pct_vmid": 601300
+    },
     "postgres-ai-1": {
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "hostname": "postgres-ai-1",
@@ -39,7 +72,7 @@
     }
   },
   "nodes": {
-    "pve-r540": {
+    "example-node-a": {
       "cluster_roles": ["storage"]
     }
   },
@@ -51,12 +84,57 @@
         { "interface": "scsi1", "datastore": "local-zfs", "path": "vm-515100-disk-1" }
       ],
       "hostname": "agent-sandbox",
-      "node": "pve-r540",
+      "node": "example-node-b",
       "tags": ["agent-sandbox"],
       "vmid": 515100
+    },
+    "fixture-bulkdisk-vm": {
+      "ansible_connection": "ssh",
+      "disks": [
+        { "interface": "scsi0", "datastore": "bulk-appdata", "path": "vm-601400-disk-0" }
+      ],
+      "hostname": "fixture-bulkdisk-vm",
+      "node": "example-node-a",
+      "tags": ["vm"],
+      "vmid": 601400
+    },
+    "fixture-rootpool-vm": {
+      "ansible_connection": "ssh",
+      "disks": [
+        { "interface": "scsi0", "datastore": "local-zfs", "path": "vm-601500-disk-0" },
+        { "interface": "scsi1", "datastore": "local-zfs", "path": "vm-601500-disk-1" }
+      ],
+      "ha_replication_target": null,
+      "hostname": "fixture-rootpool-vm",
+      "node": "example-node-a",
+      "tags": ["vm"],
+      "vmid": 601500
+    },
+    "fixture-pvesr-vm": {
+      "ansible_connection": "ssh",
+      "disks": [
+        { "interface": "scsi0", "datastore": "local-zfs", "path": "vm-601800-disk-0" }
+      ],
+      "ha_replication_target": "example-node-b",
+      "hostname": "fixture-pvesr-vm",
+      "node": "example-node-a",
+      "tags": ["vm"],
+      "vmid": 601800
     }
   },
   "node_storage": {
+    "example-node-a": {
+      "pools": {
+        "bulk": {
+          "datasets": {
+            "appdata": {
+              "pvesm_id": "bulk-appdata",
+              "quota": "1T"
+            }
+          }
+        }
+      }
+    },
     "pve-w1700": {
       "smb": {
         "group_name": "nas",

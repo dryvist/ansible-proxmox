@@ -1,0 +1,9 @@
+---
+# The one Proxmox host that pulls syncoid replicas. Both inventory-load
+# verifications derive this identically, so the expression lives here once;
+# each play includes this file as a vars file.
+storage_source_host: >-
+  {{ (groups['proxmox'] | map('extract', hostvars)
+      | selectattr('syncoid_enabled', 'defined')
+      | selectattr('syncoid_enabled', 'equalto', true)
+      | map(attribute='inventory_hostname') | first) }}
