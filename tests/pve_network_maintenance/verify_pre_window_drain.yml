@@ -50,10 +50,16 @@
         state: directory
         mode: "0700"
 
-    - name: Write the previous pause record with no read permission
+    - name: Make the previous pause record path a directory
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_state_dir }}/state.json"
+        state: directory
+        mode: "0700"
+
+    - name: Keep the previous pause record inside the unreadable path
       ansible.builtin.copy:
-        mode: "0000"
-        dest: "{{ pve_network_maintenance_state_dir }}/state.json"
+        mode: "0600"
+        dest: "{{ pve_network_maintenance_state_dir }}/state.json/previous.json"
         content: '{"enabled_job_ids": ["job-prior"]}'
 
     - name: Verify a failed pause-record read preserves the previous record
@@ -68,14 +74,14 @@
           ansible.builtin.set_fact:
             pve_network_maintenance_unreadable_record_caught: true
 
-    - name: Restore read permission for the pause-record assertion
-      ansible.builtin.file:
+    - name: Inspect the previous pause record path after the failed read
+      ansible.builtin.stat:
         path: "{{ pve_network_maintenance_state_dir }}/state.json"
-        mode: "0600"
+      register: pve_network_maintenance_unreadable_record_path
 
-    - name: Read back the previous pause record after the failed read
+    - name: Read back the preserved previous pause record
       ansible.builtin.slurp:
-        src: "{{ pve_network_maintenance_state_dir }}/state.json"
+        src: "{{ pve_network_maintenance_state_dir }}/state.json/previous.json"
       register: pve_network_maintenance_unreadable_record_state
 
     - name: Assert the failed read left the previous pause record intact
@@ -83,6 +89,7 @@
         that:
           - pve_network_maintenance_unreadable_record_caught | default(false) | bool
           - pve_network_maintenance_state_raw is failed
+          - pve_network_maintenance_unreadable_record_path.stat.isdir
           - >-
             (pve_network_maintenance_unreadable_record_state.content | b64decode | from_json).enabled_job_ids
             == ['job-prior']
@@ -92,7 +99,7 @@
         success_msg: "PASS: failed pause-record reads preserve the existing record"
         quiet: false
 
-    - name: Remove the unreadable pause record before the normal drain cases
+    - name: Remove the unreadable pause record directory before normal drain cases
       ansible.builtin.file:
         path: "{{ pve_network_maintenance_state_dir }}"
         state: absent

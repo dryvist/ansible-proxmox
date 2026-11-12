@@ -1,0 +1,18 @@
+---
+# Select backup job ids by enabled state, with an optional id allowlist.
+# The API returns `enabled` as a number or a string, so normalize both shapes.
+
+- name: Select matching backup job ids
+  ansible.builtin.set_fact:
+    "{{ pve_network_maintenance_backup_job_selection_fact }}": >-
+      {%- set jobs = pve_network_maintenance_backup_jobs_raw.stdout | default('[]', true) | from_json -%}
+      {%- set selected = [] -%}
+      {%- for job in jobs -%}
+        {%- if job.enabled is defined
+              and (job.enabled | string | lower) in pve_network_maintenance_backup_job_enabled_values
+              and (pve_network_maintenance_backup_job_id_filter is not defined
+                   or job.id in pve_network_maintenance_backup_job_id_filter) -%}
+          {%- set _ = selected.append(job.id) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ selected | unique | sort }}

@@ -64,31 +64,16 @@
       changed_when: false
       check_mode: false
 
-    - name: Look for a state file left by a previous pre phase
-      ansible.builtin.stat:
-        path: "{{ pve_network_maintenance_state_file }}"
-      register: pve_network_maintenance_state_stat
-
-    - name: Start from an empty recorded backup job list
-      ansible.builtin.set_fact:
-        pve_network_maintenance_recorded_job_ids: []
-
-    - name: Read the backup jobs recorded by the previous pre phase
-      ansible.builtin.slurp:
-        src: "{{ pve_network_maintenance_state_file }}"
-      register: pve_network_maintenance_state_raw
-      when: pve_network_maintenance_state_stat.stat.exists
-
-    - name: Keep the backup jobs recorded by the previous pre phase
-      ansible.builtin.set_fact:
-        pve_network_maintenance_recorded_job_ids: >-
-          {{ (pve_network_maintenance_state_raw.content | b64decode | from_json)['enabled_job_ids'] }}
-      when:
-        - pve_network_maintenance_state_stat.stat.exists
-        - pve_network_maintenance_state_raw.content is defined
+    - name: Read a pause record from a previous pre phase
+      ansible.builtin.include_tasks: read-pause-record.yml
+      vars:
+        pve_network_maintenance_pause_record_fact: pve_network_maintenance_recorded_job_ids
 
     - name: Select the enabled backup jobs
-      ansible.builtin.include_tasks: enabled_backup_jobs.yml
+      ansible.builtin.include_tasks: select_backup_jobs.yml
+      vars:
+        pve_network_maintenance_backup_job_enabled_values: ["1", "true", "yes"]
+        pve_network_maintenance_backup_job_selection_fact: pve_network_maintenance_enabled_job_ids
 
     - name: Merge the newly paused jobs into the recorded set
       ansible.builtin.set_fact:

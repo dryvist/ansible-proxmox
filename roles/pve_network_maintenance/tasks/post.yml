@@ -100,28 +100,10 @@
 
 - name: Re-enable the paused backup jobs
   block:
-    - name: Look for the state file the pre phase wrote
-      ansible.builtin.stat:
-        path: "{{ pve_network_maintenance_state_file }}"
-      register: pve_network_maintenance_state_stat
-
-    - name: Start from an empty paused backup job list
-      ansible.builtin.set_fact:
-        pve_network_maintenance_pause_job_ids: []
-
-    - name: Read the paused backup jobs the pre phase recorded
-      ansible.builtin.slurp:
-        src: "{{ pve_network_maintenance_state_file }}"
-      register: pve_network_maintenance_state_raw
-      when: pve_network_maintenance_state_stat.stat.exists
-
-    - name: Carry the paused backup jobs recorded by the pre phase
-      ansible.builtin.set_fact:
-        pve_network_maintenance_pause_job_ids: >-
-          {{ (pve_network_maintenance_state_raw.content | b64decode | from_json)['enabled_job_ids'] }}
-      when:
-        - pve_network_maintenance_state_stat.stat.exists
-        - pve_network_maintenance_state_raw.content is defined
+    - name: Read the pause record written by the pre phase
+      ansible.builtin.include_tasks: read-pause-record.yml
+      vars:
+        pve_network_maintenance_pause_record_fact: pve_network_maintenance_pause_job_ids
 
     - name: Read the current backup jobs
       ansible.builtin.command:
@@ -146,18 +128,11 @@
       # A job the pre phase did not record was disabled before the window
       # opened and stays disabled; only recorded and still-disabled jobs are
       # re-enabled, which is what makes re-runs idempotent.
-      ansible.builtin.set_fact:
-        pve_network_maintenance_reenable_job_ids: >-
-          {%- set jobs = pve_network_maintenance_backup_jobs_raw.stdout | default('[]', true) | from_json -%}
-          {%- set out = [] -%}
-          {%- for job in jobs -%}
-            {%- if job.id in pve_network_maintenance_pause_job_ids
-                  and job.enabled is defined
-                  and (job.enabled | string | lower) in ['0', 'false', 'no'] -%}
-              {%- set _ = out.append(job.id) -%}
-            {%- endif -%}
-          {%- endfor -%}
-          {{ out | unique | sort }}
+      ansible.builtin.include_tasks: select_backup_jobs.yml
+      vars:
+        pve_network_maintenance_backup_job_enabled_values: ["0", "false", "no"]
+        pve_network_maintenance_backup_job_id_filter: "{{ pve_network_maintenance_pause_job_ids }}"
+        pve_network_maintenance_backup_job_selection_fact: pve_network_maintenance_reenable_job_ids
 
     - name: Re-enable the paused backup jobs
       ansible.builtin.command:
