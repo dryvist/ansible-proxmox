@@ -1,0 +1,7 @@
+---
+# The restore-check contract playbook lives beside the syncoid molecule
+# scenario, which runs it in the converge container as well; this wrapper
+# keeps the tests/<role>/ path the role-contracts job invokes aimed at that
+# single source.
+- name: Verify the syncoid restore-check contract
+  ansible.builtin.import_playbook: ../../molecule/syncoid/verify_restore_check.yml
