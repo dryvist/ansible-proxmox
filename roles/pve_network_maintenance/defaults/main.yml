@@ -8,7 +8,7 @@ pve_network_maintenance_phase: ""
 # pmxcfs), so one node is sufficient and correct. Reuses the pve_ha selector.
 pve_network_maintenance_config_host: "{{ pve_ha_config_host }}"
 
-# State file recording the enabled vzdump jobs paused by the pre phase, so the
+# State file listing the enabled vzdump jobs paused by the pre phase, so the
 # post phase re-enables exactly those and nothing else. Root-readable only.
 pve_network_maintenance_state_dir: /var/lib/pve-network-maintenance
 pve_network_maintenance_state_file: "{{ pve_network_maintenance_state_dir }}/state.json"
