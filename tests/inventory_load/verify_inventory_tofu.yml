@@ -4,22 +4,15 @@
   become: false
   gather_facts: false
 
+  vars_files:
+    - verify_inventory_shared_vars.yml
+
   vars:
     inventory_primary_node: "{{ hostvars['localhost'].tofu_data.proxmox_node }}"
-    inventory_storage_node: >-
-      {{ (hostvars['localhost'].tofu_data.nodes | dict2items
-          | selectattr('value.cluster_roles', 'defined')
-          | selectattr('value.cluster_roles', 'contains', 'storage')
-          | map(attribute='key') | first) }}
     inventory_nas_node: >-
       {{ (hostvars['localhost'].tofu_data.node_storage | dict2items
           | selectattr('value.smb', 'defined')
           | map(attribute='key') | first) }}
-    inventory_storage_source_host: >-
-      {{ (groups['proxmox'] | map('extract', hostvars)
-          | selectattr('syncoid_enabled', 'defined')
-          | selectattr('syncoid_enabled', 'equalto', true)
-          | map(attribute='inventory_hostname') | first) }}
 
   tasks:
     - name: Add the placeholder source node used by the generated-job fixture

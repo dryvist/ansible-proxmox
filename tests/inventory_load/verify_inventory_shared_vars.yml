@@ -1,0 +1,12 @@
+---
+# Shared inventory derivations used by the inventory and media-pool checks.
+inventory_storage_node: >-
+  {{ (hostvars['localhost'].tofu_data.nodes | dict2items
+      | selectattr('value.cluster_roles', 'defined')
+      | selectattr('value.cluster_roles', 'contains', 'storage')
+      | map(attribute='key') | first) }}
+inventory_storage_source_host: >-
+  {{ (groups['proxmox'] | map('extract', hostvars)
+      | selectattr('syncoid_enabled', 'defined')
+      | selectattr('syncoid_enabled', 'equalto', true)
+      | map(attribute='inventory_hostname') | first) }}
