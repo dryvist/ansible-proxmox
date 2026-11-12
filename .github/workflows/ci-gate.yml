@@ -102,6 +102,7 @@ jobs:
           - 'roles/pve_disk_inventory/**'
           - 'roles/pve_health_telemetry/**'
           - 'roles/pve_host_network/**'
+          - 'tests/pve_host_network_extra/**'
           - 'roles/pve_host_systemd_units/**'
           - 'roles/pve_lxc_datastore_mount/**'
           - 'roles/pve_lxc_protected_pct_set/**'

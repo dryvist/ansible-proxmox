@@ -14,6 +14,10 @@
   loop: "{{ pve_host_network_extra_interfaces }}"
   loop_control:
     label: "{{ item.name | default('undefined') }}"
+  when: >-
+    item is not mapping or
+    (item.name | default('', true) | trim | length > 0) or
+    (item.address | default('', true) | trim | length > 0)
 
 - name: Collect the interface holding the default route
   ansible.builtin.set_fact:
@@ -60,14 +64,22 @@
     src: extra-interfaces.j2
     dest: /etc/network/interfaces.d/ansible-extra-interfaces
     mode: "0644"
-  when: pve_host_network_extra_interfaces | length > 0
+  when: >-
+    pve_host_network_extra_interfaces
+    | selectattr('name', 'defined')
+    | selectattr('name')
+    | list | length > 0
   notify: Apply extra routed interfaces
 
 - name: Remove extra routed interfaces file when none are declared
   ansible.builtin.file:
     path: /etc/network/interfaces.d/ansible-extra-interfaces
     state: absent
-  when: pve_host_network_extra_interfaces | length == 0
+  when: >-
+    pve_host_network_extra_interfaces
+    | selectattr('name', 'defined')
+    | selectattr('name')
+    | list | length == 0
 
 - name: Enforce the pinned host uplink and bridge configuration
   when: pve_host_network_enforce | bool

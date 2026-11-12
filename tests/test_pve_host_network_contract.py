@@ -19,6 +19,57 @@ def read_yaml(path):
 
 
 class PveHostNetworkContractTest(unittest.TestCase):
+    def test_private_inventory_defaults_are_empty_until_runtime_override(self):
+        defaults = read_yaml(ROLE / "defaults/main.yml")
+        expected = {
+            "pve_host_network_corosync_link1_interface": "",
+            "pve_host_network_corosync_link1_address": "",
+            "pve_host_network_private_extra_interfaces": [],
+        }
+        self.assertEqual({key: defaults[key] for key in expected}, expected)
+        self.assertIn(
+            "# Private inventory supplies these values when the dedicated link is configured.",
+            (ROLE / "defaults/main.yml").read_text(),
+        )
+
+    def test_empty_private_values_skip_validation_and_rendering(self):
+        tasks = read_yaml(ROLE / "tasks/main.yml")
+        validation = next(
+            task
+            for task in tasks
+            if task["name"] == "Validate extra routed interface declarations"
+        )
+        render = next(task for task in tasks if task["name"] == "Render extra routed interfaces")
+        remove = next(
+            task for task in tasks
+            if task["name"] == "Remove extra routed interfaces file when none are declared"
+        )
+        handler = read_yaml(ROLE / "handlers/main.yml")[1]
+        template = (ROLE / "templates/extra-interfaces.j2").read_text()
+
+        self.assertEqual(
+            validation["when"],
+            "item is not mapping or "
+            "(item.name | default('', true) | trim | length > 0) or "
+            "(item.address | default('', true) | trim | length > 0)",
+        )
+        self.assertEqual(
+            render["when"],
+            "pve_host_network_extra_interfaces | selectattr('name', 'defined') | "
+            "selectattr('name') | list | length > 0",
+        )
+        self.assertEqual(
+            remove["when"],
+            "pve_host_network_extra_interfaces | selectattr('name', 'defined') | "
+            "selectattr('name') | list | length == 0",
+        )
+        self.assertIn(
+            "{% if (extra_interface.name | default('', true) | trim | length > 0)\n"
+            "      and (extra_interface.address | default('', true) | trim | length > 0) %}",
+            template,
+        )
+        self.assertIn("item.name | default('', true) | trim | length > 0", handler["when"])
+
     def test_inventory_supplies_mac_and_stable_name_for_each_pinned_node(self):
         host_vars = [
             ROOT / "inventory/host_vars/pve-r540.yml",
@@ -32,6 +83,74 @@ class PveHostNetworkContractTest(unittest.TestCase):
                 values = read_yaml(path)
                 self.assertRegex(values["pve_host_network_uplink"], NAME_PATTERN)
                 self.assertRegex(values["pve_host_network_uplink_mac"], MAC_PATTERN)
+
+    def test_extra_interfaces_declared_once_per_host(self):
+        # Ansible does not combine lists across host_vars files: a second file
+        # defining the same variable silently replaces the first, so the
+        # dropped entries render no interface and nothing warns.
+        host_vars_root = ROOT / "inventory/host_vars"
+        definitions = {}
+        for path in sorted(host_vars_root.rglob("*.yml")):
+            host = path.stem if path.parent == host_vars_root else path.parent.name
+            if "pve_host_network_extra_interfaces" in (read_yaml(path) or {}):
+                definitions.setdefault(host, []).append(path.relative_to(ROOT))
+
+        self.assertEqual(len(definitions), 3)
+        for host, paths in definitions.items():
+            with self.subTest(host=host):
+                self.assertEqual(len(paths), 1, f"multiple definitions: {paths}")
+
+        fixture_root = ROOT / "tests/pve_host_network_extra/fixtures/host_vars"
+        fixtures = {
+            path.stem: path
+            for path in sorted(fixture_root.glob("*.yml"))
+            if "pve_host_network_extra_interfaces" in (read_yaml(path) or {})
+        }
+        self.assertEqual(sorted(fixtures), ["example-node"])
+        self.assertEqual(
+            read_yaml(fixtures["example-node"])["pve_host_network_extra_interfaces"],
+            [
+                {"name": "example0", "address": "192.0.2.1/30"},
+                {
+                    "name": "{{ pve_host_network_corosync_link1_interface }}",
+                    "address": "{{ pve_host_network_corosync_link1_address }}",
+                    "comment": "corosync link1 (dedicated switch)",
+                },
+            ],
+        )
+
+    def test_extra_interfaces_reference_private_inventory_values(self):
+        host_vars_root = ROOT / "inventory/host_vars"
+        private_lists = []
+        link1_interfaces = []
+        for path in sorted(host_vars_root.rglob("*.yml")):
+            values = read_yaml(path) or {}
+            interfaces = values.get("pve_host_network_extra_interfaces")
+            if isinstance(interfaces, str):
+                private_lists.append(interfaces)
+            elif isinstance(interfaces, list):
+                link1_interfaces.extend(
+                    interface
+                    for interface in interfaces
+                    if interface.get("comment") == "corosync link1 (dedicated switch)"
+                )
+
+        self.assertEqual(private_lists, ["{{ pve_host_network_private_extra_interfaces }}"])
+        self.assertEqual(
+            link1_interfaces,
+            [
+                {
+                    "name": "{{ pve_host_network_corosync_link1_interface }}",
+                    "address": "{{ pve_host_network_corosync_link1_address }}",
+                    "comment": "corosync link1 (dedicated switch)",
+                },
+                {
+                    "name": "{{ pve_host_network_corosync_link1_interface }}",
+                    "address": "{{ pve_host_network_corosync_link1_address }}",
+                    "comment": "corosync link1 (dedicated switch)",
+                },
+            ],
+        )
 
     def test_bridge_port_uses_the_inventory_pinned_name(self):
         template = (ROLE / "templates/interfaces.j2").read_text()

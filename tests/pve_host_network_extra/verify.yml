@@ -1,0 +1,33 @@
+---
+# Pin the declared extra interfaces end to end without touching a host: load
+# a placeholder fixture the way Ansible loads host_vars and render the role's
+# extra-interfaces.j2 with it. The exact-match assert catches the list-
+# replacement hazard: Ansible does not merge lists across host_vars files, so
+# a second file defining the variable would silently drop the earlier entries.
+# Run: ansible-playbook tests/pve_host_network_extra/verify.yml -i localhost,
+- name: Verify each node's extra-interface declarations render
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars:
+    pve_extra_host_vars_root: "{{ playbook_dir }}/fixtures/host_vars"
+    pve_extra_template_path: >-
+      {{ playbook_dir }}/../../roles/pve_host_network/templates/extra-interfaces.j2
+    # Reserved example values exercise multiple interfaces and variable lookup.
+    pve_host_network_corosync_link1_interface: example1
+    pve_host_network_corosync_link1_address: 198.51.100.2/30
+    pve_extra_expected:
+      example-node:
+        - name: example0
+          address: 192.0.2.1/30
+        - name: example1
+          address: 198.51.100.2/30
+          comment: corosync link1 (dedicated switch)
+
+  tasks:
+    - name: Load, render, and assert one node per iteration
+      ansible.builtin.include_tasks: verify-node.yml
+      loop: "{{ pve_extra_expected | dict2items }}"
+      loop_control:
+        loop_var: pve_extra_node

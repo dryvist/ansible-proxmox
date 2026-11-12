@@ -147,3 +147,6 @@ idrac_power_bmc_host: "{{ lookup('env', 'PVE5_BMC_HOSTNAME') | default('', true)
 pve_host_network_extra_interfaces:
   - name: ens2f1
     address: 169.254.99.1/30
+  - name: "{{ pve_host_network_corosync_link1_interface }}"
+    address: "{{ pve_host_network_corosync_link1_address }}"
+    comment: corosync link1 (dedicated switch)
