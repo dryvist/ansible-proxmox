@@ -4,9 +4,14 @@
 # verify_post_window.yml exercise the same stubbed cluster. The pvesh stub
 # serves the fixture JSON per endpoint and records every command line; the
 # ha-manager stub serves the fixture status text and flips it on a disarm or
-# an arm, the way the cluster transitions. Callers copy either cluster
-# fixture into cluster_status.json and either HA status fixture into
-# ha_status.txt. Requires the pve_network_maintenance_stub_dir variable.
+# an arm, the way the cluster transitions. The HA status texts themselves live
+# in ha_status_fixtures.yml, so verify_status_matchers.yml classifies the same
+# texts the stub serves. Callers copy either cluster fixture into
+# cluster_status.json and either HA status fixture into ha_status.txt.
+# Requires the pve_network_maintenance_stub_dir variable.
+
+- name: Read the HA status fixture texts the stub serves
+  ansible.builtin.include_vars: ha_status_fixtures.yml
 
 - name: Create the stub directory
   ansible.builtin.file:
@@ -57,21 +62,9 @@
     content: "{{ item.content }}"
   loop:
     - dest: ha_status_armed.txt
-      content: |
-        quorum OK
-        master node-a (active, Thu Nov 12 09:00:00 2026)
-        lrm node-a (active, armed, Thu Nov 12 09:00:00 2026)
-        lrm node-b (active, armed, Thu Nov 12 09:00:00 2026)
-        fencing armed
-        service vm:100 (node-a, started)
+      content: "{{ pve_network_maintenance_ha_status_fixture_armed }}"
     - dest: ha_status_disarmed.txt
-      content: |
-        quorum OK
-        master node-a (standby, Thu Nov 12 08:01:00 2026)
-        lrm node-a (idle, released, Thu Nov 12 08:01:00 2026)
-        lrm node-b (idle, released, Thu Nov 12 08:01:00 2026)
-        fencing disarmed
-        service vm:100 (node-a, started)
+      content: "{{ pve_network_maintenance_ha_status_fixture_disarmed }}"
 
 - name: Write the idle active-task fixture
   # The drain wait reads per-node active tasks; idle unless a scenario

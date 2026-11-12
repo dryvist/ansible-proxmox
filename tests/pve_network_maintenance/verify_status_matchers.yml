@@ -2,12 +2,17 @@
 # Pin the ha-manager status matchers the disarm and arm waits run on. The
 # role's own classification task file is included against fixture status
 # texts, so a matcher that stops detecting disarmed or armed fails here
-# rather than during a maintenance window.
+# rather than during a maintenance window. The disarmed and armed texts come
+# from ha_status_fixtures.yml, the file stub_fixtures.yml writes for the
+# stubs; the disarming and standby texts have no stub fixture and live only
+# here.
 # Run: ansible-playbook tests/pve_network_maintenance/verify_status_matchers.yml -i localhost, -c local
 - name: Verify the ha-manager status matchers
   hosts: localhost
   become: false
   gather_facts: false
+  vars_files:
+    - ha_status_fixtures.yml
   vars:
     pve_network_maintenance_config_host: localhost
 
@@ -17,13 +22,7 @@
         name: pve_network_maintenance
         tasks_from: ha_status_state.yml
       vars:
-        pve_network_maintenance_ha_status_text: |
-          quorum OK
-          master node-a (standby, Thu Nov 12 08:01:00 2026)
-          lrm node-a (idle, released, Thu Nov 12 08:01:00 2026)
-          lrm node-b (idle, released, Thu Nov 12 08:01:00 2026)
-          fencing disarmed
-          service vm:100 (node-a, started)
+        pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_ha_status_fixture_disarmed }}"
 
     - name: Assert the disarmed fixture reads as disarmed and idle
       ansible.builtin.assert:
@@ -43,13 +42,7 @@
         name: pve_network_maintenance
         tasks_from: ha_status_state.yml
       vars:
-        pve_network_maintenance_ha_status_text: |
-          quorum OK
-          master node-a (active, Thu Nov 12 09:00:00 2026)
-          lrm node-a (active, armed, Thu Nov 12 09:00:00 2026)
-          lrm node-b (active, armed, Thu Nov 12 09:00:00 2026)
-          fencing armed
-          service vm:100 (node-a, started)
+        pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_ha_status_fixture_armed }}"
 
     - name: Assert the armed fixture reads as armed with busy LRMs
       ansible.builtin.assert:
