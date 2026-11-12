@@ -25,7 +25,7 @@
 # name and snapshot age, so the existing log pipeline sees the weekly result.
 set -uo pipefail
 
-export PATH="/usr/sbin:/sbin:/usr/bin:/bin${PATH:+:$PATH}"
+export PATH="${PATH:+$PATH:}/usr/sbin:/sbin:/usr/bin:/bin"
 
 DATASET="{{ syncoid_restore_check_dataset }}"
 BUCKET="{{ syncoid_restore_check_bucket }}"
