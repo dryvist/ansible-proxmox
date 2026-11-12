@@ -1,0 +1,18 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Weekly restore check of the replica (clone newest snapshot, read it back, destroy)
+
+[Timer]
+# Weekly cadence; keep the nominal minute off the :00/:15/:30/:45 grid and
+# away from the minutes other schedules own (sanoid snapshots, the syncoid
+# cron lines), so the clone never races an in-flight pull or snapshot.
+OnCalendar={{ syncoid_restore_check_on_calendar }}
+RandomizedDelaySec={{ syncoid_restore_check_randomized_delay_sec }}
+FixedRandomDelay=true
+# A node that happens to be rebooting at the nominal time still gets its
+# check at the next boot instead of skipping a week.
+Persistent=true
+Unit=syncoid-restore-check.service
+
+[Install]
+WantedBy=timers.target

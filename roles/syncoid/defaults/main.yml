@@ -72,6 +72,50 @@ syncoid_default_options: "--recursive --no-sync-snap --quiet"
 #       schedule: hourly   # optional; must name a key in syncoid_extra_schedules
 syncoid_jobs: []
 
+# Weekly restore check of a replica (default: the object-store replica).
+#
+# Freshness proves a copy was pulled; it does not prove the copy READS BACK. On
+# the node that holds the replica, a weekly timer clones the newest snapshot
+# read-only to a throwaway dataset, confirms the object store's bucket
+# directory inside it, and always destroys the clone — so a replica that exists
+# but cannot be restored is caught within a week instead of at the moment of a
+# disaster.
+syncoid_restore_check_enabled: false
+# Placeholder replica dataset. Runtime inventory supplies the real value.
+syncoid_restore_check_dataset: "example/dataset"
+# Bucket directory the check must find, non-empty, inside the clone (see README).
+# Placeholder bucket directory. Runtime inventory supplies the real value.
+syncoid_restore_check_bucket: "example-bucket"
+# The bucket directory is located by a bounded search under the clone mount,
+# because the store's data directory inside the replicated volume is not
+# published here either. Depth 5 covers <mount>/<data-dir>/<bucket> with
+# headroom; raise it only if the layout ever grows past that.
+syncoid_restore_check_search_depth: 5
+# Weekly systemd timer. The nominal minute is deliberately off the
+# :00/:15/:30/:45 grid and away from the minutes other schedules own on the
+# replicating node (sanoid snapshots ~:00, the syncoid cron lines at :17/:37),
+# so the clone never races an in-flight pull or snapshot. Keep that property
+# when overriding.
+syncoid_restore_check_on_calendar: "Sat *-*-* 05:52:00"
+# systemd RandomizedDelaySec; FixedRandomDelay=true pins one offset per boot,
+# so the effective run time is stable for a given uptime.
+syncoid_restore_check_randomized_delay_sec: "1h"
+# systemd TimeoutStartSec cap on the service: a hung zfs command must not
+# wedge the timer's job forever.
+syncoid_restore_check_timeout: "30min"
+# Where the clone's temporary mountpoint is created (mktemp -d). /run is
+# tmpfs: gone at boot, never persisted.
+syncoid_restore_check_tmp_dir: /run
+# The syslog logger binary the script invokes. A variable rather than a bare
+# `logger` so the tests/ harness can render a recording stub, and a host
+# whose logger lives off the pinned PATH can point at it explicitly.
+syncoid_restore_check_logger: logger
+# Everything off unless the role is enabled, the check is opted in, and a
+# dataset was actually declared — the declared state includes the absence.
+syncoid_restore_check_wants: "{{ syncoid_enabled | bool
+  and syncoid_restore_check_enabled | bool
+  and (syncoid_restore_check_dataset | default('') | length > 0) }}"
+
 # Replica datasets left behind by jobs syncoid_jobs no longer carries. Removing
 # a job stops the pull, not the storage: the replica it left behind keeps
 # consuming quota on the target pool forever. List literal `bulk/replica/...`

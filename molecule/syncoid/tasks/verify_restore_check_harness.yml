@@ -1,0 +1,146 @@
+---
+# --- Layer 2: execute the script against the stubs ---
+- name: Create the harness scratch directory
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: syncoid-restore-check
+  register: restore_check_harness_dir
+
+- name: Create the harness stub bin directory
+  ansible.builtin.file:
+    path: "{{ restore_check_harness_dir.path }}/bin"
+    state: directory
+    mode: "0755"
+
+- name: Install the zfs stub
+  ansible.builtin.copy:
+    content: "{{ restore_check_stub_zfs }}"
+    dest: "{{ restore_check_harness_dir.path }}/bin/zfs"
+    mode: "0755"
+
+- name: Install the logger stub
+  ansible.builtin.copy:
+    content: "{{ restore_check_stub_logger }}"
+    dest: "{{ restore_check_harness_dir.path }}/bin/logger"
+    mode: "0755"
+
+# set_fact again, for the same precedence reason as above: these must
+# beat the include_vars-loaded defaults or the harness copy would render
+# with /run and the production logger binary.
+- name: Point the harness copy's mountpoint base and logger at the stubs
+  ansible.builtin.set_fact:
+    syncoid_restore_check_tmp_dir: "{{ restore_check_harness_dir.path }}"
+    syncoid_restore_check_logger: "{{ restore_check_harness_dir.path }}/bin/logger"
+
+# The harness copy uses a placeholder dataset, a writable scratch
+# mountpoint base (not /run), and the recording logger stub.
+- name: Render the restore-check script into the harness
+  ansible.builtin.copy:
+    content: >-
+      {{ lookup('ansible.builtin.template', restore_check_template_dir ~ '/syncoid-restore-check.sh.j2') }}
+    dest: "{{ restore_check_harness_dir.path }}/script"
+    mode: "0755"
+
+- name: Run the script against the stubs in every failure mode
+  ansible.builtin.shell:
+    cmd: |
+      zfs_log="{{ restore_check_harness_dir.path }}/zfs-{{ item.name }}.log"
+      logger_log="{{ restore_check_harness_dir.path }}/logger-{{ item.name }}.log"
+      : >"$zfs_log"
+      : >"$logger_log"
+      export FAKE_ZFS_LOG="$zfs_log"
+      export FAKE_LOGGER_LOG="$logger_log"
+      export FAKE_ZFS_FAIL="{{ item.fail_mode }}"
+      export FAKE_ZFS_SNAPSHOT="{{ restore_check_snapshot }}"
+      export FAKE_ZFS_BUCKET="{{ syncoid_restore_check_bucket }}"
+      set +e
+      PATH="{{ restore_check_harness_dir.path }}/bin:$PATH" "{{ restore_check_harness_dir.path }}/script" >/dev/null 2>&1
+      rc=$?
+      printf 'rc=%s\n' "$rc"
+      printf -- '-- zfs calls --\n'
+      cat "$zfs_log"
+      printf -- '-- syslog lines --\n'
+      cat "$logger_log"
+  loop: "{{ restore_check_scenarios }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+  register: restore_check_runs
+
+- name: Assert every scenario exited with its expected status
+  ansible.builtin.assert:
+    that:
+      - >-
+        (restore_check_runs.results
+        | selectattr('item.name', 'equalto', item.name) | first).stdout_lines[0]
+        == 'rc=' ~ (item.expect_rc | string)
+    quiet: true
+  loop: "{{ restore_check_scenarios }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# The load-bearing assertion: every scenario that got past snapshot
+# discovery — including every failure mode — recorded a clone attempt AND
+# a destroy of the same dataset. The clone is readonly and noauto on
+# every clone line.
+- name: Assert the always path destroyed the clone in every scenario past discovery
+  vars:
+    run: "{{ restore_check_runs.results | selectattr('item.name', 'equalto', item.name) | first }}"
+    clone_dataset: "{{ restore_check_dataset }}-restore-check"
+  ansible.builtin.assert:
+    that:
+      - "'zfs clone -o readonly=on -o canmount=noauto' in run.stdout"
+      - "'zfs destroy ' ~ clone_dataset in run.stdout"
+    quiet: true
+  loop: "{{ restore_check_scenarios | rejectattr('name', 'equalto', 'no-snapshots') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# When the clone actually exists (every scenario but the clone failure
+# and the no-snapshot early exit), the mount/unmount pair must also have
+# run — that is the read-back the check exists to prove.
+- name: Assert the clone was mounted and unmounted wherever it was created
+  vars:
+    run: "{{ restore_check_runs.results | selectattr('item.name', 'equalto', item.name) | first }}"
+    clone_dataset: "{{ restore_check_dataset }}-restore-check"
+  ansible.builtin.assert:
+    that:
+      - "'zfs mount ' ~ clone_dataset in run.stdout"
+      - "'zfs unmount ' ~ clone_dataset in run.stdout"
+    quiet: true
+  loop: >-
+    {{ restore_check_scenarios
+       | rejectattr('name', 'equalto', 'no-snapshots')
+       | rejectattr('name', 'equalto', 'clone-fails') | list }}
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Assert the no-snapshots path cloned and destroyed nothing
+  vars:
+    run: "{{ restore_check_runs.results | selectattr('item.name', 'equalto', 'no-snapshots') | first }}"
+  ansible.builtin.assert:
+    that:
+      - "'zfs clone' not in run.stdout"
+      - "'zfs mount' not in run.stdout"
+      - "'zfs destroy' not in run.stdout"
+    quiet: true
+
+- name: Assert exactly one syslog line per run with result, snapshot and age
+  vars:
+    run: "{{ restore_check_runs.results | selectattr('item.name', 'equalto', item.name) | first }}"
+    syslog_lines: "{{ run.stdout_lines | select('match', '^-t syncoid-restore-check') | list }}"
+  ansible.builtin.assert:
+    that:
+      - syslog_lines | length == 1
+      - >-
+        syslog_lines[0] is match('^-t syncoid-restore-check -p daemon.'
+        ~ item.prio ~ ' -- run dataset=' ~ restore_check_dataset ~ ' ' ~ item.syslog ~ '$')
+    quiet: true
+  loop: "{{ restore_check_scenarios }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Remove the harness scratch directory
+  ansible.builtin.file:
+    path: "{{ restore_check_harness_dir.path }}"
+    state: absent

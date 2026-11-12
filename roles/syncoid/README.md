@@ -57,6 +57,43 @@ set up out of band. The role schedules replication; it does not distribute keys.
 | `syncoid_extra_schedules`                   | `{}`                                 | Extra cadence groups (see below)                                       |
 | `syncoid_user`                              | `root`                               | User that runs syncoid (needs SSH to sources)                          |
 | `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; pings on success, `/fail` if any job failed       |
+| `syncoid_restore_check_enabled`             | `false`                              | Weekly restore check (see below)                                       |
+| `syncoid_restore_check_dataset`             | `example/dataset`                    | Replica dataset to check; runtime inventory supplies the real value   |
+| `syncoid_restore_check_bucket`              | `example-bucket`                     | Bucket directory the check must find non-empty inside the clone        |
+
+## Restore check
+
+Freshness proves a copy was pulled; it does not prove the copy **reads back**.
+When `syncoid_restore_check_enabled` is true and a
+`syncoid_restore_check_dataset` is declared, the role installs a weekly systemd
+timer (`syncoid-restore-check.timer` — nominal time off the `:00/:15/:30/:45`
+grid and away from the minutes sanoid and the syncoid cron lines own,
+`RandomizedDelaySec` + `FixedRandomDelay=true`, `Persistent=true`) that runs
+`/usr/local/bin/syncoid-restore-check.sh` on the node that holds the replica.
+The script:
+
+1. finds the newest snapshot of the replica dataset;
+2. `zfs clone`s it **read-only** (`readonly=on`, `canmount=noauto`) to a
+   throwaway dataset and mounts it at a temporary mountpoint under `/run`;
+3. confirms the object store's bucket directory (`syncoid_restore_check_bucket`)
+   exists and is non-empty inside the clone;
+4. **always** destroys the clone — the destroy runs from the script's `EXIT`
+   trap, so every failure path tears down what it cloned;
+5. logs one syslog line (tag `syncoid-restore-check`) with the result, the
+   snapshot name and the snapshot's age, so the log pipeline sees the weekly
+   result (`daemon.info` on success, `daemon.err` with a `reason=` on failure).
+
+A known-object check (`deployment.json`) is deliberately NOT asserted by path:
+how the object store lays objects out on disk is not resolvable from this
+repository, so the
+check verifies only that the bucket directory exists and is non-empty. When
+the store's on-disk layout is published upstream, tighten the check to the
+named object.
+
+Runtime inventory supplies the real dataset and bucket values through the
+variables above. The role defaults and tracked inventory example contain only
+placeholders. Disabling the check removes the timer and units: the declared
+state includes the absence.
 
 ## Usage
 
