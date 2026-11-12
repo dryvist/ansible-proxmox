@@ -191,7 +191,7 @@
     - >-
       pve_network_maintenance_replication_raw.stdout | default('', true) | length > 0
       and ((pve_network_maintenance_replication_raw.stdout | from_json
-            | map(attribute='failcount')
+            | map(attribute='fail_count')
             | map('int') | reject('equalto', 0) | list) == [])
   retries: "{{ pve_network_maintenance_replication_timeout | int // pve_network_maintenance_replication_delay | int }}"
   delay: "{{ pve_network_maintenance_replication_delay }}"

@@ -84,7 +84,7 @@
         content: |
           [
             {"id": "100-0", "type": "local_job", "source": "node-a",
-             "target": "node-b", "guest": 100, "failcount": 0}
+             "target": "node-b", "guest": 100, "fail_count": 0}
           ]
 
     - name: Write the state file the pre phase would have left
