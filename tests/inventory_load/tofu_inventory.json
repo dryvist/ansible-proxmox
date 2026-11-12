@@ -45,7 +45,7 @@
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "datastore": "local-zfs",
       "hostname": "fixture-sandbox-ct",
-      "node": "example-node-b",
+      "node": "example-node-a",
       "pool_id": "test-only",
       "tags": ["container", "agent-sandbox"],
       "vmid": 601300,
@@ -94,7 +94,7 @@
         { "interface": "scsi0", "datastore": "bulk-appdata", "path": "vm-601400-disk-0" }
       ],
       "hostname": "fixture-bulkdisk-vm",
-      "node": "example-node-b",
+      "node": "example-node-a",
       "tags": ["vm"],
       "vmid": 601400
     },

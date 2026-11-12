@@ -32,6 +32,12 @@
         rootpool_other_target_vm_job: >-
           {{ syncoid_jobs
              | selectattr('name', 'eq', 'rootpool-601800-disk-0') | list }}
+        rootpool_sandbox_ct_jobs: >-
+          {{ syncoid_jobs
+             | selectattr('name', 'eq', 'rootpool-601300-disk-0') | list }}
+        rootpool_bulkdisk_vm_jobs: >-
+          {{ syncoid_jobs
+             | selectattr('name', 'eq', 'rootpool-601400-disk-0') | list }}
         rootpool_excluded_endpoints: >-
           {{ ((syncoid_jobs | map(attribute='source') | list)
               + (syncoid_jobs | map(attribute='target') | list))
@@ -83,14 +89,33 @@
             == ('bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/vm-601800-disk-0')
           # (b) A guest whose HA target is this syncoid target is excluded;
           # the next assertion covers both guest types.
-          # (c) A guest tagged agent-sandbox is ephemeral and generates no job.
+          # (c) A guest tagged agent-sandbox is ephemeral and generates no
+          # job. The fixture must keep sitting on this storage node with a
+          # root-pool datastore: it is what makes the tag filter — not the
+          # node or datastore filter — the reason its job list is empty.
+          - >-
+            containers_from_tofu['fixture-sandbox-ct'].node == proxmox_node_names.storage
+            and 'agent-sandbox' in containers_from_tofu['fixture-sandbox-ct'].tags
+            and hostvars[proxmox_node_names.storage].pve_dataset_root_by_storage[
+                  containers_from_tofu['fixture-sandbox-ct'].datastore] == 'rpool/data'
+          - rootpool_sandbox_ct_jobs | length == 0
           # (d) A disk on a datastore that resolves to any other root
-          # generates no job.
+          # generates no job. The fixture must keep sitting on this storage
+          # node with a resolvable non-root datastore, so the datastore
+          # filter is the reason its job list is empty.
+          - >-
+            vms_from_tofu['fixture-bulkdisk-vm'].node == proxmox_node_names.storage
+            and hostvars[proxmox_node_names.storage].pve_dataset_root_by_storage[
+                  vms_from_tofu['fixture-bulkdisk-vm'].disks[0].datastore]
+                  | default('') != 'rpool/data'
+          - rootpool_bulkdisk_vm_jobs | length == 0
           - rootpool_excluded_endpoints | length == 0
         fail_msg: >-
           The generated root-pool guest-disk jobs did not match the published
           guests: ct job {{ rootpool_ct_job }}, vm jobs {{ rootpool_vm_jobs }},
-          excluded endpoints {{ rootpool_excluded_endpoints }}.
+          sandbox ct jobs {{ rootpool_sandbox_ct_jobs }}, bulkdisk vm jobs
+          {{ rootpool_bulkdisk_vm_jobs }}, excluded endpoints
+          {{ rootpool_excluded_endpoints }}.
       when: syncoid_rootpool_jobs_json is defined
 
     - name: Assert guests replicated to this node do not get root-pool syncoid jobs
