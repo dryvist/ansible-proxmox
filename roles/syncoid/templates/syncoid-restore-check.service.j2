@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Restore check — clone the replica read-only and verify it reads back
+Documentation=ansible role syncoid
+After=local-fs.target zfs-mount.service
+
+[Service]
+Type=oneshot
+# Cap the run so a hung zfs command cannot wedge the timer's job forever.
+TimeoutStartSec={{ syncoid_restore_check_timeout }}
+ExecStart=/usr/local/bin/syncoid-restore-check.sh

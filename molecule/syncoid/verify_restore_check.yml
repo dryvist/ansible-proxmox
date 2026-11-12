@@ -1,0 +1,260 @@
+---
+# Verify the syncoid role's weekly restore-check contract without ZFS.
+# Run: ansible-playbook tests/syncoid/verify_restore_check.yml -i localhost, -c local
+#
+# Two layers:
+#   1. Render the unit, timer and script from the role templates and pin the
+#      contract they must carry: weekly schedule off the quarter-hour grid,
+#      RandomizedDelaySec + FixedRandomDelay, a read-only clone, and an
+#      always-destroy (EXIT trap) that no failure path can skip.
+#   2. EXECUTE the rendered script against a stubbed zfs and logger in every
+#      failure mode. The always-destroy is the load-bearing guarantee — a
+#      clone left behind by a failed check pins blocks and clutters the
+#      replica namespace — so it is exercised, not just read. A template that
+#      stopped trapping EXIT would pass layer 1's substring check only if the
+#      assertions here also went stale; the harness runs make that two
+#      independent tripwires.
+- name: Verify the syncoid restore-check contract
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars:
+    # Placeholder identity; the role never sees a real dataset here, only its
+    # own template output.
+    restore_check_dataset: example/replica/example-node/subvol-100-disk-1
+    restore_check_bucket: example-bucket
+    restore_check_snapshot: "{{ restore_check_dataset }}@autosnap_2026-11-09_05:00:01_hourly"
+    restore_check_template_dir: "{{ playbook_dir }}/../../roles/syncoid/templates"
+
+    # One scenario per exit path of the script. expect_rc: the script's exit
+    # status; prio/syslog: the one syslog line each run must emit.
+    restore_check_scenarios:
+      - name: success
+        fail_mode: ""
+        expect_rc: 0
+        prio: info
+        syslog: "result=ok snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
+      - name: clone-fails
+        fail_mode: clone
+        expect_rc: 1
+        prio: err
+        syslog: "result=failed reason=clone_failed snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
+      - name: mount-fails
+        fail_mode: mount
+        expect_rc: 1
+        prio: err
+        syslog: "result=failed reason=mount_failed snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
+      - name: bucket-missing
+        fail_mode: bucket_missing
+        expect_rc: 1
+        prio: err
+        syslog: "result=failed reason=bucket_dir_missing snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
+      - name: bucket-empty
+        fail_mode: bucket_empty
+        expect_rc: 1
+        prio: err
+        syslog: "result=failed reason=bucket_dir_empty snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
+      - name: cleanup-unmount-fails
+        fail_mode: unmount
+        expect_rc: 1
+        prio: err
+        syslog: "result=failed reason=cleanup_unmount_failed snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
+      - name: cleanup-destroy-fails
+        fail_mode: destroy
+        expect_rc: 1
+        prio: err
+        syslog: "result=failed reason=cleanup_destroy_failed snapshot={{ restore_check_snapshot }} age_s=[0-9]+"
+      - name: no-snapshots
+        fail_mode: no_snapshots
+        expect_rc: 1
+        prio: err
+        syslog: "result=failed reason=no_snapshots snapshot=none age_s=na"
+
+    restore_check_stub_zfs: |
+      #!/bin/bash
+      # Test stub for zfs(8): emulates the subset the restore-check script
+      # uses and records every invocation to $FAKE_ZFS_LOG.
+      #   $FAKE_ZFS_FAIL      failure mode under test ("" = succeed)
+      #   $FAKE_ZFS_SNAPSHOT  the newest snapshot the dataset holds
+      #   $FAKE_ZFS_BUCKET    the bucket directory the cloned dataset contains
+      set -u
+      LOG="${FAKE_ZFS_LOG:?}"
+      printf 'zfs %s\n' "$*" >>"$LOG"
+      case "${FAKE_ZFS_FAIL:-}" in
+        clone) [ "$1" = "clone" ] && exit 1 ;;
+        mount) [ "$1" = "mount" ] && exit 1 ;;
+        unmount) [ "$1" = "unmount" ] && exit 1 ;;
+        # Only the dataset destroy fails; the mountpoint is already empty,
+        # so the single expected reason is cleanup_destroy_failed.
+        destroy) [ "$1" = "destroy" ] && { m="${TMPDIR:-/tmp}/fake-zfs-clone-mountpoint"; [ -s "$m" ] && find "$(cat "$m")" -mindepth 1 -delete; exit 1; } ;;
+      esac
+      case "$1" in
+        list)
+          case "$*" in
+            *"-t snapshot"*)
+              case "$*" in
+                # `zfs list -p -o creation` on a snapshot: raw epoch.
+                *" -p "*) printf '%s\n' 1758000000 ;;
+                *)
+                  [ "${FAKE_ZFS_FAIL:-}" = "no_snapshots" ] && exit 0
+                  printf '%s\n' "${FAKE_ZFS_SNAPSHOT:?}"
+                  ;;
+              esac
+              ;;
+            # Stale-clone existence probe: no clone present.
+            *) exit 1 ;;
+          esac
+          ;;
+        clone)
+          mp=""
+          prev=""
+          for a in "$@"; do
+            if [ "$prev" = "-o" ] && [ "${a#mountpoint=}" != "$a" ]; then
+              mp="${a#mountpoint=}"
+            fi
+            prev="$a"
+          done
+          # Simulate the dataset content the clone mounts: the bucket
+          # directory, populated unless the scenario empties or omits it.
+          case "${FAKE_ZFS_FAIL:-}" in
+            bucket_missing) : ;;
+            bucket_empty) mkdir -p "$mp/${FAKE_ZFS_BUCKET:?}" ;;
+            *)
+              mkdir -p "$mp/${FAKE_ZFS_BUCKET:?}/fixture-object"
+              printf 'fixture\n' >"$mp/${FAKE_ZFS_BUCKET:?}/fixture-object/data"
+              ;;
+          esac
+          printf '%s\n' "$mp" >"${TMPDIR:-/tmp}/fake-zfs-clone-mountpoint"
+          ;;
+        # Destroying the clone empties its mountpoint, as ZFS does.
+        destroy)
+          m="${TMPDIR:-/tmp}/fake-zfs-clone-mountpoint"
+          if [ -s "$m" ]; then find "$(cat "$m")" -mindepth 1 -delete; fi
+          ;;
+        mount | unmount) : ;;
+      esac
+      exit 0
+
+    restore_check_stub_logger: |
+      #!/bin/bash
+      # Test stub for logger(1): records the syslog line to $FAKE_LOGGER_LOG.
+      printf '%s\n' "$*" >>"${FAKE_LOGGER_LOG:?}"
+
+  tasks:
+    - name: Load the syncoid role defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/syncoid/defaults/main.yml"
+
+    # set_fact, deliberately: include_vars outranks task vars, so a task-vars
+    # override of a loaded default silently loses. set_fact outranks
+    # include_vars, so the renders actually see the fixture values.
+    - name: Point the script renders at the fixture dataset and bucket
+      ansible.builtin.set_fact:
+        syncoid_restore_check_dataset: "{{ restore_check_dataset }}"
+        syncoid_restore_check_bucket: "{{ restore_check_bucket }}"
+
+    # --- Layer 1: the rendered timer ---
+    - name: Render the restore-check timer from the role template
+      ansible.builtin.set_fact:
+        restore_check_timer_text: >-
+          {{ lookup('ansible.builtin.template', restore_check_template_dir ~ '/syncoid-restore-check.timer.j2') }}
+
+    - name: Assert the timer is weekly, randomized, pinned and persistent
+      ansible.builtin.assert:
+        that:
+          - "'OnCalendar=Sat *-*-* 05:52:00' in restore_check_timer_text"
+          - "'RandomizedDelaySec=1h' in restore_check_timer_text"
+          - "'FixedRandomDelay=true' in restore_check_timer_text"
+          - "'Persistent=true' in restore_check_timer_text"
+          - "'Unit=syncoid-restore-check.service' in restore_check_timer_text"
+        quiet: true
+
+    - name: Assert the default nominal minute is weekly and off the quarter-hour grid
+      vars:
+        calendar_parts: "{{ syncoid_restore_check_on_calendar.split(' ') }}"
+        calendar_minute: "{{ calendar_parts[2].split(':')[1] }}"
+      ansible.builtin.assert:
+        that:
+          - calendar_parts | length == 3
+          - calendar_parts[0] in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+          - calendar_minute not in ['00', '15', '30', '45']
+        quiet: true
+
+    # --- Layer 1: the rendered service ---
+    - name: Render the restore-check service from the role template
+      ansible.builtin.set_fact:
+        restore_check_service_text: >-
+          {{ lookup('ansible.builtin.template', restore_check_template_dir ~ '/syncoid-restore-check.service.j2') }}
+
+    - name: Assert the service runs the check script oneshot with a timeout cap
+      ansible.builtin.assert:
+        that:
+          - "'Type=oneshot' in restore_check_service_text"
+          - "'ExecStart=/usr/local/bin/syncoid-restore-check.sh' in restore_check_service_text"
+          - "'TimeoutStartSec=30min' in restore_check_service_text"
+          - "'After=local-fs.target zfs-mount.service' in restore_check_service_text"
+        quiet: true
+
+    # --- Layer 1: the rendered script ---
+    - name: Render the restore-check script from the role defaults
+      ansible.builtin.set_fact:
+        restore_check_script_text: >-
+          {{ lookup('ansible.builtin.template', restore_check_template_dir ~ '/syncoid-restore-check.sh.j2') }}
+
+    - name: Assert the script clones the newest snapshot read-only at a temporary mount
+      ansible.builtin.assert:
+        that:
+          # Newest snapshot = the replication high-water mark (DR runbook idiom).
+          - "'zfs list -H -t snapshot -o name -s creation' in restore_check_script_text"
+          - "'tail -n 1' in restore_check_script_text"
+          # Read-only, noauto, explicit temporary mountpoint — the check must
+          # be physically unable to write into the replica and must never
+          # collide with the live replica mount.
+          - "'zfs clone -o readonly=on -o canmount=noauto -o mountpoint=\"$MNT\"' in restore_check_script_text"
+          - "'zfs mount \"$CLONE\"' in restore_check_script_text"
+          - "'mktemp -d /run/syncoid-restore-check.XXXXXX' in restore_check_script_text"
+          - "'DATASET=\"{{ restore_check_dataset }}\"' in restore_check_script_text"
+          - "'BUCKET=\"{{ restore_check_bucket }}\"' in restore_check_script_text"
+        quiet: true
+
+    - name: Assert the script checks the bucket directory and not a named object
+      ansible.builtin.assert:
+        that:
+          # The object store's on-disk layout is not resolvable from this
+          # repository, so the check locates the bucket directory by a
+          # bounded search and proves it non-empty. The header may NAME the
+          # known object (deployment.json) to explain why it is not checked,
+          # but the script must never TEST for it by path.
+          - "'-name \"$BUCKET\" -print -quit' in restore_check_script_text"
+          - "'-mindepth 1 -maxdepth 1 -print -quit' in restore_check_script_text"
+          - "'-name \"deployment.json\"' not in restore_check_script_text"
+        quiet: true
+
+    - name: Assert the script always destroys the clone and logs one syslog line
+      vars:
+        cleanup_destroy_call: 'zfs destroy "$CLONE" >/dev/null 2>&1'
+        stale_destroy_call: 'zfs destroy -f "$CLONE" >/dev/null 2>&1 || fail "stale_clone_destroy_failed"'
+      ansible.builtin.assert:
+        that:
+          # The destroy lives in the EXIT trap so every exit path runs it —
+          # success, every fail() exit, and signals routed through exit.
+          - "'trap cleanup EXIT' in restore_check_script_text"
+          - "restore_check_script_text is search(\"trap 'exit 1' HUP INT TERM\")"
+          # One checked destroy for a stale clone and one checked destroy in
+          # the EXIT trap; dropping either cleanup path fails this assertion.
+          - "(restore_check_script_text | regex_findall(cleanup_destroy_call | regex_escape)) | length == 1"
+          - "(restore_check_script_text | regex_findall(stale_destroy_call | regex_escape)) | length == 1"
+          - "'if ! zfs destroy \"$CLONE\" >/dev/null 2>&1; then' in restore_check_script_text"
+          - "'if [ -n \"$FAIL_REASON\" ] || [ \"$exit_status\" -ne 0 ]; then' in restore_check_script_text"
+          - "'record_failure cleanup_unmount_failed' in restore_check_script_text"
+          - "'record_failure cleanup_destroy_failed' in restore_check_script_text"
+          # One syslog line per run carrying result, snapshot and age, emitted
+          # after cleanup has determined whether success is truthful.
+          - "'result=ok snapshot=$SNAP age_s=$AGE_S' in restore_check_script_text"
+          - "'result=failed reason=$FAIL_REASON snapshot=${SNAP:-none} age_s=${AGE_S:-na}' in restore_check_script_text"
+          - "'timeout 5 {{ syncoid_restore_check_logger }} -t syncoid-restore-check' in restore_check_script_text"
+        quiet: true
+
+    - name: Verify the restore-check script against the harness
+      ansible.builtin.import_tasks: tasks/verify_restore_check_harness.yml
