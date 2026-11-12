@@ -10,9 +10,7 @@
           | selectattr('syncoid_enabled', 'defined')
           | selectattr('syncoid_enabled', 'equalto', true)
           | map(attribute='inventory_hostname') | first) }}
-    media_storage_source_node: >-
-      {{ hostvars[media_storage_source_host].proxmox_node_name
-         | default(media_storage_source_host) }}
+    media_primary_node: "{{ hostvars['localhost'].tofu_data.proxmox_node }}"
     media_splunk_node: "{{ hostvars['localhost'].tofu_data.splunk_vm.splunk.node }}"
     # Matches the media-pool dataset and its children, with an optional
     # user@host: prefix, and the /bulk/data mount path. /bulk/databases does not
@@ -46,7 +44,7 @@
     - name: Assert the collected endpoints include a plain job and a derived job
       ansible.builtin.assert:
         that:
-          - "'root@' ~ media_storage_source_node ~ ':bulk/databases' in media_no_backup_live_endpoints"
+          - "'root@' ~ media_primary_node ~ ':bulk/databases' in media_no_backup_live_endpoints"
           - "'root@' ~ media_splunk_node ~ ':rpool/data/vm-90200-disk-0' in media_no_backup_live_endpoints"
         fail_msg: >-
           The collected syncoid endpoints do not cover every Proxmox host, so the
