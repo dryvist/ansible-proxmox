@@ -140,21 +140,52 @@
       check_mode: false
       when: not ansible_check_mode
   rescue:
-    - name: Re-enable the paused backup jobs
+    - name: Re-enable the backup jobs this run paused
+      # The merged record may hold jobs an earlier pre phase paused; those
+      # stay paused, so a re-run timeout cannot resume backups in an open
+      # window.
       ansible.builtin.command:
         argv: [pvesh, set, "/cluster/backup/{{ item }}", --enabled, "1"]
-      loop: "{{ pve_network_maintenance_pause_job_ids | default([]) }}"
+      loop: "{{ pve_network_maintenance_enabled_job_ids | default([]) }}"
       loop_control:
         label: "{{ item }}"
       changed_when: true
       when: not ansible_check_mode
 
+    - name: Restore the pause record left by a previous pre phase
+      # Rewinds the merged record to what was on disk before this run, so the
+      # record names only the jobs still disabled.
+      ansible.builtin.copy:
+        content: >-
+          {{ {'enabled_job_ids': pve_network_maintenance_recorded_job_ids} | to_nice_json }}
+        dest: "{{ pve_network_maintenance_state_file }}"
+        mode: "0600"
+        owner: "{{ pve_network_maintenance_state_owner }}"
+        group: "{{ pve_network_maintenance_state_group }}"
+      when:
+        - not ansible_check_mode
+        - pve_network_maintenance_state_stat.stat is defined
+        - pve_network_maintenance_state_stat.stat.exists
+        - pve_network_maintenance_recorded_job_ids is defined
+
+    - name: Remove the pause record this run wrote
+      # Only reached when no previous record existed; a file here can only be
+      # the one this run wrote, and removing a missing file is a no-op.
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_state_file }}"
+        state: absent
+      when:
+        - not ansible_check_mode
+        - pve_network_maintenance_state_stat.stat is defined
+        - not pve_network_maintenance_state_stat.stat.exists
+
     - name: Fail the run because the backup tasks did not drain in time
       ansible.builtin.fail:
         msg: >-
           Backup and replication tasks did not finish within
-          {{ pve_network_maintenance_drain_timeout }} seconds; the paused
-          backup jobs were re-enabled and the maintenance window stays closed.
+          {{ pve_network_maintenance_drain_timeout }} seconds; the backup
+          jobs this run paused were re-enabled and the pause record rewound,
+          leaving the window exactly as this run found it.
 
 - name: Read the HA manager status before disarming
   ansible.builtin.command:
