@@ -10,7 +10,4 @@
     pve_network_maintenance_ha_armed: >-
       {{ pve_network_maintenance_ha_status_text is search(pve_network_maintenance_fencing_armed_pattern) }}
     pve_network_maintenance_ha_lrms_idle: >-
-      {{ ((pve_network_maintenance_ha_status_text.splitlines()
-           | select('match', pve_network_maintenance_lrm_line_pattern)
-           | reject('search', pve_network_maintenance_lrm_idle_pattern)
-           | list) | length) == 0 }}
+      {{ pve_network_maintenance_ha_lrms_idle_condition }}

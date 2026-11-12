@@ -130,35 +130,8 @@
         fail_msg: "The pre phase accepted an HA resource in recover state."
         quiet: true
 
-    - name: Write the healthy HA fixture
-      ansible.builtin.copy:
-        mode: "0644"
-        dest: "{{ pve_network_maintenance_stub_dir }}/ha_status_current.json"
-        content: |
-          {"quorum": {"quorate": 1},
-           "master": {"id": "q1", "name": "node-a", "status": "active"},
-           "resources": [
-             {"sid": "vm:100", "type": "vm", "state": "started", "node": "node-a"},
-             {"sid": "ct:101", "type": "ct", "state": "started", "node": "node-b"}
-           ]}
-
-    - name: Write the backup job fixture
-      # The API returns `enabled` as a number or a string; a job without the
-      # field and a disabled job are both left alone.
-      ansible.builtin.copy:
-        mode: "0644"
-        dest: "{{ pve_network_maintenance_stub_dir }}/backup_jobs.json"
-        content: |
-          [
-            {"id": "job-enabled-str", "type": "vzdump", "enabled": "1",
-             "storage": "fixture-store", "schedule": "02:30"},
-            {"id": "job-disabled", "type": "vzdump", "enabled": 0,
-             "storage": "fixture-store", "schedule": "03:30"},
-            {"id": "job-enabled-int", "type": "vzdump", "enabled": 1,
-             "storage": "fixture-store", "schedule": "04:30"},
-            {"id": "job-no-field", "type": "vzdump",
-             "storage": "fixture-store", "schedule": "05:30"}
-          ]
+    - name: Restore the shared healthy HA and enabled backup fixtures
+      ansible.builtin.include_tasks: stub_fixtures.yml
 
     - name: Write the empty active-task fixture
       ansible.builtin.copy:

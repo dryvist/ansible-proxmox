@@ -9,21 +9,14 @@
     argv: [pvesh, get, /cluster/status, --output-format, json]
   register: pve_network_maintenance_quorum_raw
   until:
-    - >-
-      pve_network_maintenance_quorum_raw.stdout | default('', true) | length > 0
-      and (((pve_network_maintenance_quorum_raw.stdout | from_json)
-            | selectattr('type', 'equalto', 'cluster')
-            | selectattr('quorate', 'defined')
-            | map(attribute='quorate') | map('int') | list) == [1])
-      and (((pve_network_maintenance_quorum_raw.stdout | from_json)
-            | selectattr('type', 'equalto', 'node')
-            | map(attribute='online') | map('int') | reject('equalto', 1)
-            | list) == [])
+    - pve_network_maintenance_cluster_ready_condition | bool
   retries: "{{ pve_network_maintenance_quorum_timeout | int // pve_network_maintenance_quorum_delay | int }}"
   delay: "{{ pve_network_maintenance_quorum_delay }}"
   changed_when: false
   check_mode: false
   when: not ansible_check_mode
+  vars:
+    pve_network_maintenance_cluster_status_text: "{{ pve_network_maintenance_quorum_raw.stdout | default('', true) }}"
 
 - name: Read the cluster status for the check-mode preview
   ansible.builtin.command:

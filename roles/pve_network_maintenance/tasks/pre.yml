@@ -185,7 +185,7 @@
         - not ansible_check_mode
         - pve_network_maintenance_state_stat.stat is defined
         - pve_network_maintenance_state_stat.stat.exists
-        - pve_network_maintenance_recorded_job_ids is defined
+        - pve_network_maintenance_state_raw.content is defined
 
     - name: Remove the pause record this run wrote
       # Only reached when no previous record existed; a file here can only be
@@ -235,15 +235,14 @@
     - >-
       pve_network_maintenance_disarm_status_raw.stdout is search(pve_network_maintenance_fencing_disarmed_pattern)
     - >-
-      ((pve_network_maintenance_disarm_status_raw.stdout.splitlines()
-        | select('match', pve_network_maintenance_lrm_line_pattern)
-        | reject('search', pve_network_maintenance_lrm_idle_pattern)
-        | list) | length) == 0
+      pve_network_maintenance_ha_lrms_idle_condition | bool
   retries: "{{ pve_network_maintenance_disarm_timeout | int // pve_network_maintenance_disarm_delay | int }}"
   delay: "{{ pve_network_maintenance_disarm_delay }}"
   changed_when: false
   check_mode: false
   when: not ansible_check_mode
+  vars:
+    pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_disarm_status_raw.stdout }}"
 
 - name: Confirm the disarmed fencing state after the wait
   when: not ansible_check_mode

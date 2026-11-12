@@ -49,3 +49,25 @@ pve_network_maintenance_fencing_disarmed_pattern: '(?im)^fencing\s+disarmed\b'
 pve_network_maintenance_fencing_armed_pattern: '(?im)^fencing\s+armed\b'
 pve_network_maintenance_lrm_line_pattern: '(?im)^lrm\s+\S+'
 pve_network_maintenance_lrm_idle_pattern: '(?i)\b(idle|released)\b'
+
+# Status predicates are shared by their classifiers and wait loops so both
+# paths keep checking the same cluster and LRM state.
+pve_network_maintenance_cluster_quorate_condition: >-
+  {{ ((pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
+      | selectattr('type', 'equalto', 'cluster')
+      | selectattr('quorate', 'defined')
+      | map(attribute='quorate') | map('int') | list) == [1] }}
+pve_network_maintenance_cluster_nodes_online_condition: >-
+  {{ ((pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
+      | selectattr('type', 'equalto', 'node')
+      | map(attribute='online') | map('int') | reject('equalto', 1)
+      | list) == [] }}
+pve_network_maintenance_cluster_ready_condition: >-
+  {{ pve_network_maintenance_cluster_status_text | default('', true) | length > 0
+     and (pve_network_maintenance_cluster_quorate_condition | bool)
+     and (pve_network_maintenance_cluster_nodes_online_condition | bool) }}
+pve_network_maintenance_ha_lrms_idle_condition: >-
+  {{ ((pve_network_maintenance_ha_status_text.splitlines()
+       | select('match', pve_network_maintenance_lrm_line_pattern)
+       | reject('search', pve_network_maintenance_lrm_idle_pattern)
+       | list) | length) == 0 }}

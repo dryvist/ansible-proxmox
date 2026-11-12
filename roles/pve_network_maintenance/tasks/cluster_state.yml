@@ -7,15 +7,9 @@
 - name: Resolve cluster quorum, node health, and membership
   ansible.builtin.set_fact:
     pve_network_maintenance_cluster_quorate: >-
-      {{ ((pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
-          | selectattr('type', 'equalto', 'cluster')
-          | selectattr('quorate', 'defined')
-          | map(attribute='quorate') | map('int') | list) == [1] }}
+      {{ pve_network_maintenance_cluster_quorate_condition }}
     pve_network_maintenance_cluster_nodes_online: >-
-      {{ ((pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
-          | selectattr('type', 'equalto', 'node')
-          | map(attribute='online') | map('int') | reject('equalto', 1)
-          | list) == [] }}
+      {{ pve_network_maintenance_cluster_nodes_online_condition }}
     pve_network_maintenance_cluster_nodes: >-
       {{ (pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
          | selectattr('type', 'equalto', 'node')

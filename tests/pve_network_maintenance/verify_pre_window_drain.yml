@@ -44,33 +44,58 @@
         dest: "{{ pve_network_maintenance_stub_dir }}/cluster_status.json"
         remote_src: true
 
-    - name: Write the healthy HA resource fixture
-      ansible.builtin.copy:
-        mode: "0644"
-        dest: "{{ pve_network_maintenance_stub_dir }}/ha_status_current.json"
-        content: |
-          {"quorum": {"quorate": 1},
-           "master": {"id": "q1", "name": "node-a", "status": "active"},
-           "resources": [
-             {"sid": "vm:100", "type": "vm", "state": "started", "node": "node-a"},
-             {"sid": "ct:101", "type": "ct", "state": "started", "node": "node-b"}
-           ]}
+    - name: Create a previous pause record that cannot be read
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_state_dir }}"
+        state: directory
+        mode: "0700"
 
-    - name: Write the initial enabled backup job fixture
+    - name: Write the previous pause record with no read permission
       ansible.builtin.copy:
-        mode: "0644"
-        dest: "{{ pve_network_maintenance_stub_dir }}/backup_jobs.json"
-        content: |
-          [
-            {"id": "job-enabled-str", "type": "vzdump", "enabled": "1",
-             "storage": "fixture-store", "schedule": "02:30"},
-            {"id": "job-disabled", "type": "vzdump", "enabled": 0,
-             "storage": "fixture-store", "schedule": "03:30"},
-            {"id": "job-enabled-int", "type": "vzdump", "enabled": 1,
-             "storage": "fixture-store", "schedule": "04:30"},
-            {"id": "job-no-field", "type": "vzdump",
-             "storage": "fixture-store", "schedule": "05:30"}
-          ]
+        mode: "0000"
+        dest: "{{ pve_network_maintenance_state_dir }}/state.json"
+        content: '{"enabled_job_ids": ["job-prior"]}'
+
+    - name: Verify a failed pause-record read preserves the previous record
+      block:
+        - name: Run the pre phase against the unreadable pause record
+          ansible.builtin.include_role:
+            name: pve_network_maintenance
+            tasks_from: pre.yml
+
+      rescue:
+        - name: Record that the unreadable pause record failed the pre phase
+          ansible.builtin.set_fact:
+            pve_network_maintenance_unreadable_record_caught: true
+
+    - name: Restore read permission for the pause-record assertion
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_state_dir }}/state.json"
+        mode: "0600"
+
+    - name: Read back the previous pause record after the failed read
+      ansible.builtin.slurp:
+        src: "{{ pve_network_maintenance_state_dir }}/state.json"
+      register: pve_network_maintenance_unreadable_record_state
+
+    - name: Assert the failed read left the previous pause record intact
+      ansible.builtin.assert:
+        that:
+          - pve_network_maintenance_unreadable_record_caught | default(false) | bool
+          - pve_network_maintenance_state_raw is failed
+          - >-
+            (pve_network_maintenance_unreadable_record_state.content | b64decode | from_json).enabled_job_ids
+            == ['job-prior']
+        fail_msg: >-
+          A failed pause-record read erased or replaced the previous record:
+          {{ pve_network_maintenance_unreadable_record_state.content | b64decode }}
+        success_msg: "PASS: failed pause-record reads preserve the existing record"
+        quiet: false
+
+    - name: Remove the unreadable pause record before the normal drain cases
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_state_dir }}"
+        state: absent
 
     - name: Write an idle replication fixture for the backup-task drain case
       ansible.builtin.copy:
