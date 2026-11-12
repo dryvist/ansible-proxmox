@@ -21,7 +21,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -349,6 +349,7 @@ jobs:
     name: Merge Gate
     needs: [ci, changes, data-contract, role-contracts, static-contracts, molecule, agent-platform-conformance]
     if: ${{ always() && !cancelled() }}
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - name: Check all results
