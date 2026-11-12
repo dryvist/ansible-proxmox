@@ -107,7 +107,7 @@ syncoid_restore_check_timeout: "30min"
 # tmpfs: gone at boot, never persisted.
 syncoid_restore_check_tmp_dir: /run
 # The syslog logger binary the script invokes. A variable rather than a bare
-# `logger` so the tests/ harness can render a recording stub, and a host
+# `logger` so the tests/ harness can render a syslog capture fake, and a host
 # whose logger lives off the pinned PATH can point at it explicitly.
 syncoid_restore_check_logger: logger
 # Everything off unless the role is enabled, the check is opted in, and a
