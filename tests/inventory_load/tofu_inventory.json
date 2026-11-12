@@ -4,6 +4,7 @@
     "apt_cache": ["http://cache-a.example.com:3142", "http://cache-b.example.com:3142"]
   },
   "proxmox_user": "root",
+  "proxmox_node": "pve-r710",
   "splunk_vm": {
     "splunk": {
       "ansible_connection": "ssh",

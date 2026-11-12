@@ -53,14 +53,9 @@
           - rootpool_ct_job[0].options == '--no-sync-snap --quiet'
           - rootpool_ct_job[0].sanoid_replica_class == 'slow'
           - rootpool_ct_job[0].schedule is not defined
-          # A pvesr target elsewhere does not suppress a syncoid replica here.
-          - rootpool_other_target_ct_job | length == 1
-          - >-
-            rootpool_other_target_ct_job[0].source
-            == ('root@' ~ proxmox_node_names.storage ~ ':rpool/data/subvol-601200-disk-0')
-          - >-
-            rootpool_other_target_ct_job[0].target
-            == ('bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/subvol-601200-disk-0')
+          # A pvesr target on any node keeps the guest out: pvesr already
+          # replicates it, so a syncoid pull here would duplicate it.
+          - rootpool_other_target_ct_job | length == 0
           # A VM on the root pool generates one job per published disk, named
           # and addressed from the published volume names.
           - rootpool_vm_jobs | map(attribute='name') | list
@@ -73,14 +68,8 @@
                 'bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/vm-601500-disk-1']
           - (rootpool_vm_jobs | map(attribute='options') | list)
             | unique | list == ['--no-sync-snap --quiet']
-          # A VM whose pvesr target is elsewhere also keeps its syncoid jobs.
-          - rootpool_other_target_vm_job | length == 1
-          - >-
-            rootpool_other_target_vm_job[0].source
-            == ('root@' ~ proxmox_node_names.storage ~ ':rpool/data/vm-601800-disk-0')
-          - >-
-            rootpool_other_target_vm_job[0].target
-            == ('bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/vm-601800-disk-0')
+          # A VM whose pvesr target is elsewhere is also left out.
+          - rootpool_other_target_vm_job | length == 0
           # (b) A guest whose HA target is this syncoid target is excluded;
           # the next assertion covers both guest types.
           # (c) A guest tagged agent-sandbox is ephemeral and generates no job.

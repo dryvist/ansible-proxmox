@@ -15,6 +15,7 @@
 
   tasks:
     - name: Evaluate the generated root-pool jobs with the published inventory unset
+      when: inventory_hostname == hostvars['localhost'].tofu_data.proxmox_node
       block:
         - name: Evaluate syncoid_rootpool_jobs_json
           ansible.builtin.set_fact:
@@ -37,4 +38,3 @@
               The generated expression failed in an unexpected way.
               Task: {{ ansible_failed_task.name }}.
               Result: {{ ansible_failed_result.msg | default(ansible_failed_result) }}
-      when: inventory_hostname == hostvars['localhost'].tofu_data.proxmox_node

@@ -10,9 +10,13 @@
           | selectattr('syncoid_enabled', 'defined')
           | selectattr('syncoid_enabled', 'equalto', true)
           | map(attribute='inventory_hostname') | first) }}
+    # The databases endpoint's node comes from the published storage role, the
+    # same derivation the syncoid job itself uses (proxmox_node_names.storage).
     media_storage_source_node: >-
-      {{ hostvars[media_storage_source_host].proxmox_node_name
-         | default(media_storage_source_host) }}
+      {{ (hostvars['localhost'].tofu_data.nodes | dict2items
+          | selectattr('value.cluster_roles', 'defined')
+          | selectattr('value.cluster_roles', 'contains', 'storage')
+          | map(attribute='key') | first) }}
     media_splunk_node: "{{ hostvars['localhost'].tofu_data.splunk_vm.splunk.node }}"
     # Matches the media-pool dataset and its children, with an optional
     # user@host: prefix, and the /bulk/data mount path. /bulk/databases does not
