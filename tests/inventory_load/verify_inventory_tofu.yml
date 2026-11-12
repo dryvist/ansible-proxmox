@@ -3,6 +3,8 @@
   hosts: localhost
   become: false
   gather_facts: false
+  vars_files:
+    - vars_storage_source.yml
 
   vars:
     inventory_primary_node: "{{ hostvars['localhost'].tofu_data.proxmox_node }}"
@@ -15,11 +17,6 @@
       {{ (hostvars['localhost'].tofu_data.node_storage | dict2items
           | selectattr('value.smb', 'defined')
           | map(attribute='key') | first) }}
-    inventory_storage_source_host: >-
-      {{ (groups['proxmox'] | map('extract', hostvars)
-          | selectattr('syncoid_enabled', 'defined')
-          | selectattr('syncoid_enabled', 'equalto', true)
-          | map(attribute='inventory_hostname') | first) }}
 
   tasks:
     - name: Add the placeholder source node used by the generated-job fixture
@@ -58,7 +55,7 @@
     - name: Assert a node with no declared share receives no NAS contract
       ansible.builtin.assert:
         that:
-          - (hostvars[inventory_storage_source_host].nas_storage_from_tofu | default({}, true)) == {}
+          - (hostvars[storage_source_host].nas_storage_from_tofu | default({}, true)) == {}
         fail_msg: >-
           A node with no `smb` block still received a NAS contract. Every node
           would build an identical NAS again, which is the exact shape the
@@ -143,16 +140,16 @@
     - name: Assert the storage node declares a snapshot policy for the state it holds
       ansible.builtin.assert:
         that:
-          - hostvars[inventory_storage_source_host].sanoid_timer_enabled | bool
-          - "'bulk/databases' in hostvars[inventory_storage_source_host].sanoid_datasets"
-          - "'bulk/appdata' in hostvars[inventory_storage_source_host].sanoid_datasets"
-          - hostvars[inventory_storage_source_host].sanoid_datasets['bulk/databases'].hourly | int > 0
-          - hostvars[inventory_storage_source_host].sanoid_datasets['bulk/appdata'].recursive == 'yes'
-          - "'bulk/home-videos' in hostvars[inventory_storage_source_host].sanoid_datasets"
-          - "'bulk/object/subvol-902000-disk-1' in hostvars[inventory_storage_source_host].sanoid_datasets"
-          - hostvars[inventory_storage_source_host].sanoid_datasets['bulk'].recursive == 'yes'
-          - hostvars[inventory_storage_source_host].sanoid_datasets['rpool/data'].use_template == 'rpool_guest'
-          - hostvars[inventory_storage_source_host].sanoid_datasets['rpool/data'].recursive == 'yes'
+          - hostvars[storage_source_host].sanoid_timer_enabled | bool
+          - "'bulk/databases' in hostvars[storage_source_host].sanoid_datasets"
+          - "'bulk/appdata' in hostvars[storage_source_host].sanoid_datasets"
+          - hostvars[storage_source_host].sanoid_datasets['bulk/databases'].hourly | int > 0
+          - hostvars[storage_source_host].sanoid_datasets['bulk/appdata'].recursive == 'yes'
+          - "'bulk/home-videos' in hostvars[storage_source_host].sanoid_datasets"
+          - "'bulk/object/subvol-902000-disk-1' in hostvars[storage_source_host].sanoid_datasets"
+          - hostvars[storage_source_host].sanoid_datasets['bulk'].recursive == 'yes'
+          - hostvars[storage_source_host].sanoid_datasets['rpool/data'].use_template == 'rpool_guest'
+          - hostvars[storage_source_host].sanoid_datasets['rpool/data'].recursive == 'yes'
         fail_msg: >-
           The storage node holds live application state and the dump archive, so
           it must declare a sanoid policy for both. syncoid runs --no-sync-snap:
@@ -162,18 +159,18 @@
     - name: Assert the storage source pulls the primary node datasets
       ansible.builtin.assert:
         that:
-          - hostvars[inventory_storage_source_host].syncoid_enabled | bool
-          - hostvars[inventory_storage_source_host].syncoid_trigger == 'cron'
-          - hostvars[inventory_storage_source_host].syncoid_cron_hour == '*/4'
-          - hostvars[inventory_storage_source_host].syncoid_jobs | map(attribute='source') | list == [
+          - hostvars[storage_source_host].syncoid_enabled | bool
+          - hostvars[storage_source_host].syncoid_trigger == 'cron'
+          - hostvars[storage_source_host].syncoid_cron_hour == '*/4'
+          - hostvars[storage_source_host].syncoid_jobs | map(attribute='source') | list == [
             'root@' ~ inventory_primary_node ~ ':rpool/data',
             'root@' ~ inventory_primary_node ~ ':bulk/backups',
             'root@' ~ inventory_primary_node ~ ':bulk/databases']
-          - hostvars[inventory_storage_source_host].syncoid_jobs | map(attribute='target') | list == [
+          - hostvars[storage_source_host].syncoid_jobs | map(attribute='target') | list == [
             'bulk/replica/' ~ inventory_primary_node ~ '/rpool/data',
             'bulk/replica/' ~ inventory_primary_node ~ '/backups',
             'bulk/replica/' ~ inventory_primary_node ~ '/databases']
-          - hostvars[inventory_storage_source_host].sanoid_replica_retention_enabled | bool
+          - hostvars[storage_source_host].sanoid_replica_retention_enabled | bool
         fail_msg: >-
           The storage source must pull the selected primary node datasets into its own replica
           tree on the same four-hour cadence as the existing server pulls.

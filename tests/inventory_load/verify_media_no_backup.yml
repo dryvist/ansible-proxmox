@@ -3,13 +3,10 @@
   hosts: localhost
   become: false
   gather_facts: false
+  vars_files:
+    - vars_storage_source.yml
 
   vars:
-    media_storage_source_host: >-
-      {{ (groups['proxmox'] | map('extract', hostvars)
-          | selectattr('syncoid_enabled', 'defined')
-          | selectattr('syncoid_enabled', 'equalto', true)
-          | map(attribute='inventory_hostname') | first) }}
     media_primary_node: "{{ hostvars['localhost'].tofu_data.proxmox_node }}"
     media_splunk_node: "{{ hostvars['localhost'].tofu_data.splunk_vm.splunk.node }}"
     # Matches the media-pool dataset and its children, with an optional
@@ -53,7 +50,7 @@
     - name: Assert the live inventory keeps the media pool out of sanoid and syncoid
       ansible.builtin.include_tasks: media_no_backup_assert.yml
       vars:
-        media_no_backup_sanoid: "{{ hostvars[media_storage_source_host].sanoid_datasets }}"
+        media_no_backup_sanoid: "{{ hostvars[storage_source_host].sanoid_datasets }}"
         media_no_backup_endpoints: "{{ media_no_backup_live_endpoints }}"
 
     # Each negative case is loop-included and must be refused by the assertion
