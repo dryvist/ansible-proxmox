@@ -29,66 +29,8 @@
     pve_network_maintenance_replication_delay: 5
 
   tasks:
-    - name: Create the stub directory
-      ansible.builtin.file:
-        path: "{{ pve_network_maintenance_stub_dir }}"
-        state: directory
-        mode: "0755"
-
-    - name: Write the pvesh stub
-      ansible.builtin.copy:
-        mode: "0755"
-        dest: "{{ pve_network_maintenance_stub_dir }}/pvesh"
-        content: |
-          #!/bin/sh
-          d={{ pve_network_maintenance_stub_dir }}
-          printf '%s\n' "$*" >> "$d/commands.log"
-          [ "$1" = get ] || exit 0
-          case "$2" in
-            /cluster/status) cat "$d/cluster_status.json" ;;
-            /cluster/ha/status/current) cat "$d/ha_status_current.json" ;;
-            /cluster/backup) cat "$d/backup_jobs.json" ;;
-            /nodes/*/replication) cat "$d/replication.json" ;;
-            *) echo "[]" ;;
-          esac
-
-    - name: Write the ha-manager stub
-      ansible.builtin.copy:
-        mode: "0755"
-        dest: "{{ pve_network_maintenance_stub_dir }}/ha-manager"
-        content: |
-          #!/bin/sh
-          d={{ pve_network_maintenance_stub_dir }}
-          printf '%s\n' "ha-manager $*" >> "$d/commands.log"
-          [ "$1" = status ] && cat "$d/ha_status.txt"
-          [ "$1" = crm-command ] && [ "$2" = disarm-ha ] \
-            && cp "$d/ha_status_disarmed.txt" "$d/ha_status.txt"
-          [ "$1" = crm-command ] && [ "$2" = arm-ha ] \
-            && cp "$d/ha_status_armed.txt" "$d/ha_status.txt"
-          exit 0
-
-    - name: Write the HA manager status fixtures
-      ansible.builtin.copy:
-        mode: "0644"
-        dest: "{{ pve_network_maintenance_stub_dir }}/{{ item.dest }}"
-        content: "{{ item.content }}"
-      loop:
-        - dest: ha_status_armed.txt
-          content: |
-            quorum OK
-            master node-a (active, Thu Nov 12 09:00:00 2026)
-            lrm node-a (active, armed, Thu Nov 12 09:00:00 2026)
-            lrm node-b (active, armed, Thu Nov 12 09:00:00 2026)
-            fencing armed
-            service vm:100 (node-a, started)
-        - dest: ha_status_disarmed.txt
-          content: |
-            quorum OK
-            master node-a (standby, Thu Nov 12 08:01:00 2026)
-            lrm node-a (idle, released, Thu Nov 12 08:01:00 2026)
-            lrm node-b (idle, released, Thu Nov 12 08:01:00 2026)
-            fencing disarmed
-            service vm:100 (node-a, started)
+    - name: Write the stubs and fixtures both window tests share
+      ansible.builtin.include_tasks: stub_fixtures.yml
 
     - name: Copy the disarmed status fixture into place
       ansible.builtin.copy:
@@ -97,16 +39,12 @@
         dest: "{{ pve_network_maintenance_stub_dir }}/ha_status.txt"
         remote_src: true
 
-    - name: Write the quorate cluster fixture
+    - name: Copy the quorate cluster fixture into place
       ansible.builtin.copy:
         mode: "0644"
+        src: "{{ pve_network_maintenance_stub_dir }}/cluster_status_quorate.json"
         dest: "{{ pve_network_maintenance_stub_dir }}/cluster_status.json"
-        content: |
-          [
-            {"id": "cluster", "name": "fixture-cluster", "type": "cluster", "quorate": 1},
-            {"id": "node/node-a", "name": "node-a", "type": "node", "online": 1, "quorate": 1},
-            {"id": "node/node-b", "name": "node-b", "type": "node", "online": 1, "quorate": 1}
-          ]
+        remote_src: true
 
     - name: Write the healthy HA fixture
       ansible.builtin.copy:
