@@ -123,8 +123,14 @@
               printf 'fixture\n' >"$mp/${FAKE_ZFS_BUCKET:?}/fixture-object/data"
               ;;
           esac
+          printf '%s\n' "$mp" >"${TMPDIR:-/tmp}/fake-zfs-clone-mountpoint"
           ;;
-        mount | unmount | destroy) : ;;
+        # Destroying the clone empties its mountpoint, as ZFS does.
+        destroy)
+          m="${TMPDIR:-/tmp}/fake-zfs-clone-mountpoint"
+          if [ -s "$m" ]; then find "$(cat "$m")" -mindepth 1 -delete; fi
+          ;;
+        mount | unmount) : ;;
       esac
       exit 0
 
