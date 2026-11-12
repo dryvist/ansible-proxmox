@@ -1,6 +1,6 @@
 ---
 # Pin the post phase without a live cluster: the same stubbed `pvesh` and
-# `ha-manager` as verify_pre_window.yml serve a window-open fixture set, and
+# `ha-manager` as the pre-window playbooks serve a window-open fixture set, and
 # the role's own post.yml runs against it.
 # Run: ansible-playbook tests/pve_network_maintenance/verify_post_window.yml -i localhost, -c local
 #

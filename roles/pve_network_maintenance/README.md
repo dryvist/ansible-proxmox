@@ -142,6 +142,7 @@ cluster:
 
 ```bash
 ansible-playbook tests/pve_network_maintenance/verify_pre_window.yml -i localhost, -c local
+ansible-playbook tests/pve_network_maintenance/verify_pre_window_drain.yml -i localhost, -c local
 ansible-playbook tests/pve_network_maintenance/verify_post_window.yml -i localhost, -c local
 ansible-playbook tests/pve_network_maintenance/verify_status_matchers.yml -i localhost, -c local
 ```

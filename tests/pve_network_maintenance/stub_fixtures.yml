@@ -1,6 +1,6 @@
 ---
-# The stubbed `pvesh` and `ha-manager` and the fixtures both window tests
-# serve, written once here so verify_pre_window.yml and
+# The stubbed `pvesh` and `ha-manager` and the fixtures the pre- and
+# post-window tests serve, written once here so verify_pre_window*.yml and
 # verify_post_window.yml exercise the same stubbed cluster. The pvesh stub
 # serves the fixture JSON per endpoint and records every command line; the
 # ha-manager stub serves the fixture status text and flips it on a disarm or
