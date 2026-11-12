@@ -58,7 +58,7 @@ set up out of band. The role schedules replication; it does not distribute keys.
 | `syncoid_user`                              | `root`                               | User that runs syncoid (needs SSH to sources)                          |
 | `syncoid_healthcheck_url`                   | `""`                                 | healthchecks.io URL; pings on success, `/fail` if any job failed       |
 | `syncoid_restore_check_enabled`             | `false`                              | Weekly restore check (see below)                                       |
-| `syncoid_restore_check_dataset`             | `example/dataset`                    | Replica dataset to check; runtime inventory supplies the real value   |
+| `syncoid_restore_check_dataset`             | `example/dataset`                    | Replica dataset to check; runtime inventory supplies the real value    |
 | `syncoid_restore_check_bucket`              | `example-bucket`                     | Bucket directory the check must find non-empty inside the clone        |
 
 ## Restore check
