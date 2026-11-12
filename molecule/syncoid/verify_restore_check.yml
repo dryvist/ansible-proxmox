@@ -85,7 +85,9 @@
         clone) [ "$1" = "clone" ] && exit 1 ;;
         mount) [ "$1" = "mount" ] && exit 1 ;;
         unmount) [ "$1" = "unmount" ] && exit 1 ;;
-        destroy) [ "$1" = "destroy" ] && exit 1 ;;
+        # Only the dataset destroy fails; the mountpoint is already empty,
+        # so the single expected reason is cleanup_destroy_failed.
+        destroy) [ "$1" = "destroy" ] && { m="${TMPDIR:-/tmp}/fake-zfs-clone-mountpoint"; [ -s "$m" ] && find "$(cat "$m")" -mindepth 1 -delete; exit 1; } ;;
       esac
       case "$1" in
         list)

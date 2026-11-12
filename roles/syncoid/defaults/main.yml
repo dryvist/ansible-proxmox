@@ -83,12 +83,7 @@ syncoid_jobs: []
 syncoid_restore_check_enabled: false
 # Placeholder replica dataset. Runtime inventory supplies the real value.
 syncoid_restore_check_dataset: "example/dataset"
-# Bucket directory the check must find inside the clone. HOW THE OBJECT STORE
-# LAYS OBJECTS OUT ON DISK IS NOT RESOLVABLE FROM THIS REPOSITORY (the store
-# guest is deployed by ansible-proxmox-apps), so the check verifies only that
-# this bucket directory exists and is non-empty — not that a named object is
-# present. When the store's on-disk layout is published upstream, tighten the
-# check to the known object (deployment.json) and delete this caveat.
+# Bucket directory the check must find, non-empty, inside the clone (see README).
 # Placeholder bucket directory. Runtime inventory supplies the real value.
 syncoid_restore_check_bucket: "example-bucket"
 # The bucket directory is located by a bounded search under the clone mount,

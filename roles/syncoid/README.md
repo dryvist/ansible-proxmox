@@ -85,7 +85,7 @@ The script:
 
 A known-object check (`deployment.json`) is deliberately NOT asserted by path:
 how the object store lays objects out on disk is not resolvable from this
-repository (the store guest is deployed by `ansible-proxmox-apps`), so the
+repository, so the
 check verifies only that the bucket directory exists and is non-empty. When
 the store's on-disk layout is published upstream, tighten the check to the
 named object.

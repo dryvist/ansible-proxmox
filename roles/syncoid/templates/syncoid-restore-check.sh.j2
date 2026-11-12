@@ -13,13 +13,7 @@
 #   4. ALWAYS destroy the clone — on success and on every failure path. The
 #      cleanup runs from the EXIT trap, so no exit path skips it.
 #
-# The known object (deployment.json in bucket
-# {{ syncoid_restore_check_bucket }}) is deliberately NOT checked by path: how
-# the object store lays objects out on disk is not resolvable from this
-# repository (the store guest is deployed by ansible-proxmox-apps), so this
-# check verifies only that the bucket directory exists and is non-empty. When
-# the store's on-disk layout is published upstream, tighten this to the named
-# object.
+# The bucket directory is checked non-empty, not a named object (see the role README).
 #
 # One syslog line per run (tag syncoid-restore-check) carries result, snapshot
 # name and snapshot age, so the existing log pipeline sees the weekly result.
