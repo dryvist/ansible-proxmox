@@ -6,6 +6,11 @@
 
   vars:
     inventory_primary_node: "{{ hostvars['localhost'].tofu_data.proxmox_node }}"
+    inventory_storage_node: >-
+      {{ (hostvars['localhost'].tofu_data.nodes | dict2items
+          | selectattr('value.cluster_roles', 'defined')
+          | selectattr('value.cluster_roles', 'contains', 'storage')
+          | map(attribute='key') | first) }}
     inventory_nas_node: >-
       {{ (hostvars['localhost'].tofu_data.node_storage | dict2items
           | selectattr('value.smb', 'defined')
@@ -19,7 +24,7 @@
   tasks:
     - name: Add the placeholder source node used by the generated-job fixture
       ansible.builtin.add_host:
-        name: example-node-a
+        name: "{{ inventory_storage_node }}"
         groups: proxmox
         pve_dataset_root_by_storage:
           local-zfs: rpool/data
@@ -92,7 +97,9 @@
     - name: Assert the replica dataset declares its configured quota
       ansible.builtin.assert:
         that:
-          - hostvars[inventory_primary_node][(inventory_primary_node | replace('-', '_')) ~ '_bulk_replica_quota'] == '2T'
+          - >-
+            hostvars[inventory_primary_node][(inventory_primary_node | replace('-', '_'))
+            ~ '_bulk_replica_quota'] == '2T'
           - "'bulk/replica' in hostvars[inventory_primary_node].zfs_pools_vm_disk_properties"
           - hostvars[inventory_primary_node].zfs_pools_vm_disk_properties['bulk/replica'].quota
             == hostvars[inventory_primary_node][(inventory_primary_node | replace('-', '_')) ~ '_bulk_replica_quota']

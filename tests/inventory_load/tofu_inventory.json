@@ -44,7 +44,7 @@
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
       "datastore": "local-zfs",
       "hostname": "fixture-sandbox-ct",
-      "node": "example-node-a",
+      "node": "example-node-b",
       "pool_id": "test-only",
       "tags": ["container", "agent-sandbox"],
       "vmid": 601300,
@@ -71,7 +71,7 @@
     }
   },
   "nodes": {
-    "pve-r540": {
+    "example-node-a": {
       "cluster_roles": ["storage"]
     }
   },
@@ -83,7 +83,7 @@
         { "interface": "scsi1", "datastore": "local-zfs", "path": "vm-515100-disk-1" }
       ],
       "hostname": "agent-sandbox",
-      "node": "example-node-a",
+      "node": "example-node-b",
       "tags": ["agent-sandbox"],
       "vmid": 515100
     },
@@ -93,7 +93,7 @@
         { "interface": "scsi0", "datastore": "bulk-appdata", "path": "vm-601400-disk-0" }
       ],
       "hostname": "fixture-bulkdisk-vm",
-      "node": "example-node-a",
+      "node": "example-node-b",
       "tags": ["vm"],
       "vmid": 601400
     },

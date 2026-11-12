@@ -224,7 +224,7 @@ syncoid_rootpool_jobs_json: >-
               assigns each volume name; never derive it by counting.') -%}
         {%- if dataset_roots[datastore] | default('') == 'rpool/data' -%}
           {%- set _ = jobs.append({
-                'name': 'rootpool-' ~ vm.vmid ~ '-' ~ (path | regex_replace('^.*-(disk-[0-9]+)$', '\\1')),
+                'name': 'rootpool-' ~ vm.vmid ~ '-' ~ (path | regex_replace('^.*-(?P<disk>disk-[0-9]+)$', '\\g<disk>')),
                 'source': 'root@' ~ storage_node ~ ':rpool/data/' ~ path,
                 'target': 'bulk/replica/' ~ storage_node ~ '/rpool/data/' ~ path,
                 'options': '--no-sync-snap --quiet',
