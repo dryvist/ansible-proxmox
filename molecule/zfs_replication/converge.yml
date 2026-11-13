@@ -16,7 +16,6 @@
     # Example fixture values exercise configuration rendering without using a
     # deployment bucket or contacting an S3 service.
     zfs_replication_vzdump_s3_endpoint: "https://s3.example.invalid"
-    zfs_replication_vzdump_s3_bucket: example-bucket
 
   roles:
     - role: zfs_replication
