@@ -62,23 +62,24 @@ and the role disables the timer again.
 
 ## Variables
 
-| Variable                                                       | Default                              | Description                                                                          |
-| -------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `zfs_replication_enabled`                                      | `true`                               | Master enable for the role                                                           |
-| `zfs_replication_target_host`                                  | `""`                                 | Standby host to replicate toward. Set in host_vars; never hard-code a real node name |
-| `zfs_replication_jobs`                                         | `[]`                                 | List of replication jobs — **inert until set**                                       |
-| `zfs_replication_reachability_probe`                           | `true`                               | Probe the target before replicating; skip cleanly if down                            |
-| `zfs_replication_probe_method`                                 | `ssh`                                | `ssh` (TCP connect) or `ping` (ICMP)                                                 |
-| `zfs_replication_probe_port` / `zfs_replication_probe_timeout` | `22` / `10`                          | Probe port and per-probe timeout (s)                                                 |
-| `zfs_replication_default_options`                              | `--recursive --no-sync-snap --quiet` | syncoid options when a job omits its own                                             |
-| `zfs_replication_timer_enabled`                                | `true`                               | Enable/start the systemd timer                                                       |
-| `zfs_replication_on_calendar`                                  | `*:0/15`                             | Replication cadence (every 15 min)                                                   |
-| `zfs_replication_randomized_delay_sec`                         | `120`                                | Timer jitter so sources don't all hit the standby at once                            |
-| `zfs_replication_timer_persistent`                             | `false`                              | Do NOT catch up a missed trigger on boot                                             |
-| `zfs_replication_vzdump_enabled`                               | `false`                              | Enable the optional vzdump backup leg                                                |
-| `zfs_replication_vzdump_storage`                               | `<backup-storage-id>`                | Proxmox storage id vzdump writes to                                                  |
-| `zfs_replication_vzdump_guests`                                | `[]`                                 | vmids to back up — inert until set                                                   |
-| `zfs_replication_vzdump_on_calendar`                           | `*-*-* 01:30:00`                     | vzdump cadence                                                                       |
+| Variable                               | Default                              | Description                                                          |
+| -------------------------------------- | ------------------------------------ | -------------------------------------------------------------------- |
+| `zfs_replication_enabled`              | `true`                               | Master enable for the role                                           |
+| `zfs_replication_target_host`          | `""`                                 | Standby host to replicate toward; set in host_vars, never hard-coded |
+| `zfs_replication_jobs`                 | `[]`                                 | List of replication jobs — **inert until set**                       |
+| `zfs_replication_reachability_probe`   | `true`                               | Probe the target before replicating; skip cleanly if down            |
+| `zfs_replication_probe_method`         | `ssh`                                | `ssh` (TCP connect) or `ping` (ICMP)                                 |
+| `zfs_replication_probe_port`           | `22`                                 | Port the reachability probe connects to                              |
+| `zfs_replication_probe_timeout`        | `10`                                 | Per-probe timeout in seconds                                         |
+| `zfs_replication_default_options`      | `--recursive --no-sync-snap --quiet` | syncoid options when a job omits its own                             |
+| `zfs_replication_timer_enabled`        | `true`                               | Enable/start the systemd timer                                       |
+| `zfs_replication_on_calendar`          | `*:0/15`                             | Replication cadence (every 15 min)                                   |
+| `zfs_replication_randomized_delay_sec` | `120`                                | Timer jitter so sources don't all hit the standby at once            |
+| `zfs_replication_timer_persistent`     | `false`                              | Do NOT catch up a missed trigger on boot                             |
+| `zfs_replication_vzdump_enabled`       | `false`                              | Enable the optional vzdump backup leg                                |
+| `zfs_replication_vzdump_storage`       | `<backup-storage-id>`                | Proxmox storage id vzdump writes to                                  |
+| `zfs_replication_vzdump_guests`        | `[]`                                 | vmids to back up — inert until set                                   |
+| `zfs_replication_vzdump_on_calendar`   | `*-*-* 01:30:00`                     | vzdump cadence                                                       |
 
 The optional S3 mirror requires both `GUEST_BACKUP_S3_ENDPOINT` (for example,
 `https://s3.example.org`) and `GUEST_BACKUP_S3_BUCKET` (for example,
