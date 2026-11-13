@@ -1,0 +1,73 @@
+---
+# Phase selector for the maintenance window: pre (disarm HA, pause backups) or
+# post (re-arm HA, resume backups). Any other value fails the run.
+pve_network_maintenance_phase: ""
+
+# Inventory hostname of the single node every cluster-wide command runs on. HA
+# state and backup job configuration are cluster-wide (/etc/pve, replicated by
+# pmxcfs), so one node is sufficient and correct. Uses the cluster primary
+# directly so this role does not depend on pve_ha being loaded.
+pve_network_maintenance_config_host: >-
+  {{ pve_cluster_primary_host
+     | default((proxmox_node_names | default({})).primary
+       | default(groups.get('proxmox', ['localhost']) | first), true) }}
+
+# State file listing the enabled vzdump jobs paused by the pre phase, so the
+# post phase re-enables exactly those and nothing else. Root-readable only.
+pve_network_maintenance_state_dir: /var/lib/pve-network-maintenance
+pve_network_maintenance_state_file: "{{ pve_network_maintenance_state_dir }}/state.json"
+pve_network_maintenance_state_owner: root
+pve_network_maintenance_state_group: root
+
+# Bounded waits. Each wait polls every <*_delay> seconds and gives up after
+# <*_timeout> seconds.
+pve_network_maintenance_drain_timeout: 1800
+pve_network_maintenance_drain_delay: 15
+pve_network_maintenance_disarm_timeout: 600
+pve_network_maintenance_disarm_delay: 10
+pve_network_maintenance_quorum_timeout: 1200
+pve_network_maintenance_quorum_delay: 15
+pve_network_maintenance_replication_timeout: 600
+pve_network_maintenance_replication_delay: 15
+
+# Task types that must finish before the window opens: a running backup or
+# replication is exactly the storage IO the window is opened to avoid.
+pve_network_maintenance_drain_task_types: [vzdump, vzreplication]
+
+# HA service states that block opening the window. A resource being fenced or
+# recovered is mid-failover, and the vendor disarm defers until such
+# operations finish.
+pve_network_maintenance_blocked_ha_states: [error, fence, recover]
+
+# ha-manager status matchers (PVE 9.2 wording, vendor HA docs section
+# "Disarming HA for Cluster Maintenance"). The status output carries a fencing
+# entry with the CRM watchdog state (armed | standby | disarming | disarmed),
+# and each LRM entry carries that node's watchdog state, which flips to a
+# released/idle value as the LRM acknowledges the disarm. Role defaults so
+# field-verified wording can be corrected without code changes.
+pve_network_maintenance_fencing_disarmed_pattern: '(?im)^fencing\s+disarmed\b'
+pve_network_maintenance_fencing_armed_pattern: '(?im)^fencing\s+armed\b'
+pve_network_maintenance_lrm_line_pattern: '(?im)^lrm\s+\S+'
+pve_network_maintenance_lrm_idle_pattern: '(?i)\b(idle|released)\b'
+
+# Status predicates are shared by their classifiers and wait loops so both
+# paths keep checking the same cluster and LRM state.
+pve_network_maintenance_cluster_quorate_condition: >-
+  {{ ((pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
+      | selectattr('type', 'equalto', 'cluster')
+      | selectattr('quorate', 'defined')
+      | map(attribute='quorate') | map('int') | list) == [1] }}
+pve_network_maintenance_cluster_nodes_online_condition: >-
+  {{ ((pve_network_maintenance_cluster_status_text | default('[]', true) | from_json)
+      | selectattr('type', 'equalto', 'node')
+      | map(attribute='online') | map('int') | reject('equalto', 1)
+      | list) == [] }}
+pve_network_maintenance_cluster_ready_condition: >-
+  {{ pve_network_maintenance_cluster_status_text | default('', true) | length > 0
+     and (pve_network_maintenance_cluster_quorate_condition | bool)
+     and (pve_network_maintenance_cluster_nodes_online_condition | bool) }}
+pve_network_maintenance_ha_lrms_idle_condition: >-
+  {{ ((pve_network_maintenance_ha_status_text.splitlines()
+       | select('match', pve_network_maintenance_lrm_line_pattern)
+       | reject('search', pve_network_maintenance_lrm_idle_pattern)
+       | list) | length) == 0 }}

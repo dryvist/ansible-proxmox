@@ -1,0 +1,128 @@
+---
+# The stubbed `pvesh` and `ha-manager` and the fixtures the pre- and
+# post-window tests serve, written once here so verify_pre_window*.yml and
+# verify_post_window.yml exercise the same stubbed cluster. The pvesh stub
+# serves the fixture JSON per endpoint and records every command line; the
+# ha-manager stub serves the fixture status text and flips it on a disarm or
+# an arm, the way the cluster transitions. The HA status texts themselves live
+# in ha_status_fixtures.yml, so verify_status_matchers.yml classifies the same
+# texts the stub serves. Callers copy either cluster fixture into
+# cluster_status.json and either HA status fixture into ha_status.txt.
+# Requires the pve_network_maintenance_stub_dir variable.
+
+- name: Read the HA status fixture texts the stub serves
+  ansible.builtin.include_vars: ha_status_fixtures.yml
+
+- name: Create the stub directory
+  ansible.builtin.file:
+    path: "{{ pve_network_maintenance_stub_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Write the pvesh stub
+  # Serves the fixture JSON per endpoint and records every command line.
+  ansible.builtin.copy:
+    mode: "0755"
+    dest: "{{ pve_network_maintenance_stub_dir }}/pvesh"
+    content: |
+      #!/bin/sh
+      d={{ pve_network_maintenance_stub_dir }}
+      printf '%s\n' "$*" >> "$d/commands.log"
+      [ "$1" = get ] || exit 0
+      case "$2" in
+        /cluster/status) cat "$d/cluster_status.json" ;;
+        /cluster/ha/status/current) cat "$d/ha_status_current.json" ;;
+        /cluster/backup) cat "$d/backup_jobs.json" ;;
+        /nodes/*/replication) cat "$d/replication.json" ;;
+        /nodes/*/tasks) cat "$d/tasks.json" ;;
+        *) echo "[]" ;;
+      esac
+
+- name: Write the ha-manager stub
+  # Serves the fixture status text; a disarm switches the served text to
+  # disarmed and an arm switches it back, the way the cluster transitions.
+  ansible.builtin.copy:
+    mode: "0755"
+    dest: "{{ pve_network_maintenance_stub_dir }}/ha-manager"
+    content: |
+      #!/bin/sh
+      d={{ pve_network_maintenance_stub_dir }}
+      printf '%s\n' "ha-manager $*" >> "$d/commands.log"
+      [ "$1" = status ] && cat "$d/ha_status.txt"
+      [ "$1" = crm-command ] && [ "$2" = disarm-ha ] \
+        && cp "$d/ha_status_disarmed.txt" "$d/ha_status.txt"
+      [ "$1" = crm-command ] && [ "$2" = arm-ha ] \
+        && cp "$d/ha_status_armed.txt" "$d/ha_status.txt"
+      exit 0
+
+- name: Write the HA manager status fixtures
+  ansible.builtin.copy:
+    mode: "0644"
+    dest: "{{ pve_network_maintenance_stub_dir }}/{{ item.dest }}"
+    content: "{{ item.content }}"
+  loop:
+    - dest: ha_status_armed.txt
+      content: "{{ pve_network_maintenance_ha_status_fixture_armed }}"
+    - dest: ha_status_disarmed.txt
+      content: "{{ pve_network_maintenance_ha_status_fixture_disarmed }}"
+
+- name: Write the idle active-task fixture
+  # The drain wait reads per-node active tasks; idle unless a scenario
+  # replaces this with busy tasks.
+  ansible.builtin.copy:
+    mode: "0644"
+    dest: "{{ pve_network_maintenance_stub_dir }}/tasks.json"
+    content: |
+      []
+
+- name: Write the quorate cluster fixture
+  ansible.builtin.copy:
+    mode: "0644"
+    dest: "{{ pve_network_maintenance_stub_dir }}/cluster_status_quorate.json"
+    content: |
+      [
+        {"id": "cluster", "name": "fixture-cluster", "type": "cluster", "quorate": 1},
+        {"id": "node/node-a", "name": "node-a", "type": "node", "online": 1, "quorate": 1},
+        {"id": "node/node-b", "name": "node-b", "type": "node", "online": 1, "quorate": 1}
+      ]
+
+- name: Write the non-quorate cluster fixture
+  ansible.builtin.copy:
+    mode: "0644"
+    dest: "{{ pve_network_maintenance_stub_dir }}/cluster_status_non_quorate.json"
+    content: |
+      [
+        {"id": "cluster", "name": "fixture-cluster", "type": "cluster", "quorate": 0},
+        {"id": "node/node-a", "name": "node-a", "type": "node", "online": 1, "quorate": 0},
+        {"id": "node/node-b", "name": "node-b", "type": "node", "online": 1, "quorate": 1}
+      ]
+
+- name: Write the healthy HA resource fixture
+  ansible.builtin.copy:
+    mode: "0644"
+    dest: "{{ pve_network_maintenance_stub_dir }}/ha_status_current.json"
+    content: |
+      {"quorum": {"quorate": 1},
+       "master": {"id": "q1", "name": "node-a", "status": "active"},
+       "resources": [
+         {"sid": "vm:100", "type": "vm", "state": "started", "node": "node-a"},
+         {"sid": "ct:101", "type": "ct", "state": "started", "node": "node-b"}
+       ]}
+
+- name: Write the enabled backup job fixture
+  # The API returns `enabled` as a number or a string; a job without the
+  # field and a disabled job are both left alone.
+  ansible.builtin.copy:
+    mode: "0644"
+    dest: "{{ pve_network_maintenance_stub_dir }}/backup_jobs.json"
+    content: |
+      [
+        {"id": "job-enabled-str", "type": "vzdump", "enabled": "1",
+         "storage": "fixture-store", "schedule": "02:30"},
+        {"id": "job-disabled", "type": "vzdump", "enabled": 0,
+         "storage": "fixture-store", "schedule": "03:30"},
+        {"id": "job-enabled-int", "type": "vzdump", "enabled": 1,
+         "storage": "fixture-store", "schedule": "04:30"},
+        {"id": "job-no-field", "type": "vzdump",
+         "storage": "fixture-store", "schedule": "05:30"}
+      ]

@@ -1,0 +1,182 @@
+---
+# Pin the post phase without a live cluster: the same stubbed `pvesh` and
+# `ha-manager` as the pre-window playbooks serve a window-open fixture set, and
+# the role's own post.yml runs against it.
+# Run: ansible-playbook tests/pve_network_maintenance/verify_post_window.yml -i localhost, -c local
+#
+# Proven here: post arms HA, re-enables only the jobs recorded in the state
+# file (a job disabled before the window stays disabled), removes the state
+# file, passes the replication fail-count gate, and re-runs without touching
+# anything twice.
+- name: Verify the pve_network_maintenance post phase
+  hosts: localhost
+  become: false
+  gather_facts: false
+  environment:
+    PATH: "/tmp/pve-network-maintenance-fixture:{{ ansible_env.PATH | default('/usr/bin:/bin') }}"
+  vars:
+    pve_network_maintenance_stub_dir: /tmp/pve-network-maintenance-fixture
+    pve_cluster_primary_host: localhost
+    pve_network_maintenance_phase: post
+    pve_network_maintenance_state_dir: /tmp/pve-network-maintenance-fixture/state
+    pve_network_maintenance_state_owner: "{{ lookup('ansible.builtin.env', 'USER') }}"
+    pve_network_maintenance_state_group: "{{ lookup('ansible.builtin.pipe', 'id -gn') }}"
+    pve_network_maintenance_quorum_timeout: 60
+    pve_network_maintenance_quorum_delay: 5
+    pve_network_maintenance_disarm_timeout: 60
+    pve_network_maintenance_disarm_delay: 5
+    pve_network_maintenance_replication_timeout: 60
+    pve_network_maintenance_replication_delay: 5
+
+  tasks:
+    - name: Write the stubs and fixtures both window tests share
+      ansible.builtin.include_tasks: stub_fixtures.yml
+
+    - name: Copy the disarmed status fixture into place
+      ansible.builtin.copy:
+        mode: "0644"
+        src: "{{ pve_network_maintenance_stub_dir }}/ha_status_disarmed.txt"
+        dest: "{{ pve_network_maintenance_stub_dir }}/ha_status.txt"
+        remote_src: true
+
+    - name: Copy the quorate cluster fixture into place
+      ansible.builtin.copy:
+        mode: "0644"
+        src: "{{ pve_network_maintenance_stub_dir }}/cluster_status_quorate.json"
+        dest: "{{ pve_network_maintenance_stub_dir }}/cluster_status.json"
+        remote_src: true
+
+    - name: Write the healthy HA fixture
+      ansible.builtin.copy:
+        mode: "0644"
+        dest: "{{ pve_network_maintenance_stub_dir }}/ha_status_current.json"
+        content: |
+          {"quorum": {"quorate": 1},
+           "master": {"id": "q1", "name": "node-a", "status": "active"},
+           "resources": [
+             {"sid": "vm:100", "type": "vm", "state": "started", "node": "node-a"}
+           ]}
+
+    - name: Write the backup job fixture
+      # job-recorded-disabled: paused by pre, must be re-enabled.
+      # job-unrecorded-disabled: disabled before the window, must stay that way.
+      # job-recorded-enabled: recorded by pre but already enabled again, skipped.
+      # job-gone: recorded by pre but deleted during the window, left alone.
+      ansible.builtin.copy:
+        mode: "0644"
+        dest: "{{ pve_network_maintenance_stub_dir }}/backup_jobs.json"
+        content: |
+          [
+            {"id": "job-recorded-disabled", "type": "vzdump", "enabled": 0,
+             "storage": "fixture-store", "schedule": "02:30"},
+            {"id": "job-unrecorded-disabled", "type": "vzdump", "enabled": 0,
+             "storage": "fixture-store", "schedule": "03:30"},
+            {"id": "job-recorded-enabled", "type": "vzdump", "enabled": 1,
+             "storage": "fixture-store", "schedule": "04:30"},
+            {"id": "job-unrecorded-enabled", "type": "vzdump", "enabled": 1,
+             "storage": "fixture-store", "schedule": "05:30"}
+          ]
+
+    - name: Write the replication fixture
+      ansible.builtin.copy:
+        mode: "0644"
+        dest: "{{ pve_network_maintenance_stub_dir }}/replication.json"
+        content: |
+          [
+            {"id": "100-0", "type": "local_job", "source": "node-a",
+             "target": "node-b", "guest": 100, "fail_count": 0}
+          ]
+
+    - name: Write the state file the pre phase would have left
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_state_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Write the pause record with the recorded job ids
+      ansible.builtin.copy:
+        mode: "0600"
+        dest: "{{ pve_network_maintenance_state_dir }}/state.json"
+        content: |
+          {"enabled_job_ids": ["job-gone", "job-recorded-disabled", "job-recorded-enabled"]}
+
+    - name: Reset the recorded command log
+      ansible.builtin.copy:
+        mode: "0644"
+        dest: "{{ pve_network_maintenance_stub_dir }}/commands.log"
+        content: ""
+
+    - name: Run the post phase against the window-open fixture set
+      ansible.builtin.include_role:
+        name: pve_network_maintenance
+        tasks_from: post.yml
+
+    - name: Read back the recorded command lines
+      ansible.builtin.slurp:
+        src: "{{ pve_network_maintenance_stub_dir }}/commands.log"
+      register: pve_network_maintenance_command_log
+
+    - name: Stat the state file
+      ansible.builtin.stat:
+        path: "{{ pve_network_maintenance_state_dir }}/state.json"
+      register: pve_network_maintenance_state_stat
+
+    - name: Assert the post phase arms HA and re-enables only the recorded jobs
+      ansible.builtin.assert:
+        that:
+          - "'crm-command arm-ha' in pve_network_maintenance_commands"
+          - "'set /cluster/backup/job-recorded-disabled --enabled 1' in pve_network_maintenance_commands"
+          # A job disabled before the window was never recorded, so post never
+          # enables it.
+          - "'set /cluster/backup/job-unrecorded-disabled --enabled 1' not in pve_network_maintenance_commands"
+          # An already-enabled job needs no second enable.
+          - "'set /cluster/backup/job-recorded-enabled --enabled 1' not in pve_network_maintenance_commands"
+          - >-
+            (pve_network_maintenance_commands.splitlines()
+             | select('search', '--enabled 1') | list | length) == 1
+          # The record is consumed once the re-enable has been issued.
+          - not pve_network_maintenance_state_stat.stat.exists
+        fail_msg: |
+          Post phase armed or re-enabled the wrong job set.
+          Commands:
+          {{ pve_network_maintenance_commands }}
+        success_msg: "PASS: post arms HA and re-enables exactly the recorded paused jobs"
+        quiet: false
+      vars:
+        pve_network_maintenance_commands: "{{ pve_network_maintenance_command_log.content | b64decode }}"
+
+    - name: Reset the recorded command log for the re-run
+      ansible.builtin.copy:
+        mode: "0644"
+        dest: "{{ pve_network_maintenance_stub_dir }}/commands.log"
+        content: ""
+
+    - name: Run the post phase a second time against a closed window
+      ansible.builtin.include_role:
+        name: pve_network_maintenance
+        tasks_from: post.yml
+
+    - name: Read back the second run command lines
+      ansible.builtin.slurp:
+        src: "{{ pve_network_maintenance_stub_dir }}/commands.log"
+      register: pve_network_maintenance_second_log
+
+    - name: Assert the post phase re-run issues no arm or enable commands
+      ansible.builtin.assert:
+        that:
+          - "'crm-command arm-ha' not in pve_network_maintenance_second_commands"
+          - >-
+            (pve_network_maintenance_second_commands.splitlines()
+             | select('search', '--enabled 1') | list | length) == 0
+        fail_msg: |
+          Post phase re-run is not idempotent. Commands:
+          {{ pve_network_maintenance_second_commands }}
+        success_msg: "PASS: post re-run issues no commands"
+        quiet: false
+      vars:
+        pve_network_maintenance_second_commands: "{{ pve_network_maintenance_second_log.content | b64decode }}"
+
+    - name: Remove the stub directory
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_stub_dir }}"
+        state: absent

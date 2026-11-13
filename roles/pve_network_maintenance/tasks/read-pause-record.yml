@@ -1,0 +1,26 @@
+---
+# Read the paused backup job ids from the maintenance state file. Callers
+# choose the fact that receives the decoded enabled_job_ids list.
+
+- name: Look for the maintenance pause record
+  ansible.builtin.stat:
+    path: "{{ pve_network_maintenance_state_file }}"
+  register: pve_network_maintenance_state_stat
+
+- name: Start from an empty pause record
+  ansible.builtin.set_fact:
+    "{{ pve_network_maintenance_pause_record_fact }}": []
+
+- name: Read the maintenance pause record
+  ansible.builtin.slurp:
+    src: "{{ pve_network_maintenance_state_file }}"
+  register: pve_network_maintenance_state_raw
+  when: pve_network_maintenance_state_stat.stat.exists
+
+- name: Decode the maintenance pause record
+  ansible.builtin.set_fact:
+    "{{ pve_network_maintenance_pause_record_fact }}": >-
+      {{ (pve_network_maintenance_state_raw.content | b64decode | from_json)['enabled_job_ids'] }}
+  when:
+    - pve_network_maintenance_state_stat.stat.exists
+    - pve_network_maintenance_state_raw.content is defined
