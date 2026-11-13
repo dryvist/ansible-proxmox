@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   role_name: oci_app_upgrade
-  author: dryvist
+  author: example-org
   description: Replace the image of OCI-image LXCs while keeping their CT-owned mpN volumes
   license: MIT
   min_ansible_version: '2.19'

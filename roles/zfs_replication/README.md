@@ -80,6 +80,11 @@ and the role disables the timer again.
 | `zfs_replication_vzdump_guests`                                | `[]`                                 | vmids to back up — inert until set                                                   |
 | `zfs_replication_vzdump_on_calendar`                           | `*-*-* 01:30:00`                     | vzdump cadence                                                                       |
 
+The optional S3 mirror requires both `GUEST_BACKUP_S3_ENDPOINT` (for example,
+`https://s3.example.org`) and `GUEST_BACKUP_S3_BUCKET` (for example,
+`example-bucket`) in the private runtime environment. Neither value has a
+working default; if either is unset, the S3 mirror is skipped.
+
 Each job in `zfs_replication_jobs`:
 
 | Key              | Required     | Description                                                         |

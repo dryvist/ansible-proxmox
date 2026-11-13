@@ -108,10 +108,11 @@ zfs_replication_vzdump_keep_last: 4
 # After each guest's vzdump completes to the local storage, the archive + its
 # sidecars (.log/.notes) are copied to s3://<bucket>/<prefix>/<vmid>/ with the
 # vzdump filenames preserved VERBATIM — the same bucket + keys mirror 1:1 to
-# off-site immutable object storage out of band. Inert until an endpoint is set;
-# a run whose endpoint is unreachable SKIPS the S3 leg cleanly (the local vzdump
+# off-site immutable object storage out of band. Inert until both the endpoint
+# and bucket are set; neither is bound to a deployment-specific default. A run
+# whose endpoint is unreachable SKIPS the S3 leg cleanly (the local vzdump
 # still happened), mirroring the syncoid reachability gate.
-zfs_replication_vzdump_s3_bucket: dryvist-homelab-backups
+zfs_replication_vzdump_s3_bucket: "{{ lookup('env', 'GUEST_BACKUP_S3_BUCKET') | default('', true) }}"
 zfs_replication_vzdump_s3_prefix: guests
 # Injection-agnostic: read GUEST_BACKUP_S3_* from the environment at render time
 # (parallels the postgres role's POSTGRES_BACKUP_S3_* grain). Empty endpoint =>

@@ -5,8 +5,8 @@
 # only enables when there is at least one guest to back up.
 
 # The S3 mirror leg needs the aws CLI and a root-only credentials file. Both are
-# gated on an endpoint being set, so the plain-vzdump case installs nothing extra
-# and stays inert.
+# gated on an endpoint and bucket being set, so the plain-vzdump case installs
+# nothing extra and stays inert.
 - name: Install awscli for the vzdump S3 mirror leg
   ansible.builtin.apt:
     name: awscli
@@ -14,6 +14,7 @@
     update_cache: true
   when:
     - zfs_replication_vzdump_s3_endpoint | length > 0
+    - zfs_replication_vzdump_s3_bucket | length > 0
     - ansible_virtualization_type | default('') != 'docker'
   tags:
     - zfs_replication_vzdump
@@ -26,7 +27,19 @@
     group: root
     mode: "0600"
   no_log: true
-  when: zfs_replication_vzdump_s3_endpoint | length > 0
+  when:
+    - zfs_replication_vzdump_s3_endpoint | length > 0
+    - zfs_replication_vzdump_s3_bucket | length > 0
+  tags:
+    - zfs_replication_vzdump
+
+- name: Remove the vzdump S3 config when the mirror is disabled
+  ansible.builtin.file:
+    path: /etc/default/zfs-replication-vzdump-s3
+    state: absent
+  when: >
+    zfs_replication_vzdump_s3_endpoint | length == 0 or
+    zfs_replication_vzdump_s3_bucket | length == 0
   tags:
     - zfs_replication_vzdump
 

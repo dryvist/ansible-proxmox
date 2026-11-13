@@ -222,7 +222,7 @@ def contract_covered(path):
 
 
 def selected_profile(changed_files):
-    # Mirrors JacobPEvans/.github select-molecule-scenarios.js for repo-owned paths: a path that no
+    # Mirrors the shared select-molecule-scenarios.js for repo-owned paths: a path that no
     # scenario or contract covers runs the full profile, and .github/ paths select no scenario.
     scenarios = set()
     for path in changed_files:

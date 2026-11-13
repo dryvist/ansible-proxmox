@@ -2,8 +2,9 @@
 {{ ansible_managed | comment }}
 # Optional vzdump backup of named guests to a backup storage, then an S3 mirror
 # of each fresh archive. Per-guest logging; a single failed guest does NOT abort
-# the rest. The S3 leg is reachability-gated: if the endpoint is unset or
-# unreachable, the local vzdump still runs and only the S3 copy is skipped.
+# the rest. The S3 leg is reachability-gated: if the endpoint or bucket is
+# unset, or the endpoint is unreachable, the local vzdump runs and only the S3
+# copy is skipped.
 set -uo pipefail
 
 LOG_DIR="{{ zfs_replication_log_dir }}"
@@ -24,10 +25,19 @@ AWS_ARGS="--endpoint-url ${S3_ENDPOINT}"
 # Probe the endpoint ONCE per run. curl exits 0 on any HTTP response (RustFS
 # answers 403 unauthenticated — still "up"); non-zero on connect/timeout.
 s3_ready() {
-  [ -n "$S3_ENDPOINT" ] || return 1
+  [ -n "$S3_ENDPOINT" ] && [ -n "$S3_BUCKET" ] || return 1
   curl -sS -o /dev/null -m "{{ zfs_replication_vzdump_s3_probe_timeout }}" "$S3_ENDPOINT" 2>/dev/null
 }
-if s3_ready; then S3_UP=1; else S3_UP=0; [ -n "$S3_ENDPOINT" ] && say "S3 endpoint unreachable — skipping S3 mirror this run"; fi
+if s3_ready; then
+  S3_UP=1
+else
+  S3_UP=0
+  if [ -n "$S3_ENDPOINT" ] && [ -n "$S3_BUCKET" ]; then
+    say "S3 endpoint unreachable — skipping S3 mirror this run"
+  else
+    say "S3 endpoint or bucket unset — skipping S3 mirror this run"
+  fi
+fi
 
 # Copy this run's fresh archive + sidecars to s3://bucket/prefix/<vmid>/, keys
 # preserved verbatim. The vmid's newest archive path is read back from the log.

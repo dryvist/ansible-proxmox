@@ -20,6 +20,11 @@
         src: /etc/systemd/system/zfs-replication.timer
       register: repl_timer
 
+    - name: Read the rendered S3 config
+      ansible.builtin.slurp:
+        src: /etc/default/zfs-replication-vzdump-s3
+      register: vzdump_s3_config
+
     - name: Assert the inert (no-op) contract rendered
       ansible.builtin.assert:
         that:
@@ -33,6 +38,7 @@
           - "'/usr/local/bin/zfs-replicate.sh' in (repl_service.content | b64decode)"
           - "'OnCalendar=*:0/15' in (repl_timer.content | b64decode)"
           - "'WantedBy=timers.target' in (repl_timer.content | b64decode)"
+          - "\"GUEST_BACKUP_S3_BUCKET='example-bucket'\" in (vzdump_s3_config.content | b64decode)"
         fail_msg: "zfs_replication did not render the expected inert contract"
 
     # The timer must NOT be active under the inert default. Converge succeeding
