@@ -3,7 +3,8 @@
 Populates the llm fabric's shared model-store mount(s)
 (`var.llm_models_mount_path` in tofu-proxmox, `/var/lib/llm` by default) with
 every declared GGUF, so a serving guest's converge-time
-`roles/llama_cpp/tasks/main.yml` model-presence assert (dryvist/ansible-proxmox-ai)
+`roles/llama_cpp/tasks/main.yml` model-presence assert in the consuming
+repository
 finds the file rather than failing a converge on a manually-populated store.
 
 ## Why this runs here, not on the serving guest
@@ -57,7 +58,7 @@ the backing volume, which is what this role does.
 
 The model list is `llm_model_catalog_models`, from
 `dryvist.homelab.llm_model_catalog` (dryvist/homelab-contracts) — the single
-catalog shared with dryvist/ansible-proxmox-ai's `llama_cpp` role, which
+catalog shared with the consuming repository's `llama_cpp` role, which
 serves the same GGUFs this role downloads. `playbooks/site.yml` includes that
 role immediately before this one so the catalog is already in scope; this
 role declares no model list of its own.
@@ -91,8 +92,8 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 ### Variables
 
-| Variable                         | Default                            | Purpose                                                                     |
-| -------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
-| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Shared model catalog; this role seeds only entries with the optional Hugging Face GGUF artifact fields |
-| `llm_model_store_seed_timeout`   | `3600`                             | Seconds allowed for the HF metadata lookup and the GGUF download            |
-| `llm_model_store_seed_file_mode` | `"0644"`                           | Mode of a seeded GGUF file                                                  |
+| Variable                         | Default                            | Purpose                                                                       |
+| -------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
+| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Shared catalog; seeds only entries with the optional Hugging Face GGUF fields |
+| `llm_model_store_seed_timeout`   | `3600`                             | Seconds allowed for the HF metadata lookup and the GGUF download              |
+| `llm_model_store_seed_file_mode` | `"0644"`                           | Mode of a seeded GGUF file                                                    |

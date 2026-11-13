@@ -3,6 +3,8 @@
   hosts: all
   become: true
   gather_facts: false
+  vars:
+    expected_s3_bucket: "{{ lookup('env', 'GUEST_BACKUP_S3_BUCKET') }}"
 
   tasks:
     - name: Read the rendered replication wrapper
@@ -20,6 +22,16 @@
         src: /etc/systemd/system/zfs-replication.timer
       register: repl_timer
 
+    - name: Read the rendered vzdump wrapper
+      ansible.builtin.slurp:
+        src: /usr/local/bin/zfs-replication-vzdump.sh
+      register: vzdump_wrapper
+
+    - name: Read the rendered S3 config
+      ansible.builtin.slurp:
+        src: /etc/default/zfs-replication-vzdump-s3
+      register: vzdump_s3_config
+
     - name: Assert the inert (no-op) contract rendered
       ansible.builtin.assert:
         that:
@@ -33,6 +45,11 @@
           - "'/usr/local/bin/zfs-replicate.sh' in (repl_service.content | b64decode)"
           - "'OnCalendar=*:0/15' in (repl_timer.content | b64decode)"
           - "'WantedBy=timers.target' in (repl_timer.content | b64decode)"
+          - expected_s3_bucket == 'example-bucket'
+          - >-
+            ("GUEST_BACKUP_S3_BUCKET='" ~ expected_s3_bucket ~ "'")
+            in (vzdump_s3_config.content | b64decode)
+          - "'[ -n \"$S3_ENDPOINT\" ] && [ -n \"$S3_BUCKET\" ] || return 1' in (vzdump_wrapper.content | b64decode)"
         fail_msg: "zfs_replication did not render the expected inert contract"
 
     # The timer must NOT be active under the inert default. Converge succeeding

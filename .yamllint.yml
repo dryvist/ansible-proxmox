@@ -1,5 +1,5 @@
 ---
-# Synced from JacobPEvans/.github precommit/configs/yamllint.yml — keep
+# Synced from the shared pre-commit configuration — keep
 # in lockstep with that canonical. ansible-lint's bundled yamllint
 # integration reads this from disk in CI; the Nix-based pre-commit
 # hook reads the same content via fetch-shared-configs. Renovate
