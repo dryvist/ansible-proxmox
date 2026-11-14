@@ -5,7 +5,7 @@ driver:
 platforms:
   - name: proxmox-lxc-features-test
     # renovate: datasource=docker depName=mirror.gcr.io/library/debian
-    image: "${MOLECULE_IMAGE:-mirror.gcr.io/library/debian:stable-slim@sha256:a717a33469731894e77e912ea7d714e27c2dc38ee6554fd1a3102e92999cfc66}"
+    image: "${MOLECULE_IMAGE:-mirror.gcr.io/library/debian:stable-slim@sha256:fbfb4059d2127120aa05b6e6064523d2102552f0cf0026ddf0701c12f1f8f3e0}"
     pre_build_image: true
     privileged: true
     tmpfs:
