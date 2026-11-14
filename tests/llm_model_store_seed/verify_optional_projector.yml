@@ -19,7 +19,7 @@
       ansible.builtin.set_fact:
         llm_model_store_seed_model:
           name: image-text model
-          hf_repo: ggml-org/GLM-OCR-GGUF
+          hf_repo: example-org/example-model-GGUF
           hf_revision: 65a42de1148dbed2297e922b5dbc7d9b70c36578
           gguf: GLM-OCR-Q8_0.gguf
 
@@ -47,7 +47,7 @@
       ansible.builtin.set_fact:
         llm_model_store_seed_model:
           name: image-text model
-          hf_repo: ggml-org/GLM-OCR-GGUF
+          hf_repo: example-org/example-model-GGUF
           hf_revision: 65a42de1148dbed2297e922b5dbc7d9b70c36578
           gguf: GLM-OCR-Q8_0.gguf
           mmproj_file: mmproj-GLM-OCR-Q8_0.gguf
