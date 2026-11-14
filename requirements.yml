@@ -31,10 +31,10 @@ collections:
   # signals have no approved route into Splunk. Shared with
   # ansible-proxmox-apps (Edge containers) rather than copied.
   # Pin the current v5 release revision; breaking changes ship as v6.
-  # renovate: datasource=github-releases depName=dryvist/homelab-contracts currentValue=v5.65.0 extractVersion=^(?<version>.*)$
+  # renovate: datasource=github-releases depName=dryvist/homelab-contracts currentValue=v5.66.0 extractVersion=^(?<version>.*)$
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: 81ba71079c4830a6e976b59f1278c35c24eb709f
+    version: 641682c47c22e2beb61f46faf811eec9d182f7a7
   # renovate: datasource=github-releases depName=jpe-ansible/ansible-nautobot currentValue=v0.2.0 extractVersion=^(?<version>.*)$
   - name: https://github.com/jpe-ansible/ansible-nautobot.git
     type: git
