@@ -1,0 +1,299 @@
+---
+# Molecule verification: tasks/lxc.yml's pct push against a STUBBED pct, with
+# three fixture containers in the same loop: 401 (nixos, Nix side deployed),
+# 402 (debian), and 403 (nixos, Nix side NOT deployed yet).
+#
+# The Docker container cannot run real pct, so this play emulates it: the
+# stub logs every argv (one line per call) and serves `pct list`/`pct config`
+# fixtures; guest writes are redirected into a per-container fixture root via
+# PATH shims, so the container's real /etc/ssh is never touched and verify.yml's
+# "no CA trust file was ever written" checks stay valid. The log assertions
+# below pin the exact rendered commands:
+#   - 401 (nixos): every in-guest exec goes through the current-system PATH
+#     form, and no drop-in write/validate/move ever runs (the Nix side owns
+#     sshd_config); readiness rests only on the effective config trusting the
+#     CA file. Its sshd -T fixture deliberately keeps passwordauthentication
+#     yes to prove the Debian hardening asserts are not applied there.
+#   - 402 (debian): no PATH prefix, and the staged drop-in sequence
+#     (tee *.new, sshd -t -f, mv) is intact — the pre-NixOS Debian stream.
+#   - 403 (nixos, trust directives missing from sshd -T): the run records it
+#     NOT READY and CONTINUES — the loop item never fails over the Nix side.
+#
+# Not covered here: the OpenBao sign endpoint and the live host-cert install
+# path (host-cert disabled), and a real guest sshd.
+
+- name: Verify the pct push renders per-OS exec forms (stubbed pct)
+  hosts: all
+  # The Docker test container runs as root and does not install sudo.
+  become: false
+  gather_facts: false
+
+  vars:
+    # Not /tmp: the scenario mounts it as tmpfs, which is noexec.
+    ssh_ca_trust_pct_stub_dir: /var/tmp/ssh-ca-trust-pct-stub
+    ssh_ca_trust_lxc_test_ca_pub: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMc4shG4OO1GtC46CMVsOK8Tz7kuEGWX0xutfFYBjLth
+      molecule-test-ca-throwaway-key-not-a-real-ca
+    # Normally registered by tasks/main.yml's CA fetch; the gate is bypassed
+    # here so the push half of lxc.yml can run against the stub.
+    ssh_ca_trust_fetched:
+      content: "{{ ssh_ca_trust_lxc_test_ca_pub }}"
+    containers_from_tofu: {}
+
+  # A PATH with the stub first is the whole trick: lxc.yml's shell tasks then
+  # resolve `pct` to the fixture. The trailing directories are the container's
+  # usual lookup path (awk, sort, md5sum, sh for the guest emulation).
+  environment:
+    PATH: "{{ ssh_ca_trust_pct_stub_dir }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    PCT_STUB_LOG: "{{ ssh_ca_trust_pct_stub_dir }}/commands.log"
+    PCT_STUB_ROOT: "{{ ssh_ca_trust_pct_stub_dir }}/root"
+    PCT_GUEST_BIN: "{{ ssh_ca_trust_pct_stub_dir }}/bin/guest-bin"
+    PCT_SHIM_LIB: "{{ ssh_ca_trust_pct_stub_dir }}/bin/shim-lib.sh"
+
+  tasks:
+    - name: Create the stub directory layout
+      ansible.builtin.file:
+        path: "{{ ssh_ca_trust_pct_stub_dir }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - bin
+        - bin/guest-bin
+        - root
+        - root/401/guest
+        - root/402/guest
+        - root/403/guest
+
+    - name: Create the stub command log
+      ansible.builtin.copy:
+        dest: "{{ ssh_ca_trust_pct_stub_dir }}/commands.log"
+        content: ""
+        mode: "0644"
+
+    - name: Write the pct stub
+      ansible.builtin.copy:
+        dest: "{{ ssh_ca_trust_pct_stub_dir }}/bin/pct"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          # pct fixture: logs every argv, then emulates list/config/exec for
+          # CT 401 (nixos) and CT 402 (debian). The exec emulation only
+          # accepts the exact current-system PATH prefix for a NixOS guest
+          # and runs the remaining argv with the guest-bin shims first on
+          # PATH, so guest writes land inside the fixture root.
+          set -u
+          printf '%s\n' "${0##*/} $*" >> "$PCT_STUB_LOG"
+          op=${1-}
+          ct=${2-}
+          case "$op" in
+              list)
+                  printf '%s\n' 'VMID       Status     Lock         Name'
+                  printf '%s\n' '401        running                 nixos-ct'
+                  printf '%s\n' '402        running                 debian-ct'
+                  printf '%s\n' '403        running                 nixos-undeployed'
+                  ;;
+              config)
+                  case "$ct" in
+                      401) printf '%s\n' 'arch: amd64' 'hostname: nixos-ct' 'ostype: nixos' 'unprivileged: 1' ;;
+                      402) printf '%s\n' 'arch: amd64' 'hostname: debian-ct' 'ostype: debian' 'unprivileged: 1' ;;
+                      403) printf '%s\n' 'arch: amd64' 'hostname: nixos-undeployed' 'ostype: nixos' 'unprivileged: 1' ;;
+                      *) exit 2 ;;
+                  esac
+                  ;;
+              exec)
+                  shift 2
+                  if [ "${1-}" != "--" ]; then
+                      printf '%s\n' 'pct stub: expected "--" after the vmid' >&2
+                      exit 64
+                  fi
+                  shift
+                  if [ "${1-}" = "/run/current-system/sw/bin/env" ]; then
+                      if [ "${2-}" != "PATH=/run/current-system/sw/bin" ]; then
+                          printf '%s\n' 'pct stub: unexpected env form' >&2
+                          exit 65
+                      fi
+                      shift 2
+                  fi
+                  export PCT_GUEST_ROOT="$PCT_STUB_ROOT/$ct/guest"
+                  export PCT_SSHD_T="$PCT_STUB_ROOT/$ct/sshd-T.txt"
+                  PATH="$PCT_GUEST_BIN:$PATH"
+                  export PATH
+                  if [ "${1-}" = "sh" ]; then
+                      [ "${2-}" = "-c" ] || exit 66
+                      /bin/sh -c "${3-}"
+                  else
+                      "$@"
+                  fi
+                  ;;
+              *) exit 2 ;;
+          esac
+
+    - name: Write the guest-path shim helper
+      ansible.builtin.copy:
+        dest: "{{ ssh_ca_trust_pct_stub_dir }}/bin/shim-lib.sh"
+        mode: "0644"
+        content: |
+          # Sourced by the guest-bin shims: rewrites each guest-absolute path
+          # argument onto the fixture guest root; flags and relative args pass
+          # through (fixture paths never contain quotes or spaces).
+          mapped=
+          for shim_arg in "$@"; do
+              case "$shim_arg" in
+                  /*) shim_arg="$PCT_GUEST_ROOT$shim_arg" ;;
+              esac
+              mapped="$mapped '$shim_arg'"
+          done
+          eval "set --$mapped"
+
+    - name: Write the guest-bin shims
+      ansible.builtin.copy:
+        dest: "{{ ssh_ca_trust_pct_stub_dir }}/bin/guest-bin/{{ item }}"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          . "$PCT_SHIM_LIB"
+          exec /bin/{{ item }} "$@"
+      loop: [cat, tee, mkdir, chmod, mv, rm]
+
+    - name: Write the sshd stub
+      ansible.builtin.copy:
+        dest: "{{ ssh_ca_trust_pct_stub_dir }}/bin/guest-bin/sshd"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          # sshd fixture: every config test validates; -T prints the per-CT
+          # effective-config fixture. /bin/cat explicitly — plain `cat` would
+          # resolve to the path-mapping shim and remap the fixture path.
+          case "${1-}" in
+              -t) exit 0 ;;
+              -T) /bin/cat "$PCT_SSHD_T" ;;
+              *) exit 2 ;;
+          esac
+
+    - name: Write the systemctl stub
+      ansible.builtin.copy:
+        dest: "{{ ssh_ca_trust_pct_stub_dir }}/bin/guest-bin/systemctl"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          # systemctl fixture: logs the requested action, succeeds.
+          printf '%s\n' "$*" >> "$PCT_STUB_LOG"
+          exit 0
+
+    - name: Write the NixOS container's effective-config fixture
+      ansible.builtin.copy:
+        dest: "{{ ssh_ca_trust_pct_stub_dir }}/root/401/sshd-T.txt"
+        mode: "0644"
+        content: |
+          port 22
+          passwordauthentication no
+          kbdinteractiveauthentication no
+          trustedusercakeys /etc/ssh/trusted-user-ca-keys.pem
+          authorizedprincipalsfile /etc/ssh/principals/%u
+
+    - name: Write the Debian container's effective-config fixture
+      ansible.builtin.copy:
+        dest: "{{ ssh_ca_trust_pct_stub_dir }}/root/402/sshd-T.txt"
+        mode: "0644"
+        content: |
+          port 22
+          passwordauthentication no
+          kbdinteractiveauthentication no
+          trustedusercakeys /etc/ssh/trusted-user-ca-keys.pem
+          authorizedprincipalsfile /etc/ssh/principals/%u
+          allowusers root
+
+    - name: Write the not-yet-deployed NixOS container's effective-config fixture
+      # 403's Nix side has not declared the CA trust yet — sshd -T must not
+      # show trustedusercakeys.
+      ansible.builtin.copy:
+        dest: "{{ ssh_ca_trust_pct_stub_dir }}/root/403/sshd-T.txt"
+        mode: "0644"
+        content: |
+          port 22
+          passwordauthentication yes
+
+    - name: Run the role's pct push against the stub (NixOS + Debian containers)
+      # include_role (not include_tasks) so the role's templates resolve for
+      # the drop-in render — include_tasks runs outside role context.
+      ansible.builtin.include_role:
+        name: ssh_ca_trust
+        tasks_from: lxc.yml
+
+    # slurp, not lookup('file'): the log is on the test instance, not the controller.
+    - name: Fetch the stubbed pct command log
+      ansible.builtin.slurp:
+        src: "{{ ssh_ca_trust_pct_stub_dir }}/commands.log"
+      register: ssh_ca_trust_pct_log_raw
+
+    - name: Read the stubbed pct command log
+      ansible.builtin.set_fact:
+        ssh_ca_trust_pct_log: "{{ (ssh_ca_trust_pct_log_raw.content | b64decode).splitlines() }}"
+
+    - name: Assert every NixOS-container exec runs through the current-system PATH
+      vars:
+        ssh_ca_trust_nixos_execs: "{{ ssh_ca_trust_pct_log | select('match', '^pct exec 401 -- ') | list }}"
+      ansible.builtin.assert:
+        that:
+          - ssh_ca_trust_nixos_execs | length > 0
+          - >-
+            (ssh_ca_trust_nixos_execs
+            | reject('search', '/run/current-system/sw/bin/env PATH=/run/current-system/sw/bin')
+            | list) == []
+        success_msg: "{{ ssh_ca_trust_nixos_execs | length }} NixOS execs, all PATH-providing"
+
+    - name: Assert the NixOS container never sees the drop-in or a staged validate
+      ansible.builtin.assert:
+        that:
+          - (ssh_ca_trust_pct_log | select('search', 'pct exec 401 .*99-openbao-ca\.conf') | list) == []
+          - (ssh_ca_trust_pct_log | select('search', 'pct exec 401 .*sshd_config\.d') | list) == []
+          - (ssh_ca_trust_pct_log | select('search', 'pct exec 401 .*sshd -t -f') | list) == []
+          - (ssh_ca_trust_pct_log | select('search', 'pct exec 401 .* mv ') | list) == []
+        fail_msg: "{{ ssh_ca_trust_pct_log }}"
+
+    - name: Assert the NixOS container validates the live config and restarts sshd on change
+      vars:
+        ssh_ca_trust_nixos_sshd_t: "{{ ssh_ca_trust_pct_log | select('match', '^pct exec 401 -- .* sshd -t$') | list }}"
+        ssh_ca_trust_nixos_sshd_t_cap: "{{ ssh_ca_trust_pct_log | select('match', '^pct exec 401 -- .* sshd -T$') | list }}"
+      ansible.builtin.assert:
+        that:
+          - ssh_ca_trust_nixos_sshd_t | length == 1
+          - ssh_ca_trust_nixos_sshd_t_cap | length == 1
+          - "'try-restart sshd' in ssh_ca_trust_pct_log"
+          - (ssh_ca_trust_pct_log | select('search', '^pct exec 401 .*try-restart ssh ') | list) == []
+        fail_msg: "{{ ssh_ca_trust_pct_log }}"
+
+    - name: Assert the Debian container keeps its exact existing command stream
+      vars:
+        ssh_ca_trust_debian_execs: "{{ ssh_ca_trust_pct_log | select('match', '^pct exec 402 -- ') | list }}"
+      ansible.builtin.assert:
+        that:
+          - ssh_ca_trust_debian_execs | length > 0
+          - (ssh_ca_trust_debian_execs | select('search', 'sw/bin/env') | list) == []
+          - (ssh_ca_trust_debian_execs | select('search', 'mkdir -p /etc/ssh/principals /etc/ssh/sshd_config\.d') | list) | length == 1
+          - (ssh_ca_trust_debian_execs | select('search', 'tee /etc/ssh/sshd_config\.d/99-openbao-ca\.conf\.new') | list) | length == 1
+          - (ssh_ca_trust_debian_execs | select('search', 'sshd -t -f /etc/ssh/sshd_config\.d/99-openbao-ca\.conf\.new') | list) | length == 1
+          - >-
+            (ssh_ca_trust_debian_execs
+            | select('search', 'mv /etc/ssh/sshd_config\.d/99-openbao-ca\.conf\.new'
+            ~ ' /etc/ssh/sshd_config\.d/99-openbao-ca\.conf$') | list) | length == 1
+          - "'try-restart ssh' in ssh_ca_trust_pct_log"
+        fail_msg: "{{ ssh_ca_trust_pct_log }}"
+
+    - name: Assert the undeployed NixOS container was recorded NOT READY without failing
+      vars:
+        ssh_ca_trust_403_result: "{{ ssh_ca_trust_lxc_push.results | selectattr('item', 'equalto', '403') | first }}"
+      ansible.builtin.assert:
+        that:
+          - not (ssh_ca_trust_403_result.failed | default(false))
+          - "'READY=0' in ssh_ca_trust_403_result.stdout"
+          - "'NOT_READY 403' in ssh_ca_trust_403_result.stderr"
+          - "'trustedusercakeys /etc/ssh/trusted-user-ca-keys.pem' in ssh_ca_trust_403_result.stderr"
+        fail_msg: "{{ ssh_ca_trust_pct_log }}"
+
+    - name: Assert all three containers converged and readiness was recorded per container
+      ansible.builtin.assert:
+        that:
+          - ssh_ca_trust_lxc_push.changed | bool
+          - "ssh_ca_trust_lxc_ready == {'401': true, '402': true, '403': false}"
+        fail_msg: "{{ ssh_ca_trust_lxc_push.results | map(attribute='stdout', default='') | list }}"

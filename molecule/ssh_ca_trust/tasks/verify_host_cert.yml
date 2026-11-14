@@ -166,7 +166,7 @@
 - name: Assert the production scripts wire a pre-signing fingerprint into the reload decision
   vars:
     ssh_ca_trust_lxc_host_cert_tasks_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/lxc_host_cert.yml') }}"
-    ssh_ca_trust_lxc_tasks_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/lxc.yml') }}"
+    ssh_ca_trust_lxc_tasks_text: "{{ lookup('file', '../../../roles/ssh_ca_trust/tasks/lxc_push.yml') }}"
   ansible.builtin.assert:
     that:
       - "'PREFP=' in ssh_ca_trust_lxc_host_cert_tasks_text"
@@ -174,7 +174,7 @@
     fail_msg: >-
       tasks/lxc_host_cert.yml must snapshot a fingerprint that includes the
       host cert file (PREFP) BEFORE the certificate is signed and
-      installed, and tasks/lxc.yml's "Push CA trust" task must assign that
+      installed, and tasks/lxc_push.yml's "Push CA trust" task must assign that
       pre-signing snapshot straight into `before` — a fingerprint taken
       after the cert is already installed cannot detect a renewal-only
       change, so sshd would never reload for it.
@@ -229,7 +229,7 @@
         fail_msg: >-
           A cert-only change must change this fingerprint — it is what
           "before != after" gates the `systemctl reload` call on in
-          tasks/lxc.yml. If this fingerprint expression stops including the
+          tasks/lxc_push.yml. If this fingerprint expression stops including the
           host-cert path, a cert-only renewal would silently stop
           reloading sshd in every container.
 
