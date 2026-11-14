@@ -15,6 +15,11 @@
   ],
   "packageRules": [
     {
+      "description": "The vLLM client image value is a full image reference and is updated by hand.",
+      "matchPackageNames": ["vllm/vllm-openai-cpu"],
+      "enabled": false
+    },
+    {
       "description": "Keep the current SHA pin until a new release version is available.",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["jpe-ansible/ansible-nautobot"],
