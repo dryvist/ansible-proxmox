@@ -74,13 +74,13 @@ def main():
     for budget in (None, "233472", 0, -1, 233472.5, True):
         cases.append((f"malformed budget {budget!r}", "server-b",
                       {"memory_budget_mb": budget}, RESOURCES,
-                      False, "A node memory budget"))
+                      False, "The node needs a memory budget"))
     cases.append(("budget exceeds physical memory", "gpu-b",
                   {"memory_budget_mb": 100 * 1024}, RESOURCES,
                   False, "Allocated guest memory"))
     cases.append(("missing resource list", "gpu-b",
                   {"memory_budget_mb": 86 * 1024}, None,
-                  False, "A node memory budget"))
+                  False, "The node needs a memory budget"))
     without_node = [row for row in RESOURCES if not (
         row["type"] == "node" and row["node"] == "gpu-b")]
     cases.append(("missing physical telemetry", "gpu-b",
