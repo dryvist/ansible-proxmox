@@ -14,7 +14,7 @@
       uv: "0.13.1"
       node: "24.21.0"
       # renovate: datasource=docker depName=vllm/vllm-openai-cpu
-      vllm_client_image: "vllm/vllm-openai-cpu:v0.32.0-x86_64"
+      vllm_client_image: "v0.33.0"
   tasks:
     - name: Require a valid node and client request
       ansible.builtin.assert:
