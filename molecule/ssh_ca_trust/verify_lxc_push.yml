@@ -219,9 +219,15 @@
         name: ssh_ca_trust
         tasks_from: lxc.yml
 
+    # slurp, not lookup('file'): the log is on the test instance, not the controller.
+    - name: Fetch the stubbed pct command log
+      ansible.builtin.slurp:
+        src: "{{ ssh_ca_trust_pct_stub_dir }}/commands.log"
+      register: ssh_ca_trust_pct_log_raw
+
     - name: Read the stubbed pct command log
       ansible.builtin.set_fact:
-        ssh_ca_trust_pct_log: "{{ lookup('file', ssh_ca_trust_pct_stub_dir ~ '/commands.log').splitlines() }}"
+        ssh_ca_trust_pct_log: "{{ (ssh_ca_trust_pct_log_raw.content | b64decode).splitlines() }}"
 
     - name: Assert every NixOS-container exec runs through the current-system PATH
       vars:
