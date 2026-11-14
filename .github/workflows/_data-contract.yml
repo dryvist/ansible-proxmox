@@ -32,45 +32,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: requirements-ci.txt
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-ci.txt
-
-      # `install` resolves BOTH sections of requirements.yml. `collection
-      # install` alone silently skips a `roles:` block and `role install` alone
-      # silently skips `collections:`, so either half on its own can leave the
-      # play to fail later on a missing dependency. Passing `-p` also makes
-      # `install` drop collections — so no install path here, deliberately.
-      # Cache Galaxy content keyed on requirements.yml; a hit refreshes the
-      # pinned dependencies from requirements.yml. Same key/paths as the central _ansible-ci.yml.
-      - name: Cache Ansible Galaxy content
-        id: galaxy-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/.ansible/collections
-            ~/.ansible/roles
-          key: ansible-galaxy-v2-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
-          # A partial restore keeps unchanged dependencies warm; the forced
-          # install below reconciles restored content against the current pins.
-          restore-keys: |
-            ansible-galaxy-v2-${{ runner.os }}-
-
-      - name: Install Ansible dependencies
-        if: steps.galaxy-cache.outputs.cache-hit != 'true'
-        run: ansible-galaxy install -r requirements.yml --force
-
-      - name: Refresh Ansible dependencies from requirements.yml
-        if: steps.galaxy-cache.outputs.cache-hit == 'true'
-        run: ansible-galaxy install -r requirements.yml --force
+      - name: Set up the data contract environment
+        uses: ./.github/actions/data-contract-setup
 
       # load_tofu.yml (imported by verify_inventory.yml) include_role's the
       # shared inventory_resolve role by FQCN, so this run is what proves the
