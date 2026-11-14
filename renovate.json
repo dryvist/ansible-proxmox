@@ -15,7 +15,7 @@
   ],
   "packageRules": [
     {
-      "description": "shortcut: the shared matcher rewrites this whole image reference to a bare tag; re-enable when a matcher captures only the tag.",
+      "description": "The vLLM client image value is a full image reference and is updated by hand.",
       "matchPackageNames": ["vllm/vllm-openai-cpu"],
       "enabled": false
     },
