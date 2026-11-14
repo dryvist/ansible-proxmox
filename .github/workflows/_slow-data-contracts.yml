@@ -18,36 +18,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: requirements-ci.txt
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-ci.txt
-
-      - name: Cache Ansible Galaxy content
-        id: galaxy-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/.ansible/collections
-            ~/.ansible/roles
-          key: ansible-galaxy-v2-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
-          restore-keys: |
-            ansible-galaxy-v2-${{ runner.os }}-
-
-      - name: Install Ansible dependencies
-        if: steps.galaxy-cache.outputs.cache-hit != 'true'
-        run: ansible-galaxy install -r requirements.yml --force
-
-      - name: Refresh Ansible dependencies from requirements.yml
-        if: steps.galaxy-cache.outputs.cache-hit == 'true'
-        run: ansible-galaxy install -r requirements.yml --force
+      - name: Set up the data contract environment
+        uses: ./.github/actions/data-contract-setup
 
       # The mount lookup must find a live `<storage>:<vol>,mp=<path>,...` value,
       # and a surplus duplicate is removed only when it is role-named and empty.
