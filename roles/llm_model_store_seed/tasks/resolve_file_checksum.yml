@@ -1,0 +1,10 @@
+---
+- name: Resolve the pinned LFS SHA-256 for {{ llm_model_store_seed_file }}
+  ansible.builtin.set_fact:
+    llm_model_store_seed_file_sha256: >-
+      {{
+        (llm_model_store_seed_hf_meta.json.siblings
+          | selectattr('rfilename', 'equalto', llm_model_store_seed_file)
+          | map(attribute='lfs.sha256') | list | first) | default('')
+      }}
+  changed_when: false

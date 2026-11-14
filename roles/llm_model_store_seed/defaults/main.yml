@@ -2,7 +2,8 @@
 # llm_model_store_seed role defaults.
 #
 # Populates the llm fabric's shared model-store mount(s) with every declared
-# GGUF, running on the PVE host that owns the backing volume — never a
+# GGUF and optional projector file, running on the PVE host that owns the
+# backing volume — never a
 # serving guest, which never downloads models (see role README).
 #
 # The model list itself is NOT here. It lives in
@@ -12,7 +13,7 @@
 # immediately before this one, in the same play, so its defaults are already
 # in scope by the time tasks/seed_node.yml reads them.
 
-# Timeout for the HF metadata lookup and the GGUF download itself, in
+# Timeout for the HF metadata lookup and model-file downloads, in
 # seconds. Multi-gigabyte files over a home internet connection, not a CDN
 # SLA — generous on purpose.
 llm_model_store_seed_timeout: 3600
@@ -21,7 +22,7 @@ llm_model_store_seed_timeout: 3600
 # a models mount for them (e.g. a mount whose quota cannot hold the catalog).
 llm_model_store_seed_exclude_hostnames: []
 
-# File mode for a seeded GGUF. World-readable: llama-server runs as the
+# File mode for a seeded model file. World-readable: llama-server runs as the
 # guest's own service user, and this file is only ever reached read-only
 # through the fabric's ro bind mount.
 llm_model_store_seed_file_mode: "0644"

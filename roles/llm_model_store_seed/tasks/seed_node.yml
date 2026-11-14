@@ -88,7 +88,7 @@
   loop_control:
     label: "{{ item.item.item.hostname }}"
 
-- name: Seed every declared GGUF onto each resolved models-mount path
+- name: Seed every declared model file onto each resolved models-mount path
   ansible.builtin.include_tasks: seed_model.yml
   vars:
     llm_model_store_seed_target_hostname: "{{ llm_model_store_seed_pair.0.item.hostname }}"

@@ -1,6 +1,7 @@
 ---
-# Seeds one model's GGUF onto one resolved models-mount path. Included once
-# per (container, model) pair by seed_node.yml.
+# Seeds one model's GGUF and optional projector onto one resolved
+# models-mount path. Included once per (container, model) pair by
+# seed_node.yml.
 #
 # The sha256 is never a literal in this repo: it is read from HuggingFace's
 # own LFS blob metadata at run time, pinned to the model's Renovate-tracked
@@ -23,37 +24,12 @@
   # A public read-only GET; a check run needs the real sha to preview the seed.
   check_mode: false
 
-- name: "Require the pinned revision to contain {{ llm_model_store_seed_model.gguf }}"
-  ansible.builtin.assert:
-    that:
-      - llm_model_store_seed_gguf_sha256 | default('') | length > 0
-    fail_msg: >-
-      {{ llm_model_store_seed_model.hf_repo }}@{{ llm_model_store_seed_model.hf_revision }}
-      has no file named {{ llm_model_store_seed_model.gguf }} in its LFS
-      blob list. The pinned hf_revision or the gguf filename has drifted
-      from the upstream repo's current layout — fix defaults/main.yml, don't
-      guess a fallback name.
-    quiet: true
-  vars:
-    llm_model_store_seed_gguf_sha256: >-
-      {{
-        (llm_model_store_seed_hf_meta.json.siblings
-          | selectattr('rfilename', 'equalto', llm_model_store_seed_model.gguf)
-          | map(attribute='lfs.sha256') | list | first) | default('')
-      }}
+- name: Select the files declared for this model
+  ansible.builtin.include_tasks: select_model_files.yml
 
-- name: "Seed the model store with {{ llm_model_store_seed_model.gguf }}"
-  ansible.builtin.get_url:
-    url: >-
-      https://huggingface.co/{{ llm_model_store_seed_model.hf_repo }}/resolve/{{ llm_model_store_seed_model.hf_revision }}/{{ llm_model_store_seed_model.gguf }}
-    dest: "{{ llm_model_store_seed_target_path }}/{{ llm_model_store_seed_model.gguf }}"
-    checksum: >-
-      sha256:{{
-        (llm_model_store_seed_hf_meta.json.siblings
-          | selectattr('rfilename', 'equalto', llm_model_store_seed_model.gguf)
-          | map(attribute='lfs.sha256') | first)
-      }}
-    mode: "{{ llm_model_store_seed_file_mode }}"
-    owner: root
-    group: root
-    timeout: "{{ llm_model_store_seed_timeout }}"
+- name: Seed each declared model file into the flat model store
+  ansible.builtin.include_tasks: seed_file.yml
+  loop: "{{ llm_model_store_seed_files }}"
+  loop_control:
+    loop_var: llm_model_store_seed_file
+    label: "{{ llm_model_store_seed_file }}"

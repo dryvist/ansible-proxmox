@@ -1,0 +1,13 @@
+---
+- name: Build the file list from the model's declared artifacts
+  ansible.builtin.set_fact:
+    llm_model_store_seed_files: >-
+      {{
+        [llm_model_store_seed_model.gguf]
+        + (
+          [llm_model_store_seed_model.mmproj_file]
+          if llm_model_store_seed_model.mmproj_file is defined
+          else []
+        )
+      }}
+  changed_when: false

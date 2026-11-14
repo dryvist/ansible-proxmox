@@ -1,0 +1,52 @@
+name: Slow Data Contracts
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-slow-contracts:
+    name: Verify Slow Data Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up the data contract environment
+        uses: ./.github/actions/data-contract-setup
+
+      # The mount lookup must find a live `<storage>:<vol>,mp=<path>,...` value,
+      # and a surplus duplicate is removed only when it is role-named and empty.
+      - name: Verify llm_model_store_seed mount lookup and surplus removal
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_duplicate_removal.yml -i localhost, -c local
+
+      # The optional projector shares the model's pinned metadata lookup and
+      # checksum handling, while GGUF-only catalog entries still select one file.
+      - name: Verify llm_model_store_seed optional projector selection and checksum
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_optional_projector.yml -i localhost, -c local
+
+      - name: Verify HA relocation admission against sanitized API fixtures
+        run: python3 tests/pve_ha_relocation/test_preflight.py
+
+      - name: Verify the Nautobot pre-flight gate against offline fixtures
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/preflight_gate/verify.yml -i localhost, -c local
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/preflight_gate/verify_guards.yml -i localhost, -c local
+
+      - name: Verify hardware facts parsers on offline fixtures
+        run: ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp ansible-playbook tests/hardware_facts/verify.yml -i localhost, -c local
