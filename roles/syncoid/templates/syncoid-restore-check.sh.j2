@@ -1,0 +1,130 @@
+#!/bin/bash
+# syncoid restore check — prove the replica is restorable, not just present.
+# Managed by Ansible — do not edit manually.
+#
+# Replication freshness (the syncoid-replicate syslog lines) proves a copy was
+# pulled; it does not prove the copy can be mounted and read back. Run weekly
+# on the node that holds the replica:
+#
+#   1. find the newest snapshot of the replica dataset;
+#   2. zfs clone it READ-ONLY (readonly=on, canmount=noauto) and mount it at a
+#      temporary mountpoint;
+#   3. confirm the object store's bucket directory exists and is non-empty;
+#   4. ALWAYS destroy the clone — on success and on every failure path. The
+#      cleanup runs from the EXIT trap, so no exit path skips it.
+#
+# The bucket directory is checked non-empty, not a named object (see the role README).
+#
+# One syslog line per run (tag syncoid-restore-check) carries result, snapshot
+# name and snapshot age, so the existing log pipeline sees the weekly result.
+set -uo pipefail
+
+export PATH="${PATH:+$PATH:}/usr/sbin:/sbin:/usr/bin:/bin"
+
+DATASET="{{ syncoid_restore_check_dataset }}"
+BUCKET="{{ syncoid_restore_check_bucket }}"
+SEARCH_DEPTH="{{ syncoid_restore_check_search_depth }}"
+CLONE="$DATASET-restore-check"
+
+SNAP=""
+AGE_S=""
+MNT=""
+CLONE_ATTEMPTED=false
+CLONE_CREATED=false
+FAIL_REASON=""
+
+# One syslog line per run. Same guard as the replication wrapper: a logger
+# failure never changes the run's result, and the call is capped at five
+# seconds. The logger binary is a variable so a host without `logger` on the
+# pinned PATH (or the tests/ harness) can point it at a replacement.
+slog() { local prio="$1"; shift; timeout 5 {{ syncoid_restore_check_logger }} -t syncoid-restore-check -p "$prio" -- "$*" >/dev/null 2>&1 || true; }
+
+record_failure() {
+  if [ -n "$FAIL_REASON" ]; then
+    FAIL_REASON="$FAIL_REASON,$1"
+  else
+    FAIL_REASON="$1"
+  fi
+}
+
+fail() { record_failure "$1"; exit 1; }
+
+# Report success only after every cleanup step succeeds. Preserve the original
+# failure reason and append cleanup failures so a failed destroy cannot be
+# hidden by an earlier error (or by an otherwise successful read-back).
+cleanup() {
+  local exit_status=$?
+  trap - EXIT
+
+  if [ "$CLONE_ATTEMPTED" = true ]; then
+    # A failed mount can still leave a partial mount, so try to unmount every
+    # clone that was created. Always try destroy even when unmount fails.
+    if [ "$CLONE_CREATED" = true ] && ! zfs unmount "$CLONE" >/dev/null 2>&1; then
+      record_failure cleanup_unmount_failed
+    fi
+    if ! zfs destroy "$CLONE" >/dev/null 2>&1; then
+      record_failure cleanup_destroy_failed
+    fi
+  fi
+
+  if [ -n "$MNT" ] && ! rmdir "$MNT" >/dev/null 2>&1; then
+    record_failure cleanup_mountpoint_failed
+  fi
+
+  if [ -n "$FAIL_REASON" ] || [ "$exit_status" -ne 0 ]; then
+    [ -n "$FAIL_REASON" ] || FAIL_REASON=unexpected_exit
+    slog daemon.err "run dataset=$DATASET result=failed reason=$FAIL_REASON snapshot=${SNAP:-none} age_s=${AGE_S:-na}"
+    exit 1
+  fi
+
+  slog daemon.info "run dataset=$DATASET result=ok snapshot=$SNAP age_s=$AGE_S"
+  exit 0
+}
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+
+# Newest snapshot = the replication high-water mark (same idiom as the DR
+# runbook's freshness check).
+SNAP="$(zfs list -H -t snapshot -o name -s creation "$DATASET" 2>/dev/null | tail -n 1)"
+[ -n "$SNAP" ] || fail "no_snapshots"
+
+# Snapshot age in seconds for the syslog line. `-p` prints the creation
+# property as a raw epoch; fall back to parsing the date string, and to 0 if
+# even that fails (the check still reports, just with a meaningless age).
+CREATION="$(zfs list -H -p -o creation -t snapshot "$SNAP" 2>/dev/null)"
+case "$CREATION" in
+  *[!0-9]*|"") CREATION="$(LC_ALL=C date -d "$CREATION" +%s 2>/dev/null || echo 0)" ;;
+esac
+AGE_S=$(( $(date +%s) - CREATION ))
+
+# A leftover clone from a run killed before its trap ran must not block this
+# one. Force-unmount and destroy that exact clone; failure stops this run.
+if zfs list -H -o name "$CLONE" >/dev/null 2>&1; then
+  zfs destroy -f "$CLONE" >/dev/null 2>&1 || fail "stale_clone_destroy_failed"
+fi
+
+MNT="$(mktemp -d {{ syncoid_restore_check_tmp_dir }}/syncoid-restore-check.XXXXXX)" || fail "mktemp_failed"
+
+# Read-only clone: the check must be physically unable to write into (and so
+# corrupt) the replica it exists to verify. canmount=noauto keeps mount-all
+# from ever picking the clone up; it is mounted explicitly at the temporary
+# mountpoint (a clone inherits its origin's mountpoint otherwise, which
+# collides with the live replica mount).
+CLONE_ATTEMPTED=true
+if zfs clone -o readonly=on -o canmount=noauto -o mountpoint="$MNT" "$SNAP" "$CLONE"; then
+  CLONE_CREATED=true
+else
+  fail "clone_failed"
+fi
+zfs mount "$CLONE" || fail "mount_failed"
+
+# Bucket check (see header for why no named object is asserted). The bounded
+# find locates the bucket directory inside the replicated volume; the same
+# idiom with -mindepth proves it holds at least one entry without enumerating
+# a large bucket.
+BUCKET_DIR="$(find "$MNT" -maxdepth "$SEARCH_DEPTH" -type d -name "$BUCKET" -print -quit 2>/dev/null)"
+[ -n "$BUCKET_DIR" ] || fail "bucket_dir_missing"
+if [ -z "$(find "$BUCKET_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+  fail "bucket_dir_empty"
+fi

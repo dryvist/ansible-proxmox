@@ -20,8 +20,8 @@ on:
     branches: [main, develop]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -102,9 +102,11 @@ jobs:
           - 'roles/pve_disk_inventory/**'
           - 'roles/pve_health_telemetry/**'
           - 'roles/pve_host_network/**'
+          - 'tests/pve_host_network_extra/**'
           - 'roles/pve_host_systemd_units/**'
           - 'roles/pve_lxc_datastore_mount/**'
           - 'roles/pve_lxc_protected_pct_set/**'
+          - 'roles/pve_network_maintenance/**'
           - 'roles/pve_node_exporter/**'
           - 'roles/pve_proxman_operator/**'
           - 'roles/pve_quorum_guard/**'
@@ -129,7 +131,9 @@ jobs:
           - 'tests/pve_ha_replication/**'
           - 'tests/pve_health_ras/**'
           - 'tests/pve_lxc_datastore_mount/**'
+          - 'tests/pve_network_maintenance/**'
           - 'tests/pve_node_exporter/**'
+          - 'tests/syncoid/**'
           - 'tests/pve_upgrade_cross_vendor/**'
           - 'tests/test_assert_conditionals.py'
           - 'tests/test_benchmark_client_image_contract.py'
@@ -349,6 +353,7 @@ jobs:
     name: Merge Gate
     needs: [ci, changes, data-contract, role-contracts, static-contracts, molecule, agent-platform-conformance]
     if: ${{ always() && !cancelled() }}
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Check all results

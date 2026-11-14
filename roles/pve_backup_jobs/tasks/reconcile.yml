@@ -43,6 +43,7 @@
            '--enabled', pve_backup_jobs_desired.enabled,
            '--mode', pve_backup_jobs_desired.mode,
            '--compress', pve_backup_jobs_desired.compress,
+           '--pbs-change-detection-mode', pve_backup_jobs_desired.pbs_change_detection_mode,
            '--comment', pve_backup_jobs_desired.comment,
            '--prune-backups', item.prune | default(pve_backup_jobs_default_prune)]
         + (((pve_backup_jobs_desired.exclude | length) > 0)
@@ -68,6 +69,9 @@
       enabled: "{{ (item.enabled | default(false) | bool) | ternary('1', '0') }}"
       mode: "{{ item.mode | default(pve_backup_jobs_default_mode) }}"
       compress: "{{ item.compress | default(pve_backup_jobs_default_compress) }}"
+      pbs_change_detection_mode: >-
+        {{ item.pbs_change_detection_mode
+           | default(pve_backup_jobs_default_pbs_change_detection_mode) }}
       comment: "{{ item.comment | default('') }}"
       vmid: >-
         {{ item.names | default([])
@@ -100,6 +104,9 @@
       enabled: "{{ (pve_backup_jobs_found.enabled | default(0, true) | bool) | ternary('1', '0') }}"
       mode: "{{ pve_backup_jobs_found.mode | default('', true) | string }}"
       compress: "{{ pve_backup_jobs_found.compress | default('', true) | string }}"
+      pbs_change_detection_mode: >-
+        {{ pve_backup_jobs_found['pbs-change-detection-mode']
+           | default('', true) | string }}
       comment: "{{ pve_backup_jobs_found.comment | default('', true) | string }}"
       vmid: >-
         {{ pve_backup_jobs_found.vmid | default('', true) | string

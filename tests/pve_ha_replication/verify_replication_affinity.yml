@@ -1,0 +1,191 @@
+---
+# Pin pve_ha's replication-affinity verification without a live cluster: feed
+# fixtures shaped like `ha-manager rules config --output-format json`,
+# `pvesh get /cluster/replication --output-format json`, and
+# `pvesh get /cluster/ha/resources --output-format json` and INCLUDE the real
+# roles/pve_ha/tasks/verify_replication_affinity.yml (rather than restating
+# its logic), so a drift in the role fails here instead of passing against a
+# stale copy.
+# Run: ansible-playbook tests/pve_ha_replication/verify_replication_affinity.yml -i localhost,
+#
+# Placeholder node names only (node-a/node-b/node-c): guest ct:605000 runs on
+# node-b with a job to node-a, guest vm:110130 runs on node-c with a job to
+# node-b.
+- name: Verify pve_ha replication-affinity mismatch detection
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  tasks:
+    # --- Good: each guest's strict rule names exactly its source node plus
+    # its replication target. Must pass with zero mismatches.
+    - name: Include the real verification against matching rules
+      vars:
+        pve_ha_verify_rules:
+          - rule: apps-replication-nodes
+            type: node-affinity
+            resources: "ct:605000"
+            nodes: "node-a,node-b"
+            strict: 1
+          - rule: apps-replication-nodes-vm-110130
+            type: node-affinity
+            resources: "vm:110130"
+            nodes: "node-b,node-c"
+            strict: 1
+        pve_ha_verify_jobs:
+          - id: "605000-0"
+            guest: 605000 # a number on purpose - live output type varies
+            target: node-a
+            source: node-b
+          - id: "110130-0"
+            guest: "110130" # a string on purpose - the task normalizes both
+            target: node-b
+            source: node-c
+        pve_ha_verify_resources:
+          - sid: "ct:605000"
+          - sid: "vm:110130"
+        pve_ha_verify_guest_nodes:
+          "605000": node-b
+          "110130": node-c
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/verify_replication_affinity.yml
+
+    - name: Assert the matching cluster reports no mismatches
+      ansible.builtin.assert:
+        that:
+          - pve_ha_verify_mismatches == []
+        fail_msg: >-
+          a cluster whose rules match source + target was reported as
+          mismatching: {{ pve_ha_verify_mismatches }}
+        success_msg: >-
+          exact source + target rules pass, and a job with a numeric guest id
+          matches its resource sid.
+
+    # --- Good, divergent placement: the job names source node-b while the
+    # placement map still says node-c (HA moved the guest and the map is
+    # stale). The job's source wins, so the expected set stays
+    # {node-a,node-b} and a matching rule passes instead of failing on a
+    # false third node.
+    - name: Include the real verification where the job source differs from the placement map
+      vars:
+        pve_ha_verify_rules:
+          - rule: apps-replication-nodes
+            type: node-affinity
+            resources: "ct:605000"
+            nodes: "node-a,node-b"
+            strict: 1
+        pve_ha_verify_jobs:
+          - id: "605000-0"
+            guest: 605000
+            target: node-a
+            source: node-b
+        pve_ha_verify_resources:
+          - sid: "ct:605000"
+        pve_ha_verify_guest_nodes:
+          "605000": node-c
+      ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/verify_replication_affinity.yml
+
+    - name: Assert the job source wins over a stale placement entry
+      ansible.builtin.assert:
+        that:
+          - pve_ha_verify_mismatches == []
+        fail_msg: >-
+          a job whose source disagrees with the placement map was reported
+          as mismatching: {{ pve_ha_verify_mismatches }}
+        success_msg: >-
+          the job's source is used and the stale placement entry adds no
+          third node.
+
+    # --- Over-broad: ONE strict rule holds BOTH sids and names node-c, where
+    # neither guest keeps a replica. Must fail naming both sids.
+    - name: Catch a strict rule naming a node with no replica
+      block:
+        - name: Include the real verification against an over-broad strict rule
+          vars:
+            pve_ha_verify_rules:
+              - rule: apps-replication-nodes
+                type: node-affinity
+                resources: "ct:605000,vm:110130"
+                nodes: "node-a,node-b,node-c"
+                strict: 1
+            pve_ha_verify_jobs:
+              - id: "605000-0"
+                guest: 605000
+                target: node-a
+                source: node-b
+              - id: "110130-0"
+                guest: "110130"
+                target: node-b
+                source: node-c
+            pve_ha_verify_resources:
+              - sid: "ct:605000"
+              - sid: "vm:110130"
+            pve_ha_verify_guest_nodes:
+              "605000": node-b
+              "110130": node-c
+          ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/verify_replication_affinity.yml
+
+        - name: Fail the test because the over-broad rule passed verification
+          ansible.builtin.fail:
+            msg: >-
+              the verification PASSED with a strict rule naming node-c, where
+              neither replicated guest keeps a replica
+
+      rescue:
+        - name: Assert the verification failed naming both replicated sids
+          vars:
+            verify_msg: "{{ ansible_failed_result.msg | default('') }}"
+          ansible.builtin.assert:
+            that:
+              - "'ct:605000' in verify_msg"
+              - "'vm:110130' in verify_msg"
+            fail_msg: >-
+              the verification failure does not name both replicated sids:
+              {{ verify_msg }}
+
+    # --- Missing rule: the guests keep jobs but ONLY a resource-affinity rule
+    # exists (a negative placement constraint says nothing about nodes, so it
+    # must be ignored, not counted as coverage). Must fail naming both sids.
+    - name: Catch a replicated guest with no strict node-affinity rule
+      block:
+        - name: Include the real verification with only a resource-affinity rule
+          vars:
+            pve_ha_verify_rules:
+              - rule: app-pair
+                type: resource-affinity
+                resources: "ct:605000,vm:110130"
+                affinity: negative
+            pve_ha_verify_jobs:
+              - id: "605000-0"
+                guest: 605000
+                target: node-a
+                source: node-b
+              - id: "110130-0"
+                guest: "110130"
+                target: node-b
+                source: node-c
+            pve_ha_verify_resources:
+              - sid: "ct:605000"
+              - sid: "vm:110130"
+            pve_ha_verify_guest_nodes:
+              "605000": node-b
+              "110130": node-c
+          ansible.builtin.include_tasks: ../../roles/pve_ha/tasks/verify_replication_affinity.yml
+
+        - name: Fail the test because the missing strict rule passed verification
+          ansible.builtin.fail:
+            msg: >-
+              the verification PASSED with no strict node-affinity rule for
+              guests that keep replication jobs
+
+      rescue:
+        - name: Assert the verification failed naming both replicated sids
+          vars:
+            verify_msg: "{{ ansible_failed_result.msg | default('') }}"
+          ansible.builtin.assert:
+            that:
+              - "'ct:605000' in verify_msg"
+              - "'vm:110130' in verify_msg"
+              - "'no enabled strict node-affinity rule' in verify_msg"
+            fail_msg: >-
+              the verification failure does not name both replicated sids:
+              {{ verify_msg }}

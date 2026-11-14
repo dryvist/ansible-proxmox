@@ -1,0 +1,40 @@
+---
+- name: Refuse to generate the root-pool jobs when the published inventory is not loaded
+  hosts: proxmox
+  connection: local
+  become: false
+  gather_facts: false
+
+  # Play vars outrank host_vars, so shadowing the loader-injected guest maps
+  # makes the generated expression evaluate exactly as it would in a run whose
+  # --limit excluded localhost (and with it load_tofu.yml). The expression must
+  # fail loudly rather than render jobs that guess a dataset path.
+  vars:
+    containers_from_tofu: "{{ undef() }}"
+    vms_from_tofu: "{{ undef() }}"
+
+  tasks:
+    - name: Evaluate the generated root-pool jobs with the published inventory unset
+      when: inventory_hostname == hostvars['localhost'].tofu_data.proxmox_node
+      block:
+        - name: Evaluate syncoid_rootpool_jobs_json
+          ansible.builtin.set_fact:
+            rootpool_unset_eval: "{{ syncoid_rootpool_jobs_json }}"
+
+        - name: Fail because the expression evaluated without the published inventory
+          ansible.builtin.fail:
+            msg: >-
+              syncoid_rootpool_jobs_json rendered {{ rootpool_unset_eval | length }}
+              jobs with containers_from_tofu and vms_from_tofu unset; it must
+              refuse to guess dataset paths.
+
+      rescue:
+        - name: Assert the refusal is the published-inventory mandatory
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Evaluate syncoid_rootpool_jobs_json'
+              - "'containers_from_tofu is unset' in ansible_failed_result.msg"
+            fail_msg: >-
+              The generated expression failed in an unexpected way.
+              Task: {{ ansible_failed_task.name }}.
+              Result: {{ ansible_failed_result.msg | default(ansible_failed_result) }}

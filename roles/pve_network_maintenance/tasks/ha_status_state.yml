@@ -1,0 +1,13 @@
+---
+# Classify ha-manager status text into fencing-state booleans. Pure logic, no
+# reads or commands, so the fixture test (tests/pve_network_maintenance)
+# includes it with pve_network_maintenance_ha_status_text set.
+
+- name: Classify the fencing and LRM state from HA manager status text
+  ansible.builtin.set_fact:
+    pve_network_maintenance_ha_disarmed: >-
+      {{ pve_network_maintenance_ha_status_text is search(pve_network_maintenance_fencing_disarmed_pattern) }}
+    pve_network_maintenance_ha_armed: >-
+      {{ pve_network_maintenance_ha_status_text is search(pve_network_maintenance_fencing_armed_pattern) }}
+    pve_network_maintenance_ha_lrms_idle: >-
+      {{ pve_network_maintenance_ha_lrms_idle_condition }}

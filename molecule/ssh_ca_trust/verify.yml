@@ -23,6 +23,9 @@
 #    guest-sourced-principal regression, and the cert-only-reload
 #    regression) lives in verify_host_cert.yml, included below — split out
 #    to keep this file under the repo's per-file token budget.
+# 8. The pct push against a stubbed pct (NixOS PATH-providing exec form, the
+#    drop-in skip, and the unchanged Debian command stream) lives in
+#    verify_lxc_push.yml, imported below.
 
 - name: Verify
   hosts: all
@@ -134,3 +137,6 @@
 
     - name: QEMU VM trust task structural coverage
       ansible.builtin.include_tasks: tasks/verify_vm.yml
+
+- name: PCT push coverage (NixOS PATH form, drop-in skip, Debian stream unchanged)
+  ansible.builtin.import_playbook: verify_lxc_push.yml

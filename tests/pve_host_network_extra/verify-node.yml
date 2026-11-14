@@ -1,0 +1,48 @@
+---
+# Included once per fixture node. The un-named include_vars loads this node's
+# host_vars into the play scope the template lookup renders from, so load,
+# render, and assert must stay in this order before the next iteration's load
+# replaces the variables.
+- name: Load the node's host_vars directory
+  ansible.builtin.include_vars:
+    dir: "{{ pve_extra_host_vars_root }}/{{ pve_extra_node.key }}"
+  when: (pve_extra_host_vars_root ~ '/' ~ pve_extra_node.key) is directory
+
+- name: Load the node's host_vars file
+  ansible.builtin.include_vars:
+    file: "{{ pve_extra_host_vars_root }}/{{ pve_extra_node.key }}.yml"
+  when: not ((pve_extra_host_vars_root ~ '/' ~ pve_extra_node.key) is directory)
+
+- name: Render the extra interfaces template with the loaded vars
+  ansible.builtin.set_fact:
+    pve_extra_rendered: "{{ lookup('ansible.builtin.template', pve_extra_template_path) }}"
+
+- name: Assert the node declares exactly the expected interfaces
+  ansible.builtin.assert:
+    that:
+      - pve_host_network_extra_interfaces == pve_extra_node.value
+    fail_msg: >-
+      {{ pve_extra_node.key }} does not declare exactly the expected extra
+      interfaces; got {{ pve_host_network_extra_interfaces | default(none) }}.
+    success_msg: >-
+      PASS: {{ pve_extra_node.key }} declares
+      {{ pve_host_network_extra_interfaces | map(attribute='name') | join(', ') }}.
+
+# The contiguous rendered block binds the interface name to its address, so a
+# swapped or dropped entry fails here even though both strings appear.
+- name: Assert each declared interface renders with its own address
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('auto ' ~ pve_extra_iface.name ~ '\niface ' ~ pve_extra_iface.name
+        ~ ' inet static\n    address ' ~ pve_extra_iface.address)
+        in pve_extra_rendered
+    fail_msg: >-
+      The rendered interfaces file does not pair {{ pve_extra_iface.name }}
+      with {{ pve_extra_iface.address }}; got {{ pve_extra_rendered }}.
+    success_msg: >-
+      PASS: {{ pve_extra_node.key }} renders {{ pve_extra_iface.name }} with
+      {{ pve_extra_iface.address }}.
+  loop: "{{ pve_extra_node.value }}"
+  loop_control:
+    loop_var: pve_extra_iface

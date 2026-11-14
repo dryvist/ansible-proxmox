@@ -12,6 +12,10 @@
   vars:
     zfs_replication_jobs: []
     zfs_replication_target_host: ""
+    zfs_replication_vzdump_enabled: true
+    # Example fixture values exercise configuration rendering without using a
+    # deployment bucket or contacting an S3 service.
+    zfs_replication_vzdump_s3_endpoint: "https://s3.example.invalid"
 
   roles:
     - role: zfs_replication

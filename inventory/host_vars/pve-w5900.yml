@@ -26,6 +26,11 @@ wol_enable_mac: "{{ pve_host_network_uplink_mac }}"
 pve_host_network_uplink: nic0
 pve_host_network_uplink_mac: "10:ff:e0:c4:32:db"
 
+pve_host_network_extra_interfaces:
+  - name: "{{ pve_host_network_corosync_link1_interface }}"
+    address: "{{ pve_host_network_corosync_link1_address }}"
+    comment: corosync link1 (dedicated switch)
+
 # One of two nodes in the estate with an NVIDIA card (pve-w1700 is the
 # other, since 2026-10 — the RTX 4080 SUPER moved off this node to there).
 # This node is being rebuilt to take an RTX PRO 6000 Blackwell instead.

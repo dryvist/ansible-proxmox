@@ -5,7 +5,7 @@
 # profile composes the base hygiene hooks (file checks, markdownlint,
 # zizmor, treefmt, deadnix, statix, gitleaks-via-base-once-added) with
 # ansible-lint and yamllint, both reading canonical configs from
-# JacobPEvans/.github via nix-devenv.lib.fetch-shared-configs.
+# Shared GitHub configuration is fetched by nix-devenv.lib.fetch-shared-configs.
 #
 # Per-repo overrides kept inline below.
 {

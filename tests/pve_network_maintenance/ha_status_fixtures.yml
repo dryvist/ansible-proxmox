@@ -1,0 +1,21 @@
+---
+# The disarmed and armed ha-manager status texts, written once so the stubbed
+# cluster and the status matcher test read the same cluster: stub_fixtures.yml
+# writes them into the stub directory for the ha-manager stub to serve, and
+# verify_status_matchers.yml feeds them through the role's
+# ha_status_state.yml classification. The texts pin PVE 9.2 wording, like the
+# role's matcher defaults.
+pve_network_maintenance_ha_status_fixture_armed: |
+  quorum OK
+  master node-a (active, Thu Nov 12 09:00:00 2026)
+  lrm node-a (active, armed, Thu Nov 12 09:00:00 2026)
+  lrm node-b (active, armed, Thu Nov 12 09:00:00 2026)
+  fencing armed
+  service vm:100 (node-a, started)
+pve_network_maintenance_ha_status_fixture_disarmed: |
+  quorum OK
+  master node-a (standby, Thu Nov 12 08:01:00 2026)
+  lrm node-a (idle, released, Thu Nov 12 08:01:00 2026)
+  lrm node-b (idle, released, Thu Nov 12 08:01:00 2026)
+  fencing disarmed
+  service vm:100 (node-a, started)

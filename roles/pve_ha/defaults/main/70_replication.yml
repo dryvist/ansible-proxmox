@@ -1,11 +1,12 @@
 ---
-# pvesr schedule (systemd-calendar subset) and optional rate limit (MB/s; empty
-# = unlimited). */5 matches the jobs already running; the app guests' real data-loss
+# pvesr schedule (systemd-calendar subset). */5 matches the jobs already running; the app guests' real data-loss
 # window is covered separately (postgres-apps by streaming replication + WAL
 # archiving, the others are near-stateless), so this is a relocation-enabler,
 # not the primary durability layer.
 pve_ha_replication_schedule: "*/5"
-pve_ha_replication_rate: ""
+# per-job pvesr rate limit in MB/s, applied when the role creates a replication job; set per environment in
+# inventory; empty means unlimited.
+pve_ha_replication_rate: 50
 
 # Per-job override keyed by the guest key in the published inventory.
 # Unlisted guests are enabled; false keeps the pvesr job present but inactive.
@@ -27,3 +28,9 @@ pve_ha_replication_jobnum: 0
 # the listed nodes, so a relocation onto a replica-less node can't happen and
 # then start-fail/flap.
 pve_ha_replication_affinity_rule: apps-replication-nodes
+
+# Post-reconcile read-back (tasks/verify_replication_affinity.yml): after the
+# jobs and rules reconcile, re-read the live cluster and fail the play when an
+# HA resource with an enabled pvesr job is not covered by strict node-affinity
+# rules naming exactly its source node plus its replication targets.
+pve_ha_verify_replication_affinity: true

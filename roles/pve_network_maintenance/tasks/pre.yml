@@ -1,0 +1,258 @@
+---
+# Open the maintenance window: assert the cluster is healthy, pause the
+# enabled vzdump jobs, wait for running backup and replication tasks to
+# finish, then disarm HA with the freeze disarm. Every read and command is
+# cluster-wide and runs on the config host. Check mode performs the reads and
+# previews the writes only.
+
+- name: Read the cluster status
+  ansible.builtin.command:
+    argv: [pvesh, get, /cluster/status, --output-format, json]
+  register: pve_network_maintenance_cluster_raw
+  changed_when: false
+  check_mode: false
+
+- name: Carry the cluster status into the classification input
+  ansible.builtin.set_fact:
+    pve_network_maintenance_cluster_status_text: "{{ pve_network_maintenance_cluster_raw.stdout }}"
+
+- name: Resolve cluster quorum, node health, and membership
+  ansible.builtin.include_tasks: cluster_state.yml
+
+- name: Refuse to open the window unless the cluster is quorate with every node online
+  ansible.builtin.assert:
+    that:
+      - "pve_network_maintenance_cluster_quorate"
+      - "pve_network_maintenance_cluster_nodes_online"
+    fail_msg: >-
+      The cluster is not ready to open a maintenance window: quorate={{
+      pve_network_maintenance_cluster_quorate }}, every node online={{
+      pve_network_maintenance_cluster_nodes_online }}.
+    quiet: true
+
+- name: Read the current HA service states
+  ansible.builtin.command:
+    argv: [pvesh, get, /cluster/ha/status/current, --output-format, json]
+  register: pve_network_maintenance_ha_state_raw
+  changed_when: false
+  check_mode: false
+
+- name: Refuse to open the window while an HA resource is fenced, recovering, or in error
+  # The vendor disarm is deferred while services are being fenced, recovered,
+  # or migrated, so such a resource would leave the window in an
+  # undetermined state.
+  ansible.builtin.assert:
+    that:
+      - "pve_network_maintenance_blocked_sids | length == 0"
+    fail_msg: >-
+      HA resources are mid-failover or in error; the disarm waits until they
+      settle: {{ pve_network_maintenance_blocked_sids }}.
+    quiet: true
+  vars:
+    pve_network_maintenance_blocked_sids: >-
+      {{ ((pve_network_maintenance_ha_state_raw.stdout | default('{}', true) | from_json)
+          .resources | default([], true)
+          | selectattr('state', 'in', pve_network_maintenance_blocked_ha_states)
+          | map(attribute='sid') | list) }}
+
+- name: Open the backup pause and disarm HA
+  block:
+    - name: Read the current backup jobs
+      ansible.builtin.command:
+        argv: [pvesh, get, /cluster/backup, --output-format, json]
+      register: pve_network_maintenance_backup_jobs_raw
+      changed_when: false
+      check_mode: false
+
+    - name: Read a pause record from a previous pre phase
+      ansible.builtin.include_tasks: read-pause-record.yml
+      vars:
+        pve_network_maintenance_pause_record_fact: pve_network_maintenance_recorded_job_ids
+
+    - name: Select the enabled backup jobs
+      ansible.builtin.include_tasks: select_backup_jobs.yml
+      vars:
+        pve_network_maintenance_backup_job_enabled_values: ["1", "true", "yes"]
+        pve_network_maintenance_backup_job_selection_fact: pve_network_maintenance_enabled_job_ids
+
+    - name: Merge the newly paused jobs into the recorded set
+      ansible.builtin.set_fact:
+        pve_network_maintenance_pause_job_ids: >-
+          {{ (pve_network_maintenance_recorded_job_ids
+              + pve_network_maintenance_enabled_job_ids) | unique | sort }}
+
+    - name: Create the state directory
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_state_dir }}"
+        state: directory
+        mode: "0700"
+        owner: "{{ pve_network_maintenance_state_owner }}"
+        group: "{{ pve_network_maintenance_state_group }}"
+
+    - name: Record the paused backup jobs in the state file
+      ansible.builtin.copy:
+        content: >-
+          {{ {'enabled_job_ids': pve_network_maintenance_pause_job_ids} | to_nice_json }}
+        dest: "{{ pve_network_maintenance_state_file }}"
+        mode: "0600"
+        owner: "{{ pve_network_maintenance_state_owner }}"
+        group: "{{ pve_network_maintenance_state_group }}"
+
+    - name: Disable the enabled backup jobs
+      ansible.builtin.command:
+        argv: [pvesh, set, "/cluster/backup/{{ item }}", --enabled, "0"]
+      loop: "{{ pve_network_maintenance_enabled_job_ids }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: true
+
+    - name: Wait until no backup or replication task is running on each node
+      ansible.builtin.command:
+        argv: [pvesh, get, "/nodes/{{ item }}/tasks", --source, active, --output-format, json]
+      register: pve_network_maintenance_drain_raw
+      until:
+        - >-
+          pve_network_maintenance_drain_raw.stdout | default('', true) | length > 0
+          and ((pve_network_maintenance_drain_raw.stdout | from_json
+                | selectattr('type', 'in', pve_network_maintenance_drain_task_types)
+                | list) | length) == 0
+      retries: "{{ pve_network_maintenance_drain_timeout | int // pve_network_maintenance_drain_delay | int }}"
+      delay: "{{ pve_network_maintenance_drain_delay }}"
+      loop: "{{ pve_network_maintenance_cluster_nodes }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+      check_mode: false
+      when: not ansible_check_mode
+
+    - name: Wait until no replication job reports an active process on each node
+      ansible.builtin.command:
+        argv: [pvesh, get, "/nodes/{{ item }}/replication", --output-format, json]
+      register: pve_network_maintenance_replication_drain_raw
+      until:
+        - >-
+          pve_network_maintenance_replication_drain_raw.stdout | default('', true) | length > 0
+          and ((pve_network_maintenance_replication_drain_raw.stdout | from_json
+                | selectattr('pid', 'defined') | rejectattr('pid', 'none')
+                | list) | length) == 0
+      retries: "{{ pve_network_maintenance_drain_timeout | int // pve_network_maintenance_drain_delay | int }}"
+      delay: "{{ pve_network_maintenance_drain_delay }}"
+      loop: "{{ pve_network_maintenance_cluster_nodes }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+      check_mode: false
+      when: not ansible_check_mode
+  rescue:
+    - name: Re-enable the backup jobs this run paused
+      # The merged record may hold jobs an earlier pre phase paused; those
+      # stay paused, so a re-run timeout cannot resume backups in an open
+      # window.
+      ansible.builtin.command:
+        argv: [pvesh, set, "/cluster/backup/{{ item }}", --enabled, "1"]
+      loop: "{{ pve_network_maintenance_enabled_job_ids | default([]) }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: true
+      when: not ansible_check_mode
+
+    - name: Restore the pause record left by a previous pre phase
+      # Rewinds the merged record to what was on disk before this run, so the
+      # record names only the jobs still disabled.
+      ansible.builtin.copy:
+        content: >-
+          {{ {'enabled_job_ids': pve_network_maintenance_recorded_job_ids} | to_nice_json }}
+        dest: "{{ pve_network_maintenance_state_file }}"
+        mode: "0600"
+        owner: "{{ pve_network_maintenance_state_owner }}"
+        group: "{{ pve_network_maintenance_state_group }}"
+      when:
+        - not ansible_check_mode
+        - pve_network_maintenance_state_stat.stat is defined
+        - pve_network_maintenance_state_stat.stat.exists
+        - pve_network_maintenance_state_raw.content is defined
+
+    - name: Remove the pause record this run wrote
+      # Only reached when no previous record existed; a file here can only be
+      # the one this run wrote, and removing a missing file is a no-op.
+      ansible.builtin.file:
+        path: "{{ pve_network_maintenance_state_file }}"
+        state: absent
+      when:
+        - not ansible_check_mode
+        - pve_network_maintenance_state_stat.stat is defined
+        - not pve_network_maintenance_state_stat.stat.exists
+
+    - name: Fail the run because the backup tasks did not drain in time
+      ansible.builtin.fail:
+        msg: >-
+          Backup and replication tasks did not finish within
+          {{ pve_network_maintenance_drain_timeout }} seconds; the backup
+          jobs this run paused were re-enabled and the pause record rewound,
+          leaving the window exactly as this run found it.
+
+- name: Read the HA manager status before disarming
+  ansible.builtin.command:
+    argv: [ha-manager, status]
+  register: pve_network_maintenance_ha_status_raw
+  changed_when: false
+  check_mode: false
+
+- name: Classify the fencing and LRM state from HA manager status text
+  ansible.builtin.include_tasks: ha_status_state.yml
+  vars:
+    pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_ha_status_raw.stdout }}"
+
+- name: Disarm HA with a freeze disarm
+  ansible.builtin.command:
+    argv: [ha-manager, crm-command, disarm-ha, freeze]
+  # Re-entry: a cluster that already reports disarmed needs no second command.
+  when:
+    - not ansible_check_mode
+    - not (pve_network_maintenance_ha_disarmed | bool)
+  changed_when: true
+
+- name: Wait until HA reports disarmed with every LRM released
+  ansible.builtin.command:
+    argv: [ha-manager, status]
+  register: pve_network_maintenance_disarm_status_raw
+  until:
+    - >-
+      pve_network_maintenance_disarm_status_raw.stdout is search(pve_network_maintenance_fencing_disarmed_pattern)
+    - >-
+      pve_network_maintenance_ha_lrms_idle_condition | bool
+  retries: "{{ pve_network_maintenance_disarm_timeout | int // pve_network_maintenance_disarm_delay | int }}"
+  delay: "{{ pve_network_maintenance_disarm_delay }}"
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+  vars:
+    pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_disarm_status_raw.stdout }}"
+
+- name: Confirm the disarmed fencing state after the wait
+  when: not ansible_check_mode
+  block:
+    - name: Classify the fencing state from the waited HA manager status
+      ansible.builtin.include_tasks: ha_status_state.yml
+      vars:
+        pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_disarm_status_raw.stdout }}"
+
+    - name: Refuse to report an open window on anything but a fully disarmed cluster
+      ansible.builtin.assert:
+        that:
+          - "pve_network_maintenance_ha_disarmed | bool"
+          - "pve_network_maintenance_ha_lrms_idle | bool"
+        fail_msg: >-
+          HA did not report a fully disarmed cluster within
+          {{ pve_network_maintenance_disarm_timeout }} seconds.
+        quiet: true
+
+- name: Report the open maintenance window
+  ansible.builtin.debug:
+    msg: "network maintenance window open: HA disarmed (freeze), backups paused"
+  when: not ansible_check_mode
+
+- name: Report the maintenance preview
+  ansible.builtin.debug:
+    msg: "check mode only: no maintenance changes applied; existing window state unchanged"
+  when: ansible_check_mode

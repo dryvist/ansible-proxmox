@@ -10,4 +10,5 @@
       - ifup
       - "{{ item.name }}"
   loop: "{{ pve_host_network_extra_interfaces }}"
+  when: item.name | default('', true) | trim | length > 0
   changed_when: false

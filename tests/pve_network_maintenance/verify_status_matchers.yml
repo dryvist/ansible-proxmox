@@ -1,0 +1,107 @@
+---
+# Pin the ha-manager status matchers the disarm and arm waits run on. The
+# role's own classification task file is included against fixture status
+# texts, so a matcher that stops detecting disarmed or armed fails here
+# rather than during a maintenance window. The disarmed and armed texts come
+# from ha_status_fixtures.yml, the file stub_fixtures.yml writes for the
+# stubs; the disarming and standby texts have no stub fixture and live only
+# here.
+# Run: ansible-playbook tests/pve_network_maintenance/verify_status_matchers.yml -i localhost, -c local
+- name: Verify the ha-manager status matchers
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars_files:
+    - ha_status_fixtures.yml
+  vars:
+    pve_cluster_primary_host: localhost
+
+  tasks:
+    - name: Classify the disarmed fixture text
+      ansible.builtin.include_role:
+        name: pve_network_maintenance
+        tasks_from: ha_status_state.yml
+      vars:
+        pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_ha_status_fixture_disarmed }}"
+
+    - name: Assert the disarmed fixture reads as disarmed and idle
+      ansible.builtin.assert:
+        that:
+          - "pve_network_maintenance_ha_disarmed | bool"
+          - "not (pve_network_maintenance_ha_armed | bool)"
+          - "pve_network_maintenance_ha_lrms_idle | bool"
+        fail_msg: >-
+          disarmed={{ pve_network_maintenance_ha_disarmed }},
+          armed={{ pve_network_maintenance_ha_armed }},
+          lrms_idle={{ pve_network_maintenance_ha_lrms_idle }}
+        success_msg: "PASS: matcher detects disarmed with every LRM released"
+        quiet: false
+
+    - name: Classify the armed fixture text
+      ansible.builtin.include_role:
+        name: pve_network_maintenance
+        tasks_from: ha_status_state.yml
+      vars:
+        pve_network_maintenance_ha_status_text: "{{ pve_network_maintenance_ha_status_fixture_armed }}"
+
+    - name: Assert the armed fixture reads as armed with busy LRMs
+      ansible.builtin.assert:
+        that:
+          - "pve_network_maintenance_ha_armed | bool"
+          - "not (pve_network_maintenance_ha_disarmed | bool)"
+          - "not (pve_network_maintenance_ha_lrms_idle | bool)"
+        fail_msg: >-
+          disarmed={{ pve_network_maintenance_ha_disarmed }},
+          armed={{ pve_network_maintenance_ha_armed }},
+          lrms_idle={{ pve_network_maintenance_ha_lrms_idle }}
+        success_msg: "PASS: matcher detects armed and distinguishes it from disarmed"
+        quiet: false
+
+    - name: Classify a half-disarmed fixture text
+      ansible.builtin.include_role:
+        name: pve_network_maintenance
+        tasks_from: ha_status_state.yml
+      vars:
+        pve_network_maintenance_ha_status_text: |
+          quorum OK
+          master node-a (standby, Thu Nov 12 08:00:30 2026)
+          lrm node-a (idle, released, Thu Nov 12 08:00:30 2026)
+          lrm node-b (active, armed, Thu Nov 12 08:00:30 2026)
+          fencing disarming
+          service vm:100 (node-a, started)
+
+    - name: Assert the disarming fixture reads as neither disarmed nor idle
+      ansible.builtin.assert:
+        that:
+          - "not (pve_network_maintenance_ha_disarmed | bool)"
+          - "not (pve_network_maintenance_ha_armed | bool)"
+          - "not (pve_network_maintenance_ha_lrms_idle | bool)"
+        fail_msg: >-
+          disarmed={{ pve_network_maintenance_ha_disarmed }},
+          armed={{ pve_network_maintenance_ha_armed }},
+          lrms_idle={{ pve_network_maintenance_ha_lrms_idle }}
+        success_msg: "PASS: matcher keeps the disarming transition window closed"
+        quiet: false
+
+    - name: Classify the standby fixture text
+      ansible.builtin.include_role:
+        name: pve_network_maintenance
+        tasks_from: ha_status_state.yml
+      vars:
+        pve_network_maintenance_ha_status_text: |
+          quorum OK
+          master (standby, Thu Nov 12 08:00:00 2026)
+          fencing standby
+
+    - name: Assert the standby fixture reads as neither armed nor disarmed
+      ansible.builtin.assert:
+        that:
+          - "not (pve_network_maintenance_ha_armed | bool)"
+          - "not (pve_network_maintenance_ha_disarmed | bool)"
+          - "pve_network_maintenance_ha_lrms_idle | bool"
+        fail_msg: >-
+          disarmed={{ pve_network_maintenance_ha_disarmed }},
+          armed={{ pve_network_maintenance_ha_armed }},
+          lrms_idle={{ pve_network_maintenance_ha_lrms_idle }}
+        success_msg: "PASS: matcher reads standby as neither armed nor disarmed"
+        quiet: false

@@ -1,0 +1,22 @@
+---
+# PVE network maintenance role metadata
+
+galaxy_info:
+  role_name: pve_network_maintenance
+  author: ansible-proxmox
+  description: Disarm and re-arm Proxmox VE HA and pause/resume vzdump backup jobs around a maintenance window
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - maintenance
+    - ha
+
+dependencies: []

@@ -1,4 +1,7 @@
 ---
+- name: Verify restore-check behavior with the stub harness
+  ansible.builtin.import_playbook: verify_restore_check.yml
+
 - name: Verify
   hosts: all
   become: false

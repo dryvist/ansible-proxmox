@@ -7,7 +7,9 @@
 # the SAME decision template tasks/host_cert.yml and this role's tests
 # render, sign on the CONTROLLER (never inside the container), then push the
 # signed cert back in — BEFORE lxc.yml's drop-in write, which adds the
-# HostCertificate line, `sshd -t -f` validates, then reloads.
+# HostCertificate line, `sshd -t -f` validates, then reloads (on a NixOS
+# container there is no drop-in; the Nix-generated sshd_config declares the
+# HostCertificate path this file installs).
 #
 # SECURITY: the principal a signed cert is issued for MUST come from data
 # the controller/PVE node controls, never from inside the guest — otherwise
@@ -19,16 +21,27 @@
 # report its hostname, which it fully controls. Only the
 # PUBLIC KEY is read from the guest below (safe: the cert still binds that
 # key to the principal WE chose, never one the guest chose).
+#
+# Like the push task, every in-guest command goes through the per-container
+# exec prefix built here: a NixOS container (`ostype: nixos` map from
+# tasks/lxc.yml) needs the current-system PATH, Debian keeps the bare form.
 - name: Probe each running container's host key and existing host certificate
   ansible.builtin.shell:
     executable: /bin/bash
     cmd: |
       set -o pipefail
-      pubkey=$(pct exec {{ item }} -- cat /etc/ssh/ssh_host_ed25519_key.pub)
+      {% set nixos = ssh_ca_trust_lxc_nixos[item | string] | default(false) %}
+      {% set fp_files = ssh_ca_trust_lxc_fingerprint_files_nixos if nixos else ssh_ca_trust_fingerprint_files %}
+      {% if nixos %}
+      gx=(pct exec {{ item }} -- /run/current-system/sw/bin/env PATH=/run/current-system/sw/bin)
+      {% else %}
+      gx=(pct exec {{ item }} --)
+      {% endif %}
+      pubkey=$("${gx[@]}" cat /etc/ssh/ssh_host_ed25519_key.pub)
       hostname=$(pct config {{ item }} | awk -F': ' '$1=="hostname"{print $2}')
       hostname="${hostname:-CT{{ item }}}"
-      if pct exec {{ item }} -- test -f {{ ssh_ca_trust_host_cert_path }}; then
-        probe=$(pct exec {{ item }} -- ssh-keygen -Lf {{ ssh_ca_trust_host_cert_path }})
+      if "${gx[@]}" test -f {{ ssh_ca_trust_host_cert_path }}; then
+        probe=$("${gx[@]}" ssh-keygen -Lf {{ ssh_ca_trust_host_cert_path }})
         present=1
       else
         probe=""
@@ -41,8 +54,8 @@
       # comparing against this pre-signing snapshot (not one taken after the
       # cert is already installed) is what lets that task detect a cert-only
       # change and reload sshd for it.
-      certfp_before=$(pct exec {{ item }} -- sh -c \
-        'cat {{ ssh_ca_trust_fingerprint_files }} 2>/dev/null | md5sum' \
+      certfp_before=$("${gx[@]}" sh -c \
+        'cat {{ fp_files }} 2>/dev/null | md5sum' \
         2>/dev/null || echo absent)
       printf 'PUBKEY=%s\n' "$pubkey"
       printf 'HOSTNAME=%s\n' "$hostname"
@@ -83,9 +96,14 @@
     executable: /bin/bash
     cmd: |
       set -euo pipefail
+      {% if ssh_ca_trust_lxc_nixos[item.item.ctid | string] | default(false) %}
+      gx=(pct exec {{ item.item.ctid }} -- /run/current-system/sw/bin/env PATH=/run/current-system/sw/bin)
+      {% else %}
+      gx=(pct exec {{ item.item.ctid }} --)
+      {% endif %}
       printf '%s' {{ item.json.data.signed_key | quote }} \
-        | pct exec {{ item.item.ctid }} -- tee {{ ssh_ca_trust_host_cert_path }} > /dev/null
-      pct exec {{ item.item.ctid }} -- chmod 0644 {{ ssh_ca_trust_host_cert_path }}
+        | "${gx[@]}" tee {{ ssh_ca_trust_host_cert_path }} > /dev/null
+      "${gx[@]}" chmod 0644 {{ ssh_ca_trust_host_cert_path }}
   # Under --check the sign POST is skipped, so its results carry no json.
   loop: "{{ ssh_ca_trust_lxc_host_cert_signed.results | default([]) | selectattr('json', 'defined') | list }}"
   loop_control:

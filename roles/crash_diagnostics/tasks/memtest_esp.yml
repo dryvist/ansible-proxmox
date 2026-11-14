@@ -1,0 +1,74 @@
+---
+# Install memtest86+ on one ESP, looped by main.yml over every resolvable
+# boot partition in /etc/kernel/proxmox-boot-uuids.
+#
+# Inputs, set per iteration on the include in main.yml:
+#   crash_diagnostics_esp_uuid   - ESP filesystem UUID from proxmox-boot-uuids
+#   crash_diagnostics_esp_device - device path blkid resolved the UUID to
+#   crash_diagnostics_esp_mount  - temporary mount point for this ESP
+# The unmount runs in always:, so a failed copy never leaves the ESP mounted.
+- name: Install memtest86+ files on one boot ESP
+  block:
+    - name: Create temporary mount point for boot ESP
+      ansible.builtin.file:
+        path: "{{ crash_diagnostics_esp_mount }}"
+        state: directory
+        mode: "0700"
+
+    - name: Mount boot ESP without writing fstab
+      ansible.posix.mount:
+        path: "{{ crash_diagnostics_esp_mount }}"
+        src: "{{ crash_diagnostics_esp_device }}"
+        fstype: vfat
+        # state=mounted wrote a permanent fstab entry keyed by kernel device
+        # name; ephemeral leaves /etc/fstab untouched.
+        state: ephemeral
+
+    - name: Check if memtest86+ binary exists in /boot
+      ansible.builtin.stat:
+        path: /boot/memtest86+x64.bin
+      register: crash_diagnostics_memtest_source
+
+    - name: Copy memtest86+ to boot partition
+      ansible.builtin.copy:
+        src: /boot/memtest86+x64.bin
+        dest: "{{ crash_diagnostics_esp_mount }}/memtest86+x64.bin"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      # The temporary boot mount exists only on a real run.
+      when:
+        - not ansible_check_mode
+        - crash_diagnostics_memtest_source.stat.exists
+
+    - name: Ensure the GRUB directory exists on the boot partition
+      ansible.builtin.file:
+        path: "{{ crash_diagnostics_esp_mount }}/grub"
+        state: directory
+        # Matches the ESP's vfat dmask, so this is a no-op rather than a change.
+        mode: "0700"
+      when: crash_diagnostics_memtest_source.stat.exists
+
+    - name: Deploy custom GRUB config with memtest entry to boot partition
+      ansible.builtin.template:
+        src: memtest-custom.cfg.j2
+        dest: "{{ crash_diagnostics_esp_mount }}/grub/custom.cfg"
+        owner: root
+        group: root
+        mode: "0644"
+      # The temporary boot mount exists only on a real run.
+      when:
+        - not ansible_check_mode
+        - crash_diagnostics_memtest_source.stat.exists
+
+  always:
+    - name: Unmount boot ESP
+      ansible.posix.mount:
+        path: "{{ crash_diagnostics_esp_mount }}"
+        state: unmounted
+
+    - name: Remove temporary mount point for boot ESP
+      ansible.builtin.file:
+        path: "{{ crash_diagnostics_esp_mount }}"
+        state: absent

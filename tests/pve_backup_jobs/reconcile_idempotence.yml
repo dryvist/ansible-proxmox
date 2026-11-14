@@ -1,0 +1,21 @@
+---
+- name: Run the second reconcile against the fixture
+  ansible.builtin.include_role:
+    name: pve_backup_jobs
+    tasks_from: reconcile.yml
+
+- name: Read the second reconcile command lines
+  ansible.builtin.slurp:
+    src: "{{ pve_backup_jobs_stub_dir }}/commands.log"
+  register: pve_backup_jobs_second_command_log
+
+- name: Assert the current jobs produce no writes
+  ansible.builtin.assert:
+    that:
+      - pve_backup_jobs_second_commands | trim == 'get /cluster/backup --output-format json'
+    fail_msg: >-
+      Expected a read-only reconcile, got {{ pve_backup_jobs_second_commands }}.
+    success_msg: "PASS: the second reconcile issues no writes"
+    quiet: false
+  vars:
+    pve_backup_jobs_second_commands: "{{ pve_backup_jobs_second_command_log.content | b64decode }}"
