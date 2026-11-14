@@ -186,7 +186,8 @@
         mode: "0644"
         content: |
           port 22
-          passwordauthentication yes
+          passwordauthentication no
+          kbdinteractiveauthentication no
           trustedusercakeys /etc/ssh/trusted-user-ca-keys.pem
           authorizedprincipalsfile /etc/ssh/principals/%u
 

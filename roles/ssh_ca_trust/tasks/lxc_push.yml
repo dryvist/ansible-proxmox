@@ -167,16 +167,19 @@
         fi
         ready=1
         {% else %}
-        # The Nix side owns the config, so the only thing this role can assert
-        # is that the deployed Nix declaration trusts the CA file it just
-        # wrote. Until it does, the files above are inert: record the container
+        # The Nix side owns the config, so this role only asserts what the
+        # deployed Nix declaration must carry: trust in the CA file it just
+        # wrote, and password logins off. Until it does, record the container
         # NOT READY and move on — never fail the loop item, never edit Nix-side
         # sshd config from here.
-        if echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}'; then
+        if echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}' &&
+          echo "$effective" | grep -qx 'passwordauthentication no' &&
+          echo "$effective" | grep -qx 'kbdinteractiveauthentication no'; then
           ready=1
         else
           echo "NOT_READY {{ item }}: sshd -T does not show trustedusercakeys {{ ssh_ca_trust_ca_file }}" \
-            "— the Nix-side sshd declaration is not deployed yet; CA trust files are in place" >&2
+            "with password and keyboard-interactive logins off — the Nix-side sshd declaration" \
+            "is not deployed yet; CA trust files are in place" >&2
         fi
         {% endif %}
       else
