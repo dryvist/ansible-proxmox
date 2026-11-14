@@ -2,7 +2,7 @@
 platforms:
   - name: proxmox-hba-storcli-test
     # renovate: datasource=docker depName=mirror.gcr.io/geerlingguy/docker-debian12-ansible
-    image: "${MOLECULE_IMAGE:-mirror.gcr.io/geerlingguy/docker-debian12-ansible:latest@sha256:43b3f59882ccc0ba5deb3b3ecac727084bb082a3230b5258c500395694b5497f}"
+    image: "${MOLECULE_IMAGE:-mirror.gcr.io/geerlingguy/docker-debian12-ansible:latest@sha256:fc679fe5eb029c5ceeed3beb9c8a7ee116de371e7f62e3341d5a4dba79853004}"
     pre_build_image: true
     privileged: true
     tmpfs:
