@@ -15,6 +15,11 @@
   ],
   "packageRules": [
     {
+      "description": "shortcut: the shared matcher rewrites this whole image reference to a bare tag; re-enable when a matcher captures only the tag.",
+      "matchPackageNames": ["vllm/vllm-openai-cpu"],
+      "enabled": false
+    },
+    {
       "description": "Keep the current SHA pin until a new release version is available.",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["jpe-ansible/ansible-nautobot"],
