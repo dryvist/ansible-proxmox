@@ -1,0 +1,25 @@
+---
+- name: "Select the pinned SHA-256 for {{ llm_model_store_seed_file }}"
+  ansible.builtin.include_tasks: resolve_file_checksum.yml
+
+- name: "Require the pinned revision to contain {{ llm_model_store_seed_file }}"
+  ansible.builtin.assert:
+    that:
+      - llm_model_store_seed_file_sha256 | default('') | length > 0
+    fail_msg: >-
+      {{ llm_model_store_seed_model.hf_repo }}@{{ llm_model_store_seed_model.hf_revision }}
+      has no file named {{ llm_model_store_seed_file }} in its LFS blob list.
+      The pinned hf_revision or filename has drifted from the upstream repo's
+      current layout — fix the catalog, don't guess a fallback name.
+    quiet: true
+
+- name: "Seed the model store with {{ llm_model_store_seed_file }}"
+  ansible.builtin.get_url:
+    url: >-
+      https://huggingface.co/{{ llm_model_store_seed_model.hf_repo }}/resolve/{{ llm_model_store_seed_model.hf_revision }}/{{ llm_model_store_seed_file }}
+    dest: "{{ llm_model_store_seed_target_path }}/{{ llm_model_store_seed_file }}"
+    checksum: "sha256:{{ llm_model_store_seed_file_sha256 }}"
+    mode: "{{ llm_model_store_seed_file_mode }}"
+    owner: root
+    group: root
+    timeout: "{{ llm_model_store_seed_timeout }}"

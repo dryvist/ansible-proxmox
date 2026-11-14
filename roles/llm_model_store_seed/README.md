@@ -2,7 +2,7 @@
 
 Populates the llm fabric's shared model-store mount(s)
 (`var.llm_models_mount_path` in tofu-proxmox, `/var/lib/llm` by default) with
-every declared GGUF, so a serving guest's converge-time
+every declared GGUF and optional projector file, so a serving guest's converge-time
 `roles/llama_cpp/tasks/main.yml` model-presence assert in the consuming
 repository
 finds the file rather than failing a converge on a manually-populated store.
@@ -46,9 +46,10 @@ the backing volume, which is what this role does.
    `roles/pve_guest_evacuation_lxc_managed_volumes` already uses, because a
    managed mount_point's real backing dataset name only exists once Proxmox
    allocates it; it cannot be derived from the desired state alone.
-4. For every GGUF-backed model in `llm_model_catalog_models`, resolves its sha256 from
-   HuggingFace's own LFS blob metadata at the model's pinned `hf_revision`,
-   then fetches the GGUF with `ansible.builtin.get_url` and `checksum:` —
+4. For every GGUF-backed model in `llm_model_catalog_models`, resolves the
+   SHA-256 for each declared file from Hugging Face's LFS blob metadata at the
+   model's pinned `hf_revision`, then fetches the GGUF and optional
+   `mmproj_file` with `ansible.builtin.get_url` and `checksum:` —
    idempotent (skipped once the destination already matches) and atomic
    (get_url writes to a temp file next to `dest` and moves it into place, so
    a concurrent reader through the guest's own ro bind mount never sees a
@@ -59,7 +60,8 @@ the backing volume, which is what this role does.
 The model list is `llm_model_catalog_models`, from
 `dryvist.homelab.llm_model_catalog` (dryvist/homelab-contracts) — the single
 catalog shared with the consuming repository's `llama_cpp` role, which
-serves the same GGUFs this role downloads. `playbooks/site.yml` includes that
+serves the same GGUFs and any declared projector file this role downloads.
+`playbooks/site.yml` includes that
 role immediately before this one so the catalog is already in scope; this
 role declares no model list of its own.
 
@@ -94,6 +96,6 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 | Variable                         | Default                            | Purpose                                                                       |
 | -------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
-| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Shared catalog; seeds only entries with the optional Hugging Face GGUF fields |
-| `llm_model_store_seed_timeout`   | `3600`                             | Seconds allowed for the HF metadata lookup and the GGUF download              |
-| `llm_model_store_seed_file_mode` | `"0644"`                           | Mode of a seeded GGUF file                                                    |
+| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Shared catalog; seeds entries with GGUF fields and optional `mmproj_file`     |
+| `llm_model_store_seed_timeout`   | `3600`                             | Seconds allowed for the HF metadata lookup and model-file downloads           |
+| `llm_model_store_seed_file_mode` | `"0644"`                           | Mode of each seeded model file                                                |
