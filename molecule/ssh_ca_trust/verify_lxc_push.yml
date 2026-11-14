@@ -29,7 +29,8 @@
   gather_facts: false
 
   vars:
-    ssh_ca_trust_pct_stub_dir: /tmp/ssh-ca-trust-pct-stub
+    # Not /tmp: the scenario mounts it as tmpfs, which is noexec.
+    ssh_ca_trust_pct_stub_dir: /var/tmp/ssh-ca-trust-pct-stub
     ssh_ca_trust_lxc_test_ca_pub: >-
       ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMc4shG4OO1GtC46CMVsOK8Tz7kuEGWX0xutfFYBjLth
       molecule-test-ca-throwaway-key-not-a-real-ca
