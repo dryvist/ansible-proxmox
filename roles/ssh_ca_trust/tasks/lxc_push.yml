@@ -173,6 +173,7 @@
         # NOT READY and move on — never fail the loop item, never edit Nix-side
         # sshd config from here.
         if echo "$effective" | grep -qF 'trustedusercakeys {{ ssh_ca_trust_ca_file }}' &&
+          echo "$effective" | grep -qxF 'authorizedprincipalsfile {{ ssh_ca_trust_principals_dir }}/%u' &&
           echo "$effective" | grep -qx 'passwordauthentication no' &&
           echo "$effective" | grep -qx 'kbdinteractiveauthentication no'; then
           ready=1
