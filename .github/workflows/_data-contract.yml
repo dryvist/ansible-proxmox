@@ -275,6 +275,14 @@ jobs:
           ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
           ansible-playbook tests/llm_model_store_seed/verify_catalog_models.yml -i localhost, -c local
 
+      # The optional projector shares the model's pinned metadata lookup and
+      # checksum handling, while GGUF-only catalog entries still select one file.
+      - name: Verify llm_model_store_seed optional projector selection and checksum
+        run: |
+          mkdir -p /tmp/ansible-tmp
+          ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp \
+          ansible-playbook tests/llm_model_store_seed/verify_optional_projector.yml -i localhost, -c local
+
       # Whether a changed container gets `pct reboot` or `pct start`. Drives
       # the handler's own decision task against both outcomes.
       - name: Verify llm_model_store_seed restart-target classification

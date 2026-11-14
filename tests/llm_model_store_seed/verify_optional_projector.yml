@@ -1,0 +1,73 @@
+---
+- name: Verify the model-store seeder selects and verifies an optional projector
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    llm_model_store_seed_hf_meta:
+      json:
+        siblings:
+          - rfilename: GLM-OCR-Q8_0.gguf
+            lfs:
+              sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          - rfilename: mmproj-GLM-OCR-Q8_0.gguf
+            lfs:
+              sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+  tasks:
+    - name: Define a GGUF-only catalog fixture
+      ansible.builtin.set_fact:
+        llm_model_store_seed_model:
+          name: image-text model
+          hf_repo: ggml-org/GLM-OCR-GGUF
+          hf_revision: 65a42de1148dbed2297e922b5dbc7d9b70c36578
+          gguf: GLM-OCR-Q8_0.gguf
+
+    - name: Select the GGUF-only fixture files
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/select_model_files.yml
+
+    - name: Assert a catalog entry without mmproj_file selects only its GGUF
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - llm_model_store_seed_files == ['GLM-OCR-Q8_0.gguf']
+
+    - name: Resolve the GGUF-only fixture checksum
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/resolve_file_checksum.yml
+      vars:
+        llm_model_store_seed_file: GLM-OCR-Q8_0.gguf
+
+    - name: Assert the GGUF uses its pinned LFS checksum
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - llm_model_store_seed_file_sha256 == 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    - name: Define an image-text catalog fixture with its projector
+      ansible.builtin.set_fact:
+        llm_model_store_seed_model:
+          name: image-text model
+          hf_repo: ggml-org/GLM-OCR-GGUF
+          hf_revision: 65a42de1148dbed2297e922b5dbc7d9b70c36578
+          gguf: GLM-OCR-Q8_0.gguf
+          mmproj_file: mmproj-GLM-OCR-Q8_0.gguf
+
+    - name: Select the image-text fixture files
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/select_model_files.yml
+
+    - name: Assert the image-text entry selects its GGUF and projector
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - llm_model_store_seed_files == ['GLM-OCR-Q8_0.gguf', 'mmproj-GLM-OCR-Q8_0.gguf']
+
+    - name: Resolve the projector fixture checksum
+      ansible.builtin.include_tasks: ../../roles/llm_model_store_seed/tasks/resolve_file_checksum.yml
+      vars:
+        llm_model_store_seed_file: mmproj-GLM-OCR-Q8_0.gguf
+
+    - name: Assert the projector uses its pinned LFS checksum
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - llm_model_store_seed_file_sha256 == 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
