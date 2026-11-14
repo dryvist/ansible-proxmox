@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.46.0](https://github.com/dryvist/ansible-proxmox/compare/v2.45.0...v2.46.0) (2026-11-14)
+
+
+### Features
+
+* **pve_backup_jobs:** metadata change detection for container backups ([#1309](https://github.com/dryvist/ansible-proxmox/issues/1309)) ([79a0307](https://github.com/dryvist/ansible-proxmox/commit/79a0307fab90d4814e8c6e2ec0c2c70485e39c83))
+* **pve_ha:** verify live HA node-affinity matches replication targets ([#1304](https://github.com/dryvist/ansible-proxmox/issues/1304)) ([a855f64](https://github.com/dryvist/ansible-proxmox/commit/a855f64ac27556ed254e380c0ab4160e5c474846))
+* **pve_host_network:** declare corosync link1 addresses ([#1306](https://github.com/dryvist/ansible-proxmox/issues/1306)) ([6c92a73](https://github.com/dryvist/ansible-proxmox/commit/6c92a73c1722f8ceb0f4914f0a1842dc7b014c48))
+* **pve_network_maintenance:** disarm HA and pause backups around network maintenance ([#1310](https://github.com/dryvist/ansible-proxmox/issues/1310)) ([4d748a7](https://github.com/dryvist/ansible-proxmox/commit/4d748a7c3cd4cde726e57597c5232555644a6f0e))
+* **ssh_ca_trust:** push CA trust and host certificates into NixOS containers ([#1321](https://github.com/dryvist/ansible-proxmox/issues/1321)) ([05063c5](https://github.com/dryvist/ansible-proxmox/commit/05063c54064e0b4cbef972f264d7508cac2bd10d))
+* **syncoid:** object-store replica restore check ([#1299](https://github.com/dryvist/ansible-proxmox/issues/1299)) ([5964bfc](https://github.com/dryvist/ansible-proxmox/commit/5964bfc12f2a1df92fec6048099a03a508127ad5))
+* **syncoid:** pull root-pool guest disks that have no pvesr replica ([#1311](https://github.com/dryvist/ansible-proxmox/issues/1311)) ([4874e1e](https://github.com/dryvist/ansible-proxmox/commit/4874e1eabde242a0ba74d52523e03314eb340bd3))
+
+
+### Bug Fixes
+
+* **benchmark-client:** full image reference for the vLLM client ([#1330](https://github.com/dryvist/ansible-proxmox/issues/1330)) ([cb04bd9](https://github.com/dryvist/ansible-proxmox/commit/cb04bd9eb8ee8546501dbf6937b582be6a79c082))
+* **ci:** raise the CI-fix daily run limit ([#1327](https://github.com/dryvist/ansible-proxmox/issues/1327)) ([88dccb1](https://github.com/dryvist/ansible-proxmox/commit/88dccb1f0c3d1938970e3e24a7a0e41e5ed255ba))
+* **ci:** scope CI Gate cancellation to pull_request runs and add Merge Gate timeout ([#1314](https://github.com/dryvist/ansible-proxmox/issues/1314)) ([999ab97](https://github.com/dryvist/ansible-proxmox/commit/999ab97b31b38d913e64f6bfe7ce6681b98b0901))
+* **crash_diagnostics:** install memtest on every resolvable ESP without fstab writes ([#1305](https://github.com/dryvist/ansible-proxmox/issues/1305)) ([f83c11a](https://github.com/dryvist/ansible-proxmox/commit/f83c11a70565dac4a271a338ba0d48ed21be29ad))
+* **pve_ha:** rate-limit pvesr replication jobs to 50 MB/s by default ([#1308](https://github.com/dryvist/ansible-proxmox/issues/1308)) ([e9cbde8](https://github.com/dryvist/ansible-proxmox/commit/e9cbde86b34d4aa37b14c4eb026ef0eedf83819e))
+* **syncoid:** skip guests with any declared pvesr replication target ([#1318](https://github.com/dryvist/ansible-proxmox/issues/1318)) ([49f7a8f](https://github.com/dryvist/ansible-proxmox/commit/49f7a8f184ebcdf872fc4590124da8f18fc4f790))
+
 ## [2.45.0](https://github.com/dryvist/ansible-proxmox/compare/v2.44.0...v2.45.0) (2026-11-11)
 
 
