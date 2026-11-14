@@ -39,6 +39,12 @@ unless a group flips rollout on for that host class.
    carries that hardening before recording the container as ready in
    `ssh_ca_trust_lxc_ready` (keyed by CTID; a container without sshd is
    recorded not-ready, never failed over its package manager).
+   Containers declaring `ostype: nixos` in `pct config` get the same managed
+   files but no sshd drop-in — their `sshd_config` is generated on the Nix
+   side, which must itself point at the role's CA/principals/certificate
+   paths; until it does they run every in-guest command through the
+   `/run/current-system/sw/bin` PATH and are recorded not-ready, never
+   failed.
    VMs must be SSH-reached in the published inventory, running locally, and
    confirmed as Debian by a responding guest agent. VMs without guest exec are
    logged and skipped. `ssh_ca_trust_manage_vms` follows the existing

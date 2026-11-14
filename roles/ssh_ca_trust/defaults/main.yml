@@ -83,6 +83,11 @@ ssh_ca_trust_host_admin_guest_vmids: []
 # instead of re-deriving readiness itself.
 ssh_ca_trust_lxc_ready: {}
 
+# Per-container NixOS flag, keyed by CTID, populated by tasks/lxc.yml from
+# `pct config` (node-side — never probed from inside the guest). Same
+# defined-empty contract as ssh_ca_trust_lxc_ready above.
+ssh_ca_trust_lxc_nixos: {}
+
 ssh_ca_trust_ca_file: /etc/ssh/trusted-user-ca-keys.pem
 ssh_ca_trust_principals_dir: /etc/ssh/principals
 # Late-numbered so it wins over distro/local snippets in sshd_config.d.
@@ -92,6 +97,13 @@ ssh_ca_trust_dropin: /etc/ssh/sshd_config.d/99-openbao-ca.conf
 ssh_ca_trust_fingerprint_files: >-
   {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_dropin }}
   {{ ssh_ca_trust_principals_dir }}/* {{ ssh_ca_trust_host_cert_path }}
+
+# The same list minus the drop-in: a NixOS container never carries one (its
+# sshd_config is generated on the Nix side), so it must not contribute to the
+# hash. Selected per container by tasks/lxc.yml and tasks/lxc_host_cert.yml.
+ssh_ca_trust_lxc_fingerprint_files_nixos: >-
+  {{ ssh_ca_trust_ca_file }} {{ ssh_ca_trust_principals_dir }}/*
+  {{ ssh_ca_trust_host_cert_path }}
 
 # --- SSH host certificates (rollout gate, off by default) ----------------
 # Issues and installs a signed SSH HOST certificate on this guest — sshd then
