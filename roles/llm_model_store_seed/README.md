@@ -96,6 +96,6 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
 
 | Variable                         | Default                            | Purpose                                                                       |
 | -------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
-| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Shared catalog; seeds entries with Hugging Face GGUF fields and optional `mmproj_file` |
+| `llm_model_catalog_models`       | see `llm_model_catalog`'s defaults | Shared catalog; seeds entries with GGUF fields and optional `mmproj_file`     |
 | `llm_model_store_seed_timeout`   | `3600`                             | Seconds allowed for the HF metadata lookup and model-file downloads           |
 | `llm_model_store_seed_file_mode` | `"0644"`                           | Mode of each seeded model file                                                |
