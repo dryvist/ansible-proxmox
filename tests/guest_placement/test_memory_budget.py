@@ -70,7 +70,7 @@ def main():
                       passes, "Allocated guest memory"))
 
     cases.append(("missing budget", "server-b", {}, RESOURCES,
-                  False, "A node memory budget"))
+                  False, "The node needs a memory budget"))
     for budget in (None, "233472", 0, -1, 233472.5, True):
         cases.append((f"malformed budget {budget!r}", "server-b",
                       {"memory_budget_mb": budget}, RESOURCES,

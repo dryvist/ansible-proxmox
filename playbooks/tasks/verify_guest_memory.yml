@@ -9,7 +9,7 @@
       - placement_node_config.memory_budget_mb is not boolean
       - placement_node_config.memory_budget_mb > 0
       - placement_resources is sequence and placement_resources is not string and placement_resources is not mapping
-    fail_msg: A node memory budget and a complete PVE resource list are required.
+    fail_msg: The node needs a memory budget and a complete PVE resource list.
 
 - name: Select this node and every allocated guest on it
   ansible.builtin.set_fact:
