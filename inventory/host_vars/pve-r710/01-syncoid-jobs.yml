@@ -36,6 +36,9 @@ syncoid_pinned_jobs:
   # estate: remote state, the desired-state object, the published inventory, and
   # the bucket other backups are written INTO. A backup target with no copy of
   # its own is the one that turns a disk failure into an unrecoverable one.
+  # When upstream distributed mode is production-ready and deployed as an
+  # erasure set, revisit this, but delete the job only in the same change that
+  # proves the replacement exists.
   # Node and VMID come from the published inventory, like the splunk jobs
   # above: this guest has already moved once, and a pull job naming a node it
   # no longer runs on fails every cycle while the replica it left behind ages.
