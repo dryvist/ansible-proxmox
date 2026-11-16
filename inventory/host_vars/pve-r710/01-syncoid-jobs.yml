@@ -179,7 +179,11 @@ syncoid_rootpool_jobs_json: >-
   {%- set jobs = [] -%}
   {%- set storage_node = proxmox_node_names.storage -%}
   {%- set dataset_roots = hostvars[storage_node].pve_dataset_root_by_storage -%}
-  {%- set pvesr_guest_ids = syncoid_pvesr_guest_ids | default([]) | map('int') | list -%}
+  {%- set pvesr_guest_ids = (syncoid_pvesr_guest_ids | mandatory(
+        'syncoid_pvesr_guest_ids is unset, so the storage-node root-pool guest
+        disk jobs cannot be computed. The list comes from the syncoid role\'s
+        cluster replication read (`pvesh get /cluster/replication`); the jobs
+        cannot be computed without it.')) | map('int') | list -%}
   {%- for ct_entry in (containers_from_tofu | mandatory(
         'containers_from_tofu is unset, so the storage-node root-pool guest
         disk jobs cannot be listed. Run playbooks/load_tofu.yml — it targets

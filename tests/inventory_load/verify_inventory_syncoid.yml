@@ -12,6 +12,8 @@
         media_no_backup_host_endpoints: >-
           {{ ((syncoid_jobs | default([])) | map(attribute='source') | list)
              + ((syncoid_jobs | default([])) | map(attribute='target') | list) }}
+      vars:
+        syncoid_pvesr_guest_ids: []
 
     # Per-fixture projections for the generated root-pool guest-disk jobs, so
     # each expected case (one job / no job) is asserted on exactly the jobs its
@@ -42,6 +44,8 @@
           {{ ((syncoid_jobs | map(attribute='source') | list)
               + (syncoid_jobs | map(attribute='target') | list))
              | select('search', '601300|601400') | list }}
+      vars:
+        syncoid_pvesr_guest_ids: []
       when: syncoid_rootpool_jobs_json is defined
 
     - name: Assert the generated root-pool jobs match the published guests
@@ -119,6 +123,8 @@
           sandbox ct jobs {{ rootpool_sandbox_ct_jobs }}, bulkdisk vm jobs
           {{ rootpool_bulkdisk_vm_jobs }}, excluded endpoints
           {{ rootpool_excluded_endpoints }}.
+      vars:
+        syncoid_pvesr_guest_ids: []
       when: syncoid_rootpool_jobs_json is defined
 
     - name: Assert guests with an existing pvesr job do not get root-pool syncoid jobs
@@ -153,6 +159,7 @@
       vars:
         same_target_ct_vmid: 601900
         same_target_vm_vmid: 602000
+        syncoid_pvesr_guest_ids: []
         containers_from_tofu: >-
           {{ hostvars[inventory_hostname].containers_from_tofu
              | combine({
@@ -254,6 +261,7 @@
       vars:
         media_rootpool_ct_vmid: 601600
         media_rootpool_vm_vmid: 601700
+        syncoid_pvesr_guest_ids: []
         containers_from_tofu: >-
           {{ hostvars[inventory_hostname].containers_from_tofu
              | combine({
@@ -297,6 +305,8 @@
         fail_msg: >-
           The recursive root-pool source job must not be configured on this
           replica node.
+      vars:
+        syncoid_pvesr_guest_ids: []
       when: syncoid_rootpool_jobs_json is defined
 
     # The same protection, scoped to a guest class: guests the published
@@ -319,6 +329,7 @@
           No syncoid endpoint names an agent-sandbox guest disk
           ({{ agent_sandbox_disk_pattern }}).
       vars:
+        syncoid_pvesr_guest_ids: []
         agent_sandbox_vmids: >-
           {{ ((hostvars['localhost'].tofu_data.vms | default({}))
               | combine(hostvars['localhost'].tofu_data.containers | default({}), recursive=True)

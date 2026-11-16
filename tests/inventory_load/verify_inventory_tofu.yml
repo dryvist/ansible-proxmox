@@ -27,6 +27,11 @@
           local-zfs: rpool/data
           bulk-appdata: bulk/appdata
 
+    - name: Seed an empty pvesr guest list on the primary node for inventory evaluation
+      ansible.builtin.add_host:
+        name: "{{ inventory_primary_node }}"
+        syncoid_pvesr_guest_ids: []
+
     - name: Assert the share-serving node received its NAS contract
       ansible.builtin.assert:
         that:
