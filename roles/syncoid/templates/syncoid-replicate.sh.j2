@@ -41,10 +41,10 @@ log="$LOG_DIR/$(date +%Y-%m-%d).log"
 # still run concurrently.
 # One syslog line per job and per run, so the result reaches the log pipeline
 # rather than only the local log file. The first argument is the syslog
-# priority. A logger failure never changes the run's result, and each call is
-# capped at five seconds. Per-job lines are queued and written after the
-# healthcheck ping, so a stalled syslog socket cannot delay the healthcheck.
-slog() { local prio="$1"; shift; timeout 5 logger -t syncoid-replicate -p "$prio" -- "$*" >/dev/null 2>&1 || true; }
+# priority. A logger failure never changes the run's result. Per-job lines are
+# queued and written after the healthcheck ping, so a stalled syslog socket
+# cannot delay the healthcheck.
+slog() { local prio="$1"; shift; logger -t syncoid-replicate -p "$prio" -- "$*" >/dev/null 2>&1 || true; }
 job_prio=()
 job_msg=()
 
@@ -61,12 +61,36 @@ replicate() {
   local name="$1"; shift
   echo "=== $(date +%H:%M:%S) syncoid $* ===" >>"$log"
   local rc=0 start=$SECONDS
-  syncoid "$@" >>"$log" 2>&1 || rc=$?
+  # The run log keeps the full output, but the queued syslog line needs the
+  # reason too — "result=failed rc=1" alone cannot be diagnosed from the
+  # central feed. Capture this invocation in a per-job temp file (under the
+  # log dir, which always exists) and append it to the run log afterwards.
+  # A capture failure falls back to streaming into the run log as before and
+  # marks the reason unavailable; it must never fail the job or the run.
+  local tmp="" err="unavailable"
+  if tmp="$(mktemp "${LOG_DIR}/.syncoid-${name}.XXXXXX" 2>/dev/null)"; then
+    syncoid "$@" >>"$tmp" 2>&1 || rc=$?
+    cat "$tmp" >>"$log"
+    if [ "$rc" -ne 0 ]; then
+      # Last non-empty line of the raw output, made syslog-safe: control
+      # characters stripped (keeping tab/newline through the pipeline),
+      # whitespace collapsed, double quotes single-quoted so the quoted
+      # err="..." field stays parseable, capped at 300 characters.
+      err="$(tr -d '\000-\010\013\015\016-\037\177' <"$tmp" \
+        | grep -a -v -e '^[[:space:]]*$' | tail -n 1 | tr '\t' ' ' | tr -s ' ' \
+        | tr '"' "'" | cut -c1-300)"
+      read -r err <<<"$err"
+      [ -n "$err" ] || err="none"
+    fi
+    rm -f "$tmp"
+  else
+    syncoid "$@" >>"$log" 2>&1 || rc=$?
+  fi
   if [ "$rc" -ne 0 ]; then
     echo "  FAILED (rc=$rc)" >>"$log"
     failed="$failed $name"
     job_prio+=(daemon.err)
-    job_msg+=("job=$name group=$group result=failed rc=$rc duration_s=$((SECONDS - start))")
+    job_msg+=("job=$name group=$group result=failed rc=$rc duration_s=$((SECONDS - start)) err=\"$err\"")
   else
     job_prio+=(daemon.info)
     job_msg+=("job=$name group=$group result=ok rc=0 duration_s=$((SECONDS - start))")

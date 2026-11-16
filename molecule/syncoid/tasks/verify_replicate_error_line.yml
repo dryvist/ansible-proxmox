@@ -1,0 +1,215 @@
+---
+# --- Execute the deployed wrapper against stubbed syncoid + logger ---
+# The static asserts pin the wrapper's text; this harness runs the converge-
+# rendered /usr/local/bin/syncoid-replicate.sh so the failed-job syslog
+# contract is exercised, not just read: a job whose syncoid exits 2 must
+# queue err="<last non-empty sanitized stderr line>" while the local run log
+# still holds the raw output untouched, and a succeeding job's queued line
+# must keep its exact old shape. The wrapper resolves syncoid and logger on
+# its pinned system-directories-first PATH, so the stubs replace the
+# binaries at the paths that PATH resolves (real ones moved aside first)
+# and are restored afterwards; the healthcheck URL default is empty, so the
+# run pings nothing.
+- name: Create the replicate harness scratch directory
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: syncoid-replicate
+  register: syncoid_replicate_harness_dir
+
+# No harness bin dir: the wrapper's PATH puts the system directories first,
+# so a prepended stub directory loses. The stubs must sit exactly where the
+# wrapper's own PATH resolves the tools.
+- name: Resolve syncoid on the wrapper's pinned PATH
+  ansible.builtin.command:
+    argv:
+      - sh
+      - -c
+      - PATH=/usr/sbin:/sbin:/usr/bin:/bin command -v syncoid
+  check_mode: false
+  failed_when: false
+  changed_when: false
+  register: syncoid_path_probe
+
+- name: Resolve logger on the wrapper's pinned PATH
+  ansible.builtin.command:
+    argv:
+      - sh
+      - -c
+      - PATH=/usr/sbin:/sbin:/usr/bin:/bin command -v logger
+  check_mode: false
+  failed_when: false
+  changed_when: false
+  register: logger_path_probe
+
+- name: Record the stub target paths
+  ansible.builtin.set_fact:
+    # syncoid is absent from the CI image (sanoid install is Docker-skipped),
+    # so fall back to where Debian's sanoid package installs it.
+    syncoid_stub_path: "{{ syncoid_path_probe.stdout | trim if syncoid_path_probe.stdout | trim else '/usr/sbin/syncoid' }}"
+    logger_stub_path: "{{ logger_path_probe.stdout | trim }}"
+
+- name: Assert the wrapper's pinned PATH resolves a real logger
+  ansible.builtin.assert:
+    that:
+      - logger_stub_path != ''
+    fail_msg: >-
+      The wrapper's pinned PATH resolved no logger, and the harness cannot
+      replace what it cannot find. Resolved:
+      {{ logger_path_probe.stdout | trim }}
+
+# Stated outside the block so the always: restore below can tell, per tool,
+# whether to put the real binary back over the stub or delete the stub.
+- name: Check whether a real syncoid occupies its stub path
+  ansible.builtin.stat:
+    path: "{{ syncoid_stub_path }}"
+  register: syncoid_stub_stat
+
+- name: Check whether a real logger occupies its stub path
+  ansible.builtin.stat:
+    path: "{{ logger_stub_path }}"
+  register: logger_stub_stat
+
+- name: Run the wrapper with stubs in place, restoring the real binaries afterwards
+  block:
+    - name: Move the real syncoid aside
+      ansible.builtin.command:
+        argv:
+          - mv
+          - "{{ syncoid_stub_path }}"
+          - "{{ syncoid_stub_path }}.molecule-real"
+      when: syncoid_stub_stat.stat.exists
+      changed_when: true
+
+    - name: Move the real logger aside
+      ansible.builtin.command:
+        argv:
+          - mv
+          - "{{ logger_stub_path }}"
+          - "{{ logger_stub_path }}.molecule-real"
+      when: logger_stub_stat.stat.exists
+      changed_when: true
+
+    - name: Install the syncoid stub at the path the wrapper resolves
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          # Test stub for syncoid(8): job one fails with a two-line error whose
+          # LAST line carries the reason — with a BEL control char, a double
+          # quote, a double space and a trailing blank line the wrapper's
+          # sanitizer must survive; job two succeeds, so its queued line must
+          # keep the old shape.
+          case "$*" in
+            *splunk-hot*) exit 0 ;;
+          esac
+          printf 'syncoid-always-fails: source behind target\n' >&2
+          printf 'syncoid-always-fails: \a cannot "open"  source: offline\n\n' >&2
+          exit 2
+        dest: "{{ syncoid_stub_path }}"
+        mode: "0755"
+
+    - name: Install the logger stub at the path the wrapper resolves
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          # Test stub for logger(1): records every syslog line to $FAKE_LOGGER_LOG.
+          printf '%s\n' "$*" >>"${FAKE_LOGGER_LOG:?}"
+        dest: "{{ logger_stub_path }}"
+        mode: "0755"
+
+    - name: Run the deployed wrapper with one failing and one succeeding job
+      ansible.builtin.shell:
+        cmd: |
+          logger_log="{{ syncoid_replicate_harness_dir.path }}/logger.log"
+          : >"$logger_log"
+          export FAKE_LOGGER_LOG="$logger_log"
+          set +e
+          /usr/local/bin/syncoid-replicate.sh default >/dev/null 2>&1
+          printf 'rc=%s\n' "$?"
+          printf -- '-- syslog lines --\n'
+          cat "$logger_log"
+          printf -- '-- local log --\n'
+          cat /var/log/syncoid/*.log
+          leftover=0
+          for f in /var/log/syncoid/.syncoid-*; do
+            [ -e "$f" ] && leftover=$((leftover + 1))
+          done
+          printf 'leftover=%s\n' "$leftover"
+      changed_when: false
+      register: syncoid_replicate_run
+
+    - name: Assert the queued syslog lines carry the failure reason and keep success shape
+      vars:
+        syslog_lines: "{{ syncoid_replicate_run.stdout_lines | select('match', '^-t syncoid-replicate') | list }}"
+        failed_lines: "{{ syslog_lines | select('search', ' result=failed rc=2 ') | list }}"
+        ok_lines: "{{ syslog_lines | select('search', ' result=ok rc=0 ') | list }}"
+      ansible.builtin.assert:
+        that:
+          # Any failed job makes the wrapper exit non-zero (unchanged contract).
+          - syncoid_replicate_run.stdout_lines[0] == 'rc=1'
+          - syslog_lines | length == 3
+          - failed_lines | length == 1
+          # The queued line must carry the LAST non-empty stderr line, sanitized:
+          # the first stderr line ("source behind target") is not it, the BEL is
+          # stripped, quotes are single, runs of spaces collapse to one.
+          - >-
+            failed_lines[0] is match("^-t syncoid-replicate -p daemon[.]err -- job=node-a-nas "
+            ~ "group=default result=failed rc=2 duration_s=[0-9]+ "
+            ~ "err=\"syncoid-always-fails: cannot 'open' source: offline\"$")
+          # Success keeps the exact old message — no err= field at all.
+          - ok_lines | length == 1
+          - >-
+            ok_lines[0] is match("^-t syncoid-replicate -p daemon[.]info -- job=node-a-splunk-hot "
+            ~ "group=default result=ok rc=0 duration_s=[0-9]+$")
+          # Per-job lines are queued before the run summary, in job order; only
+          # job one failed, so it is the only entry in failed_jobs.
+          - >-
+            syslog_lines[-1] is match("^-t syncoid-replicate -p daemon[.]err -- run group=default "
+            ~ "result=failed jobs=2 failed_jobs=node-a-nas$")
+        fail_msg: "queued syslog lines: {{ syslog_lines }}"
+
+    - name: Assert the local run log still holds the raw output
+      ansible.builtin.assert:
+        that:
+          - "'FAILED (rc=2)' in syncoid_replicate_run.stdout"
+          - "'syncoid-always-fails: source behind target' in syncoid_replicate_run.stdout"
+          # Raw fragment with the BEL byte, the double quotes and the double
+          # space intact — sanitization must touch only the syslog line.
+          - "'syncoid-always-fails: \a cannot \"open\"  source: offline' in syncoid_replicate_run.stdout"
+          # The per-job capture temp file is removed after use.
+          - "'leftover=0' in syncoid_replicate_run.stdout"
+        fail_msg: "run log output: {{ syncoid_replicate_run.stdout }}"
+  always:
+    - name: Restore the real syncoid
+      ansible.builtin.command:
+        argv:
+          - mv
+          - "{{ syncoid_stub_path }}.molecule-real"
+          - "{{ syncoid_stub_path }}"
+      when: syncoid_stub_stat.stat.exists
+      changed_when: true
+
+    - name: Remove the syncoid stub
+      ansible.builtin.file:
+        path: "{{ syncoid_stub_path }}"
+        state: absent
+      when: not syncoid_stub_stat.stat.exists
+
+    - name: Restore the real logger
+      ansible.builtin.command:
+        argv:
+          - mv
+          - "{{ logger_stub_path }}.molecule-real"
+          - "{{ logger_stub_path }}"
+      when: logger_stub_stat.stat.exists
+      changed_when: true
+
+    - name: Remove the logger stub
+      ansible.builtin.file:
+        path: "{{ logger_stub_path }}"
+        state: absent
+      when: not logger_stub_stat.stat.exists
+
+- name: Remove the replicate harness scratch directory
+  ansible.builtin.file:
+    path: "{{ syncoid_replicate_harness_dir.path }}"
+    state: absent
