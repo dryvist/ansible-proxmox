@@ -15,12 +15,11 @@ already reports would mean two sources of truth for one fact. That pipe
 general-purpose path and this role does not replace it.
 
 This role exists for one narrow case where that general path was judged
-insufficient: Zammad #17242 found pve-w5900's rpool (single unmirrored
-consumer NVMe) threw a real, signature-matched corruption-plus-hang event
-three times in eight days, with SMART reading `PASSED` throughout. A log
-line nobody is actively reading is not a control for a fault at that
-severity -- so this publishes to the ntfy hub directly from the host, in
-parallel with (not instead of) the syslog path.
+insufficient: pve-w5900's rpool (single unmirrored consumer NVMe) threw
+a real, signature-matched corruption-plus-hang event while SMART read
+`PASSED`. A log line nobody is actively reading is not a control for a
+fault at that severity -- so this publishes to the ntfy hub directly
+from the host, in parallel with (not instead of) the syslog path.
 
 ## What it watches
 
