@@ -12,6 +12,7 @@
   vars:
     containers_from_tofu: "{{ undef() }}"
     vms_from_tofu: "{{ undef() }}"
+    syncoid_pvesr_guest_ids: []
 
   tasks:
     - name: Evaluate the generated root-pool jobs with the published inventory unset
@@ -36,5 +37,35 @@
               - "'containers_from_tofu is unset' in ansible_failed_result.msg"
             fail_msg: >-
               The generated expression failed in an unexpected way.
+              Task: {{ ansible_failed_task.name }}.
+              Result: {{ ansible_failed_result.msg | default(ansible_failed_result) }}
+
+    - name: Evaluate the generated root-pool jobs with syncoid_pvesr_guest_ids unset
+      when: inventory_hostname == hostvars['localhost'].tofu_data.proxmox_node
+      vars:
+        containers_from_tofu: "{{ hostvars[inventory_hostname].containers_from_tofu }}"
+        vms_from_tofu: "{{ hostvars[inventory_hostname].vms_from_tofu }}"
+        syncoid_pvesr_guest_ids: "{{ undef() }}"
+      block:
+        - name: Evaluate syncoid_rootpool_jobs_json without syncoid_pvesr_guest_ids
+          ansible.builtin.set_fact:
+            rootpool_pvesr_unset_eval: "{{ syncoid_rootpool_jobs_json }}"
+
+        - name: Fail because the expression evaluated without syncoid_pvesr_guest_ids
+          ansible.builtin.fail:
+            msg: >-
+              syncoid_rootpool_jobs_json rendered {{ rootpool_pvesr_unset_eval | length }}
+              jobs with syncoid_pvesr_guest_ids unset; it must refuse to compute
+              jobs without the cluster replication list.
+
+      rescue:
+        - name: Assert the refusal names syncoid_pvesr_guest_ids
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_task.name == 'Evaluate syncoid_rootpool_jobs_json without syncoid_pvesr_guest_ids'
+              - "'syncoid_pvesr_guest_ids is unset' in ansible_failed_result.msg"
+            fail_msg: >-
+              The generated expression failed in an unexpected way when
+              syncoid_pvesr_guest_ids was unset.
               Task: {{ ansible_failed_task.name }}.
               Result: {{ ansible_failed_result.msg | default(ansible_failed_result) }}

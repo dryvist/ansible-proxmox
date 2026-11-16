@@ -18,7 +18,7 @@ zfs_fault_alert_zed_subclasses:
 zfs_fault_alert_pool: rpool
 
 # Any zed class=delay event at or above this many milliseconds fires an
-# alert. The observed fault signature on pve-w5900 (Zammad #17242) starts at
+# alert. The observed fault signature on pve-w5900 starts at
 # ~70000ms; 30000 gives margin above normal load without false-firing.
 zfs_fault_alert_delay_threshold_ms: 30000
 

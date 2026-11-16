@@ -4,8 +4,7 @@
 # that does not carry the guest's datastore, or a node declared but not
 # installed, is worse than no rule: ha-manager relocates there, the guest
 # cannot start, and it parks in `error` — a latch, not a retry — after the
-# source node has already self-fenced to get there (Vikunja 1756, 938;
-# Zammad #17168).
+# source node has already self-fenced to get there (Vikunja 1756, 938).
 #
 # Includes the ROLE's own derivation rather than restating its expressions.
 # ---------------------------------------------------------------------------

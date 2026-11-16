@@ -5,7 +5,7 @@
 # why: pve_health_telemetry's journal->syslog pipe is the general-purpose
 # path, and this role deliberately bypasses it for one narrow,
 # already-proven-real trigger, because a log nobody reads is not a control
-# (Zammad #17242 -- the pipe this would otherwise rely on has its own known
+# (the pipe this would otherwise rely on has its own known
 # reliability gap).
 - name: Wire the ZFS fault alert
   when: zfs_fault_alert_enabled | bool
