@@ -47,13 +47,16 @@ def test_pool_fill_exports_bounded_dataset_properties_and_threshold(tmp_path):
     guest_dataset = (
         f"bulk/replica/vm-{len('pool') * len('node')}-disk-{len('disk') - len('disk')}"
     )
+    replica_dataset = "bulk/replica/node-a/appdata/plex"
+    excluded_dataset = "bulk/media/movies"
     datasets = (
         "rpool\t1000\t700\t100\t200\t500",
         "rpool/ROOT\t800\t600\t100\t100\t600",
         "rpool/ROOT/system\t700\t500\t100\t100\t700",
         "bulk\t10000\t9000\t500\t500\t1000",
         "bulk/backups\t5000\t4500\t250\t250\t500",
-        "bulk/appdata/nested\t4000\t3500\t250\t250\t600",
+        f"{replica_dataset}\t4000\t3500\t250\t250\t600",
+        f"{excluded_dataset}\t3500\t3000\t250\t250\t650",
         f"{guest_dataset}\t3000\t2800\t100\t100\t700",
     )
 
@@ -109,12 +112,13 @@ def test_pool_fill_exports_bounded_dataset_properties_and_threshold(tmp_path):
         "rpool/ROOT/system": ("rpool", ("700", "500", "100", "100", "700")),
         "bulk": ("bulk", ("10000", "9000", "500", "500", "1000")),
         "bulk/backups": ("bulk", ("5000", "4500", "250", "250", "500")),
+        replica_dataset: ("bulk", ("4000", "3500", "250", "250", "600")),
         guest_dataset: ("bulk", ("3000", "2800", "100", "100", "700")),
     }
     for dataset, (pool, values) in expected_datasets.items():
         for metric, value in zip(DATASET_METRICS, values, strict=True):
             assert f'{metric}{{pool="{pool}",dataset="{dataset}"}} {value}' in metrics
-    assert 'dataset="bulk/appdata/nested"' not in metrics
+    assert f'dataset="{excluded_dataset}"' not in metrics
 
 
 def test_dataset_selection_is_bounded_and_alert_threshold_is_configured():
@@ -128,4 +132,6 @@ def test_dataset_selection_is_bounded_and_alert_threshold_is_configured():
     assert regex.fullmatch("bulk")
     assert regex.fullmatch("bulk/backups")
     assert regex.fullmatch(guest_dataset)
+    assert regex.fullmatch("bulk/replica/node-a/appdata/plex")
+    assert not regex.fullmatch("bulk/media/movies")
     assert not regex.fullmatch("bulk/appdata/nested")
