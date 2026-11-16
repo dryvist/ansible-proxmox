@@ -91,7 +91,7 @@
           # which case the invocation still streams straight into the run log.
           - >-
             'job_msg+=("job=$name group=$group result=failed rc=$rc
-            duration_s=$((SECONDS - start)) err=\"$err\"")' in syncoid_wrapper_text
+            duration_s=$((SECONDS - start)) err=\\"$err\\"")' in syncoid_wrapper_text
           - "'local tmp=\"\" err=\"unavailable\"' in syncoid_wrapper_text"
           - "'syncoid \"$@\" >>\"$log\" 2>&1 || rc=$?' in syncoid_wrapper_text"
         fail_msg: "syncoid wrapper does not report results to syslog"
