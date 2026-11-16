@@ -40,7 +40,7 @@ ansible-galaxy install -r requirements.yml
 | `sanoid_datasets`                    | `{}`                                           | Map of `dataset => { use_template, recursive, … }` |
 | `sanoid_replica_retention_enabled`   | `false`                                        | Add retention stanzas for live syncoid targets     |
 | `sanoid_replica_default_class`       | group default (`fast`)                         | Retention class used when a job has no override    |
-| `sanoid_replica_templates`           | group-defined                                  | Defines `replica_fast` and `replica_slow`          |
+| `sanoid_replica_templates`           | group-defined                                  | Defines `replica_fast`, `replica_lean` and `replica_slow` |
 | `sanoid_rpool_guest_monthly`         | `0`                                            | Monthly snapshots for recursive guest datasets     |
 
 Quote `yes`/`no` values — sanoid wants literal `yes`/`no`, and unquoted YAML
@@ -55,9 +55,9 @@ With `sanoid_replica_retention_enabled`, the role derives stanzas for
 `syncoid_jobs` targets, including descendants of recursive targets. Jobs may
 set `sanoid_replica_class`; other jobs use the group default. The `slow` class
 keeps 1 hourly, 14 daily and 3 monthly snapshots, while `fast` keeps 1 hourly,
-7 daily and 1 monthly snapshot. Replica templates disable new snapshots and
-prune `autosnap_*` names only. Sources need daily and monthly Sanoid snapshots
-for both retention
+7 daily and 1 monthly snapshot. The `lean` class keeps 1 hourly and 2 daily
+snapshots. Replica templates disable new snapshots and prune `autosnap_*` names
+only. Sources need daily and monthly Sanoid snapshots for all retention
 classes to have snapshots to retain.
 
 ## Usage

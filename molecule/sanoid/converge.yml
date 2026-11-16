@@ -33,6 +33,9 @@
       - name: replica-nonrecursive
         options: "--no-sync-snap --quiet"
         target: bulk/replica/source/nonrecursive
+      - name: replica-lean
+        sanoid_replica_class: lean
+        target: bulk/replica/source/lean
 
   roles:
     - role: sanoid
