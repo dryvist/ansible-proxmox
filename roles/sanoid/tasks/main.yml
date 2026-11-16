@@ -3,6 +3,17 @@
 # Package install and the systemd timer are skipped under Docker (molecule);
 # config rendering still runs so the contract can be verified in-container.
 
+- name: Read guests with an active pvesr replication job (syncoid_jobs needs them)
+  ansible.builtin.include_role:
+    name: syncoid
+    tasks_from: pvesr_guests.yml
+    apply:
+      tags:
+        - sanoid
+  when: sanoid_replica_retention_enabled
+  tags:
+    - sanoid
+
 - name: Validate replica retention targets
   ansible.builtin.assert:
     that:

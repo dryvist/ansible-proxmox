@@ -1,0 +1,45 @@
+---
+# Loaded by both the syncoid and the sanoid role so syncoid_jobs can be evaluated.
+
+- name: Read existing cluster replication jobs
+  ansible.builtin.command: pvesh get /cluster/replication --output-format json
+  register: syncoid_pvesr_jobs_raw
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - syncoid_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
+- name: Require a readable cluster replication job list
+  ansible.builtin.assert:
+    that:
+      - syncoid_pvesr_jobs_raw.rc == 0
+    fail_msg: >-
+      Failed to read cluster replication jobs via `pvesh get /cluster/replication`
+      (rc={{ syncoid_pvesr_jobs_raw.rc }}): {{ syncoid_pvesr_jobs_raw.stderr | default('') }}.
+      Refusing to fall back to an empty list, which would duplicate pvesr-replicated
+      guests into syncoid.
+  when:
+    - syncoid_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
+- name: Record guest IDs with an active pvesr replication job
+  ansible.builtin.set_fact:
+    syncoid_pvesr_guest_ids: >-
+      {%- set ids = [] -%}
+      {%- for job in (syncoid_pvesr_jobs_raw.stdout | from_json) -%}
+        {%- if not (job.disable | default(0) | bool) -%}
+          {%- set _ = ids.append(job.guest | int) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ids | unique | list }}
+  when:
+    - syncoid_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
