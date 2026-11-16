@@ -22,3 +22,13 @@ sanoid_replica_templates:
     weekly: 0
     monthly: 1
     yearly: 0
+  replica_lean:
+    autosnap: "no"
+    autoprune: "yes"
+    frequently: 0
+    # The newest hourly is the newest replicated instant.
+    hourly: 1
+    daily: 2
+    weekly: 0
+    monthly: 0
+    yearly: 0
