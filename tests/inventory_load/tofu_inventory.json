@@ -38,8 +38,8 @@
       "node": "example-node-a",
       "pool_id": "test-only",
       "tags": ["container"],
-      "vmid": 601200,
-      "ansible_pct_vmid": 601200
+      "vmid": 991200,
+      "ansible_pct_vmid": 991200
     },
     "fixture-sandbox-ct": {
       "ansible_connection": "community.proxmox.proxmox_pct_remote",
@@ -113,13 +113,13 @@
     "fixture-pvesr-vm": {
       "ansible_connection": "ssh",
       "disks": [
-        { "interface": "scsi0", "datastore": "local-zfs", "path": "vm-601800-disk-0" }
+        { "interface": "scsi0", "datastore": "local-zfs", "path": "vm-991800-disk-0" }
       ],
       "ha_replication_target": "example-node-b",
       "hostname": "fixture-pvesr-vm",
       "node": "example-node-a",
       "tags": ["vm"],
-      "vmid": 601800
+      "vmid": 991800
     }
   },
   "node_storage": {

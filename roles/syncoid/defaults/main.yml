@@ -71,6 +71,9 @@ syncoid_default_options: "--recursive --no-sync-snap --quiet"
 #       target: "tank/replica/node-a/splunk-hot"
 #       schedule: hourly   # optional; must name a key in syncoid_extra_schedules
 syncoid_jobs: []
+# syncoid_pvesr_guest_ids has no default here: the role sets it at runtime from
+# the cluster replication list (`pvesh get /cluster/replication`) before
+# syncoid_jobs is evaluated.
 
 # Weekly restore check of a replica (default: the object-store replica).
 #
