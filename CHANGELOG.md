@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.49.0](https://github.com/dryvist/ansible-proxmox/compare/v2.48.0...v2.49.0) (2026-11-16)
+
+
+### Features
+
+* **agent:** opencode-local run j-691f7d390273337b ([0dd09b1](https://github.com/dryvist/ansible-proxmox/commit/0dd09b1c00e785e7c74a25b27f2452301caebefb))
+
+
+### Bug Fixes
+
+* **sanoid:** read pvesr guests before syncoid_jobs is evaluated ([#1366](https://github.com/dryvist/ansible-proxmox/issues/1366)) ([0dd09b1](https://github.com/dryvist/ansible-proxmox/commit/0dd09b1c00e785e7c74a25b27f2452301caebefb))
+
 ## [2.48.0](https://github.com/dryvist/ansible-proxmox/compare/v2.47.1...v2.48.0) (2026-11-16)
 
 
