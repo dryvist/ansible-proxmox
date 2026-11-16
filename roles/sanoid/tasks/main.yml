@@ -3,6 +3,14 @@
 # Package install and the systemd timer are skipped under Docker (molecule);
 # config rendering still runs so the contract can be verified in-container.
 
+# Read the pvesr guest list before any task that evaluates syncoid_jobs. The
+# include must NOT be gated on sanoid_replica_retention_enabled: on pve-r710
+# that flag is true while the syncoid role does not run (this node relies on
+# the syncoid_enabled default), so a retention-only gate would leave
+# syncoid_pvesr_guest_ids unset and make the storage-node syncoid_jobs
+# unevaluable. The pvesr read itself carries syncoid's own gate inside
+# pvesr_guests.yml, so running it here is a no-op unless syncoid needs it. The
+# sanoid tag is applied to the sub-tasks so a tagged run still reaches them.
 - name: Read guests with an active pvesr replication job (syncoid_jobs needs them)
   ansible.builtin.include_role:
     name: syncoid
@@ -10,7 +18,6 @@
     apply:
       tags:
         - sanoid
-  when: sanoid_replica_retention_enabled
   tags:
     - sanoid
 
