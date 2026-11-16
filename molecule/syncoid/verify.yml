@@ -85,7 +85,19 @@
           - "'slog daemon.info \"run group=$group result=ok' in syncoid_wrapper_text"
           - "'slog daemon.err \"run group=$group result=no_jobs' in syncoid_wrapper_text"
           - "'slog daemon.warning \"run group=$group result=skipped' in syncoid_wrapper_text"
+          # A failed job's queued line also carries the sanitized last error
+          # line from that syncoid invocation; the fallback default marks the
+          # reason unavailable when the capture temp file cannot be made, in
+          # which case the invocation still streams straight into the run log.
+          - >-
+            'job_msg+=("job=$name group=$group result=failed rc=$rc
+            duration_s=$((SECONDS - start)) err=\"$err\"")' in syncoid_wrapper_text
+          - "'local tmp=\"\" err=\"unavailable\"' in syncoid_wrapper_text"
+          - "'syncoid \"$@\" >>\"$log\" 2>&1 || rc=$?' in syncoid_wrapper_text"
         fail_msg: "syncoid wrapper does not report results to syslog"
+
+    - name: Verify a failed job's queued syslog line carries the error reason
+      ansible.builtin.include_tasks: tasks/verify_replicate_error_line.yml
 
     - name: Read the rendered on-boot replication service (boot trigger)
       ansible.builtin.slurp:
