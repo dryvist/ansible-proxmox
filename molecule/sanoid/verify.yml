@@ -107,3 +107,24 @@
             == ['recursive = yes', 'use_template = replica_lean']
           - "'[bulk/replica/stale/hand-thinned]' not in sanoid_conf_text"
         fail_msg: "sanoid.conf did not render the expected templates/datasets"
+
+    - name: Load the sanoid role task list
+      ansible.builtin.set_fact:
+        sanoid_role_tasks: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/sanoid/tasks/main.yml') | from_yaml }}"
+        syncoid_pvesr_tasks: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/syncoid/tasks/pvesr_guests.yml') | from_yaml }}"
+
+    - name: Assert the sanoid role reads the pvesr guest list before it evaluates syncoid_jobs
+      ansible.builtin.assert:
+        that:
+          - (sanoid_role_tasks | first)['ansible.builtin.include_role'].name == 'syncoid'
+          - (sanoid_role_tasks | first)['ansible.builtin.include_role'].tasks_from == 'pvesr_guests.yml'
+          - "'sanoid' in (sanoid_role_tasks | first).tags"
+          - "'sanoid' in (sanoid_role_tasks | first)['ansible.builtin.include_role'].apply.tags"
+          - >-
+            syncoid_pvesr_tasks | selectattr('ansible.builtin.set_fact', 'defined')
+            | map(attribute='ansible.builtin.set_fact')
+            | selectattr('syncoid_pvesr_guest_ids', 'defined') | list | length == 1
+        fail_msg: >-
+          roles/sanoid/tasks/main.yml must start by including syncoid's pvesr_guests.yml
+          (tagged and applied sanoid), and that file must set syncoid_pvesr_guest_ids;
+          otherwise syncoid_jobs on pve-r710 cannot be evaluated by the sanoid role.
