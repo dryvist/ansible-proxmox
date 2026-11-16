@@ -59,9 +59,15 @@
           - rootpool_ct_job[0].options == '--no-sync-snap --quiet'
           - rootpool_ct_job[0].sanoid_replica_class == 'slow'
           - rootpool_ct_job[0].schedule is not defined
-          # A pvesr target on any node keeps the guest out: pvesr already
-          # replicates it, so a syncoid pull here would duplicate it.
-          - rootpool_other_target_ct_job | length == 0
+          # A declared pvesr target without an existing pvesr job still gets its
+          # syncoid replica here.
+          - rootpool_other_target_ct_job | length == 1
+          - >-
+            rootpool_other_target_ct_job[0].source
+            == ('root@' ~ proxmox_node_names.storage ~ ':rpool/data/subvol-601200-disk-0')
+          - >-
+            rootpool_other_target_ct_job[0].target
+            == ('bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/subvol-601200-disk-0')
           # A VM on the root pool generates one job per published disk, named
           # and addressed from the published volume names.
           - rootpool_vm_jobs | map(attribute='name') | list
@@ -74,10 +80,18 @@
                 'bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/vm-601500-disk-1']
           - (rootpool_vm_jobs | map(attribute='options') | list)
             | unique | list == ['--no-sync-snap --quiet']
-          # A VM whose pvesr target is elsewhere is also left out.
-          - rootpool_other_target_vm_job | length == 0
-          # (b) A guest whose HA target is this syncoid target is excluded;
-          # the next assertion covers both guest types.
+          # A VM with a declared pvesr target and no existing pvesr job also
+          # keeps its syncoid job.
+          - rootpool_other_target_vm_job | length == 1
+          - >-
+            rootpool_other_target_vm_job[0].source
+            == ('root@' ~ proxmox_node_names.storage ~ ':rpool/data/vm-601800-disk-0')
+          - >-
+            rootpool_other_target_vm_job[0].target
+            == ('bulk/replica/' ~ proxmox_node_names.storage ~ '/rpool/data/vm-601800-disk-0')
+          # (b) A guest with an existing pvesr job is excluded, while a declared
+          # target without a pvesr job is still included; the next assertions
+          # cover both guest types.
           # (c) A guest tagged agent-sandbox is ephemeral and generates no
           # job. The fixture must keep sitting on this storage node with a
           # root-pool datastore: it is what makes the tag filter — not the
@@ -107,18 +121,90 @@
           {{ rootpool_excluded_endpoints }}.
       when: syncoid_rootpool_jobs_json is defined
 
-    - name: Assert guests replicated to this node do not get root-pool syncoid jobs
+    - name: Assert guests with an existing pvesr job do not get root-pool syncoid jobs
+      ansible.builtin.assert:
+        that:
+          - pvesr_present_ct_job | length == 0
+          - pvesr_present_vm_job | length == 0
+        fail_msg: >-
+          A guest with an existing pvesr job still received a root-pool syncoid
+          job: CT {{ pvesr_present_ct_job }}, VM {{ pvesr_present_vm_job }}.
+      vars:
+        syncoid_pvesr_guest_ids:
+          - 601200
+          - 601800
+        pvesr_present_ct_job: >-
+          {{ syncoid_jobs
+             | selectattr('name', 'eq', 'rootpool-601200-disk-0') | list }}
+        pvesr_present_vm_job: >-
+          {{ syncoid_jobs
+             | selectattr('name', 'eq', 'rootpool-601800-disk-0') | list }}
+      when: syncoid_rootpool_jobs_json is defined
+
+    - name: Assert guests targeting this node get root-pool syncoid jobs when no pvesr job exists
+      ansible.builtin.assert:
+        that:
+          - same_target_ct_jobs | length == 1
+          - same_target_vm_jobs | length == 1
+        fail_msg: >-
+          A guest whose HA replication target is this syncoid target but has no
+          existing pvesr job did not receive a root-pool syncoid job: CT
+          {{ same_target_ct_jobs }}, VM {{ same_target_vm_jobs }}.
+      vars:
+        same_target_ct_vmid: 601900
+        same_target_vm_vmid: 602000
+        containers_from_tofu: >-
+          {{ hostvars[inventory_hostname].containers_from_tofu
+             | combine({
+                 'fixture-same-target-ct': {
+                   'datastore': 'local-zfs',
+                   'ha_replication_target': inventory_hostname,
+                   'node': proxmox_node_names.storage,
+                   'tags': ['container'],
+                   'vmid': same_target_ct_vmid
+                 }
+               }) }}
+        vms_from_tofu: >-
+          {{ hostvars[inventory_hostname].vms_from_tofu
+             | combine({
+                 'fixture-same-target-vm': {
+                   'disks': [{
+                     'datastore': 'local-zfs',
+                     'path': 'vm-' ~ (same_target_vm_vmid | string) ~ '-disk-0'
+                   }],
+                   'ha_replication_target': inventory_hostname,
+                   'node': proxmox_node_names.storage,
+                   'tags': ['vm'],
+                   'vmid': same_target_vm_vmid
+                 }
+               }) }}
+        same_target_ct_jobs: >-
+          {{ syncoid_rootpool_jobs_json | from_json
+             | selectattr('name', 'eq',
+                 'rootpool-' ~ (same_target_ct_vmid | string) ~ '-disk-0')
+             | list }}
+        same_target_vm_jobs: >-
+          {{ syncoid_rootpool_jobs_json | from_json
+             | selectattr('name', 'eq',
+                 'rootpool-' ~ (same_target_vm_vmid | string) ~ '-disk-0')
+             | list }}
+      when: syncoid_rootpool_jobs_json is defined
+
+    - name: Assert guests targeting this node do not get root-pool syncoid jobs when a pvesr job exists
       ansible.builtin.assert:
         that:
           - same_target_ct_jobs | length == 0
           - same_target_vm_jobs | length == 0
         fail_msg: >-
-          A guest whose HA replication target is this syncoid target also
-          received a root-pool syncoid job: CT {{ same_target_ct_jobs }},
-          VM {{ same_target_vm_jobs }}.
+          A guest whose HA replication target is this syncoid target and has an
+          existing pvesr job also received a root-pool syncoid job: CT
+          {{ same_target_ct_jobs }}, VM {{ same_target_vm_jobs }}.
       vars:
         same_target_ct_vmid: 601900
         same_target_vm_vmid: 602000
+        syncoid_pvesr_guest_ids:
+          - 601900
+          - 602000
         containers_from_tofu: >-
           {{ hostvars[inventory_hostname].containers_from_tofu
              | combine({

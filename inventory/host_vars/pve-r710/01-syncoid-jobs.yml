@@ -153,8 +153,10 @@ syncoid_pinned_jobs:
 # - the disk's datastore resolves through the storage node's
 #   pve_dataset_root_by_storage to the node's root pool (rpool/data) — disks
 #   on any other storage stay out, covered by their own jobs or policies;
-# - the guest declares no ha_replication_target; guests pvesr already
-#   replicates, whatever the target node, stay out;
+# - the guest has no existing pvesr replication job in the cluster
+#   (syncoid_pvesr_guest_ids); a guest is skipped only while a pvesr job for it
+#   exists, so a declared ha_replication_target without a job still gets the
+#   syncoid pull;
 # - the guest is not tagged agent-sandbox (see
 #   syncoid_retired_replica_datasets below);
 # - the guest is not tagged shared-media-data; its rootfs is re-acquirable and
@@ -177,6 +179,7 @@ syncoid_rootpool_jobs_json: >-
   {%- set jobs = [] -%}
   {%- set storage_node = proxmox_node_names.storage -%}
   {%- set dataset_roots = hostvars[storage_node].pve_dataset_root_by_storage -%}
+  {%- set pvesr_guest_ids = syncoid_pvesr_guest_ids | default([]) | map('int') | list -%}
   {%- for ct_entry in (containers_from_tofu | mandatory(
         'containers_from_tofu is unset, so the storage-node root-pool guest
         disk jobs cannot be listed. Run playbooks/load_tofu.yml — it targets
@@ -186,7 +189,7 @@ syncoid_rootpool_jobs_json: >-
     {%- if ct.node | default('') == storage_node
           and 'agent-sandbox' not in (ct.tags | default([]))
           and 'shared-media-data' not in (ct.tags | default([]))
-          and not (ct.ha_replication_target | default('', true)) -%}
+          and (ct.vmid | int) not in pvesr_guest_ids -%}
       {%- set datastore = ct.datastore | mandatory(
             'container ' ~ ct_entry.key ~ ' publishes no .datastore, so its
             root-pool dataset path cannot be resolved. The published
@@ -209,7 +212,7 @@ syncoid_rootpool_jobs_json: >-
     {%- if vm.node | default('') == storage_node
           and 'agent-sandbox' not in (vm.tags | default([]))
           and 'shared-media-data' not in (vm.tags | default([]))
-          and not (vm.ha_replication_target | default('', true)) -%}
+          and (vm.vmid | int) not in pvesr_guest_ids -%}
       {%- for disk in vm.disks | mandatory(
             'VM ' ~ vm_entry.key ~ ' publishes no .disks, so its dataset paths
             cannot be resolved. The published inventory predates that field;
