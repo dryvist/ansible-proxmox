@@ -8,7 +8,7 @@
 
 syncoid_pinned_jobs:
   - name: "splunk-{{ splunk_vmid }}-disk0"
-    sanoid_replica_class: fast
+    sanoid_replica_class: lean
     source: >-
       {{ 'root@' ~ splunk_node ~ ':' ~
          hostvars[splunk_node].pve_dataset_root_by_storage[
@@ -21,7 +21,7 @@ syncoid_pinned_jobs:
   # durability through bucket archival. The published volume names follow moves.
   - name: "splunk-{{ splunk_vmid }}-disk2"
     schedule: hourly
-    sanoid_replica_class: fast
+    sanoid_replica_class: lean
     source: >-
       {{ 'root@' ~ splunk_node ~ ':' ~
          hostvars[splunk_node].pve_dataset_root_by_storage[

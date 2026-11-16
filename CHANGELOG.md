@@ -5,13 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.47.1](https://github.com/dryvist/ansible-proxmox/compare/v2.47.0...v2.47.1) (2026-11-16)
-
-
-### Bug Fixes
-
-* **syncoid:** skip only guests with an existing pvesr job ([#1347](https://github.com/dryvist/ansible-proxmox/issues/1347)) ([ae06163](https://github.com/dryvist/ansible-proxmox/commit/ae06163bc637ff4b92528815945776ec36d1d555))
-
 ## [2.47.0](https://github.com/dryvist/ansible-proxmox/compare/v2.46.0...v2.47.0) (2026-11-14)
 
 

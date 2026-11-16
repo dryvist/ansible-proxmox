@@ -36,13 +36,10 @@ pve_ha_anti_affinity_groups:
       - traefik-10
       - traefik-30
   # The Postgres primary/standby pair: a node loss must never take both the
-  # primary and its streaming standby. The pair takes effect only while both
-  # guests carry the `ha-managed` capability tag in the Tofu desired state
-  # (pve_ha_ct_hostnames, 30_membership.yml) — the names in this file do not
-  # confer membership. ha-manager rejects a resource-affinity rule naming a
-  # guest that is not an HA resource, so the two memberships must move
-  # together. Both are application_ha by virtue of this group, so neither
-  # gets a pvesr replica (60_classes.yml).
+  # primary and its streaming standby. postgres-apps is restored here now
+  # that it is HA-managed again (pve_ha_ct_hostnames above) — ha-manager
+  # rejects a resource-affinity rule referencing a guest that is not itself
+  # an HA-managed resource, so the two memberships must move together.
   - name: postgres-pair
     hostnames:
       - postgres

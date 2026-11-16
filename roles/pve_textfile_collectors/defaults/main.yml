@@ -16,8 +16,6 @@ pve_textfile_collectors_zfs_dataset_include_regexes:
   - '^rpool(/.*)?$'
   - '^[^/]+$'
   - '^[^/]+/[^/]+$'
-  # Export per-dataset space for syncoid replica targets.
-  - '^[^/]+/replica(/.*)?$'
   - '^[^/]+/(.*/)?(vm|subvol)-[0-9]+-disk-[0-9]+$'
 # Alert when one rpool dataset's usedbydataset plus usedbyrefreservation grows
 # beyond this threshold in 24 hours. Export it for threshold-driven SPL.
