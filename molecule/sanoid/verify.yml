@@ -36,6 +36,7 @@
           - "'[template_critical]' in sanoid_conf_text"
           - "'[template_rpool_guest]' in sanoid_conf_text"
           - "'[template_scratch]' in sanoid_conf_text"
+          - "'[template_replica_lean]' in sanoid_conf_text"
           - sanoid_templates.critical.hourly == 36
           - sanoid_templates.critical.daily == 30
           - sanoid_templates.critical.weekly == 8
@@ -80,6 +81,17 @@
               'weekly = 0',
               'yearly = 0'
             ]
+          - >-
+            sanoid_conf_block['[template_replica_lean]'] == [
+              'autoprune = yes',
+              'autosnap = no',
+              'daily = 2',
+              'frequently = 0',
+              'hourly = 1',
+              'monthly = 0',
+              'weekly = 0',
+              'yearly = 0'
+            ]
           - "'[rpool/data/nas]' in sanoid_conf_text"
           - "'use_template = critical' in sanoid_conf_text"
           - sanoid_conf_block['[rpool/data/subvol-100-disk-0]'] == ['use_template = rpool_guest']
@@ -90,5 +102,8 @@
           - "'[bulk/replica/source/recursive]' in sanoid_conf_text"
           - sanoid_conf_block['[bulk/replica/source/recursive]'] == ['recursive = yes', 'use_template = replica_slow']
           - sanoid_conf_block['[bulk/replica/source/nonrecursive]'] == ['use_template = replica_fast']
+          - >-
+            sanoid_conf_block['[bulk/replica/source/lean]']
+            == ['recursive = yes', 'use_template = replica_lean']
           - "'[bulk/replica/stale/hand-thinned]' not in sanoid_conf_text"
         fail_msg: "sanoid.conf did not render the expected templates/datasets"

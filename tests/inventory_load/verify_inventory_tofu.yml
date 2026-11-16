@@ -133,14 +133,40 @@
           - hostvars[inventory_primary_node].sanoid_replica_templates.replica_slow.monthly == 3
           - hostvars[inventory_primary_node].sanoid_replica_templates.replica_fast.daily == 7
           - hostvars[inventory_primary_node].sanoid_replica_templates.replica_fast.monthly == 1
+          # High-churn class: 1 hourly, 2 daily, no longer retention.
+          - hostvars[inventory_primary_node].sanoid_replica_templates.replica_lean.autosnap == 'no'
+          - hostvars[inventory_primary_node].sanoid_replica_templates.replica_lean.autoprune == 'yes'
+          - hostvars[inventory_primary_node].sanoid_replica_templates.replica_lean.hourly == 1
+          - hostvars[inventory_primary_node].sanoid_replica_templates.replica_lean.daily == 2
+          - hostvars[inventory_primary_node].sanoid_replica_templates.replica_lean.weekly == 0
+          - hostvars[inventory_primary_node].sanoid_replica_templates.replica_lean.monthly == 0
+          - hostvars[inventory_primary_node].sanoid_replica_templates.replica_lean.yearly == 0
           - hostvars[inventory_primary_node].sanoid_datasets['bulk/replica'].use_template == 'replica_fast'
           - hostvars[inventory_primary_node].sanoid_rpool_guest_monthly | int == 1
           - >-
             (hostvars[inventory_primary_node].syncoid_jobs
             | selectattr('name', 'eq', 'photos') | first).sanoid_replica_class == 'slow'
+          # The high-churn Splunk replicas take the lean class, while the other
+          # pinned jobs keep theirs: fast stays the default for everything else.
+          - >-
+            (hostvars[inventory_primary_node].syncoid_jobs
+            | selectattr('name', 'eq', 'splunk-90200-disk0') | first
+            ).sanoid_replica_class == 'lean'
+          - >-
+            (hostvars[inventory_primary_node].syncoid_jobs
+            | selectattr('name', 'eq', 'splunk-90200-disk2') | first
+            ).sanoid_replica_class == 'lean'
+          - >-
+            (hostvars[inventory_primary_node].syncoid_jobs
+            | selectattr('name', 'eq', 'object-store') | first
+            ).sanoid_replica_class == 'fast'
+          - >-
+            (hostvars[inventory_primary_node].syncoid_jobs
+            | selectattr('name', 'eq', 'databases') | first
+            ).sanoid_replica_class == 'fast'
         fail_msg: >-
-          Replica retention defaults, source snapshots, or the job override did
-          not reach the inventory.
+          Replica retention defaults, the lean template, or the job class
+          overrides did not reach the inventory.
 
     - name: Assert the storage node declares a snapshot policy for the state it holds
       ansible.builtin.assert:
