@@ -40,20 +40,18 @@ runs:
 
     - name: Install Ansible dependencies
       if: steps.galaxy-cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        for attempt in 1 2 3; do
-          ansible-galaxy install -r requirements.yml --force && break
-          echo "Galaxy install attempt $attempt failed, retrying..."
-          sleep 5
-        done
+      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+      with:
+        max_attempts: 3
+        retry_wait_seconds: 5
+        timeout_minutes: 10
+        command: ansible-galaxy install -r requirements.yml --force
 
     - name: Refresh Ansible dependencies from requirements.yml
       if: steps.galaxy-cache.outputs.cache-hit == 'true'
-      shell: bash
-      run: |
-        for attempt in 1 2 3; do
-          ansible-galaxy install -r requirements.yml --force && break
-          echo "Galaxy install attempt $attempt failed, retrying..."
-          sleep 5
-        done
+      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+      with:
+        max_attempts: 3
+        retry_wait_seconds: 5
+        timeout_minutes: 10
+        command: ansible-galaxy install -r requirements.yml --force
