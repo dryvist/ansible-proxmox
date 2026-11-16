@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.48.0](https://github.com/dryvist/ansible-proxmox/compare/v2.47.1...v2.48.0) (2026-11-16)
+
+
+### Features
+
+* **agent:** autonomous opencode-local run j-674ed74e26c18143 ([#1359](https://github.com/dryvist/ansible-proxmox/issues/1359)) ([4415e5e](https://github.com/dryvist/ansible-proxmox/commit/4415e5ef12db0b6fd9e28cb484c51d5a1265120b))
+* **agent:** autonomous opencode-local run j-8587e756e20d963d ([#1355](https://github.com/dryvist/ansible-proxmox/issues/1355)) ([50ab3f0](https://github.com/dryvist/ansible-proxmox/commit/50ab3f00c52594c164aa5865924243015758e957))
+* **agent:** autonomous opencode-local run j-b878a6991d987292 ([#1357](https://github.com/dryvist/ansible-proxmox/issues/1357)) ([c59ab0e](https://github.com/dryvist/ansible-proxmox/commit/c59ab0e767207fb5bdfb377271987c1e4a25eda6))
+* **agent:** opencode-local run j-41b9b9d4689fed0c ([e87c08d](https://github.com/dryvist/ansible-proxmox/commit/e87c08d978774327f485c8deeb4a01792c164bf3))
+* **agent:** opencode-local run j-674ed74e26c18143 ([4415e5e](https://github.com/dryvist/ansible-proxmox/commit/4415e5ef12db0b6fd9e28cb484c51d5a1265120b))
+* **agent:** opencode-local run j-8587e756e20d963d ([50ab3f0](https://github.com/dryvist/ansible-proxmox/commit/50ab3f00c52594c164aa5865924243015758e957))
+* **agent:** opencode-local run j-b878a6991d987292 ([c59ab0e](https://github.com/dryvist/ansible-proxmox/commit/c59ab0e767207fb5bdfb377271987c1e4a25eda6))
+* **pve_textfile_collectors:** export space for every replica dataset ([#1353](https://github.com/dryvist/ansible-proxmox/issues/1353)) ([ca89e09](https://github.com/dryvist/ansible-proxmox/commit/ca89e09f94e689adef3cee4afcaf19fecfb61fae))
+
 ## [2.47.1](https://github.com/dryvist/ansible-proxmox/compare/v2.47.0...v2.47.1) (2026-11-16)
 
 
