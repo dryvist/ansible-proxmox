@@ -3,10 +3,9 @@
 #
 # Shared alert body for zed.d/checksum-notify.sh, zed.d/delay-notify.sh, and
 # the missed-events poller. Publishes to the homelab ntfy alert hub -- not a
-# log line -- because the drive this exists for (Zammad #17242) showed a
-# real, signature-matched corruption-plus-hang event 3 times in 8 days while
-# SMART read PASSED throughout. A stuck monitor or a log nobody reads is not
-# a control.
+# log line -- because the drive this exists for showed a real,
+# signature-matched corruption-plus-hang event while SMART read PASSED.
+# A stuck monitor or a log nobody reads is not a control.
 #
 # Fires a fresh publish per occurrence rather than suppressing repeats: the
 # hub fans out to Slack and Zammad, and a recurrence must not go silent just
@@ -50,8 +49,8 @@ Reason: ${REASON}
 Detail: ${DETAIL}
 
 This fires on any zed checksum/delay event on this host's watched vdev, or on
-zed reporting a missed-events queue overflow. See Zammad #17242 for the
-originating investigation and the drive-replacement decision this signature
+zed reporting a missed-events queue overflow. See this pool's earlier
+incident ticket for the originating investigation and the drive-replacement decision this signature
 already triggered once. If that ticket is closed, this is a NEW occurrence on
 a device that should already have been swapped -- treat as immediate."
 
