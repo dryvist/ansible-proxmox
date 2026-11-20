@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   fix:
-    uses: JacobPEvans/.github-ai/.github/workflows/cc-ci-fix.yml@5743e07e094f6ca410a4b85a0d3681064013f946 # v2.16.0
+    uses: JacobPEvans/.github-ai/.github/workflows/cc-ci-fix.yml@02a519e0d71b0a72ae783e5db707203a53222523 # v2.28.0
     secrets:
       LLM_ROUTER_BASE_URL: ${{ secrets.LLM_ROUTER_BASE_URL }}
       LLM_ROUTER_API_KEY: ${{ secrets.LLM_ROUTER_API_KEY }}
