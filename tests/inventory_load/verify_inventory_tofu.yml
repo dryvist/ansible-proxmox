@@ -101,7 +101,7 @@
         that:
           - >-
             hostvars[inventory_primary_node][(inventory_primary_node | replace('-', '_'))
-            ~ '_bulk_replica_quota'] == '2T'
+            ~ '_bulk_replica_quota'] == '1979G'
           - "'bulk/replica' in hostvars[inventory_primary_node].zfs_pools_vm_disk_properties"
           - hostvars[inventory_primary_node].zfs_pools_vm_disk_properties['bulk/replica'].quota
             == hostvars[inventory_primary_node][(inventory_primary_node | replace('-', '_')) ~ '_bulk_replica_quota']
