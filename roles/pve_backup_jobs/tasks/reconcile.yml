@@ -81,7 +81,12 @@
         {{ ((item.exclude_names | default([])
              | map('extract', pve_backup_jobs_tofu_guest_map)
              | map(attribute='vmid') | map('int') | list)
-            + pve_backup_jobs_tag_vmids)
+            + pve_backup_jobs_tag_vmids
+            + ([pve_backup_jobs_pbs_guest_vmid | int]
+               if (pve_backup_jobs_pbs_node | length > 0
+                   and item.node | default('') == pve_backup_jobs_pbs_node
+                   and item.names is not defined
+                   and pve_backup_jobs_pbs_guest_vmid | int > 0) else []))
            | unique | list | sort }}
     # Guests carrying an excluded tag, from the same map the names resolve
     # against. subelements yields one (guest, tag) pair per tag a guest carries;

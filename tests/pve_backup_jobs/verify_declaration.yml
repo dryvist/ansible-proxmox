@@ -199,14 +199,39 @@
             storage: fixture-backup-store
             schedule: "02:30"
 
-    - name: Refuse a job on the backup node
-      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+    - name: Accept a pool job on the backup node
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
       vars:
-        pve_backup_jobs_refusal_id: backup-node
-        pve_backup_jobs_refusal_expected_error: fixture-on-backup-node
-        pve_backup_jobs_refusal_jobs:
+        pve_backup_jobs_jobs:
           - id: fixture-on-backup-node
             pool: fixture-pool
+            node: fixture-backup-node
+            storage: fixture-backup-store
+            schedule: "02:30"
+
+    - name: Refuse a backup-node job when the backup server guest does not resolve
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: pbs-unresolved
+        pve_backup_jobs_refusal_expected_error: fixture-backup-node-unresolved
+        pve_backup_jobs_refusal_pbs_server: fixture-unknown-server
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-backup-node-unresolved
+            all: true
+            node: fixture-backup-node
+            storage: fixture-backup-store
+            schedule: "02:30"
+
+    - name: Refuse a names job on the backup node that selects the backup server
+      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+      vars:
+        pve_backup_jobs_refusal_id: pbs-selected
+        pve_backup_jobs_refusal_expected_error: fixture-backup-node-selects-pbs
+        pve_backup_jobs_refusal_jobs:
+          - id: fixture-backup-node-selects-pbs
+            names: [fixture-pbs]
             node: fixture-backup-node
             storage: fixture-backup-store
             schedule: "02:30"
@@ -232,12 +257,12 @@
         pve_backup_jobs_refusal_default_mode: faster
         pve_backup_jobs_refusal_jobs: []
 
-    - name: Refuse a backup-node job without its guest excluded
-      ansible.builtin.include_tasks: assert_declaration_refusal.yml
+    - name: Accept an all job on the backup node without a named exclusion
+      ansible.builtin.include_role:
+        name: pve_backup_jobs
+        tasks_from: validate.yml
       vars:
-        pve_backup_jobs_refusal_id: pbs-node
-        pve_backup_jobs_refusal_expected_error: fixture-backup-node-unexcluded
-        pve_backup_jobs_refusal_jobs:
+        pve_backup_jobs_jobs:
           - id: fixture-backup-node-unexcluded
             all: true
             node: fixture-backup-node
@@ -276,10 +301,10 @@
           - >-
             (pve_backup_jobs_refusals | default([]) | sort)
             == [
-              'backup-node', 'both', 'change-detection',
+              'both', 'change-detection',
               'default-change-detection', 'duplicate', 'exclude-name',
-              'names-tags', 'neither', 'node', 'node-list', 'pbs-node',
-              'storage', 'tags-shape', 'vmid'
+              'names-tags', 'neither', 'node', 'node-list', 'pbs-selected',
+              'pbs-unresolved', 'storage', 'tags-shape', 'vmid'
             ]
         fail_msg: "Unexpected declaration refusals: {{ pve_backup_jobs_refusals | default([]) | sort }}"
         success_msg: "PASS: all fourteen declaration refusals fired"
