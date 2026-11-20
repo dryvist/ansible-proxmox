@@ -149,6 +149,7 @@ def test_each_job_selects_one_scope_on_one_node():
     assert all(job.get("all") is not True for job in JOBS if "names" in job)
     assert {job["id"]: job["schedule"] for job in JOBS} == {
         "guests-pve-r540": "06:33",
+        "guests-pve-r540-s3": "14:17",
         "guests-pve-r710": "06:31",
         "guests-pve-w5900": "06:01",
         "guests-pve-w5900-stop": "06:43",
@@ -195,3 +196,11 @@ def test_r710_job_is_enabled_and_excludes_the_old_backup_vm():
 def test_jobs_default_to_legacy_change_detection():
     assert INVENTORY["pve_backup_jobs_default_pbs_change_detection_mode"] == "legacy"
     assert all("pbs_change_detection_mode" not in job for job in JOBS)
+
+
+def test_object_store_has_its_own_job():
+    job = next(job for job in JOBS if job["id"] == "guests-pve-r540-s3")
+    assert job["names"] == ["s3"]
+    assert job["enabled"] is True
+    r540 = next(job for job in JOBS if job["id"] == "guests-pve-r540")
+    assert "s3" in r540["exclude_names"]
