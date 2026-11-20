@@ -74,6 +74,7 @@ jobs:
           - 'tests/guest_recovery/**'
           - 'tests/test_guest_recovery_contract.py'
           - 'tests/test_zfs_nfs_export_permissions.py'
+          - 'tests/test_syncoid_retired_snapshots.py'
           - 'tests/pve_bulk_data_compare/**'
           - 'tests/pve_notifications/**'
           - 'tests/zfs_capacity_monitor/**'
