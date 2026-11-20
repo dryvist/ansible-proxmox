@@ -30,6 +30,11 @@ Re-runs are no-ops; bumping `pve_node_exporter_version` (plus checksum) rolls
 the fleet forward on the next converge, and the same holds for
 `pve_node_exporter_zfs_exporter_version`.
 
+## Installation
+
+Part of this repository's roles; no separate install. The role downloads both
+exporter binaries itself on each node.
+
 ## Where It Runs
 
 Wired into `playbooks/site.yml` against the `proxmox` group. By default the
