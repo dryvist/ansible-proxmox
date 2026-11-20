@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.52.1](https://github.com/dryvist/ansible-proxmox/compare/v2.52.0...v2.52.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **guest-recovery:** pick the recovery path from the live guest type ([#1384](https://github.com/dryvist/ansible-proxmox/issues/1384)) ([02852f9](https://github.com/dryvist/ansible-proxmox/commit/02852f90aa1597e7b4b3b7e494122c6110c14be2))
+* **pve_node_exporter:** gate the snapshot collector assert at task level ([#1383](https://github.com/dryvist/ansible-proxmox/issues/1383)) ([74a215a](https://github.com/dryvist/ansible-proxmox/commit/74a215a18cedd2d53b2f793c308ed551bf5a521a))
+* **syncoid:** resolve system binaries first in the restore check ([#1385](https://github.com/dryvist/ansible-proxmox/issues/1385)) ([8fb39b4](https://github.com/dryvist/ansible-proxmox/commit/8fb39b42f39e5852c391c445fbdd8c596a9d4edd))
+
 ## [2.52.0](https://github.com/dryvist/ansible-proxmox/compare/v2.51.0...v2.52.0) (2026-11-20)
 
 
