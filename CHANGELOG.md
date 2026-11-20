@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.50.0](https://github.com/dryvist/ansible-proxmox/compare/v2.49.0...v2.50.0) (2026-11-17)
+
+
+### Features
+
+* **ci:** replace the CI Fix caller with a dispatch-only OpenHands caller ([#1369](https://github.com/dryvist/ansible-proxmox/issues/1369)) ([36cf159](https://github.com/dryvist/ansible-proxmox/commit/36cf159c02addc8e3d7b8b297663119f8010cf16))
+
 ## [2.49.0](https://github.com/dryvist/ansible-proxmox/compare/v2.48.0...v2.49.0) (2026-11-16)
 
 

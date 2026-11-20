@@ -1,0 +1,16 @@
+---
+- name: Assert every LXC pct exec is inside a per-container timeout
+  vars:
+    ssh_ca_trust_lxc_task_files: "{{ query('ansible.builtin.fileglob', '../../../roles/ssh_ca_trust/tasks/lxc*.yml') }}"
+    ssh_ca_trust_lxc_task_text: "{{ query('ansible.builtin.file', *ssh_ca_trust_lxc_task_files) | join('\n') }}"
+    ssh_ca_trust_lxc_exec_pattern: '(?m)^[^#\r\n]*\bpct[ \t]+exec\b'
+    ssh_ca_trust_lxc_timeout_pattern: >-
+      (?m)^ {6}timeout --kill-after=5s \{\{ ssh_ca_trust_lxc_exec_timeout \| int \}\}s
+      /bin/bash /dev/fd/3 3<<'LXC_EXEC'\n((?: {6}[^\r\n]*\n|\n)*?)^ {6}LXC_EXEC$
+    ssh_ca_trust_lxc_timed_scripts: "{{ ssh_ca_trust_lxc_task_text | regex_findall(ssh_ca_trust_lxc_timeout_pattern) | join('\n') }}"
+    ssh_ca_trust_lxc_exec_count: "{{ ssh_ca_trust_lxc_task_text | regex_findall(ssh_ca_trust_lxc_exec_pattern) | length }}"
+  ansible.builtin.assert:
+    that:
+      - ssh_ca_trust_lxc_exec_count > 0
+      - ssh_ca_trust_lxc_exec_count == (ssh_ca_trust_lxc_timed_scripts | regex_findall(ssh_ca_trust_lxc_exec_pattern) | length)
+    fail_msg: Every LXC pct exec must run inside a shell script bounded by ssh_ca_trust_lxc_exec_timeout.

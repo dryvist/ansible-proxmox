@@ -29,6 +29,7 @@
   ansible.builtin.shell:
     executable: /bin/bash
     cmd: |
+      timeout --kill-after=5s {{ ssh_ca_trust_lxc_exec_timeout | int }}s /bin/bash /dev/fd/3 3<<'LXC_EXEC'
       set -o pipefail
       {% set nixos = ssh_ca_trust_lxc_nixos[item | string] | default(false) %}
       {% set fp_files = ssh_ca_trust_lxc_fingerprint_files_nixos if nixos else ssh_ca_trust_fingerprint_files %}
@@ -38,6 +39,9 @@
       gx=(pct exec {{ item }} --)
       {% endif %}
       pubkey=$("${gx[@]}" cat /etc/ssh/ssh_host_ed25519_key.pub)
+      pubkey=${pubkey%%$'\n'*}
+      printf 'PUBKEY=%s\n' "$pubkey"
+      if [ -z "$pubkey" ]; then exit 0; fi
       hostname=$(pct config {{ item }} | awk -F': ' '$1=="hostname"{print $2}')
       hostname="${hostname:-CT{{ item }}}"
       if "${gx[@]}" test -f {{ ssh_ca_trust_host_cert_path }}; then
@@ -57,13 +61,14 @@
       certfp_before=$("${gx[@]}" sh -c \
         'cat {{ fp_files }} 2>/dev/null | md5sum' \
         2>/dev/null || echo absent)
-      printf 'PUBKEY=%s\n' "$pubkey"
       printf 'HOSTNAME=%s\n' "$hostname"
       printf 'PRESENT=%s\n' "$present"
       printf 'PROBE_B64=%s\n' "$(printf '%s' "$probe" | base64 | tr -d '\n')"
       printf 'PREFP=%s\n' "$certfp_before"
+      LXC_EXEC
   loop: "{{ ssh_ca_trust_lxc_running }}"
   register: ssh_ca_trust_lxc_host_cert_probe
+  failed_when: ssh_ca_trust_lxc_host_cert_probe.rc not in [0, 124, 137]
   changed_when: false
   # Read-only; a check run needs the real value to preview the trust rollout.
   check_mode: false
@@ -95,6 +100,7 @@
   ansible.builtin.shell:
     executable: /bin/bash
     cmd: |
+      timeout --kill-after=5s {{ ssh_ca_trust_lxc_exec_timeout | int }}s /bin/bash /dev/fd/3 3<<'LXC_EXEC'
       set -euo pipefail
       {% if ssh_ca_trust_lxc_nixos[item.item.ctid | string] | default(false) %}
       gx=(pct exec {{ item.item.ctid }} -- /run/current-system/sw/bin/env PATH=/run/current-system/sw/bin)
@@ -104,8 +110,19 @@
       printf '%s' {{ item.json.data.signed_key | quote }} \
         | "${gx[@]}" tee {{ ssh_ca_trust_host_cert_path }} > /dev/null
       "${gx[@]}" chmod 0644 {{ ssh_ca_trust_host_cert_path }}
+      LXC_EXEC
   # Under --check the sign POST is skipped, so its results carry no json.
   loop: "{{ ssh_ca_trust_lxc_host_cert_signed.results | default([]) | selectattr('json', 'defined') | list }}"
   loop_control:
     label: "{{ item.item.ctid }}"
-  changed_when: true
+  register: ssh_ca_trust_lxc_host_cert_install
+  failed_when: ssh_ca_trust_lxc_host_cert_install.rc not in [0, 124, 137]
+  changed_when: ssh_ca_trust_lxc_host_cert_install.rc == 0
+
+- name: Warn about containers whose host certificate install timed out
+  ansible.builtin.debug:
+    msg: "WARNING: LXC {{ item.item.item.ctid }} host certificate install timed out. Skipping CA trust push."
+  loop: "{{ ssh_ca_trust_lxc_host_cert_install.results }}"
+  loop_control:
+    label: "{{ item.item.item.ctid }}"
+  when: item.rc | default(0) in [124, 137]

@@ -102,12 +102,14 @@ pve_node_exporter_zfs_exporter_filesystem_properties:
   - referenced
   - used
   - usedbysnapshots
+  - written
 pve_node_exporter_zfs_exporter_volume_properties:
   - available
   - referenced
   - used
   - usedbysnapshots
   - volsize
+  - written
 
 # Extra CLI flags appended verbatim to the zfs_exporter ExecStart (e.g.
 # ["--exclude=^rpool/data/"]).

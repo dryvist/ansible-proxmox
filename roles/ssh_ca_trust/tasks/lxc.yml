@@ -116,6 +116,11 @@
       did NOT receive CA trust — static-key retirement stays blocked for them.
   when: ssh_ca_trust_lxc_stopped | length > 0
 
+- name: Require a positive LXC exec timeout
+  ansible.builtin.assert:
+    that: ssh_ca_trust_lxc_exec_timeout | int > 0
+    quiet: true
+
 # --- SSH host certificates for running containers (rollout gate) ---------
 # Split into tasks/lxc_host_cert.yml (probe/decide/sign/install) to keep this
 # file under the repo's per-file token budget — see that file for the
