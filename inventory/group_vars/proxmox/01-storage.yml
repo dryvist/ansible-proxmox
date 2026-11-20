@@ -126,6 +126,6 @@ pve_backup_jobs_jobs:
       - win25-vdi
     exclude_tags:
       - media
-  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: false}
+  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: true, exclude_names: [pbs]}
   - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:01", enabled: true, exclude_names: [splunk, prometheus]}
   - {id: guests-pve-w5900-stop, names: [prometheus], node: pve-w5900, storage: guests, schedule: "06:43", enabled: true, mode: stop}
