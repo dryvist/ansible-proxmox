@@ -55,8 +55,8 @@ With `sanoid_replica_retention_enabled`, the role derives stanzas for
 `syncoid_jobs` targets, including descendants of recursive targets. Jobs may
 set `sanoid_replica_class`; other jobs use the group default. The `slow` class
 keeps 1 hourly, 14 daily and 3 monthly snapshots, while `fast` keeps 1 hourly,
-7 daily and 1 monthly snapshot. The `lean` class keeps 1 hourly and 2 daily
-snapshots. Replica templates disable new snapshots and prune `autosnap_*` names
+7 daily and 1 monthly snapshot. The `week` class keeps 1 hourly and 7 daily
+snapshots. The `lean` class keeps 1 hourly and 2 daily snapshots. Replica templates disable new snapshots and prune `autosnap_*` names
 only. Sources need daily and monthly Sanoid snapshots for all retention
 classes to have snapshots to retain.
 

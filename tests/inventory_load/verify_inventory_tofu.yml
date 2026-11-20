@@ -101,7 +101,7 @@
         that:
           - >-
             hostvars[inventory_primary_node][(inventory_primary_node | replace('-', '_'))
-            ~ '_bulk_replica_quota'] == '1979G'
+            ~ '_bulk_replica_quota'] == '1862G'
           - "'bulk/replica' in hostvars[inventory_primary_node].zfs_pools_vm_disk_properties"
           - hostvars[inventory_primary_node].zfs_pools_vm_disk_properties['bulk/replica'].quota
             == hostvars[inventory_primary_node][(inventory_primary_node | replace('-', '_')) ~ '_bulk_replica_quota']
@@ -137,6 +137,8 @@
           - hostvars[inventory_primary_node].sanoid_replica_templates.replica_slow.monthly == 3
           - hostvars[inventory_primary_node].sanoid_replica_templates.replica_fast.daily == 7
           - hostvars[inventory_primary_node].sanoid_replica_templates.replica_fast.monthly == 1
+          - hostvars[inventory_primary_node].sanoid_replica_templates.replica_week.daily == 7
+          - hostvars[inventory_primary_node].sanoid_replica_templates.replica_week.monthly == 0
           # High-churn class: 1 hourly, 2 daily, no longer retention.
           - hostvars[inventory_primary_node].sanoid_replica_templates.replica_lean.autosnap == 'no'
           - hostvars[inventory_primary_node].sanoid_replica_templates.replica_lean.autoprune == 'yes'
@@ -163,7 +165,11 @@
           - >-
             (hostvars[inventory_primary_node].syncoid_jobs
             | selectattr('name', 'eq', 'object-store') | first
-            ).sanoid_replica_class == 'fast'
+            ).sanoid_replica_class == 'week'
+          - >-
+            (hostvars[inventory_primary_node].syncoid_jobs
+            | selectattr('name', 'eq', 'ct-405000-disk3') | first
+            ).sanoid_replica_class == 'lean'
           - >-
             (hostvars[inventory_primary_node].syncoid_jobs
             | selectattr('name', 'eq', 'databases') | first
