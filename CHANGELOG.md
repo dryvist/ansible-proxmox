@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.51.0](https://github.com/dryvist/ansible-proxmox/compare/v2.50.0...v2.51.0) (2026-11-20)
+
+
+### Features
+
+* **pve_node_exporter:** export the ZFS written property per dataset ([#1372](https://github.com/dryvist/ansible-proxmox/issues/1372)) ([ca6e678](https://github.com/dryvist/ansible-proxmox/commit/ca6e6786375a83f76459828d9b14afe4829c7449))
+
+
+### Bug Fixes
+
+* **ssh_ca_trust:** bound each LXC pct exec and skip containers without a host key ([#1375](https://github.com/dryvist/ansible-proxmox/issues/1375)) ([bac6c2a](https://github.com/dryvist/ansible-proxmox/commit/bac6c2a32734c073cae427fde8a7e6b28ea857f7))
+
 ## [2.50.0](https://github.com/dryvist/ansible-proxmox/compare/v2.49.0...v2.50.0) (2026-11-17)
 
 
