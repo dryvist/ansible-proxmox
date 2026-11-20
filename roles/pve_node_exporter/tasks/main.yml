@@ -17,19 +17,9 @@
   tags:
     - pve_node_exporter
 
-- name: Assert the zfs_exporter snapshot collector configuration is valid
-  ansible.builtin.assert:
-    that:
-      - pve_node_exporter_zfs_exporter_snapshot_properties | length > 0
-      - pve_node_exporter_zfs_exporter_snapshot_excludes | reject('contains', '@') | list | length == 0
-    fail_msg: >-
-      pve_node_exporter_zfs_exporter_snapshot_properties must not be empty,
-      and every pve_node_exporter_zfs_exporter_snapshot_excludes entry must
-      contain '@' (zfs_exporter applies --exclude to filesystems and
-      volumes too). Excludes missing '@':
-      {{ pve_node_exporter_zfs_exporter_snapshot_excludes | reject('contains', '@') | list | join(', ') }}
-    when: pve_node_exporter_zfs_exporter_snapshot_collector | bool
-    quiet: true
+- name: Validate the zfs_exporter snapshot collector settings
+  ansible.builtin.include_tasks: validate_snapshot_collector.yml
+  when: pve_node_exporter_zfs_exporter_snapshot_collector | bool
   tags:
     - pve_node_exporter
 
