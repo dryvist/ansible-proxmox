@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.52.0](https://github.com/dryvist/ansible-proxmox/compare/v2.51.0...v2.52.0) (2026-11-20)
+
+
+### Features
+
+* **pve_node_exporter:** add opt-in snapshot creation collector ([#1379](https://github.com/dryvist/ansible-proxmox/issues/1379)) ([fe1fe7c](https://github.com/dryvist/ansible-proxmox/commit/fe1fe7cb85af31bd30ddc148843310ad0bb35044))
+
+
+### Bug Fixes
+
+* **guest-recovery:** load the OpenTofu host data before the Proxmox play ([#1381](https://github.com/dryvist/ansible-proxmox/issues/1381)) ([a80e0b2](https://github.com/dryvist/ansible-proxmox/commit/a80e0b2fc73f45d92b10b87d7adc18cb19ade093))
+
 ## [2.51.0](https://github.com/dryvist/ansible-proxmox/compare/v2.50.0...v2.51.0) (2026-11-20)
 
 
