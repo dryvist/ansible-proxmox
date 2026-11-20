@@ -1,21 +1,23 @@
 ---
 # Verify the syncoid role's weekly restore-check contract without ZFS.
-# Run: ansible-playbook tests/syncoid/verify_restore_check.yml -i localhost, -c local
+# Render-only check: ansible-playbook tests/syncoid/verify_restore_check.yml -i localhost, -c local
 #
 # Two layers:
 #   1. Render the unit, timer and script from the role templates and pin the
 #      contract they must carry: weekly schedule off the quarter-hour grid,
 #      RandomizedDelaySec + FixedRandomDelay, a read-only clone, and an
 #      always-destroy (EXIT trap) that no failure path can skip.
-#   2. EXECUTE the rendered script against a stubbed zfs and logger in every
-#      failure mode. The always-destroy is the load-bearing guarantee — a
+#   2. In Molecule only, EXECUTE the rendered script against a stubbed zfs and
+#      logger in every failure mode. The stubs replace the real binaries at the
+#      paths the script's pinned PATH resolves, so this never runs on a CI
+#      host. The always-destroy is the load-bearing guarantee — a
 #      clone left behind by a failed check pins blocks and clutters the
 #      replica namespace — so it is exercised, not just read. A template that
 #      stopped trapping EXIT would pass layer 1's substring check only if the
 #      assertions here also went stale; the harness runs make that two
 #      independent tripwires.
 - name: Verify the syncoid restore-check contract
-  hosts: localhost
+  hosts: "{{ 'all' if restore_check_molecule | default(false) else 'localhost' }}"
   become: false
   gather_facts: false
 
@@ -258,3 +260,4 @@
 
     - name: Verify the restore-check script against the harness
       ansible.builtin.import_tasks: tasks/verify_restore_check_harness.yml
+      when: restore_check_molecule | default(false)
