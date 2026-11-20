@@ -45,6 +45,8 @@ unless a group flips rollout on for that host class.
    paths; until it does they run every in-guest command through the
    `/run/current-system/sw/bin` PATH and are recorded not-ready, never
    failed.
+   With host certificate signing enabled, a missing Ed25519 host public key
+   skips signing and the trust push for that CTID and emits a warning.
    VMs must be SSH-reached in the published inventory, running locally, and
    confirmed as Debian by a responding guest agent. VMs without guest exec are
    logged and skipped. `ssh_ca_trust_manage_vms` follows the existing
@@ -71,3 +73,8 @@ env `SSH_CA_FINGERPRINT`), `ssh_ca_trust_bao_addr` (env `BAO_ADDR`),
 entries for a container that also has a non-root user logging in over SSH
 (git-over-ssh, sftp-only, rsync/backup-pull); set per-host/group in
 inventory, never in this role.
+
+`ssh_ca_trust_lxc_exec_timeout` sets the time limit in whole seconds for each
+container's certificate probe, certificate install, and CA trust push
+(default `60`, must be positive). The role warns when a step times out,
+records the container as not ready, and continues with the others.

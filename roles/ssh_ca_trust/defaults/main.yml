@@ -52,6 +52,8 @@ ssh_ca_trust_principals:
 # Trusts the same two automation principals as the PVE-node map, in
 # lockstep: `ansible` and `semaphore` on root; `ai-agent` only via override.
 ssh_ca_trust_manage_lxc: true
+# Maximum seconds for each container's host-certificate probe, install, or CA-trust push.
+ssh_ca_trust_lxc_exec_timeout: 60
 ssh_ca_trust_lxc_principals:
   root: [ansible, semaphore]
 

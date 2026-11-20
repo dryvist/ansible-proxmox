@@ -3,6 +3,9 @@
 # under the repo's per-file token budget. Included from verify.yml's task
 # list only — same `hosts`/vars_files/become as the parent play.
 
+- name: Verify the per-container pct exec timeout
+  ansible.builtin.include_tasks: verify_lxc_timeout.yml
+
 # Host-certificate renewal decision — rendered, never hand-duplicated.
 # ssh-keygen -Lf's real output format, captured once from a certificate
 # this role's own sign call issued (see PR description).
@@ -131,21 +134,53 @@
     ssh_ca_trust_lxc_host_cert_probe:
       results:
         - item: 100
-          stdout: |-
+          stdout: &healthy_probe |-
             PUBKEY=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample root@ct
             HOSTNAME=Ct-Example-96GB
             PRESENT=0
             PROBE_B64=
             PREFP=d41d8cd98f00b204e9800998ecf8427e  -
+        - item: 101
+          stdout: |-
+            PUBKEY=
+            HOSTNAME=no-key
+            PRESENT=0
+            PREFP=absent
+        - item: 102
+          rc: 124
+          stdout: *healthy_probe
+        - item: 103
+          stdout: |-
+            HOSTNAME=no-key-field
+            PRESENT=0
+            PREFP=absent
+        - item: 104
+          stdout: |-
+            PUBKEY=ssh-ed25519 fixture
+            HOSTNAME=
+            PRESENT=0
+            PREFP=absent
+        - item: 105
+          stdout: |-
+            PUBKEY=ssh-ed25519 fixture
+            HOSTNAME=no-fingerprint-field
+            PRESENT=0
+        - item: 106
+          stdout: |-
+            PUBKEY=ssh-ed25519 fixture
+            HOSTNAME=no-present-value
+            PRESENT=
+            PREFP=absent
 
-- name: Assert the fixture container's decision
+- name: Assert only the healthy fixture container has a signing decision
   ansible.builtin.assert:
     that:
       - ssh_ca_trust_lxc_host_cert_decisions | length == 1
+      - ssh_ca_trust_lxc_host_cert_decisions[0].ctid == 100
       - ssh_ca_trust_lxc_host_cert_decisions[0].pubkey == 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample root@ct'
       - ssh_ca_trust_lxc_host_cert_decisions[0].principal == 'ct-example-96gb.example.test'
       - ssh_ca_trust_lxc_host_cert_decisions[0].needs_signing | bool
-      - ssh_ca_trust_lxc_host_cert_pre_fp[100] == 'd41d8cd98f00b204e9800998ecf8427e'
+      - "ssh_ca_trust_lxc_host_cert_pre_fp == {100: 'd41d8cd98f00b204e9800998ecf8427e'}"
     fail_msg: >-
       tasks/lxc_host_cert_decide.yml must capture the whole public key line,
       build the lowercase principal from HOSTNAME plus the domain, and sign when no
