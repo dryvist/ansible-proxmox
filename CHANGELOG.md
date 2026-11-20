@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.55.0](https://github.com/dryvist/ansible-proxmox/compare/v2.54.2...v2.55.0) (2026-11-20)
+
+
+### Features
+
+* **pve_backup_jobs:** enable two more node backup jobs ([#1403](https://github.com/dryvist/ansible-proxmox/issues/1403)) ([d3d9516](https://github.com/dryvist/ansible-proxmox/commit/d3d9516db2050851f9ecf2ea08873e004393560c))
+
 ## [2.54.2](https://github.com/dryvist/ansible-proxmox/compare/v2.54.1...v2.54.2) (2026-11-20)
 
 
