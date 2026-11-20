@@ -120,6 +120,10 @@
               ~ '/subvol-' ~ hostvars[inventory_primary_node].object_store_vmid ~ '-disk-1'
             ].reservation == '900G'
           - hostvars[inventory_primary_node].zfs_pools_vm_disk_properties['bulk/backups'].quota == '600G'
+          - >-
+            ['bulk/subvol-110030-disk-0', 'bulk/subvol-110031-disk-0', 'bulk/subvol-5310030-disk-0']
+            | map('extract', hostvars[inventory_primary_node].zfs_pools_vm_disk_properties)
+            | map(attribute='reservation') | list == ['4G', '4G', '4G']
         fail_msg: >-
           The object-store replica must reach zfs_pools with its reservation,
           keyed by the same derived path its syncoid job pulls into, and the
