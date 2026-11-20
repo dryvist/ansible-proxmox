@@ -54,7 +54,10 @@ zfs_pools_vm_disk_properties_node: >-
   {{ {
        'bulk/replica': {'quota': pve_r710_bulk_replica_quota},
        'bulk/replica/' ~ object_store_node ~ '/subvol-' ~ object_store_vmid ~ '-disk-1': {'reservation': '900G'},
-       'bulk/backups': {'quota': '600G'}
+       'bulk/backups': {'quota': '600G'},
+       'bulk/subvol-110030-disk-0': {'reservation': '4G'},
+       'bulk/subvol-110031-disk-0': {'reservation': '4G'},
+       'bulk/subvol-5310030-disk-0': {'reservation': '4G'}
      } }}
 
 # The Splunk configuration disk is ~4 GB of text that changes whenever anything
