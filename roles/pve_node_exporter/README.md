@@ -86,6 +86,10 @@ labelled `name`, `pool` and `type`, plus its pool series:
 | `zfs_dataset_quota_bytes`            | `quota`           | filesystems          |
 | `zfs_dataset_referenced_bytes`       | `referenced`      | filesystems, volumes |
 | `zfs_dataset_volume_size_bytes`      | `volsize`         | volumes              |
+| `zfs_dataset_written_bytes`          | `written`         | filesystems, volumes |
+
+`written` is the space written since the dataset's latest snapshot, so it is
+the size of the next incremental send.
 
 The snapshot collector is off (`--no-collector.dataset-snapshot`), so no
 per-snapshot series exist and cardinality stays bounded by the dataset count.
