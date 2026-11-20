@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.54.0](https://github.com/dryvist/ansible-proxmox/compare/v2.53.0...v2.54.0) (2026-11-20)
+
+
+### Features
+
+* **storage:** add three dataset reservations ([#1395](https://github.com/dryvist/ansible-proxmox/issues/1395)) ([d8298e9](https://github.com/dryvist/ansible-proxmox/commit/d8298e995aced69abf76dc956ad4ce2f393ea13b))
+* **storage:** reserve space for three guest root filesystems on the bulk pool ([d8298e9](https://github.com/dryvist/ansible-proxmox/commit/d8298e995aced69abf76dc956ad4ce2f393ea13b))
+
 ## [2.53.0](https://github.com/dryvist/ansible-proxmox/compare/v2.52.1...v2.53.0) (2026-11-20)
 
 
