@@ -17,8 +17,19 @@ def _tasks(play: dict) -> list[dict]:
     return result
 
 
+def _plays() -> list[dict]:
+    return [play for play in yaml.safe_load(PLAYBOOK.read_text()) if "hosts" in play]
+
+
+def test_loads_tofu_before_its_proxmox_hosts() -> None:
+    # ansible_user on the proxmox hosts resolves from proxmox_user_from_tofu, which only load_tofu.yml sets.
+    entries = yaml.safe_load(PLAYBOOK.read_text())
+    assert entries[0].get("ansible.builtin.import_playbook") == "load_tofu.yml"
+    assert [entry.get("ansible.builtin.import_playbook") for entry in entries].count("load_tofu.yml") == 1
+
+
 def test_targets_are_limited_to_inventory_group() -> None:
-    plays = yaml.safe_load(PLAYBOOK.read_text())
+    plays = _plays()
     assert [play["hosts"] for play in plays] == ["localhost", "proxmox"]
 
     request_assert = plays[0]["tasks"][0]["ansible.builtin.assert"]
@@ -40,7 +51,7 @@ def test_mutating_commands_use_fixed_argv() -> None:
 
 
 def test_unit_kill_restores_memory_in_always_block() -> None:
-    plays = yaml.safe_load(PLAYBOOK.read_text())
+    plays = _plays()
     kill = next(
         task
         for task in plays[1]["tasks"]
