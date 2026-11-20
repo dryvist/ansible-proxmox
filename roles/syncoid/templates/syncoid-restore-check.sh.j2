@@ -19,7 +19,8 @@
 # name and snapshot age, so the existing log pipeline sees the weekly result.
 set -uo pipefail
 
-export PATH="${PATH:+$PATH:}/usr/sbin:/sbin:/usr/bin:/bin"
+# Resolve system binaries first because this script runs as root.
+export PATH="/usr/sbin:/sbin:/usr/bin:/bin${PATH:+:$PATH}"
 
 DATASET="{{ syncoid_restore_check_dataset }}"
 BUCKET="{{ syncoid_restore_check_bucket }}"

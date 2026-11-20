@@ -1,21 +1,23 @@
 ---
 # Verify the syncoid role's weekly restore-check contract without ZFS.
-# Run: ansible-playbook tests/syncoid/verify_restore_check.yml -i localhost, -c local
+# Render-only check: ansible-playbook tests/syncoid/verify_restore_check.yml -i localhost, -c local
 #
 # Two layers:
 #   1. Render the unit, timer and script from the role templates and pin the
 #      contract they must carry: weekly schedule off the quarter-hour grid,
 #      RandomizedDelaySec + FixedRandomDelay, a read-only clone, and an
 #      always-destroy (EXIT trap) that no failure path can skip.
-#   2. EXECUTE the rendered script against a stubbed zfs and logger in every
-#      failure mode. The always-destroy is the load-bearing guarantee — a
+#   2. In Molecule only, EXECUTE the rendered script against a stubbed zfs and
+#      logger in every failure mode. The stubs replace the real binaries at the
+#      paths the script's pinned PATH resolves, so this never runs on a CI
+#      host. The always-destroy is the load-bearing guarantee — a
 #      clone left behind by a failed check pins blocks and clutters the
 #      replica namespace — so it is exercised, not just read. A template that
 #      stopped trapping EXIT would pass layer 1's substring check only if the
 #      assertions here also went stale; the harness runs make that two
 #      independent tripwires.
 - name: Verify the syncoid restore-check contract
-  hosts: localhost
+  hosts: "{{ 'all' if restore_check_molecule | default(false) else 'localhost' }}"
   become: false
   gather_facts: false
 
@@ -211,11 +213,11 @@
           # Read-only, noauto, explicit temporary mountpoint — the check must
           # be physically unable to write into the replica and must never
           # collide with the live replica mount.
-          - "'zfs clone -o readonly=on -o canmount=noauto -o mountpoint=\"$MNT\"' in restore_check_script_text"
-          - "'zfs mount \"$CLONE\"' in restore_check_script_text"
+          - '''zfs clone -o readonly=on -o canmount=noauto -o mountpoint="$MNT"'' in restore_check_script_text'
+          - '''zfs mount "$CLONE"'' in restore_check_script_text'
           - "'mktemp -d /run/syncoid-restore-check.XXXXXX' in restore_check_script_text"
-          - "'DATASET=\"{{ restore_check_dataset }}\"' in restore_check_script_text"
-          - "'BUCKET=\"{{ restore_check_bucket }}\"' in restore_check_script_text"
+          - '''DATASET="{{ restore_check_dataset }}"'' in restore_check_script_text'
+          - '''BUCKET="{{ restore_check_bucket }}"'' in restore_check_script_text'
         quiet: true
 
     - name: Assert the script checks the bucket directory and not a named object
@@ -226,9 +228,9 @@
           # bounded search and proves it non-empty. The header may NAME the
           # known object (deployment.json) to explain why it is not checked,
           # but the script must never TEST for it by path.
-          - "'-name \"$BUCKET\" -print -quit' in restore_check_script_text"
+          - '''-name "$BUCKET" -print -quit'' in restore_check_script_text'
           - "'-mindepth 1 -maxdepth 1 -print -quit' in restore_check_script_text"
-          - "'-name \"deployment.json\"' not in restore_check_script_text"
+          - '''-name "deployment.json"'' not in restore_check_script_text'
         quiet: true
 
     - name: Assert the script always destroys the clone and logs one syslog line
@@ -240,13 +242,13 @@
           # The destroy lives in the EXIT trap so every exit path runs it —
           # success, every fail() exit, and signals routed through exit.
           - "'trap cleanup EXIT' in restore_check_script_text"
-          - "restore_check_script_text is search(\"trap 'exit 1' HUP INT TERM\")"
+          - 'restore_check_script_text is search("trap ''exit 1'' HUP INT TERM")'
           # One checked destroy for a stale clone and one checked destroy in
           # the EXIT trap; dropping either cleanup path fails this assertion.
           - "(restore_check_script_text | regex_findall(cleanup_destroy_call | regex_escape)) | length == 1"
           - "(restore_check_script_text | regex_findall(stale_destroy_call | regex_escape)) | length == 1"
-          - "'if ! zfs destroy \"$CLONE\" >/dev/null 2>&1; then' in restore_check_script_text"
-          - "'if [ -n \"$FAIL_REASON\" ] || [ \"$exit_status\" -ne 0 ]; then' in restore_check_script_text"
+          - '''if ! zfs destroy "$CLONE" >/dev/null 2>&1; then'' in restore_check_script_text'
+          - '''if [ -n "$FAIL_REASON" ] || [ "$exit_status" -ne 0 ]; then'' in restore_check_script_text'
           - "'record_failure cleanup_unmount_failed' in restore_check_script_text"
           - "'record_failure cleanup_destroy_failed' in restore_check_script_text"
           # One syslog line per run carrying result, snapshot and age, emitted
@@ -258,3 +260,4 @@
 
     - name: Verify the restore-check script against the harness
       ansible.builtin.import_tasks: tasks/verify_restore_check_harness.yml
+      when: restore_check_molecule | default(false)
