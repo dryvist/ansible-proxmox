@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.54.1](https://github.com/dryvist/ansible-proxmox/compare/v2.54.0...v2.54.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **storage:** set the replica tree quota input to 1979G ([28286ca](https://github.com/dryvist/ansible-proxmox/commit/28286ca10fe649fc0a13f5026bab828d0d071800))
+
 ## [2.54.0](https://github.com/dryvist/ansible-proxmox/compare/v2.53.0...v2.54.0) (2026-11-20)
 
 
