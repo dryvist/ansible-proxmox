@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.56.0](https://github.com/dryvist/ansible-proxmox/compare/v2.55.1...v2.56.0) (2026-11-20)
+
+
+### Features
+
+* **pve_backup_jobs:** add a single-guest backup job ([#1413](https://github.com/dryvist/ansible-proxmox/issues/1413)) ([91236d9](https://github.com/dryvist/ansible-proxmox/commit/91236d903b834f994d19bc2ab9f9329795f4bc21))
+
+
+### Bug Fixes
+
+* **pve_backup_jobs:** default node backup jobs to legacy change detection ([#1411](https://github.com/dryvist/ansible-proxmox/issues/1411)) ([edabdf6](https://github.com/dryvist/ansible-proxmox/commit/edabdf6baded9b5157a45f4f6d671731bd9381e1))
+
 ## [2.55.1](https://github.com/dryvist/ansible-proxmox/compare/v2.55.0...v2.55.1) (2026-11-20)
 
 
