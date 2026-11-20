@@ -142,7 +142,7 @@ def test_each_job_selects_one_scope_on_one_node():
         INVENTORY["pve_backup_jobs_pbs_guest_key"] in job.get("exclude_names", [])
         for job in JOBS if job["node"] == backup
     )
-    assert set(nodes) == {"pve-r540", "pve-r710", "pve-w1700", "pve-w5900"}
+    assert set(nodes) == {"pve-r540", "pve-r710", "pve-w5900"}
     assert len({job["id"] for job in JOBS}) == len(JOBS)
     assert all("pool" not in job for job in JOBS)
     assert all(job.get("all") is True for job in JOBS if "names" not in job)
@@ -150,7 +150,6 @@ def test_each_job_selects_one_scope_on_one_node():
     assert {job["id"]: job["schedule"] for job in JOBS} == {
         "guests-pve-r540": "06:33",
         "guests-pve-r710": "06:31",
-        "guests-pve-w1700": "05:17",
         "guests-pve-w5900": "06:01",
         "guests-pve-w5900-stop": "06:43",
     }
@@ -187,7 +186,7 @@ def test_stop_mode_guests_are_excluded_from_the_snapshot_job():
     assert set(stop["names"]) <= set(snapshot["exclude_names"])
 
 
-def test_r710_and_w1700_jobs_are_enabled():
-    jobs = {job["id"]: job for job in JOBS}
-    assert jobs["guests-pve-r710"]["enabled"] is True
-    assert jobs["guests-pve-w1700"]["enabled"] is True
+def test_r710_job_is_enabled_and_excludes_the_old_backup_vm():
+    job = next(job for job in JOBS if job["id"] == "guests-pve-r710")
+    assert job["enabled"] is True
+    assert job["exclude_names"] == ["pbs"]
