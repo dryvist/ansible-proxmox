@@ -1,0 +1,5 @@
+---
+# Snapshot creation series on the replica node; root-pool snapshots excluded.
+pve_node_exporter_zfs_exporter_snapshot_collector: true
+pve_node_exporter_zfs_exporter_snapshot_excludes:
+  - '^rpool(/[^@]*)?@'

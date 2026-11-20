@@ -95,7 +95,7 @@ pve_node_exporter_zfs_exporter_install_dir: /opt/zfs_exporter
 
 # ZFS properties exported per filesystem and per volume: one series per
 # dataset and property. The pool collector stays on and the snapshot
-# collector stays off, so no per-snapshot series are exported.
+# collector is off by default, so no per-snapshot series are exported.
 pve_node_exporter_zfs_exporter_filesystem_properties:
   - available
   - quota
@@ -110,6 +110,17 @@ pve_node_exporter_zfs_exporter_volume_properties:
   - usedbysnapshots
   - volsize
   - written
+
+# Opt-in snapshot collector: when enabled, exports one
+# zfs_dataset_creation_timestamp series per snapshot and property.
+pve_node_exporter_zfs_exporter_snapshot_collector: false
+# Properties exported per snapshot.
+pve_node_exporter_zfs_exporter_snapshot_properties:
+  - creation
+# Full dataset-name regexes excluded from the snapshot collector. Every
+# entry must contain '@': zfs_exporter applies --exclude to filesystems
+# and volumes too, so a markerless pattern would drop live datasets.
+pve_node_exporter_zfs_exporter_snapshot_excludes: []
 
 # Extra CLI flags appended verbatim to the zfs_exporter ExecStart (e.g.
 # ["--exclude=^rpool/data/"]).

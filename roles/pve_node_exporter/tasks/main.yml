@@ -17,6 +17,12 @@
   tags:
     - pve_node_exporter
 
+- name: Validate the zfs_exporter snapshot collector settings
+  ansible.builtin.include_tasks: validate_snapshot_collector.yml
+  when: pve_node_exporter_zfs_exporter_snapshot_collector | bool
+  tags:
+    - pve_node_exporter
+
 - name: Create node_exporter system user
   ansible.builtin.user:
     name: "{{ pve_node_exporter_user }}"
