@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.57.0](https://github.com/dryvist/ansible-proxmox/compare/v2.56.0...v2.57.0) (2026-11-20)
+
+
+### Features
+
+* **pve_backup_jobs:** exclude the backup server guest on its own node ([#1417](https://github.com/dryvist/ansible-proxmox/issues/1417)) ([0744aad](https://github.com/dryvist/ansible-proxmox/commit/0744aad5845ef73e8d59be161207b63dcb6ab7ce))
+* **sanoid:** add a seven-daily replica class and reassign two replicas ([#1418](https://github.com/dryvist/ansible-proxmox/issues/1418)) ([4610056](https://github.com/dryvist/ansible-proxmox/commit/4610056b70583a4529870765b86fc7ac33e2a2af))
+
 ## [2.56.0](https://github.com/dryvist/ansible-proxmox/compare/v2.55.1...v2.56.0) (2026-11-20)
 
 
