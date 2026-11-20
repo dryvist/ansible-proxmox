@@ -124,6 +124,8 @@ pve_backup_jobs_jobs:
       - win10-vdi
       - win11-vdi
       - win25-vdi
+      # Its backup never finished and held the whole job; it gets a job of its own.
+      - s3
     exclude_tags:
       - media
   - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: true, exclude_names: [pbs]}
