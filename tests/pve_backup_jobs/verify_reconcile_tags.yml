@@ -19,6 +19,8 @@
     pve_backup_jobs_default_pbs_change_detection_mode: metadata
     pve_backup_jobs_default_prune: keep-all=1
     pve_backup_jobs_prune_unmanaged: true
+    pve_backup_jobs_pbs_server: fixture-pbs-server
+    pve_backup_jobs_pbs_node: fixture-backup-node
     pve_backup_jobs_tags_tofu_fixture:
       containers:
         fixture-media-app:
@@ -36,7 +38,14 @@
         fixture-skip-named:
           vmid: 4305
           tags: [sandbox]
+        # The backup server. A VM below shares its key, so the combined guest
+        # map holds the VM; the backup-node job must still exclude this one.
+        fixture-pbs:
+          vmid: 4308
+          fqdn: fixture-pbs-server
       vms:
+        fixture-pbs:
+          vmid: 4309
         fixture-media-vm:
           vmid: 4306
           tags: [media]
@@ -70,6 +79,14 @@
         schedule: "06:20"
         enabled: false
         exclude_names: [fixture-skip-named]
+      # Does not exist yet. On the backup node, the backup server is excluded
+      # without being named.
+      - id: fixture-backup-node-all
+        all: true
+        node: fixture-backup-node
+        storage: fixture-backup-store
+        schedule: "06:40"
+        enabled: false
       # Does not exist yet and excludes nothing. No --exclude argument at all.
       - id: fixture-no-exclusions
         all: true
@@ -142,6 +159,19 @@
         schedule: "06:20"
         enabled: 0
         exclude: "4305"
+        mode: snapshot
+        compress: zstd
+        pbs-change-detection-mode: metadata
+        comment: ""
+        prune-backups: { keep-all: "1" }
+      - id: fixture-backup-node-all
+        type: vzdump
+        all: 1
+        node: fixture-backup-node
+        storage: fixture-backup-store
+        schedule: "06:40"
+        enabled: 0
+        exclude: "4308"
         mode: snapshot
         compress: zstd
         pbs-change-detection-mode: metadata
@@ -224,6 +254,10 @@
           - "'4303' not in pve_backup_jobs_commands"
           - "'4304' not in pve_backup_jobs_commands"
           - "'4307' not in pve_backup_jobs_commands"
+          # The backup server container is excluded on its own node by VMID,
+          # and the VM sharing its key is not.
+          - "'--exclude 4308' in pve_backup_jobs_backup_node_create"
+          - "'4309' not in pve_backup_jobs_commands"
           # Nothing was removed.
           - "'delete /cluster/backup' not in pve_backup_jobs_commands"
         fail_msg: |
@@ -236,6 +270,10 @@
         pve_backup_jobs_union_set: >-
           {{ pve_backup_jobs_commands.splitlines()
              | select('search', 'set /cluster/backup/fixture-tags-union')
+             | first | default('') }}
+        pve_backup_jobs_backup_node_create: >-
+          {{ pve_backup_jobs_commands.splitlines()
+             | select('search', 'fixture-backup-node-all')
              | first | default('') }}
         pve_backup_jobs_tags_create: >-
           {{ pve_backup_jobs_commands.splitlines()

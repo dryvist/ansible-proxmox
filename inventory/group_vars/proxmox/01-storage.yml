@@ -133,5 +133,7 @@ pve_backup_jobs_jobs:
   # holds no other guest.
   - {id: guests-pve-r540-s3, names: [s3], node: pve-r540, storage: guests, schedule: "14:17", enabled: true}
   - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: true, exclude_names: [pbs]}
+  # The backup server guest on this node is excluded by the role.
+  - {id: guests-pve-w1700, all: true, node: pve-w1700, storage: guests, schedule: "05:17", enabled: true}
   - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:01", enabled: true, exclude_names: [splunk, prometheus]}
   - {id: guests-pve-w5900-stop, names: [prometheus], node: pve-w5900, storage: guests, schedule: "06:43", enabled: true, mode: stop}
