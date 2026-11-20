@@ -39,7 +39,7 @@ syncoid_cron_hour: "*/4"
 syncoid_boot_poweroff_on_complete: false
 
 # Input default for the replica dataset quota; override to change its cap.
-pve_r710_bulk_replica_quota: "1979G"
+pve_r710_bulk_replica_quota: "1862G"
 
 # Ad-hoc ZFS properties for datasets this node's tofu contract has no slot for,
 # reconciled by zfs_pools with zfs get/set. Built as an expression because the
