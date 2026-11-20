@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.55.1](https://github.com/dryvist/ansible-proxmox/compare/v2.55.0...v2.55.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **pve_backup_jobs:** declare one more exclusion on a node job ([#1409](https://github.com/dryvist/ansible-proxmox/issues/1409)) ([9ac9a55](https://github.com/dryvist/ansible-proxmox/commit/9ac9a5525a453af199891190212fa06456a382f1))
+* **pve_backup_jobs:** scope node backup jobs to resolvable exclusions ([#1407](https://github.com/dryvist/ansible-proxmox/issues/1407)) ([1ae94d4](https://github.com/dryvist/ansible-proxmox/commit/1ae94d4b4b6ebe0c69a5f1f39caccaa858fc1a81))
+
 ## [2.55.0](https://github.com/dryvist/ansible-proxmox/compare/v2.54.2...v2.55.0) (2026-11-20)
 
 
