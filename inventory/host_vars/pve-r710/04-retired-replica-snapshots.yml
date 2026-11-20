@@ -1,0 +1,14 @@
+---
+# Non-autosnap snapshots on replica datasets, destroyed once by the syncoid
+# role. Drop an entry once a converge reports it absent.
+syncoid_retired_replica_snapshots:
+  - "bulk/replica/pve-r540/subvol-405000-disk-3@rebuild-20260820"
+  - "bulk/replica/pve-r540/subvol-405000-disk-3@rebuild-final"
+  - "bulk/replica/pve-r540/subvol-405000-disk-3@pre-v4-migration"
+  - "bulk/replica/pve-r540/subvol-405000-disk-3@migrate-20261026"
+  - "bulk/replica/pve-r540/subvol-405000-disk-3@rebuild-20261027"
+  - "bulk/replica/pve-r540/subvol-202000-disk-1@rebuild-20260820"
+  - "bulk/replica/pve-r540/subvol-202000-disk-1@rebuild-final"
+  - "bulk/replica/pve-r540/subvol-202000-disk-1@migrate-20261026"
+  - "bulk/replica/pve-r540/subvol-202000-disk-1@rebuild-20261027"
+  - "bulk/replica/pve-r540/subvol-202000-disk-1@vzdump"

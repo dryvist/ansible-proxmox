@@ -1,0 +1,62 @@
+---
+# Retired replica snapshots (syncoid_retired_replica_snapshots): destroy
+# declared non-autosnap snapshots on replica datasets. Literal
+# dataset@snapshot names only; never discovered, never a pattern.
+
+- name: Refuse a retired replica snapshot that is not a literal non-autosnap replica snapshot
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item is match('^bulk/replica/[^@\\s*]+@[^@\\s*/]+$')
+      - "'..' not in item"
+      - item.split('@')[1] is not match('autosnap_')
+    fail_msg: >-
+      syncoid_retired_replica_snapshots entries must be one literal
+      bulk/replica/<dataset>@<snapshot> name, no wildcard, '..' or whitespace,
+      and never an autosnap_ snapshot; refused: {{ item | quote }}
+    quiet: true
+  loop: "{{ syncoid_retired_replica_snapshots }}"
+  when: syncoid_enabled
+  tags:
+    - syncoid
+
+# Read-only, so it also runs in check mode: the check run prints exactly the
+# snapshots the live run would destroy, with their used bytes.
+- name: List each declared retired replica snapshot that is present
+  ansible.builtin.command:
+    argv: [zfs, list, -H, -p, -t, snapshot, -o, 'name,used,creation', "{{ item }}"]
+  loop: "{{ syncoid_retired_replica_snapshots }}"
+  register: syncoid_retired_snapshot_list
+  changed_when: false
+  failed_when:
+    - syncoid_retired_snapshot_list.rc != 0
+    - "'does not exist' not in syncoid_retired_snapshot_list.stderr"
+  check_mode: false
+  when:
+    - syncoid_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
+- name: Report the retired replica snapshots that would be destroyed
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'WOULD DESTROY' if ansible_check_mode else 'DESTROYING' }}
+      {{ item.stdout if item.rc == 0 else item.item ~ ' ABSENT' }}
+  loop: "{{ syncoid_retired_snapshot_list.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags:
+    - syncoid
+
+# `zfs destroy` on one snapshot name: no -r, no -R, so a snapshot with a
+# dependent clone fails the task instead of taking the clone.
+- name: Destroy each present retired replica snapshot
+  ansible.builtin.command:
+    argv: [zfs, destroy, "{{ item.item }}"]
+  loop: "{{ syncoid_retired_snapshot_list.results | default([]) | rejectattr('skipped', 'defined') | selectattr('rc', 'equalto', 0) | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  changed_when: true
+  tags:
+    - syncoid
