@@ -190,3 +190,8 @@ def test_r710_job_is_enabled_and_excludes_the_old_backup_vm():
     job = next(job for job in JOBS if job["id"] == "guests-pve-r710")
     assert job["enabled"] is True
     assert job["exclude_names"] == ["pbs"]
+
+
+def test_jobs_default_to_legacy_change_detection():
+    assert INVENTORY["pve_backup_jobs_default_pbs_change_detection_mode"] == "legacy"
+    assert all("pbs_change_detection_mode" not in job for job in JOBS)
