@@ -15,8 +15,12 @@ ExecStart=/usr/local/bin/zfs_exporter \
     --collector.dataset-filesystem \
     --properties.dataset-filesystem={{ pve_node_exporter_zfs_exporter_filesystem_properties | join(',') }} \
     --collector.dataset-volume \
-    --properties.dataset-volume={{ pve_node_exporter_zfs_exporter_volume_properties | join(',') }} \
-    --no-collector.dataset-snapshot{% for arg in pve_node_exporter_zfs_exporter_extra_args %} \
+    --properties.dataset-volume={{ pve_node_exporter_zfs_exporter_volume_properties | join(',') }}
+    {%- if pve_node_exporter_zfs_exporter_snapshot_collector | bool %} \
+    --collector.dataset-snapshot \
+    --properties.dataset-snapshot={{ pve_node_exporter_zfs_exporter_snapshot_properties | join(',') }}{% for exclude in pve_node_exporter_zfs_exporter_snapshot_excludes %} \
+    --exclude={{ exclude | replace('$', '$$') }}{% endfor %}{% else %} \
+    --no-collector.dataset-snapshot{% endif %}{% for arg in pve_node_exporter_zfs_exporter_extra_args %} \
     {{ arg }}{% endfor %}
 
 Restart=on-failure

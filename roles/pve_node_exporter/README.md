@@ -96,8 +96,11 @@ labelled `name`, `pool` and `type`, plus its pool series:
 `written` is the space written since the dataset's latest snapshot, so it is
 the size of the next incremental send.
 
-The snapshot collector is off (`--no-collector.dataset-snapshot`), so no
-per-snapshot series exist and cardinality stays bounded by the dataset count.
+The snapshot collector is off by default. When
+`pve_node_exporter_zfs_exporter_snapshot_collector` is true it exports one
+`zfs_dataset_creation_timestamp` series per snapshot not excluded, so
+cardinality is the count of included snapshots; every entry in
+`pve_node_exporter_zfs_exporter_snapshot_excludes` must contain `@`.
 An unset quota reports `0`.
 
 | Variable                                               | Default                              | Purpose                                             |
@@ -110,6 +113,9 @@ An unset quota reports `0`.
 | `pve_node_exporter_zfs_exporter_install_dir`           | `/opt/zfs_exporter`                  | Versioned install root.                             |
 | `pve_node_exporter_zfs_exporter_filesystem_properties` | Filesystem rows of the metrics table | Properties collected per filesystem.                |
 | `pve_node_exporter_zfs_exporter_volume_properties`     | Volume rows of the metrics table     | Properties collected per volume.                    |
+| `pve_node_exporter_zfs_exporter_snapshot_collector`    | `false`                              | Enable the snapshot collector.                      |
+| `pve_node_exporter_zfs_exporter_snapshot_properties`   | `[creation]`                         | Properties collected per snapshot.                  |
+| `pve_node_exporter_zfs_exporter_snapshot_excludes`     | `[]`                                 | Snapshot excludes; every entry must contain `@`.    |
 | `pve_node_exporter_zfs_exporter_extra_args`            | `[]`                                 | Extra CLI flags appended to `ExecStart`.            |
 
 #### Scrape target
