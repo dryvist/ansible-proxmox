@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.54.2](https://github.com/dryvist/ansible-proxmox/compare/v2.54.1...v2.54.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* **syncoid:** replace retired replica snapshot list ([#1401](https://github.com/dryvist/ansible-proxmox/issues/1401)) ([df63a0a](https://github.com/dryvist/ansible-proxmox/commit/df63a0a39d1c87742f3f32bba41ed10c56bc627d))
+
 ## [2.54.1](https://github.com/dryvist/ansible-proxmox/compare/v2.54.0...v2.54.1) (2026-11-20)
 
 
