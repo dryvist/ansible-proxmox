@@ -1,7 +1,7 @@
 ---
 # Molecule verification: tasks/lxc.yml's pct push against a STUBBED pct, with
-# three fixture containers in the same loop: 401 (nixos, Nix side deployed),
-# 402 (debian), and 403 (nixos, Nix side NOT deployed yet).
+# four fixture containers in the same loop: 400 (stuck), 401 (nixos, Nix side
+# deployed), 402 (debian), and 403 (nixos, Nix side NOT deployed yet).
 #
 # The Docker container cannot run real pct, so this play emulates it: the
 # stub logs every argv (one line per call) and serves `pct list`/`pct config`
@@ -31,6 +31,7 @@
   vars:
     # Not /tmp: the scenario mounts it as tmpfs, which is noexec.
     ssh_ca_trust_pct_stub_dir: /var/tmp/ssh-ca-trust-pct-stub
+    ssh_ca_trust_lxc_exec_timeout: 5
     ssh_ca_trust_lxc_test_ca_pub: >-
       ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMc4shG4OO1GtC46CMVsOK8Tz7kuEGWX0xutfFYBjLth
       molecule-test-ca-throwaway-key-not-a-real-ca
@@ -88,12 +89,14 @@
           case "$op" in
               list)
                   printf '%s\n' 'VMID       Status     Lock         Name'
+                  printf '%s\n' '400        running                 stuck-ct'
                   printf '%s\n' '401        running                 nixos-ct'
                   printf '%s\n' '402        running                 debian-ct'
                   printf '%s\n' '403        running                 nixos-undeployed'
                   ;;
               config)
                   case "$ct" in
+                      400) printf '%s\n' 'arch: amd64' 'hostname: stuck-ct' 'ostype: debian' 'unprivileged: 1' ;;
                       401) printf '%s\n' 'arch: amd64' 'hostname: nixos-ct' 'ostype: nixos' 'unprivileged: 1' ;;
                       402) printf '%s\n' 'arch: amd64' 'hostname: debian-ct' 'ostype: debian' 'unprivileged: 1' ;;
                       403) printf '%s\n' 'arch: amd64' 'hostname: nixos-undeployed' 'ostype: nixos' 'unprivileged: 1' ;;
@@ -101,6 +104,7 @@
                   esac
                   ;;
               exec)
+                  if [ "$ct" = "400" ]; then exec sleep 30; fi
                   shift 2
                   if [ "${1-}" != "--" ]; then
                       printf '%s\n' 'pct stub: expected "--" after the vmid' >&2
@@ -291,9 +295,17 @@
           - "'trustedusercakeys /etc/ssh/trusted-user-ca-keys.pem' in ssh_ca_trust_403_result.stderr"
         fail_msg: "{{ ssh_ca_trust_pct_log }}"
 
-    - name: Assert all three containers converged and readiness was recorded per container
+    - name: Assert the CA trust push timed out for the stuck container
+      vars:
+        ssh_ca_trust_400_result: "{{ ssh_ca_trust_lxc_push.results | selectattr('item', 'equalto', '400') | first }}"
+      ansible.builtin.assert:
+        that:
+          - ssh_ca_trust_400_result.rc == 124
+          - "'READY=1' not in ssh_ca_trust_400_result.stdout"
+
+    - name: Assert remaining containers converged and readiness was recorded per container
       ansible.builtin.assert:
         that:
           - ssh_ca_trust_lxc_push.changed | bool
-          - "ssh_ca_trust_lxc_ready == {'401': true, '402': true, '403': false}"
+          - "ssh_ca_trust_lxc_ready == {'400': false, '401': true, '402': true, '403': false}"
         fail_msg: "{{ ssh_ca_trust_lxc_push.results | map(attribute='stdout', default='') | list }}"
