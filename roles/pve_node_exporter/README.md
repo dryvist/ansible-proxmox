@@ -30,6 +30,11 @@ Re-runs are no-ops; bumping `pve_node_exporter_version` (plus checksum) rolls
 the fleet forward on the next converge, and the same holds for
 `pve_node_exporter_zfs_exporter_version`.
 
+## Installation
+
+Part of this repository's roles; no separate install. The role downloads both
+exporter binaries itself on each node.
+
 ## Where It Runs
 
 Wired into `playbooks/site.yml` against the `proxmox` group. By default the
@@ -86,6 +91,10 @@ labelled `name`, `pool` and `type`, plus its pool series:
 | `zfs_dataset_quota_bytes`            | `quota`           | filesystems          |
 | `zfs_dataset_referenced_bytes`       | `referenced`      | filesystems, volumes |
 | `zfs_dataset_volume_size_bytes`      | `volsize`         | volumes              |
+| `zfs_dataset_written_bytes`          | `written`         | filesystems, volumes |
+
+`written` is the space written since the dataset's latest snapshot, so it is
+the size of the next incremental send.
 
 The snapshot collector is off (`--no-collector.dataset-snapshot`), so no
 per-snapshot series exist and cardinality stays bounded by the dataset count.
