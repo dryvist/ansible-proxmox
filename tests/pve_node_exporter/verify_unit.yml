@@ -156,6 +156,12 @@
           - "'--no-collector.dataset-snapshot' not in pve_node_exporter_test_zfs_snapshot_unit"
         quiet: true
 
+    # Runs the role's own validation task, so an argument the assert action
+    # does not accept fails here, not on a node.
+    - name: Run the snapshot collector validation with the enabled settings
+      ansible.builtin.include_tasks: >-
+        {{ playbook_dir }}/../../roles/pve_node_exporter/tasks/validate_snapshot_collector.yml
+
     - name: Render the zfs_exporter download pin for amd64
       ansible.builtin.set_fact:
         pve_node_exporter_test_zfs_url_amd64: "{{ pve_node_exporter_zfs_exporter_download_url }}"
