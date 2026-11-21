@@ -176,6 +176,11 @@ def test_r540_job_backs_up_its_data_guests():
     assert not data_guests & excluded
 
 
+def test_w1700_job_is_disabled():
+    job = next(job for job in JOBS if job["id"] == "guests-pve-w1700")
+    assert job["enabled"] is False
+
+
 def test_stop_mode_guests_are_excluded_from_the_snapshot_job():
     snapshot = next(job for job in JOBS if job["id"] == "guests-pve-w5900")
     stop = next(job for job in JOBS if job["id"] == "guests-pve-w5900-stop")
@@ -185,9 +190,9 @@ def test_stop_mode_guests_are_excluded_from_the_snapshot_job():
     assert set(stop["names"]) <= set(snapshot["exclude_names"])
 
 
-def test_r710_job_is_enabled_and_excludes_the_old_backup_vm():
+def test_r710_job_is_disabled_and_excludes_the_old_backup_vm():
     job = next(job for job in JOBS if job["id"] == "guests-pve-r710")
-    assert job["enabled"] is True
+    assert job["enabled"] is False
     assert job["exclude_names"] == ["pbs"]
 
 
@@ -199,6 +204,6 @@ def test_jobs_default_to_legacy_change_detection():
 def test_object_store_has_its_own_job():
     job = next(job for job in JOBS if job["id"] == "guests-pve-r540-s3")
     assert job["names"] == ["s3"]
-    assert job["enabled"] is True
+    assert job["enabled"] is False
     r540 = next(job for job in JOBS if job["id"] == "guests-pve-r540")
     assert "s3" in r540["exclude_names"]
