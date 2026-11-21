@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.60.0](https://github.com/dryvist/ansible-proxmox/compare/v2.59.1...v2.60.0) (2026-11-21)
+
+
+### Features
+
+* **guest-recovery:** add a backup-release mode for a container held by vzdump ([#1438](https://github.com/dryvist/ansible-proxmox/issues/1438)) ([d3c4ac1](https://github.com/dryvist/ansible-proxmox/commit/d3c4ac1ddf8388a2e14f54dd0d8cef7a63ce6404))
+
 ## [2.59.1](https://github.com/dryvist/ansible-proxmox/compare/v2.59.0...v2.59.1) (2026-11-21)
 
 
