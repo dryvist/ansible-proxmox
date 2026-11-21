@@ -76,6 +76,7 @@
   ansible.builtin.import_tasks: retired_snapshots.yml
   tags:
     - syncoid
+    - syncoid_retired_snapshots
 
 # Trigger == cron: the default for always-on nodes. A node that is powered off at
 # cron time never fires it — which is why a normally-off DR node uses trigger ==

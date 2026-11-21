@@ -54,3 +54,12 @@ def test_the_destroy_never_recurses():
 def test_the_listing_runs_in_check_mode_and_the_destroy_does_not():
     assert TASKS[1]["check_mode"] is False
     assert "check_mode" not in TASKS[-1]
+
+
+def test_only_the_retired_snapshot_import_carries_its_own_tag():
+    main = yaml.safe_load((ROOT / "roles/syncoid/tasks/main.yml").read_text(encoding="utf-8"))
+    tagged = [t for t in main if "syncoid_retired_snapshots" in (t.get("tags") or [])]
+    assert [t.get("ansible.builtin.import_tasks") for t in tagged] == ["retired_snapshots.yml"]
+    assert "syncoid" in tagged[0]["tags"]
+    others = (ROOT / "roles/syncoid/tasks").glob("*.yml")
+    assert not [f.name for f in others if f.name != "main.yml" and "syncoid_retired_snapshots" in f.read_text(encoding="utf-8")]
