@@ -72,6 +72,14 @@
   tags:
     - syncoid
 
+# Abort declared interrupted receives first: a saved receive's <dataset>/%recv
+# clone blocks the snapshot destroy below.
+- name: Abort declared interrupted replica receives
+  ansible.builtin.import_tasks: aborted_receives.yml
+  tags:
+    - syncoid
+    - syncoid_aborted_receives
+
 - name: Destroy retired replica snapshots
   ansible.builtin.import_tasks: retired_snapshots.yml
   tags:
