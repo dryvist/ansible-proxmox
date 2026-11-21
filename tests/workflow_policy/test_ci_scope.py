@@ -43,11 +43,16 @@ class CiScopeContract(unittest.TestCase):
         gate = workflow["jobs"]["gate"]
         self.assertEqual(
             gate["uses"],
-            "JacobPEvans/.github-ai/.github/workflows/_ai-merge-gate.yml@v2",
+            "JacobPEvans/.github-ai/.github/workflows/_ai-merge-gate-oidc.yml@v2",
         )
         self.assertEqual(
             gate["permissions"],
-            {"checks": "read", "contents": "read", "pull-requests": "write"},
+            {
+                "checks": "read",
+                "contents": "read",
+                "id-token": "write",
+                "pull-requests": "write",
+            },
         )
         self.assertEqual(
             set(gate["secrets"]),
