@@ -1,0 +1,9 @@
+---
+# Replica datasets whose saved interrupted receive the syncoid role aborts once.
+# Drop an entry once a converge reports it NONE.
+syncoid_aborted_replica_receives:
+  - "bulk/replica/pve-r540/subvol-514000-disk-2"
+  - "bulk/replica/pve-r540/subvol-518010-disk-1"
+  - "bulk/replica/pve-r540/subvol-519010-disk-2"
+  - "bulk/replica/pve-r540/subvol-519010-disk-3"
+  - "bulk/replica/pve-r540/subvol-5310010-disk-1"

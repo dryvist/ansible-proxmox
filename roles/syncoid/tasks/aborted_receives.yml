@@ -1,0 +1,63 @@
+---
+# Interrupted replica receives (syncoid_aborted_replica_receives): abort the
+# saved resumable receive on declared replica datasets. Literal
+# bulk/replica/<dataset> names only; never discovered, never a pattern.
+
+- name: Refuse an aborted replica receive that is not a literal replica dataset
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item is match('^bulk/replica/[^@%\\s*]+$')
+      - "'..' not in item"
+    fail_msg: >-
+      syncoid_aborted_replica_receives entries must be one literal
+      bulk/replica/<dataset> name, no snapshot, wildcard, '%', '..' or
+      whitespace; refused: {{ item | quote }}
+    quiet: true
+  loop: "{{ syncoid_aborted_replica_receives }}"
+  when: syncoid_enabled
+  tags:
+    - syncoid
+
+# Read-only, so it also runs in check mode: the check run prints exactly the
+# datasets whose saved receive the live run would abort.
+- name: Read the resume token of each declared replica dataset
+  ansible.builtin.command:
+    argv: [zfs, get, -H, -o, value, receive_resume_token, "{{ item }}"]
+  loop: "{{ syncoid_aborted_replica_receives }}"
+  register: syncoid_aborted_receive_tokens
+  changed_when: false
+  failed_when:
+    - syncoid_aborted_receive_tokens.rc != 0
+    - "'does not exist' not in syncoid_aborted_receive_tokens.stderr"
+  check_mode: false
+  when:
+    - syncoid_enabled
+    - ansible_virtualization_type != 'docker'
+  tags:
+    - syncoid
+
+- name: Report the interrupted replica receives that would be aborted
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'WOULD ABORT' if ansible_check_mode else 'ABORTING' }} {{ item.item }}
+      {{ 'saved receive' if item.rc == 0 and item.stdout | trim not in ['', '-'] else 'NONE' }}
+  loop: "{{ syncoid_aborted_receive_tokens.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags:
+    - syncoid
+
+# `zfs receive -A` discards only the saved partial receive (the <dataset>/%recv
+# state); the dataset and its snapshots stay.
+- name: Abort each declared interrupted replica receive
+  ansible.builtin.command:
+    argv: [zfs, receive, -A, "{{ item.item }}"]
+  loop: >-
+    {{ syncoid_aborted_receive_tokens.results | default([]) | rejectattr('skipped', 'defined')
+       | selectattr('rc', 'equalto', 0) | rejectattr('stdout', 'in', ['', '-']) | list }}
+  loop_control:
+    label: "{{ item.item }}"
+  changed_when: true
+  tags:
+    - syncoid
