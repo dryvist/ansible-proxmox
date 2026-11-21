@@ -44,7 +44,8 @@ syncoid_pinned_jobs:
   # no longer runs on fails every cycle while the replica it left behind ages.
   - name: "object-store"
     schedule: hourly
-    sanoid_replica_class: fast
+    # Seven dailies, no monthly: this replica is the guest's only second copy.
+    sanoid_replica_class: week
     source: "root@{{ object_store_node }}:bulk/object/subvol-{{ object_store_vmid }}-disk-1"
     target: "bulk/replica/{{ object_store_node }}/subvol-{{ object_store_vmid }}-disk-1"
   # Database DR: pull the whole bulk/databases namespace off the storage node
@@ -103,6 +104,7 @@ syncoid_pinned_jobs:
     source: "root@pve-r540:bulk/subvol-405000-disk-2"
     target: "bulk/replica/pve-r540/subvol-405000-disk-2"
   - name: "ct-405000-disk3"  # langfuse /opt/langfuse
+    sanoid_replica_class: lean
     source: "root@pve-r540:bulk/subvol-405000-disk-3"
     target: "bulk/replica/pve-r540/subvol-405000-disk-3"
   - name: "ct-514000-disk2"  # qdrant rootfs

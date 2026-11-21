@@ -5,6 +5,117 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.59.0](https://github.com/dryvist/ansible-proxmox/compare/v2.58.0...v2.59.0) (2026-11-21)
+
+
+### Features
+
+* **syncoid:** abort declared interrupted replica receives ([#1426](https://github.com/dryvist/ansible-proxmox/issues/1426)) ([61d8bc1](https://github.com/dryvist/ansible-proxmox/commit/61d8bc175e6f404bfa9fa42cb5f06f4dc39a9639))
+
+## [2.58.0](https://github.com/dryvist/ansible-proxmox/compare/v2.57.0...v2.58.0) (2026-11-21)
+
+
+### Features
+
+* **syncoid:** own tag for the retired replica snapshot tasks ([#1421](https://github.com/dryvist/ansible-proxmox/issues/1421)) ([8312581](https://github.com/dryvist/ansible-proxmox/commit/83125814b7c81492a8b3ccdf1afe03b76a4bb14e))
+
+## [2.57.0](https://github.com/dryvist/ansible-proxmox/compare/v2.56.0...v2.57.0) (2026-11-20)
+
+
+### Features
+
+* **pve_backup_jobs:** exclude the backup server guest on its own node ([#1417](https://github.com/dryvist/ansible-proxmox/issues/1417)) ([0744aad](https://github.com/dryvist/ansible-proxmox/commit/0744aad5845ef73e8d59be161207b63dcb6ab7ce))
+* **sanoid:** add a seven-daily replica class and reassign two replicas ([#1418](https://github.com/dryvist/ansible-proxmox/issues/1418)) ([4610056](https://github.com/dryvist/ansible-proxmox/commit/4610056b70583a4529870765b86fc7ac33e2a2af))
+
+## [2.56.0](https://github.com/dryvist/ansible-proxmox/compare/v2.55.1...v2.56.0) (2026-11-20)
+
+
+### Features
+
+* **pve_backup_jobs:** add a single-guest backup job ([#1413](https://github.com/dryvist/ansible-proxmox/issues/1413)) ([91236d9](https://github.com/dryvist/ansible-proxmox/commit/91236d903b834f994d19bc2ab9f9329795f4bc21))
+
+
+### Bug Fixes
+
+* **pve_backup_jobs:** default node backup jobs to legacy change detection ([#1411](https://github.com/dryvist/ansible-proxmox/issues/1411)) ([edabdf6](https://github.com/dryvist/ansible-proxmox/commit/edabdf6baded9b5157a45f4f6d671731bd9381e1))
+
+## [2.55.1](https://github.com/dryvist/ansible-proxmox/compare/v2.55.0...v2.55.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **pve_backup_jobs:** declare one more exclusion on a node job ([#1409](https://github.com/dryvist/ansible-proxmox/issues/1409)) ([9ac9a55](https://github.com/dryvist/ansible-proxmox/commit/9ac9a5525a453af199891190212fa06456a382f1))
+* **pve_backup_jobs:** scope node backup jobs to resolvable exclusions ([#1407](https://github.com/dryvist/ansible-proxmox/issues/1407)) ([1ae94d4](https://github.com/dryvist/ansible-proxmox/commit/1ae94d4b4b6ebe0c69a5f1f39caccaa858fc1a81))
+
+## [2.55.0](https://github.com/dryvist/ansible-proxmox/compare/v2.54.2...v2.55.0) (2026-11-20)
+
+
+### Features
+
+* **pve_backup_jobs:** enable two more node backup jobs ([#1403](https://github.com/dryvist/ansible-proxmox/issues/1403)) ([d3d9516](https://github.com/dryvist/ansible-proxmox/commit/d3d9516db2050851f9ecf2ea08873e004393560c))
+
+## [2.54.2](https://github.com/dryvist/ansible-proxmox/compare/v2.54.1...v2.54.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* **syncoid:** replace retired replica snapshot list ([#1401](https://github.com/dryvist/ansible-proxmox/issues/1401)) ([df63a0a](https://github.com/dryvist/ansible-proxmox/commit/df63a0a39d1c87742f3f32bba41ed10c56bc627d))
+
+## [2.54.1](https://github.com/dryvist/ansible-proxmox/compare/v2.54.0...v2.54.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **storage:** set the replica tree quota input to 1979G ([28286ca](https://github.com/dryvist/ansible-proxmox/commit/28286ca10fe649fc0a13f5026bab828d0d071800))
+
+## [2.54.0](https://github.com/dryvist/ansible-proxmox/compare/v2.53.0...v2.54.0) (2026-11-20)
+
+
+### Features
+
+* **storage:** add three dataset reservations ([#1395](https://github.com/dryvist/ansible-proxmox/issues/1395)) ([d8298e9](https://github.com/dryvist/ansible-proxmox/commit/d8298e995aced69abf76dc956ad4ce2f393ea13b))
+* **storage:** reserve space for three guest root filesystems on the bulk pool ([d8298e9](https://github.com/dryvist/ansible-proxmox/commit/d8298e995aced69abf76dc956ad4ce2f393ea13b))
+
+## [2.53.0](https://github.com/dryvist/ansible-proxmox/compare/v2.52.1...v2.53.0) (2026-11-20)
+
+
+### Features
+
+* **syncoid:** remove declared replica snapshots ([#1392](https://github.com/dryvist/ansible-proxmox/issues/1392)) ([cff607e](https://github.com/dryvist/ansible-proxmox/commit/cff607eada8f74f08d94371ee9dee289d0ec890c))
+
+## [2.52.1](https://github.com/dryvist/ansible-proxmox/compare/v2.52.0...v2.52.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **guest-recovery:** pick the recovery path from the live guest type ([#1384](https://github.com/dryvist/ansible-proxmox/issues/1384)) ([02852f9](https://github.com/dryvist/ansible-proxmox/commit/02852f90aa1597e7b4b3b7e494122c6110c14be2))
+* **pve_node_exporter:** gate the snapshot collector assert at task level ([#1383](https://github.com/dryvist/ansible-proxmox/issues/1383)) ([74a215a](https://github.com/dryvist/ansible-proxmox/commit/74a215a18cedd2d53b2f793c308ed551bf5a521a))
+* **syncoid:** resolve system binaries first in the restore check ([#1385](https://github.com/dryvist/ansible-proxmox/issues/1385)) ([8fb39b4](https://github.com/dryvist/ansible-proxmox/commit/8fb39b42f39e5852c391c445fbdd8c596a9d4edd))
+
+## [2.52.0](https://github.com/dryvist/ansible-proxmox/compare/v2.51.0...v2.52.0) (2026-11-20)
+
+
+### Features
+
+* **pve_node_exporter:** add opt-in snapshot creation collector ([#1379](https://github.com/dryvist/ansible-proxmox/issues/1379)) ([fe1fe7c](https://github.com/dryvist/ansible-proxmox/commit/fe1fe7cb85af31bd30ddc148843310ad0bb35044))
+
+
+### Bug Fixes
+
+* **guest-recovery:** load the OpenTofu host data before the Proxmox play ([#1381](https://github.com/dryvist/ansible-proxmox/issues/1381)) ([a80e0b2](https://github.com/dryvist/ansible-proxmox/commit/a80e0b2fc73f45d92b10b87d7adc18cb19ade093))
+
+## [2.51.0](https://github.com/dryvist/ansible-proxmox/compare/v2.50.0...v2.51.0) (2026-11-20)
+
+
+### Features
+
+* **pve_node_exporter:** export the ZFS written property per dataset ([#1372](https://github.com/dryvist/ansible-proxmox/issues/1372)) ([ca6e678](https://github.com/dryvist/ansible-proxmox/commit/ca6e6786375a83f76459828d9b14afe4829c7449))
+
+
+### Bug Fixes
+
+* **ssh_ca_trust:** bound each LXC pct exec and skip containers without a host key ([#1375](https://github.com/dryvist/ansible-proxmox/issues/1375)) ([bac6c2a](https://github.com/dryvist/ansible-proxmox/commit/bac6c2a32734c073cae427fde8a7e6b28ea857f7))
+
 ## [2.50.0](https://github.com/dryvist/ansible-proxmox/compare/v2.49.0...v2.50.0) (2026-11-17)
 
 

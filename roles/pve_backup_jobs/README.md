@@ -122,11 +122,12 @@ Every job must name exactly one node (`node`, PVE format `pve-node`). An
 all-node job backs up every guest on that node; a pool job backs up guests in
 that pool on that node. A job that names two nodes matches nothing.
 
-Validation refuses a job that names no node or a list, and refuses a job on
-`pve_backup_jobs_pbs_node` unless it excludes the PBS guest by name. The PBS
-guest is the one whose published `fqdn` matches `pve_backup_jobs_pbs_server`.
-A PBS-node job that excludes that guest stores nothing of the backup server on
-the backup server.
+Validation refuses a job that names no node or a list. The PBS guest is the
+one whose published `fqdn` matches `pve_backup_jobs_pbs_server`
+(`pve_backup_jobs_pbs_guest_vmid`). A pool or all job on
+`pve_backup_jobs_pbs_node` excludes that guest by VMID automatically, so the
+backup server is never stored on itself. A job on that node is refused when no
+guest matches, and a names job there is refused when it selects the PBS guest.
 
 ## Usage
 

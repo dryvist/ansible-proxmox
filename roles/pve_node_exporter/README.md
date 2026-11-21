@@ -30,6 +30,11 @@ Re-runs are no-ops; bumping `pve_node_exporter_version` (plus checksum) rolls
 the fleet forward on the next converge, and the same holds for
 `pve_node_exporter_zfs_exporter_version`.
 
+## Installation
+
+Part of this repository's roles; no separate install. The role downloads both
+exporter binaries itself on each node.
+
 ## Where It Runs
 
 Wired into `playbooks/site.yml` against the `proxmox` group. By default the
@@ -86,9 +91,16 @@ labelled `name`, `pool` and `type`, plus its pool series:
 | `zfs_dataset_quota_bytes`            | `quota`           | filesystems          |
 | `zfs_dataset_referenced_bytes`       | `referenced`      | filesystems, volumes |
 | `zfs_dataset_volume_size_bytes`      | `volsize`         | volumes              |
+| `zfs_dataset_written_bytes`          | `written`         | filesystems, volumes |
 
-The snapshot collector is off (`--no-collector.dataset-snapshot`), so no
-per-snapshot series exist and cardinality stays bounded by the dataset count.
+`written` is the space written since the dataset's latest snapshot, so it is
+the size of the next incremental send.
+
+The snapshot collector is off by default. When
+`pve_node_exporter_zfs_exporter_snapshot_collector` is true it exports one
+`zfs_dataset_creation_timestamp` series per snapshot not excluded, so
+cardinality is the count of included snapshots; every entry in
+`pve_node_exporter_zfs_exporter_snapshot_excludes` must contain `@`.
 An unset quota reports `0`.
 
 | Variable                                               | Default                              | Purpose                                             |
@@ -101,6 +113,9 @@ An unset quota reports `0`.
 | `pve_node_exporter_zfs_exporter_install_dir`           | `/opt/zfs_exporter`                  | Versioned install root.                             |
 | `pve_node_exporter_zfs_exporter_filesystem_properties` | Filesystem rows of the metrics table | Properties collected per filesystem.                |
 | `pve_node_exporter_zfs_exporter_volume_properties`     | Volume rows of the metrics table     | Properties collected per volume.                    |
+| `pve_node_exporter_zfs_exporter_snapshot_collector`    | `false`                              | Enable the snapshot collector.                      |
+| `pve_node_exporter_zfs_exporter_snapshot_properties`   | `[creation]`                         | Properties collected per snapshot.                  |
+| `pve_node_exporter_zfs_exporter_snapshot_excludes`     | `[]`                                 | Snapshot excludes; every entry must contain `@`.    |
 | `pve_node_exporter_zfs_exporter_extra_args`            | `[]`                                 | Extra CLI flags appended to `ExecStart`.            |
 
 #### Scrape target

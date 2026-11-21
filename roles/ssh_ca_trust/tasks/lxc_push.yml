@@ -15,6 +15,8 @@
   ansible.builtin.shell:
     executable: /bin/bash
     cmd: |
+      # Read the script from fd 3 so it does not become input to pct exec.
+      timeout --kill-after=5s {{ ssh_ca_trust_lxc_exec_timeout | int }}s /bin/bash /dev/fd/3 3<<'LXC_EXEC'
       set -euo pipefail
       {% set nixos = ssh_ca_trust_lxc_nixos[item | string] | default(false) %}
       {% set fp_files = ssh_ca_trust_lxc_fingerprint_files_nixos if nixos else ssh_ca_trust_fingerprint_files %}
@@ -193,22 +195,39 @@
       fi
       if [ "$before" != "$after" ]; then echo "RESULT=changed"; else echo "RESULT=unchanged"; fi
       echo "READY=$ready"
+      LXC_EXEC
   loop: "{{ ssh_ca_trust_lxc_running }}"
+  vars:
+    ssh_ca_trust_lxc_install_timeout_ctids: >-
+      {{ ssh_ca_trust_lxc_host_cert_install.results | default([])
+         | selectattr('rc', 'defined') | selectattr('rc', 'in', [124, 137])
+         | map(attribute='item.item.ctid') | list }}
+  when: >-
+    not (ssh_ca_trust_host_cert_enabled | bool)
+    or (item in ssh_ca_trust_lxc_host_cert_pre_fp and item not in ssh_ca_trust_lxc_install_timeout_ctids)
   register: ssh_ca_trust_lxc_push
-  # A NixOS container's failures stay per-item — the remaining containers must
-  # still converge, and the failed one surfaces as NOT READY below (same
-  # contract as a guest without sshd). Debian keeps failing the run.
+  # Timeouts and NixOS failures leave the container not ready.
   failed_when: >-
-    ssh_ca_trust_lxc_push.rc | default(0) != 0
+    ssh_ca_trust_lxc_push.rc | default(0) not in [0, 124, 137]
     and not (ssh_ca_trust_lxc_nixos[item | string] | default(false))
   # 'RESULT=changed' is not a substring of 'RESULT=unchanged', so this cannot
   # match the negative case the way a bare 'CHANGED' test would.
   changed_when: "'RESULT=changed' in ssh_ca_trust_lxc_push.stdout"
 
+- name: Warn about containers whose CA trust push timed out
+  ansible.builtin.debug:
+    msg: "WARNING: LXC {{ item.item }} CA trust push timed out."
+  loop: "{{ ssh_ca_trust_lxc_push.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.rc | default(0) in [124, 137]
+
 - name: Record per-container hardened-sshd readiness
   ansible.builtin.set_fact:
     ssh_ca_trust_lxc_ready: >-
-      {{ ssh_ca_trust_lxc_ready | default({}) | combine({item.item: ('READY=1' in (item.stdout | default('')))}) }}
+      {{ ssh_ca_trust_lxc_ready | default({}) | combine({
+           item.item: (item.rc | default(1) == 0 and 'READY=1' in (item.stdout | default('')))
+         }) }}
   loop: "{{ ssh_ca_trust_lxc_push.results }}"
   loop_control:
     label: "{{ item.item }}"

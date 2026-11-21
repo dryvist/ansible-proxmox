@@ -131,6 +131,37 @@
           - "'--properties.dataset-snapshot' not in pve_node_exporter_test_zfs_unit"
         quiet: true
 
+    - name: Enable the snapshot collector for the next render
+      ansible.builtin.set_fact:
+        pve_node_exporter_zfs_exporter_snapshot_collector: true
+        pve_node_exporter_zfs_exporter_snapshot_properties:
+          - creation
+        pve_node_exporter_zfs_exporter_snapshot_excludes:
+          - '^rpool(/[^@]*)?@'
+
+    - name: Render the zfs_exporter unit with the snapshot collector enabled
+      ansible.builtin.set_fact:
+        pve_node_exporter_test_zfs_snapshot_unit: >-
+          {{ lookup('ansible.builtin.template', pve_node_exporter_test_zfs_template_path) }}
+      vars:
+        ansible_default_ipv4:
+          address: fixture
+
+    - name: Assert the zfs_exporter unit exports snapshot creation when enabled
+      ansible.builtin.assert:
+        that:
+          - "'--collector.dataset-snapshot' in pve_node_exporter_test_zfs_snapshot_unit"
+          - "'--properties.dataset-snapshot=creation' in pve_node_exporter_test_zfs_snapshot_unit"
+          - "'--exclude=^rpool(/[^@]*)?@' in pve_node_exporter_test_zfs_snapshot_unit"
+          - "'--no-collector.dataset-snapshot' not in pve_node_exporter_test_zfs_snapshot_unit"
+        quiet: true
+
+    # Runs the role's own validation task, so an argument the assert action
+    # does not accept fails here, not on a node.
+    - name: Run the snapshot collector validation with the enabled settings
+      ansible.builtin.include_tasks: >-
+        {{ playbook_dir }}/../../roles/pve_node_exporter/tasks/validate_snapshot_collector.yml
+
     - name: Render the zfs_exporter download pin for amd64
       ansible.builtin.set_fact:
         pve_node_exporter_test_zfs_url_amd64: "{{ pve_node_exporter_zfs_exporter_download_url }}"

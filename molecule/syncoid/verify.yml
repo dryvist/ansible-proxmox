@@ -1,6 +1,8 @@
 ---
 - name: Verify restore-check behavior with the stub harness
   ansible.builtin.import_playbook: verify_restore_check.yml
+  vars:
+    restore_check_molecule: true
 
 - name: Verify
   hosts: all
@@ -51,7 +53,7 @@
           # a failed job must be counted and propagate to a non-zero exit — the
           # bug this contract guards against is a per-dataset failure that logs
           # but still exits 0, so nothing ever alerts
-          - "'failed=\"$failed' in syncoid_wrapper_text"
+          - '''failed="$failed'' in syncoid_wrapper_text'
           - "'exit 1' in syncoid_wrapper_text"
         fail_msg: "syncoid wrapper did not render the expected jobs"
 
@@ -60,8 +62,8 @@
         that:
           # Jobs that name no schedule must land in `default`, so a node that
           # never sets syncoid_extra_schedules keeps its existing single cadence.
-          - "'group=\"${1:-default}\"' in syncoid_wrapper_text"
-          - "'if [ \"$group\" = \"default\" ]; then' in syncoid_wrapper_text"
+          - '''group="${1:-default}"'' in syncoid_wrapper_text'
+          - '''if [ "$group" = "default" ]; then'' in syncoid_wrapper_text'
           # A cron line whose group has no jobs must fail loudly rather than
           # ping success for having done nothing.
           - "'no jobs in group' in syncoid_wrapper_text"
@@ -78,13 +80,13 @@
             'logger -t syncoid-replicate -p "$prio" -- "$*" >/dev/null 2>&1 || true'
             in syncoid_wrapper_text
           - "'job_prio+=(daemon.info)' in syncoid_wrapper_text"
-          - "'job_msg+=(\"job=$name group=$group result=ok rc=0' in syncoid_wrapper_text"
+          - '''job_msg+=("job=$name group=$group result=ok rc=0'' in syncoid_wrapper_text'
           - "'job_prio+=(daemon.err)' in syncoid_wrapper_text"
-          - "'job_msg+=(\"job=$name group=$group result=failed rc=$rc' in syncoid_wrapper_text"
-          - "'slog daemon.err \"run group=$group result=failed' in syncoid_wrapper_text"
-          - "'slog daemon.info \"run group=$group result=ok' in syncoid_wrapper_text"
-          - "'slog daemon.err \"run group=$group result=no_jobs' in syncoid_wrapper_text"
-          - "'slog daemon.warning \"run group=$group result=skipped' in syncoid_wrapper_text"
+          - '''job_msg+=("job=$name group=$group result=failed rc=$rc'' in syncoid_wrapper_text'
+          - '''slog daemon.err "run group=$group result=failed'' in syncoid_wrapper_text'
+          - '''slog daemon.info "run group=$group result=ok'' in syncoid_wrapper_text'
+          - '''slog daemon.err "run group=$group result=no_jobs'' in syncoid_wrapper_text'
+          - '''slog daemon.warning "run group=$group result=skipped'' in syncoid_wrapper_text'
           # A failed job's queued line also carries the sanitized last error
           # line from that syncoid invocation; the fallback default marks the
           # reason unavailable when the capture temp file cannot be made, in
@@ -92,8 +94,8 @@
           - >-
             'job_msg+=("job=$name group=$group result=failed rc=$rc
             duration_s=$((SECONDS - start)) err=\\"$err\\"")' in syncoid_wrapper_text
-          - "'local tmp=\"\" err=\"unavailable\"' in syncoid_wrapper_text"
-          - "'syncoid \"$@\" >>\"$log\" 2>&1 || rc=$?' in syncoid_wrapper_text"
+          - '''local tmp="" err="unavailable"'' in syncoid_wrapper_text'
+          - '''syncoid "$@" >>"$log" 2>&1 || rc=$?'' in syncoid_wrapper_text'
         fail_msg: "syncoid wrapper does not report results to syslog"
 
     - name: Verify a failed job's queued syslog line carries the error reason

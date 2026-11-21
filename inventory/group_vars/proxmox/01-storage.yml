@@ -99,8 +99,9 @@ sanoid_splunk_datasets_json: >-
   }
 sanoid_splunk_datasets: "{{ sanoid_splunk_datasets_json | from_json }}"
 
-# PBS guest backups, enabled one node at a time. Container backups use
-# metadata change detection (pbs_change_detection_mode).
+# PBS guest backups, enabled one node at a time. Container backups use the
+# PVE default (legacy) change detection; a job opts into metadata on its own.
+pve_backup_jobs_default_pbs_change_detection_mode: legacy
 pve_backup_jobs_manage: true
 pve_backup_jobs_prune_unmanaged: false
 pve_backup_jobs_config_host: "{{ proxmox_node_names.primary }}"
@@ -124,8 +125,15 @@ pve_backup_jobs_jobs:
       - win10-vdi
       - win11-vdi
       - win25-vdi
+      # Its backup never finished and held the whole job; it gets a job of its own.
+      - s3
     exclude_tags:
       - media
-  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: false}
+  # Alone and after the node job has finished, so a backup that never finishes
+  # holds no other guest.
+  - {id: guests-pve-r540-s3, names: [s3], node: pve-r540, storage: guests, schedule: "14:17", enabled: true}
+  - {id: guests-pve-r710, all: true, node: pve-r710, storage: guests, schedule: "06:31", enabled: true, exclude_names: [pbs]}
+  # The backup server guest on this node is excluded by the role.
+  - {id: guests-pve-w1700, all: true, node: pve-w1700, storage: guests, schedule: "05:17", enabled: true}
   - {id: guests-pve-w5900, all: true, node: pve-w5900, storage: guests, schedule: "06:01", enabled: true, exclude_names: [splunk, prometheus]}
   - {id: guests-pve-w5900-stop, names: [prometheus], node: pve-w5900, storage: guests, schedule: "06:43", enabled: true, mode: stop}

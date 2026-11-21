@@ -154,6 +154,8 @@ class CiScopeContract(unittest.TestCase):
             "tests/guest_recovery/hosts.yml",
             "tests/test_guest_recovery_contract.py",
             "tests/test_zfs_nfs_export_permissions.py",
+            "tests/test_syncoid_retired_snapshots.py",
+            "tests/test_syncoid_aborted_receives.py",
             "tests/pve_bulk_data_compare/__init__.py",
             "tests/pve_notifications/__init__.py",
             "tests/zfs_capacity_monitor/__init__.py",

@@ -1,4 +1,9 @@
 ---
+# load_tofu.yml runs first so the proxmox hosts carry proxmox_user_from_tofu,
+# the login user that ansible_user resolves from.
+- name: Load OpenTofu host services
+  ansible.builtin.import_playbook: load_tofu.yml
+
 - name: Validate the guest recovery request
   hosts: localhost
   connection: local
@@ -49,6 +54,8 @@
   hosts: proxmox
   become: true
   gather_facts: false
+  vars:
+    guest_recovery_reboot_timeout: 300
 
   tasks:
     - name: Explain that check mode skips recovery commands
@@ -58,6 +65,49 @@
       when:
         - inventory_hostname == node
         - ansible_check_mode
+
+    # command, not raw: pvesh prints nothing to a pty (roles/guest_power).
+    - name: Read live guest placement from the cluster
+      ansible.builtin.command:
+        argv: [pvesh, get, /cluster/resources, --type, vm, --output-format, json]
+      register: guest_recovery_resources
+      changed_when: false
+      check_mode: false
+      when: inventory_hostname == node
+
+    - name: Find the requested guest in live placement
+      ansible.builtin.set_fact:
+        guest_recovery_matches: >-
+          {{ guest_recovery_resources.stdout | from_json
+             | selectattr('vmid', 'defined')
+             | selectattr('vmid', 'equalto', vmid | int)
+             | list }}
+      when: inventory_hostname == node
+
+    - name: Set the guest type from live placement
+      ansible.builtin.set_fact:
+        guest_recovery_type: "{{ guest_recovery_matches | map(attribute='type') | first | default('') }}"
+      when: inventory_hostname == node
+
+    - name: Require one guest of a known type on the requested node
+      ansible.builtin.assert:
+        that:
+          - guest_recovery_matches | length == 1
+          - guest_recovery_matches[0].node == node
+          - guest_recovery_type in ['qemu', 'lxc']
+          - mode == 'guest-restart' or guest_recovery_type == 'lxc'
+        fail_msg: >-
+          VMID {{ vmid }} must be exactly one qemu or lxc guest on {{ node }};
+          unit modes need an lxc guest.
+        quiet: true
+      when: inventory_hostname == node
+
+    - name: Log the recovery path for the guest type
+      ansible.builtin.debug:
+        msg: >-
+          Guest {{ vmid }} is {{ guest_recovery_type }}; {{ mode }} uses
+          {{ 'qm' if guest_recovery_type == 'qemu' else 'pct' }}.
+      when: inventory_hostname == node
 
     - name: Stop a guest service through pct exec
       ansible.builtin.command:
@@ -73,12 +123,14 @@
       when:
         - inventory_hostname == node
         - mode == 'unit-stop'
+        - guest_recovery_type == 'lxc'
         - not ansible_check_mode
 
     - name: Restart the guest with stop-start fallback
       when:
         - inventory_hostname == node
         - mode == 'guest-restart'
+        - guest_recovery_type == 'lxc'
         - not ansible_check_mode
       block:
         - name: Request a guest reboot
@@ -105,10 +157,55 @@
               - "{{ vmid | string }}"
           changed_when: true
 
+    # A VM is never stopped: a graceful reboot that times out leaves it running,
+    # and the fallback is a hard reset, which keeps it powered on.
+    - name: Restart the VM with a hard-reset fallback
+      when:
+        - inventory_hostname == node
+        - mode == 'guest-restart'
+        - guest_recovery_type == 'qemu'
+        - not ansible_check_mode
+      block:
+        - name: Request a graceful VM reboot
+          ansible.builtin.command:
+            argv:
+              - qm
+              - reboot
+              - "{{ vmid | string }}"
+              - --timeout
+              - "{{ guest_recovery_reboot_timeout | string }}"
+          changed_when: true
+      rescue:
+        - name: Hard-reset the VM when the graceful reboot fails
+          ansible.builtin.command:
+            argv:
+              - qm
+              - reset
+              - "{{ vmid | string }}"
+          changed_when: true
+
+    - name: Confirm the VM is running after the restart
+      ansible.builtin.command:
+        argv:
+          - qm
+          - status
+          - "{{ vmid | string }}"
+      register: guest_recovery_vm_status
+      changed_when: false
+      retries: 12
+      delay: 5
+      until: "guest_recovery_vm_status.stdout is search('status: running')"
+      when:
+        - inventory_hostname == node
+        - mode == 'guest-restart'
+        - guest_recovery_type == 'qemu'
+        - not ansible_check_mode
+
     - name: Kill the service cgroup and restore temporary memory headroom
       when:
         - inventory_hostname == node
         - mode == 'unit-kill'
+        - guest_recovery_type == 'lxc'
         - not ansible_check_mode
       block:
         - name: Read the guest cgroup memory current value

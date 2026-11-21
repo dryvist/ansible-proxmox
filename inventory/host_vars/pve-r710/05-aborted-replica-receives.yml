@@ -1,0 +1,4 @@
+---
+# Replica datasets whose saved interrupted receive the syncoid role aborts once.
+# Drop an entry once a converge reports it NONE.
+syncoid_aborted_replica_receives: []
