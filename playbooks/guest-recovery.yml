@@ -19,7 +19,7 @@
           - vmid is defined
           - vmid | string is match('^[1-9][0-9]{2,8}$')
           - mode is defined
-          - mode in ['unit-stop', 'unit-kill', 'guest-restart']
+          - mode in ['unit-stop', 'unit-kill', 'guest-restart', 'backup-release']
           - reason is defined
           - reason | string | trim | length > 0
           - >-
@@ -125,6 +125,13 @@
         - mode == 'unit-stop'
         - guest_recovery_type == 'lxc'
         - not ansible_check_mode
+
+    - name: Release a container held by a running backup
+      ansible.builtin.include_tasks: tasks/guest_recovery_backup_release.yml
+      when:
+        - inventory_hostname == node
+        - mode == 'backup-release'
+        - guest_recovery_type == 'lxc'
 
     - name: Restart the guest with stop-start fallback
       when:

@@ -34,7 +34,7 @@ def test_targets_are_limited_to_inventory_group() -> None:
 
     request_assert = plays[0]["tasks"][0]["ansible.builtin.assert"]
     assert "node | string in (groups['proxmox'] | default([]))" in request_assert["that"]
-    assert "mode in ['unit-stop', 'unit-kill', 'guest-restart']" in request_assert["that"]
+    assert "mode in ['unit-stop', 'unit-kill', 'guest-restart', 'backup-release']" in request_assert["that"]
 
 
 def test_mutating_commands_use_fixed_argv() -> None:
@@ -103,3 +103,20 @@ def test_the_guest_type_is_read_live_even_in_check_mode() -> None:
     assert read["ansible.builtin.command"]["argv"][:3] == ["pvesh", "get", "/cluster/resources"]
     assert read["check_mode"] is False
     assert read["changed_when"] is False
+
+
+
+def test_backup_release_stops_only_tasks_backing_up_this_guest() -> None:
+    release = next(
+        task for task in _plays()[1]["tasks"] if task["name"] == "Release a container held by a running backup"
+    )
+    assert release["ansible.builtin.include_tasks"] == "tasks/guest_recovery_backup_release.yml"
+    assert "guest_recovery_type == 'lxc'" in release["when"]
+    tasks = yaml.safe_load((PLAYBOOK.parent / "tasks" / "guest_recovery_backup_release.yml").read_text())
+    names = [task["name"] for task in tasks]
+    stop = next(task for task in tasks if task["name"] == "Stop each vzdump task that is backing up this VMID")
+    assert stop["loop"] == "{{ guest_recovery_vzdump_upids }}"
+    assert all("argv" in task["ansible.builtin.command"] for task in tasks if "ansible.builtin.command" in task)
+    # The log is printed and the tasks are selected before anything is stopped.
+    assert names.index("Print each active vzdump task log") < names.index(stop["name"])
+    assert names.index("Select the tasks whose current guest is this VMID") < names.index(stop["name"])

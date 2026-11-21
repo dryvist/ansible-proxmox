@@ -1,0 +1,99 @@
+---
+# Included by playbooks/guest-recovery.yml for mode=backup-release on an lxc
+# guest. Each active vzdump task log is printed first; a task is stopped only
+# when the guest it is backing up now is this VMID.
+- name: Read the active vzdump tasks on the node
+  ansible.builtin.command:
+    argv: [pvesh, get, "/nodes/{{ node }}/tasks", --source, active, --typefilter, vzdump, --output-format, json]
+  register: guest_recovery_vzdump_active
+  changed_when: false
+  check_mode: false
+
+- name: Read the log of each active vzdump task
+  ansible.builtin.command:
+    argv: [pvesh, get, "/nodes/{{ node }}/tasks/{{ item }}/log", --limit, "5000", --output-format, json]
+  loop: "{{ guest_recovery_vzdump_active.stdout | from_json | map(attribute='upid') | list }}"
+  register: guest_recovery_vzdump_logs
+  changed_when: false
+  check_mode: false
+
+- name: Print each active vzdump task log
+  ansible.builtin.debug:
+    msg: "{{ [item.item] + (item.stdout | from_json | map(attribute='t') | list) }}"
+  loop: "{{ guest_recovery_vzdump_logs.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Select the tasks whose current guest is this VMID
+  ansible.builtin.set_fact:
+    guest_recovery_vzdump_upids: >-
+      {{ guest_recovery_vzdump_logs.results
+         | selectattr('stdout', 'search',
+             'Starting Backup of VM ' ~ (vmid | string) ~ ' (?![\\s\\S]*Starting Backup of VM )')
+         | map(attribute='item') | list }}
+
+- name: Report the tasks to stop
+  ansible.builtin.debug:
+    msg: >-
+      {{ guest_recovery_vzdump_upids | length }} of
+      {{ guest_recovery_vzdump_logs.results | length }} active vzdump tasks
+      are backing up {{ vmid }} now: {{ guest_recovery_vzdump_upids }}.
+
+- name: Stop each vzdump task that is backing up this VMID
+  ansible.builtin.command:
+    argv: [pvesh, delete, "/nodes/{{ node }}/tasks/{{ item }}"]
+  loop: "{{ guest_recovery_vzdump_upids }}"
+  changed_when: true
+  when: not ansible_check_mode
+
+- name: Wait until the stopped tasks end
+  ansible.builtin.command:
+    argv: [pvesh, get, "/nodes/{{ node }}/tasks/{{ item }}/status", --output-format, json]
+  loop: "{{ guest_recovery_vzdump_upids }}"
+  register: guest_recovery_vzdump_status
+  until: (guest_recovery_vzdump_status.stdout | from_json).status == 'stopped'
+  retries: 24
+  delay: 5
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Read the container run state
+  ansible.builtin.command:
+    argv: [lxc-info, -n, "{{ vmid | string }}", -s]
+  register: guest_recovery_lxc_state
+  changed_when: false
+  check_mode: false
+
+- name: Thaw the container when it is still frozen
+  ansible.builtin.command:
+    argv: [lxc-unfreeze, -n, "{{ vmid | string }}"]
+  changed_when: true
+  when:
+    - "'FROZEN' in guest_recovery_lxc_state.stdout"
+    - not ansible_check_mode
+
+- name: Read the container configuration
+  ansible.builtin.command:
+    argv: [pct, config, "{{ vmid | string }}"]
+  register: guest_recovery_lxc_config
+  changed_when: false
+  check_mode: false
+
+- name: Clear a backup or snapshot lock left on the container
+  ansible.builtin.command:
+    argv: [pct, unlock, "{{ vmid | string }}"]
+  changed_when: true
+  when:
+    - "guest_recovery_lxc_config.stdout is search('^lock: (backup|snapshot)$', multiline=True)"
+    - not ansible_check_mode
+
+- name: Read the container state after the release
+  ansible.builtin.command:
+    argv: [pct, status, "{{ vmid | string }}"]
+  register: guest_recovery_lxc_status
+  changed_when: false
+  check_mode: false
+
+- name: Report the container state after the release
+  ansible.builtin.debug:
+    msg: "{{ guest_recovery_lxc_status.stdout }}"
