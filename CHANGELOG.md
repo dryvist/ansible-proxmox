@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.58.0](https://github.com/dryvist/ansible-proxmox/compare/v2.57.0...v2.58.0) (2026-11-21)
+
+
+### Features
+
+* **syncoid:** own tag for the retired replica snapshot tasks ([#1421](https://github.com/dryvist/ansible-proxmox/issues/1421)) ([8312581](https://github.com/dryvist/ansible-proxmox/commit/83125814b7c81492a8b3ccdf1afe03b76a4bb14e))
+
 ## [2.57.0](https://github.com/dryvist/ansible-proxmox/compare/v2.56.0...v2.57.0) (2026-11-20)
 
 
