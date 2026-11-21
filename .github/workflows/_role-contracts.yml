@@ -70,7 +70,7 @@ jobs:
           python -m pip install -r requirements-ci.txt
 
       - name: Verify the guest recovery and ZFS NFS export contracts
-        run: python -m pytest -q tests/test_guest_recovery_contract.py tests/test_zfs_nfs_export_permissions.py tests/test_syncoid_retired_snapshots.py
+        run: python -m pytest -q tests/test_guest_recovery_contract.py tests/test_zfs_nfs_export_permissions.py tests/test_syncoid_retired_snapshots.py tests/test_syncoid_aborted_receives.py
 
       - name: Syntax-check the guest recovery playbook
         run: |

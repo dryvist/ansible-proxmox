@@ -135,3 +135,8 @@ syncoid_retired_replica_datasets: []
 # prunes those), absent names are a no-op, and a check run lists each present
 # snapshot with its used bytes before anything is destroyed.
 syncoid_retired_replica_snapshots: []
+
+# Replica datasets whose saved interrupted receive to abort (`zfs receive -A`),
+# as literal `bulk/replica/<dataset>` names. A dataset without a saved receive
+# is a no-op, and a check run lists each one that would be aborted.
+syncoid_aborted_replica_receives: []
