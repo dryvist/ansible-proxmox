@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.59.1](https://github.com/dryvist/ansible-proxmox/compare/v2.59.0...v2.59.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **pve_backup_jobs:** disable three declared backup jobs ([#1431](https://github.com/dryvist/ansible-proxmox/issues/1431)) ([aa47fcf](https://github.com/dryvist/ansible-proxmox/commit/aa47fcf6ee3bc4276043b2e1ecfa40ac1654db88))
+
 ## [2.59.0](https://github.com/dryvist/ansible-proxmox/compare/v2.58.0...v2.59.0) (2026-11-21)
 
 
