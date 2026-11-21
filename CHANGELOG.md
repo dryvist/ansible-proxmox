@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.59.0](https://github.com/dryvist/ansible-proxmox/compare/v2.58.0...v2.59.0) (2026-11-21)
+
+
+### Features
+
+* **syncoid:** abort declared interrupted replica receives ([#1426](https://github.com/dryvist/ansible-proxmox/issues/1426)) ([61d8bc1](https://github.com/dryvist/ansible-proxmox/commit/61d8bc175e6f404bfa9fa42cb5f06f4dc39a9639))
+
 ## [2.58.0](https://github.com/dryvist/ansible-proxmox/compare/v2.57.0...v2.58.0) (2026-11-21)
 
 
