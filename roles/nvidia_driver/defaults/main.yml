@@ -116,8 +116,8 @@ nvidia_driver_gpu_burn_dir: /var/lib/llm-cache/bin/gpu-burn
 
 # Optional NVIDIA host-to-device and device-to-host bandwidth benchmark.
 nvidia_driver_nvbandwidth_enabled: false
-# renovate: datasource=github-releases depName=NVIDIA/nvbandwidth currentValue=v0.10.0 extractVersion=^(?<version>.*)$
-nvidia_driver_nvbandwidth_version: 82fc4e8c6afa0babb8687793678f615b3b8d793e
+# renovate: datasource=github-releases depName=NVIDIA/nvbandwidth currentValue=v0.11.0 extractVersion=^(?<version>.*)$
+nvidia_driver_nvbandwidth_version: 201eaf7f25eda954d08a7c4fed9d8325e3c32ddf
 nvidia_driver_nvbandwidth_dir: /var/lib/llm-cache/bin/nvbandwidth
 
 nvidia_driver_header_packages:
