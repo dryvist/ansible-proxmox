@@ -2,7 +2,7 @@
 platforms:
   - name: proxmox-idrac-power-test
     # renovate: datasource=docker depName=mirror.gcr.io/geerlingguy/docker-debian12-ansible
-    image: "${MOLECULE_IMAGE:-mirror.gcr.io/geerlingguy/docker-debian12-ansible:latest@sha256:fc679fe5eb029c5ceeed3beb9c8a7ee116de371e7f62e3341d5a4dba79853004}"
+    image: "${MOLECULE_IMAGE:-mirror.gcr.io/geerlingguy/docker-debian12-ansible:latest@sha256:39bdd16916ec475a12db0502550b72e4f4c2cc858a1939ad2a17f21f6eb51b65}"
     pre_build_image: true
     privileged: true
     tmpfs:
