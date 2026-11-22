@@ -148,6 +148,7 @@ def test_each_job_selects_one_scope_on_one_node():
         "guests-pve-r540": "06:33",
         "guests-pve-r540-s3": "14:17",
         "guests-pve-r710": "06:31",
+        "guests-pve-r710-docker-host": "14:23",
         "guests-pve-w1700": "05:17",
         "guests-pve-w5900": "06:01",
         "guests-pve-w5900-stop": "06:43",
@@ -194,6 +195,16 @@ def test_r710_job_is_disabled_and_excludes_the_old_backup_vm():
     job = next(job for job in JOBS if job["id"] == "guests-pve-r710")
     assert job["enabled"] is False
     assert job["exclude_names"] == ["pbs"]
+
+
+def test_runner_guest_has_its_own_enabled_snapshot_job():
+    job = next(job for job in JOBS if job["id"] == "guests-pve-r710-docker-host")
+    assert job["names"] == ["docker-host"]
+    assert job["node"] == "pve-r710"
+    assert job["enabled"] is True
+    assert job.get("mode", DEFAULTS["pve_backup_jobs_default_mode"]) == "snapshot"
+    node_job = next(job for job in JOBS if job["id"] == "guests-pve-r710")
+    assert node_job["enabled"] is False
 
 
 def test_jobs_default_to_legacy_change_detection():
