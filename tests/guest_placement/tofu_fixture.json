@@ -241,7 +241,7 @@
    "vmid": 602000
   },
   "prometheus": {
-   "node": "pve-w1700",
+   "node": "pve-w5900",
    "vmid": 195
   },
   "pve-scripts-local": {
@@ -315,7 +315,7 @@
  },
  "docker_vms": {
   "docker-host": {
-   "node": "pve-w5900",
+   "node": "pve-r710",
    "vmid": 250
   },
   "docker-host-540": {
@@ -335,7 +335,7 @@
  },
  "vms": {
   "docker-host": {
-   "node": "pve-w5900",
+   "node": "pve-r710",
    "vmid": 250
   },
   "docker-host-540": {
