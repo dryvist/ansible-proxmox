@@ -1,5 +1,6 @@
 """Contract checks for the PBS-only pve_backup_jobs target and its node layout."""
 
+import json
 from pathlib import Path
 
 import yaml
@@ -148,6 +149,7 @@ def test_each_job_selects_one_scope_on_one_node():
         "guests-pve-r540": "06:33",
         "guests-pve-r540-s3": "14:17",
         "guests-pve-r710": "06:31",
+        "guests-pve-r710-docker-host": "14:23",
         "guests-pve-w1700": "05:17",
         "guests-pve-w5900": "06:01",
         "guests-pve-w5900-stop": "06:43",
@@ -194,6 +196,23 @@ def test_r710_job_is_disabled_and_excludes_the_old_backup_vm():
     job = next(job for job in JOBS if job["id"] == "guests-pve-r710")
     assert job["enabled"] is False
     assert job["exclude_names"] == ["pbs"]
+
+
+def test_name_scoped_jobs_run_on_the_node_of_their_guests():
+    placement = json.loads((ROOT / "tests/guest_placement/tofu_fixture.json").read_text())
+    guests = {name: guest for section in placement.values() for name, guest in section.items()}
+    for job in (job for job in JOBS if "names" in job):
+        assert all(guests[name]["node"] == job["node"] for name in job["names"]), job["id"]
+
+
+def test_runner_guest_has_its_own_enabled_snapshot_job():
+    job = next(job for job in JOBS if job["id"] == "guests-pve-r710-docker-host")
+    assert job["names"] == ["docker-host"]
+    assert job["node"] == "pve-r710"
+    assert job["enabled"] is True
+    assert job.get("mode", DEFAULTS["pve_backup_jobs_default_mode"]) == "snapshot"
+    node_job = next(job for job in JOBS if job["id"] == "guests-pve-r710")
+    assert node_job["enabled"] is False
 
 
 def test_jobs_default_to_legacy_change_detection():
