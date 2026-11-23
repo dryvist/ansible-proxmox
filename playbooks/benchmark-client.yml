@@ -13,6 +13,8 @@
     benchmark_client_default_tools:
       uv: "0.13.1"
       node: "24.21.0"
+      # renovate: datasource=pypi depName=gbench
+      gbench: "0.5.0.post1"
       # renovate: datasource=docker depName=vllm/vllm-openai-cpu
       vllm_client_image: "vllm/vllm-openai-cpu:v0.32.0-x86_64"
   tasks:
@@ -67,6 +69,8 @@
           - benchmark_client_tools.uv | string is match('^[0-9]+\.[0-9]+\.[0-9]+$')
           - benchmark_client_tools.node is defined
           - benchmark_client_tools.node | string is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+          - benchmark_client_tools.gbench is defined
+          - benchmark_client_tools.gbench | string is match('^[0-9]+\.[0-9]+\.[0-9]+(\.post[0-9]+)?$')
           - benchmark_client_tools.vllm_client_image is defined
           - benchmark_client_tools.vllm_client_image | string is match('^vllm/vllm-openai-cpu:v[0-9]+\.[0-9]+\.[0-9]+-x86_64$')
         fail_msg: >-

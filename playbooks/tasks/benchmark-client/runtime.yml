@@ -45,6 +45,7 @@
       - install
       - --yes
       - --no-install-recommends
+      - bubblewrap
       - ca-certificates
       - curl
       - docker.io
@@ -187,6 +188,43 @@
     - state == 'present'
     - benchmark_client_node_version.rc != 0 or benchmark_client_node_version.stdout != 'v' ~ benchmark_client_tools.node
     - not ansible_check_mode
+- name: Read the installed gbench version
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - /usr/local/bin/gbench
+      - --version
+  register: benchmark_client_gbench_version
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
+- name: Install the pinned gbench release when needed
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - env
+      - UV_TOOL_DIR=/opt/uv-tools
+      - UV_TOOL_BIN_DIR=/usr/local/bin
+      - /usr/local/bin/uv
+      - tool
+      - install
+      - --force
+      - "gbench=={{ benchmark_client_tools.gbench }}"
+  changed_when: true
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - benchmark_client_gbench_version.rc != 0 or benchmark_client_gbench_version.stdout != 'gbench ' ~ benchmark_client_tools.gbench
+    - not ansible_check_mode
 - name: Verify the installed tool versions
   ansible.builtin.command:
     argv:
@@ -201,6 +239,8 @@
       argument: --version
     - command: /usr/local/bin/node
       argument: --version
+    - command: /usr/local/bin/gbench
+      argument: --version
   loop_control:
     label: "{{ item.command }}"
   register: benchmark_client_tool_versions
@@ -214,7 +254,8 @@
     that:
       - benchmark_client_tool_versions.results[0].stdout.split()[:2] | join(' ') == 'uv ' ~ benchmark_client_tools.uv
       - benchmark_client_tool_versions.results[1].stdout == 'v' ~ benchmark_client_tools.node
-    fail_msg: "The benchmark client does not have the requested uv and Node versions."
+      - benchmark_client_tool_versions.results[2].stdout == 'gbench ' ~ benchmark_client_tools.gbench
+    fail_msg: "The benchmark client does not have the requested uv, Node, and gbench versions."
     quiet: true
   when:
     - inventory_hostname == node
