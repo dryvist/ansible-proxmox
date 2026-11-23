@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.61.2](https://github.com/dryvist/ansible-proxmox/compare/v2.61.1...v2.61.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* **llm_model_store_seed:** create the subdirectory of a nested GGUF path ([#1462](https://github.com/dryvist/ansible-proxmox/issues/1462)) ([2f36008](https://github.com/dryvist/ansible-proxmox/commit/2f36008e7e3c2977d2b3c75750cb921e3625ad32))
+
 ## [2.61.1](https://github.com/dryvist/ansible-proxmox/compare/v2.61.0...v2.61.1) (2026-11-23)
 
 
