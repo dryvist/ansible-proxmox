@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.61.1](https://github.com/dryvist/ansible-proxmox/compare/v2.61.0...v2.61.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **ci:** re-review edited descriptions and follow v2 for the CI fix ([#1453](https://github.com/dryvist/ansible-proxmox/issues/1453)) ([130fee3](https://github.com/dryvist/ansible-proxmox/commit/130fee31d5ef9096a11d6d25dbfa7b3fd2e92124))
+
 ## [2.61.0](https://github.com/dryvist/ansible-proxmox/compare/v2.60.0...v2.61.0) (2026-11-22)
 
 
