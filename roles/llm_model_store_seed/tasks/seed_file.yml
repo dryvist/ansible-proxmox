@@ -13,6 +13,16 @@
       current layout — fix the catalog, don't guess a fallback name.
     quiet: true
 
+# Some repos keep the GGUF in a subdirectory; get_url does not create parents.
+- name: "Create the subdirectory for {{ llm_model_store_seed_file }}"
+  ansible.builtin.file:
+    path: "{{ (llm_model_store_seed_target_path ~ '/' ~ llm_model_store_seed_file) | dirname }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  when: "'/' in llm_model_store_seed_file"
+
 - name: "Seed the model store with {{ llm_model_store_seed_file }}"
   ansible.builtin.get_url:
     url: >-
