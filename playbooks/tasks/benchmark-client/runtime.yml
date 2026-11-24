@@ -213,7 +213,7 @@
       - --
       - /opt/uv-tools/gbench/bin/python
       - -c
-      - import importlib.metadata; print(importlib.metadata.version('transformers'))
+      - import importlib.metadata, scipy; print(importlib.metadata.version('transformers'))
   register: benchmark_client_gbench_transformers_version
   changed_when: false
   failed_when: false
@@ -237,17 +237,17 @@
       - --force
       - --with
       - "transformers=={{ benchmark_client_tools.transformers }}"
-      - "gbench=={{ benchmark_client_tools.gbench }}"
+      - "gbench[evals]=={{ benchmark_client_tools.gbench }}"
   changed_when: true
   when:
     - inventory_hostname == node
     - state == 'present'
+    - not ansible_check_mode
     - >-
       benchmark_client_gbench_version.rc != 0
       or benchmark_client_gbench_version.stdout != 'gbench ' ~ benchmark_client_tools.gbench
       or benchmark_client_gbench_transformers_version.rc != 0
       or benchmark_client_gbench_transformers_version.stdout != benchmark_client_tools.transformers
-    - not ansible_check_mode
 - name: Verify the installed tool versions
   ansible.builtin.command:
     argv:
@@ -281,7 +281,7 @@
       - --
       - /opt/uv-tools/gbench/bin/python
       - -c
-      - import importlib.metadata; print(importlib.metadata.version('transformers'))
+      - import importlib.metadata, scipy; print(importlib.metadata.version('transformers'))
   register: benchmark_client_gbench_transformers_verify
   changed_when: false
   when:
