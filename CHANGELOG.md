@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.62.3](https://github.com/dryvist/ansible-proxmox/compare/v2.62.2...v2.62.3) (2026-11-24)
+
+
+### Bug Fixes
+
+* **benchmark-client:** pin scipy with gbench instead of evals extra ([#1473](https://github.com/dryvist/ansible-proxmox/issues/1473)) ([40fa4de](https://github.com/dryvist/ansible-proxmox/commit/40fa4dee26e70403a8ffd268ddf1b66c57c6c4a8))
+
 ## [2.62.2](https://github.com/dryvist/ansible-proxmox/compare/v2.62.1...v2.62.2) (2026-11-24)
 
 
