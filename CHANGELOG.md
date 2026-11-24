@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.62.1](https://github.com/dryvist/ansible-proxmox/compare/v2.62.0...v2.62.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **benchmark-client:** pin and install transformers with gbench ([#1468](https://github.com/dryvist/ansible-proxmox/issues/1468)) ([53d76fa](https://github.com/dryvist/ansible-proxmox/commit/53d76fa0f5fb17bcf848759ac584877fe5e534b5))
+
 ## [2.62.0](https://github.com/dryvist/ansible-proxmox/compare/v2.61.2...v2.62.0) (2026-11-23)
 
 

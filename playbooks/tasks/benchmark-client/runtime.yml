@@ -204,6 +204,23 @@
     - inventory_hostname == node
     - state == 'present'
     - not ansible_check_mode
+- name: Read the installed gbench transformers version
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - /opt/uv-tools/gbench/bin/python
+      - -c
+      - import importlib.metadata; print(importlib.metadata.version('transformers'))
+  register: benchmark_client_gbench_transformers_version
+  changed_when: false
+  failed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
 - name: Install the pinned gbench release when needed
   ansible.builtin.command:
     argv:
@@ -218,12 +235,18 @@
       - tool
       - install
       - --force
+      - --with
+      - "transformers=={{ benchmark_client_tools.transformers }}"
       - "gbench=={{ benchmark_client_tools.gbench }}"
   changed_when: true
   when:
     - inventory_hostname == node
     - state == 'present'
-    - benchmark_client_gbench_version.rc != 0 or benchmark_client_gbench_version.stdout != 'gbench ' ~ benchmark_client_tools.gbench
+    - >-
+      benchmark_client_gbench_version.rc != 0
+      or benchmark_client_gbench_version.stdout != 'gbench ' ~ benchmark_client_tools.gbench
+      or benchmark_client_gbench_transformers_version.rc != 0
+      or benchmark_client_gbench_transformers_version.stdout != benchmark_client_tools.transformers
     - not ansible_check_mode
 - name: Verify the installed tool versions
   ansible.builtin.command:
@@ -249,13 +272,30 @@
     - inventory_hostname == node
     - state == 'present'
     - not ansible_check_mode
+- name: Verify the installed gbench transformers version
+  ansible.builtin.command:
+    argv:
+      - pct
+      - exec
+      - "{{ vmid | string }}"
+      - --
+      - /opt/uv-tools/gbench/bin/python
+      - -c
+      - import importlib.metadata; print(importlib.metadata.version('transformers'))
+  register: benchmark_client_gbench_transformers_verify
+  changed_when: false
+  when:
+    - inventory_hostname == node
+    - state == 'present'
+    - not ansible_check_mode
 - name: Require the pinned tool versions
   ansible.builtin.assert:
     that:
       - benchmark_client_tool_versions.results[0].stdout.split()[:2] | join(' ') == 'uv ' ~ benchmark_client_tools.uv
       - benchmark_client_tool_versions.results[1].stdout == 'v' ~ benchmark_client_tools.node
       - benchmark_client_tool_versions.results[2].stdout == 'gbench ' ~ benchmark_client_tools.gbench
-    fail_msg: "The benchmark client does not have the requested uv, Node, and gbench versions."
+      - benchmark_client_gbench_transformers_verify.stdout == benchmark_client_tools.transformers
+    fail_msg: "The benchmark client does not have the requested uv, Node, gbench, and transformers versions."
     quiet: true
   when:
     - inventory_hostname == node
