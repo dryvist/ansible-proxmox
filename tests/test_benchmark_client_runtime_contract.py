@@ -31,7 +31,7 @@ def test_client_pins_and_verifies_gbench() -> None:
     tasks = yaml.safe_load(RUNTIME.read_text())
     install = next(task for task in tasks if task["name"] == "Install the pinned gbench release when needed")
     argv = install["ansible.builtin.command"]["argv"]
-    assert "gbench=={{ benchmark_client_tools.gbench }}" in argv
+    assert "gbench[evals]=={{ benchmark_client_tools.gbench }}" in argv
     assert "transformers=={{ benchmark_client_tools.transformers }}" in argv
 
     verify = next(task for task in tasks if task["name"] == "Verify the installed tool versions")
@@ -41,3 +41,4 @@ def test_client_pins_and_verifies_gbench() -> None:
         task for task in tasks if task["name"] == "Verify the installed gbench transformers version"
     )
     assert "/opt/uv-tools/gbench/bin/python" in verify_tf["ansible.builtin.command"]["argv"]
+    assert "scipy" in verify_tf["ansible.builtin.command"]["argv"][-1]
