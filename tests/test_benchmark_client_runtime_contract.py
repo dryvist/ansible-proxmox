@@ -27,12 +27,14 @@ def test_client_pins_and_verifies_gbench() -> None:
     tools = validation["vars"]["benchmark_client_default_tools"]
     assert tools["gbench"] == "0.5.0.post1"
     assert tools["transformers"] == "5.24.0"
+    assert tools["scipy"] == "1.18.1"
 
     tasks = yaml.safe_load(RUNTIME.read_text())
     install = next(task for task in tasks if task["name"] == "Install the pinned gbench release when needed")
     argv = install["ansible.builtin.command"]["argv"]
-    assert "gbench[evals]=={{ benchmark_client_tools.gbench }}" in argv
+    assert "gbench=={{ benchmark_client_tools.gbench }}" in argv
     assert "transformers=={{ benchmark_client_tools.transformers }}" in argv
+    assert "scipy=={{ benchmark_client_tools.scipy }}" in argv
 
     verify = next(task for task in tasks if task["name"] == "Verify the installed tool versions")
     assert {"command": "/usr/local/bin/gbench", "argument": "--version"} in verify["loop"]
