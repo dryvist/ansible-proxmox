@@ -213,7 +213,7 @@
       - --
       - /opt/uv-tools/gbench/bin/python
       - -c
-      - import importlib.metadata, scipy; print(importlib.metadata.version('transformers'))
+      - import importlib.metadata; print(importlib.metadata.version('transformers'), importlib.metadata.version('scipy'))
   register: benchmark_client_gbench_transformers_version
   changed_when: false
   failed_when: false
@@ -237,7 +237,9 @@
       - --force
       - --with
       - "transformers=={{ benchmark_client_tools.transformers }}"
-      - "gbench[evals]=={{ benchmark_client_tools.gbench }}"
+      - --with
+      - "scipy=={{ benchmark_client_tools.scipy }}"
+      - "gbench=={{ benchmark_client_tools.gbench }}"
   changed_when: true
   when:
     - inventory_hostname == node
@@ -247,7 +249,7 @@
       benchmark_client_gbench_version.rc != 0
       or benchmark_client_gbench_version.stdout != 'gbench ' ~ benchmark_client_tools.gbench
       or benchmark_client_gbench_transformers_version.rc != 0
-      or benchmark_client_gbench_transformers_version.stdout != benchmark_client_tools.transformers
+      or benchmark_client_gbench_transformers_version.stdout != benchmark_client_tools.transformers ~ ' ' ~ benchmark_client_tools.scipy
 - name: Verify the installed tool versions
   ansible.builtin.command:
     argv:
@@ -281,7 +283,7 @@
       - --
       - /opt/uv-tools/gbench/bin/python
       - -c
-      - import importlib.metadata, scipy; print(importlib.metadata.version('transformers'))
+      - import importlib.metadata; print(importlib.metadata.version('transformers'), importlib.metadata.version('scipy'))
   register: benchmark_client_gbench_transformers_verify
   changed_when: false
   when:
@@ -294,8 +296,8 @@
       - benchmark_client_tool_versions.results[0].stdout.split()[:2] | join(' ') == 'uv ' ~ benchmark_client_tools.uv
       - benchmark_client_tool_versions.results[1].stdout == 'v' ~ benchmark_client_tools.node
       - benchmark_client_tool_versions.results[2].stdout == 'gbench ' ~ benchmark_client_tools.gbench
-      - benchmark_client_gbench_transformers_verify.stdout == benchmark_client_tools.transformers
-    fail_msg: "The benchmark client does not have the requested uv, Node, gbench, and transformers versions."
+      - benchmark_client_gbench_transformers_verify.stdout == benchmark_client_tools.transformers ~ ' ' ~ benchmark_client_tools.scipy
+    fail_msg: "The benchmark client does not have the requested uv, Node, gbench, transformers, and scipy versions."
     quiet: true
   when:
     - inventory_hostname == node
