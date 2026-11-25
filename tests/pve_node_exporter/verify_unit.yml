@@ -113,8 +113,12 @@
       ansible.builtin.assert:
         that:
           - >-
-            ['available', 'quota', 'referenced', 'used', 'usedbysnapshots']
+            ['available', 'compressratio', 'logicalused', 'quota', 'referenced', 'refquota', 'used', 'usedbysnapshots']
             | difference(pve_node_exporter_zfs_exporter_filesystem_properties) | length == 0
+          - >-
+            ['compressratio', 'logicalused']
+            | difference(pve_node_exporter_zfs_exporter_volume_properties) | length == 0
+          - "'refquota' not in pve_node_exporter_zfs_exporter_volume_properties"
           - >-
             ('--properties.dataset-filesystem='
             ~ (pve_node_exporter_zfs_exporter_filesystem_properties | join(',')))
