@@ -144,8 +144,12 @@ common_packages:
 # (node_drm_gpu_busy_percent, node_drm_memory_vram_used_bytes, ...). Set
 # group-wide rather than a per-host exception: on a node with no amdgpu
 # device the collector just finds nothing to report.
+# The systemd collector reports only the snapshot and replication units;
+# cron-triggered syncoid jobs are not systemd units and are not covered.
 pve_node_exporter_extra_args:
   - "--collector.drm"
+  - "--collector.systemd"
+  - "--collector.systemd.unit-include=(sanoid[.](service|timer)|syncoid-replicate-on-boot[.]service)"
 
 # The shared inventory publishes the sorted FQDN URL list for guests carrying
 # the apt-cache capability tag. The loader requires the list before a converge.

@@ -83,15 +83,18 @@ node_exporter's `zfs` collector reports pool and ARC statistics only.
 zfs_exporter adds one series per dataset (filesystem or volume) and property,
 labelled `name`, `pool` and `type`, plus its pool series:
 
-| Metric                               | ZFS property      | Collected for        |
-| ------------------------------------ | ----------------- | -------------------- |
-| `zfs_dataset_used_bytes`             | `used`            | filesystems, volumes |
-| `zfs_dataset_used_by_snapshot_bytes` | `usedbysnapshots` | filesystems, volumes |
-| `zfs_dataset_available_bytes`        | `available`       | filesystems, volumes |
-| `zfs_dataset_quota_bytes`            | `quota`           | filesystems          |
-| `zfs_dataset_referenced_bytes`       | `referenced`      | filesystems, volumes |
-| `zfs_dataset_volume_size_bytes`      | `volsize`         | volumes              |
-| `zfs_dataset_written_bytes`          | `written`         | filesystems, volumes |
+| Metric                                  | ZFS property      | Collected for        |
+| --------------------------------------- | ----------------- | -------------------- |
+| `zfs_dataset_used_bytes`                | `used`            | filesystems, volumes |
+| `zfs_dataset_used_by_snapshot_bytes`    | `usedbysnapshots` | filesystems, volumes |
+| `zfs_dataset_available_bytes`           | `available`       | filesystems, volumes |
+| `zfs_dataset_compression_ratio`         | `compressratio`   | filesystems, volumes |
+| `zfs_dataset_logical_used_bytes`        | `logicalused`     | filesystems, volumes |
+| `zfs_dataset_quota_bytes`               | `quota`           | filesystems          |
+| `zfs_dataset_referenced_bytes`          | `referenced`      | filesystems, volumes |
+| `zfs_dataset_referenced_quota_bytes`    | `refquota`        | filesystems          |
+| `zfs_dataset_volume_size_bytes`         | `volsize`         | volumes              |
+| `zfs_dataset_written_bytes`             | `written`         | filesystems, volumes |
 
 `written` is the space written since the dataset's latest snapshot, so it is
 the size of the next incremental send.

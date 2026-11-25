@@ -98,13 +98,18 @@ pve_node_exporter_zfs_exporter_install_dir: /opt/zfs_exporter
 # collector is off by default, so no per-snapshot series are exported.
 pve_node_exporter_zfs_exporter_filesystem_properties:
   - available
+  - compressratio
+  - logicalused
   - quota
   - referenced
+  - refquota
   - used
   - usedbysnapshots
   - written
 pve_node_exporter_zfs_exporter_volume_properties:
   - available
+  - compressratio
+  - logicalused
   - referenced
   - used
   - usedbysnapshots

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.63.0](https://github.com/dryvist/ansible-proxmox/compare/v2.62.3...v2.63.0) (2026-11-25)
+
+
+### Features
+
+* **pve_node_exporter:** export sanoid and syncoid systemd unit state ([#1478](https://github.com/dryvist/ansible-proxmox/issues/1478)) ([f3af013](https://github.com/dryvist/ansible-proxmox/commit/f3af013ff407898b873301c023d22b1d2fa36e88))
+* **pve_node_exporter:** export ZFS compression ratio, logical used and refquota ([#1477](https://github.com/dryvist/ansible-proxmox/issues/1477)) ([7862106](https://github.com/dryvist/ansible-proxmox/commit/78621063938ffd664d24129fc7e1dbd1fc4ae98c))
+
 ## [2.62.3](https://github.com/dryvist/ansible-proxmox/compare/v2.62.2...v2.62.3) (2026-11-24)
 
 
