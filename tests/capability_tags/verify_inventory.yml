@@ -18,6 +18,8 @@
         that:
           - "'test-gpu-node' in groups['nvidia_gpu_nodes']"
           - "'test-cpu-node' not in groups['nvidia_gpu_nodes']"
+          - hostvars['test-gpu-node'].tofu_node_hardware == 'amd-desktop'
+          - hostvars['test-cpu-node'].tofu_node_hardware == ''
           - hostvars['test-gpu-node'].nvidia_driver_enabled | bool
           - not (hostvars['test-cpu-node'].nvidia_driver_enabled | bool)
           - hostvars['test-gpu-node'].cribl_edge_gpu_mode == 'custom'

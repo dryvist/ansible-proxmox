@@ -30,13 +30,15 @@
 
     # Capability tags on node entries are published from Tofu desired state.
     # Join them to the existing static PVE inventory by its declared Tofu node
-    # key, then let group_vars and roles select the capability group.
+    # key, then let group_vars and roles select the capability group. The
+    # hardware class is published too: node_watchdog picks its driver from it.
     - name: Add tagged Proxmox nodes to capability groups
       ansible.builtin.add_host:
         name: "{{ item }}"
         groups: >-
           {{ ['nvidia_gpu_nodes']
              if 'nvidia-gpu' in (_node.tags | default([])) else [] }}
+        tofu_node_hardware: "{{ _node.hardware | default('') }}"
       vars:
         _tofu_node_key: "{{ hostvars[item].proxmox_node_name | default(item) }}"
         _node: "{{ (tofu_data.nodes | default({})).get(_tofu_node_key, {}) }}"

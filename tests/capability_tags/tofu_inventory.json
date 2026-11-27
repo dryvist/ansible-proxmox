@@ -7,7 +7,7 @@
   "proxmox_user": "root",
   "constants": {},
   "nodes": {
-    "test-gpu": { "role": "test-gpu", "tags": ["nvidia-gpu"] },
+    "test-gpu": { "role": "test-gpu", "tags": ["nvidia-gpu"], "hardware": "amd-desktop" },
     "test-cpu": { "role": "test-cpu", "tags": [] }
   },
   "containers": {
