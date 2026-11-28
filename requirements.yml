@@ -16,7 +16,7 @@ collections:
     version: "2.1.0"
   # Molecule's docker driver; listed here so the Galaxy cache carries it.
   - name: community.docker
-    version: "5.4.0"
+    version: "5.4.1"
 
   # Shared homelab roles (cribl_edge, cribl_packs, inventory_resolve). A
   # collection, not `roles:`

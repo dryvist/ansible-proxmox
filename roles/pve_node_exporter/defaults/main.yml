@@ -6,7 +6,7 @@
 # Pinned upstream release. Renovate-friendly single source for the version;
 # bump deliberately (the checksum below must move with it when set).
 # renovate: datasource=github-releases depName=prometheus/node_exporter
-pve_node_exporter_version: "1.12.1"
+pve_node_exporter_version: "1.13.1"
 
 # Where the release tarball comes from. Standard GitHub releases URL; override
 # to point at a local mirror (e.g. the apt-cacher / artifact LXC) if nodes
@@ -73,7 +73,7 @@ pve_node_exporter_zfs_exporter_enabled: true
 
 # Pinned upstream release; the checksums below must move with it.
 # renovate: datasource=github-releases depName=pdf/zfs_exporter
-pve_node_exporter_zfs_exporter_version: "2.5.1"
+pve_node_exporter_zfs_exporter_version: "2.5.2"
 
 pve_node_exporter_zfs_exporter_download_url: >-
   https://github.com/pdf/zfs_exporter/releases/download/v{{ pve_node_exporter_zfs_exporter_version }}/zfs_exporter-{{ pve_node_exporter_zfs_exporter_version }}.linux-{{ pve_node_exporter_arch }}.tar.gz
